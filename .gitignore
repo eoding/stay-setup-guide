@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+.ruff_cache/
+
+# never commit contracts or outputs
+산출물/
+입력/
+input/
+output/
+*.xlsx
+*.xlsm
+*.xls
+*.ods
+*.csv
+*.pdf
+*.docx
+*.hwp
+*.hwpx

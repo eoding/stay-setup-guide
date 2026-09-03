@@ -1,0 +1,4490 @@
+{
+  "meta": {
+    "generated_on": "2026-09-03",
+    "screen_count": 27,
+    "field_count": 201,
+    "currency_token": "공급 통화",
+    "hotel_name_token": "〈호텔명〉"
+  },
+  "tabs": [
+    "기본정보",
+    "호텔 정보",
+    "객실",
+    "오퍼",
+    "시즌",
+    "요금제",
+    "판매일",
+    "가격 캘린더",
+    "부과금",
+    "부가옵션",
+    "프로모션",
+    "취소정책",
+    "혜택",
+    "참조정보",
+    "추가수집정보",
+    "환율 설정",
+    "SEO",
+    "전용 알림메시지 템플릿"
+  ],
+  "screens": [
+    {
+      "id": "hotel-create",
+      "name": "호텔 만들기",
+      "opens": [
+        "왼쪽 메뉴 `자유여행` → `상품관리`",
+        "목록 위 [호텔 만들기]"
+      ],
+      "cards": [
+        "호텔 만들기"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "호텔명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 샘플 비치 리조트 · 200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "호텔명을 입력해주세요"
+              ]
+            },
+            {
+              "label": "도시",
+              "kind": "자동완성 검색",
+              "required": true,
+              "options": null,
+              "options_note": "도시명을 쳐서 고름(자동완성)",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "도시를 검색해 선택해주세요"
+              ]
+            },
+            {
+              "label": "공급 통화",
+              "kind": "선택",
+              "required": true,
+              "options": null,
+              "options_note": "이 여행사에 환율이 등록된 통화만",
+              "format": "",
+              "help": "환율이 등록된 통화만 보입니다. 외화로 팔려면 [환율 설정]에서 먼저 등록하세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "공급 통화를 선택해주세요",
+                "이 여행사에 환율이 등록된 통화만 고를 수 있습니다"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "거래처정보",
+          "fields": [
+            {
+              "label": "거래처",
+              "kind": "자동완성 검색",
+              "required": true,
+              "options": null,
+              "options_note": "거래처를 검색해 고름(자동완성)",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "거래처를 검색해 선택해주세요"
+              ]
+            },
+            {
+              "label": "수수료(율)",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "수수료구분",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "판매가(VAT 별도)",
+                "판매가(VAT 포함)",
+                "판매가(VAT 없음)"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "수수료기준",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "정률(%)",
+                "정액"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "수수료명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "호텔 만들기",
+        "목록"
+      ],
+      "notes": [
+        "거래처를 고르면 「수수료구분」·「수수료기준」·「수수료(율)」·「수수료명」이 저절로 찬다.",
+        "만들면 곧바로 편집 화면으로 넘어간다.",
+        "만들면 네 줄이 저절로 함께 생긴다 — 오퍼 「기본 오퍼」(상태 「작성중」) · 룸 「스탠다드」 · 그 둘을 이은 판매 연결 「기본 오퍼 · 스탠다드」 · 요금제 정본 「기본 요금제」. 이것들은 새로 만들지 말고 [편집]으로 이름과 값을 고쳐 쓴다."
+      ]
+    },
+    {
+      "id": "base-info",
+      "name": "기본정보 탭 (상품 공통 화면)",
+      "opens": [
+        "편집 화면 탭 `기본정보`"
+      ],
+      "cards": [],
+      "blocks": [],
+      "buttons": [],
+      "notes": [
+        "이 탭은 호텔 전용 화면이 아니라 상품 공통 화면이라 이 사전이 칸을 담지 않는다.",
+        "지시서가 여기서 쓰는 것은 상품명·영문명·상세설명 글과 대표이미지 올리기다.",
+        "탭 오른쪽 위 [저장]이 이 탭의 저장이다 — 아래 탭들은 저마다 자기 저장 버튼을 쓴다."
+      ]
+    },
+    {
+      "id": "hotel-profile",
+      "name": "호텔 정보",
+      "opens": [
+        "편집 화면 탭 `호텔 정보`"
+      ],
+      "cards": [
+        "호텔 정보",
+        "기본",
+        "위치",
+        "연락처",
+        "정책",
+        "시설·서비스"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "호텔 영문명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "고객 화면 부제·검색·바우처에 쓴다. 「기본정보」 탭의 '영문이름' 체크박스와는 무관하다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "개장 연도",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2016",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "연도를 숫자 4자리로 입력해주세요 (예: 2016)"
+              ]
+            },
+            {
+              "label": "리노베이션 연도",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2024",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "연도를 숫자 4자리로 입력해주세요 (예: 2024)"
+              ]
+            },
+            {
+              "label": "총 객실 수",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 99",
+              "help": "숫자만",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "숫자만 입력해주세요 — 단위를 빼세요 (예: 99실 → 99)"
+              ]
+            },
+            {
+              "label": "프런트 운영",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "주소(도로명 전체)",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "255자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "위도",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 16.068000",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "위도를 숫자로 입력해주세요 (예: 16.068000)",
+                "0,0 은 좌표 없음이 아니라 대서양 한가운데입니다 — 모르면 비우세요",
+                "위도는 -90~90 범위입니다 — 경도와 뒤바꿔 넣지 않았는지 확인하세요"
+              ]
+            },
+            {
+              "label": "경도",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 108.245000",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "경도를 숫자로 입력해주세요 (예: 108.245000)",
+                "경도는 -180~180 범위입니다"
+              ]
+            },
+            {
+              "label": "전화",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "50자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "이메일",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "254자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "체크인 최소 연령",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 만 18세 · 50자까지",
+              "help": "계약서 표기 그대로 적으세요 (예: 만 18세, 18세 이상). 없으면 비워 두세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "조식 정보",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "255자까지",
+              "help": "형태·시간·가격 한 줄 (예: 뷔페 · 06:30~09:30 · 성인 VND 250,000)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "아동 정책",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "255자까지",
+              "help": "연령 기준·무료 조건 한 줄 — 금액 계산은 가격·애드온 축이 한다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "현장 결제",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "120자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "반려동물",
+              "kind": "선택 (모르겠음/가능/불가능)",
+              "required": false,
+              "options": [
+                "모르겠음",
+                "가능",
+                "불가능"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "계약에 없으면 '모르겠음'으로 두세요 — 모르겠음을 '불가능'으로 굳히지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "사용 언어",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "콤마로 구분",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "호텔 시설·서비스",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "콤마로 구분",
+              "help": "콤마로 구분. 고객 화면 시설 줄과 상세 섹션에 그대로 나갑니다 (예: 실내수영장, 스파, 피트니스센터)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "추천 포인트",
+              "kind": "반복 행",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [],
+              "columns": [
+                "제목",
+                "설명 (한 줄)"
+              ]
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "저장",
+        "행 추가",
+        "삭제"
+      ],
+      "notes": [
+        "모르는 값은 비운다 — 지어내지 않는다.",
+        "위도·경도는 소수점 아래 6자리까지만 저장된다."
+      ]
+    },
+    {
+      "id": "cancellation-policy",
+      "name": "취소정책 만들기 · 수정",
+      "opens": [
+        "편집 화면 탭 `취소정책`",
+        "[정책 만들기] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "취소 수수료 구간",
+        "취소정책"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "정책명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 표준 D-7 / 성수기 D-30 / NRF · 100자까지",
+              "help": "담당자가 오퍼에서 고를 이름입니다. 계약서 문구보다 '표준 D-7' 처럼 조건이 드러나게 씁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "사용 범위",
+              "kind": "라디오",
+              "required": false,
+              "options": [
+                "공용 — 이 여행사의 모든 호텔이 고를 수 있습니다",
+                "이 호텔 전용 — 〈호텔명〉 에서만 보입니다"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "환불 가능",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "끄면 비환불(NRF)입니다. 언제 취소해도 100% 라 아래 구간을 저장하지 않습니다.",
+              "checkbox_text": "환불 가능",
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "취소 수수료 구간",
+              "kind": "반복 행",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "계약서의 구간을 그대로 옮깁니다. 위에서부터 체크인에서 먼 순서입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「환불 가능」을 체크했을 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "환불 가능한 정책은 수수료 구간이 하나 이상 필요합니다. 비환불이면 위의 [환불 가능]을 끄세요"
+              ],
+              "columns": [
+                "체크인 D-N일 전까지",
+                "수수료 방식",
+                "수수료 값"
+              ],
+              "column_options": [
+                [
+                  "결제액 %",
+                  "박수",
+                  "정액"
+                ]
+              ]
+            },
+            {
+              "label": "천재지변 등 예외 안내 (고객에게 보임)",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 태풍 등 천재지변으로 항공기가 결항되면 수수료 없이 취소됩니다.",
+              "help": "계약서에 태풍·천재지변 같은 예외 조항이 있을 때만 그 문장을 그대로 적으세요. 예: \"태풍 등 천재지변으로 항공기가 결항되면 수수료 없이 취소됩니다.\" 없으면 비워 두세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "있는 것을 보기",
+        "그래도 새로 만들기",
+        "구간 추가",
+        "삭제",
+        "추가",
+        "저장",
+        "정책 만들기",
+        "검색하기"
+      ],
+      "notes": [
+        "취소정책은 이 여행사 전체가 함께 쓰는 목록이다 — 호텔마다 다시 만들지 않아도 된다."
+      ]
+    },
+    {
+      "id": "room-type",
+      "name": "룸 만들기 · 편집",
+      "opens": [
+        "편집 화면 탭 `객실`",
+        "카드 `룸` 의 [룸 추가] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "룸 사진",
+        "객실 (룸 타입)"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "룸 이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "룸 이름을 입력해주세요"
+              ]
+            },
+            {
+              "label": "상위 동/윙",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "(없음)"
+              ],
+              "options_note": "이 호텔에 만들어 둔 룸 목록 + 「(없음)」",
+              "format": "",
+              "help": "같은 호텔 안의 동·윙 구분입니다(예: I동/II동). 없으면 비워두세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "면적(㎡)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 42.5",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "전망",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 오션뷰 / 가든뷰 … · 50자까지",
+              "help": "룸 필터 칩의 소스입니다 — '오션뷰'처럼 고객에게 보일 표기를 그대로 씁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "층/건물",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 3~7층 / I동 … · 50자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "기준 성인",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "최대 성인",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 3",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "최대 성인이 기준 성인보다 적습니다"
+              ]
+            },
+            {
+              "label": "최대 소아",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 1",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "최대 총원",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 4",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "최대 총원이 최대 성인보다 적습니다"
+              ]
+            },
+            {
+              "label": "엑스트라베드 가능",
+              "kind": "선택 (모르겠음/가능/불가능)",
+              "required": false,
+              "options": [
+                "모르겠음",
+                "가능",
+                "불가능"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "계약에 없으면 '모르겠음'으로 두세요. '불가능'으로 두면 엑스트라베드 없음으로 확정됩니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "엑스트라베드 최대",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 1",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "엑스트라베드가 불가인데 최대 수가 들어 있습니다"
+              ]
+            },
+            {
+              "label": "재고 상한(메타)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 10",
+              "help": "실재고가 아니라 참고용 상한입니다 — 판매 가능 수량은 판매일이 정합니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "침대 구성",
+              "kind": "반복 행",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [],
+              "columns": [
+                "침대 종류",
+                "개수"
+              ],
+              "column_options": [
+                [
+                  "선택하세요",
+                  "N"
+                ],
+                [
+                  "더블",
+                  "트윈",
+                  "싱글",
+                  "킹",
+                  "퀸",
+                  "벙크 (2층 침대)",
+                  "소파베드",
+                  "기타"
+                ]
+              ]
+            },
+            {
+              "label": "어메니티",
+              "kind": "다중 체크",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [],
+              "checkbox_groups": [
+                {
+                  "group": "구조",
+                  "items": [
+                    "발코니·테라스",
+                    "프라이빗 풀",
+                    "수영장 바로 연결(풀 액세스)",
+                    "전용 출입구",
+                    "흡연 가능"
+                  ]
+                },
+                {
+                  "group": "냉난방·환경",
+                  "items": [
+                    "에어컨",
+                    "난방",
+                    "선풍기",
+                    "방음",
+                    "암막 커튼",
+                    "창문",
+                    "마룻바닥",
+                    "타일·대리석 바닥",
+                    "카펫 바닥"
+                  ]
+                },
+                {
+                  "group": "욕실",
+                  "items": [
+                    "프라이빗 욕실",
+                    "공용 욕실",
+                    "샤워실",
+                    "욕조",
+                    "월풀 욕조(자쿠지)",
+                    "세면도구",
+                    "헤어드라이어",
+                    "목욕 가운",
+                    "슬리퍼",
+                    "타월",
+                    "거울"
+                  ]
+                },
+                {
+                  "group": "엔터테인먼트·통신",
+                  "items": [
+                    "무료 Wi-Fi",
+                    "유선인터넷",
+                    "TV",
+                    "위성·케이블 방송",
+                    "스트리밍 서비스(넷플릭스 등)",
+                    "전화"
+                  ]
+                },
+                {
+                  "group": "식음료·주방",
+                  "items": [
+                    "미니바",
+                    "냉장고",
+                    "전기 주전자",
+                    "커피·티 메이커",
+                    "커피 머신(캡슐·에스프레소)",
+                    "무료 생수",
+                    "무료 커피·차",
+                    "과일·스낵",
+                    "와인잔",
+                    "간이주방",
+                    "풀키친",
+                    "주방용품",
+                    "식기세척기",
+                    "전자레인지",
+                    "식사 공간",
+                    "식탁",
+                    "바베큐 시설"
+                  ]
+                },
+                {
+                  "group": "가구·수납",
+                  "items": [
+                    "책상",
+                    "소파",
+                    "휴식 공간(좌석)",
+                    "야외용 가구",
+                    "옷장",
+                    "드레스룸",
+                    "옷걸이",
+                    "리넨·침구",
+                    "긴 침대(2m 이상)",
+                    "접이식 침대",
+                    "침대 옆 콘센트",
+                    "휴지통"
+                  ]
+                },
+                {
+                  "group": "생활·세탁",
+                  "items": [
+                    "다림질 도구",
+                    "바지 전용 다리미",
+                    "세탁기",
+                    "세탁물 건조대",
+                    "청소용품",
+                    "우산",
+                    "체중계"
+                  ]
+                },
+                {
+                  "group": "안전·위생",
+                  "items": [
+                    "객실 내 안전 금고",
+                    "노트북용 금고",
+                    "화재감지기",
+                    "소화기",
+                    "손 소독제",
+                    "시각 경보기"
+                  ]
+                },
+                {
+                  "group": "서비스·아동",
+                  "items": [
+                    "룸서비스",
+                    "모닝콜",
+                    "알람시계",
+                    "숙면용 편의 용품",
+                    "반짇고리",
+                    "유아용 침대(요청 시)",
+                    "유아용 편의 용품(요청 시)",
+                    "발판·디딤대",
+                    "저자극 객실"
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "직접 입력 (목록에 없을 때만, 콤마로 구분)",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 커넥팅 도어 가능",
+              "help": "여기 적은 문구는 고객 화면에 그대로 나갑니다 — 필터·아이콘에는 연결되지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "침대 행 추가",
+        "삭제",
+        "복사",
+        "저장",
+        "룸 추가",
+        "편집",
+        "전용으로 분리"
+      ],
+      "notes": [
+        "룸은 호텔 안에서만 쓰인다 — 다른 호텔과 나눠 쓰지 않는다.",
+        "설명 칸은 없다. 면적·전망·침대·정원·어메니티로 나눠 넣는다."
+      ]
+    },
+    {
+      "id": "room-images",
+      "name": "룸 사진 올리기",
+      "opens": [
+        "편집 화면 탭 `객실`",
+        "룸 줄의 [편집]",
+        "드로어 아래 카드 `룸 사진`"
+      ],
+      "cards": [
+        "룸 사진"
+      ],
+      "blocks": [],
+      "buttons": [
+        "▲",
+        "▼",
+        "삭제"
+      ],
+      "notes": [
+        "룸을 한 번 저장한 뒤에야 사진 자리가 생긴다."
+      ]
+    },
+    {
+      "id": "offer",
+      "name": "오퍼 만들기 · 편집",
+      "opens": [
+        "편집 화면 탭 `오퍼`",
+        "[오퍼 추가] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "오퍼"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "관리용 이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "ERP 목록·원장에서만 보입니다 — 고객에게 노출되지 않습니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "고객 표시명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "카드·상세·프로모션 드로어 제목으로 나갑니다. 비우면 관리용 이름이 그대로 노출되니 판매 오퍼는 반드시 채우세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "오퍼 코드",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "우선순위",
+              "kind": "숫자",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "겹치는 오퍼 중 값이 큰 쪽이 팔립니다. 프로모션을 계약가보다 크게 두면 프로모션이 이깁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "예약 시작",
+              "kind": "날짜·시각 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01 00:00",
+              "help": "비우면 예약 기간 제한 없음(상시)입니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01 14:15)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜·시각은 'YYYY-MM-DD HH:MM' 으로 입력해주세요 (예: 2026-01-01 00:00)"
+              ]
+            },
+            {
+              "label": "예약 종료",
+              "kind": "날짜·시각 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01 00:00",
+              "help": "비우면 예약 마감 없음입니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01 14:15)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜·시각은 'YYYY-MM-DD HH:MM' 으로 입력해주세요 (예: 2026-01-01 00:00)"
+              ]
+            },
+            {
+              "label": "투숙 시작",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "비우면 시작 제한 없음 — 다른 오퍼와 겹칠 수 있습니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)"
+              ]
+            },
+            {
+              "label": "투숙 종료",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "비우면 종료 제한 없음 — 다른 오퍼와 겹칠 수 있습니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)"
+              ]
+            },
+            {
+              "label": "최소 숙박(박)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2",
+              "help": "비우면 최소 숙박 검증을 하지 않습니다 — 1박 예약이 그대로 통과합니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "예약 마감(체크인 D-N일)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 3",
+              "help": "비우면 마감 검증을 하지 않습니다 — 체크인 당일 예약이 그대로 통과합니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "기본 체크인 시각",
+              "kind": "시각 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 14:00",
+              "help": "목록에서 고르거나 24시간 형식으로 직접 입력 (예: 14:15)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "시각은 24시간 'HH:MM' 으로 입력해주세요 (예: 14:00 · 오후 2시는 14:00)"
+              ]
+            },
+            {
+              "label": "기본 체크아웃 시각",
+              "kind": "시각 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 14:00",
+              "help": "목록에서 고르거나 24시간 형식으로 직접 입력 (예: 14:15)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "시각은 24시간 'HH:MM' 으로 입력해주세요 (예: 14:00 · 오후 2시는 14:00)"
+              ]
+            },
+            {
+              "label": "캠페인",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "— 없음 —"
+              ],
+              "options_note": "이 여행사의 캠페인 목록 + 「— 없음 —」",
+              "format": "",
+              "help": "고객 화면 히어로의 '진행 중인 프로모션' 카드가 이 이름표로 묶입니다. 비우면 카드에 뜨지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "기본 취소 정책",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "지정 안 함"
+              ],
+              "options_note": "이 여행사의 취소정책 목록 + 「지정 안 함」",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "오퍼 이미지",
+              "kind": "파일",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "프로모션 카드 배경·프로모션 드로어 히어로로 나갑니다. 고르지 않으면 지금 이미지가 그대로 남습니다. 5MB 이하.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "이미지가 아니거나 손상된 파일입니다"
+              ]
+            },
+            {
+              "label": "설명",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "저장",
+        "오퍼 추가",
+        "우선순위 저장",
+        "편집",
+        "삭제",
+        "보관",
+        "판매 종료",
+        "판매 재개",
+        "보관 해제"
+      ],
+      "notes": [
+        "「고객 표시명」을 비우면 「관리용 이름」이 고객에게 그대로 보인다."
+      ]
+    },
+    {
+      "id": "room-link-bulk",
+      "name": "객실 추가 (오퍼에 룸 여러 개 연결)",
+      "opens": [
+        "편집 화면 탭 `객실`",
+        "카드 `판매 연결` 의 [객실 추가]"
+      ],
+      "cards": [
+        "판매 연결 (오퍼 × 객실)"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "오퍼",
+              "kind": "선택",
+              "required": true,
+              "options": null,
+              "options_note": "이 호텔에 만들어 둔 오퍼 목록",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "오퍼를 선택해주세요",
+                "이 호텔의 오퍼가 아닙니다"
+              ]
+            },
+            {
+              "label": "룸 카테고리",
+              "kind": "다중 체크",
+              "required": false,
+              "options": null,
+              "options_note": "이 호텔에 만들어 둔 룸 목록 + 「+ 새 룸 카테고리 만들기」",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "이 호텔의 룸 타입이 아닙니다 — 다른 호텔의 객실은 연결할 수 없습니다",
+                "룸 카테고리를 하나 이상 골라주세요"
+              ]
+            },
+            {
+              "label": "새 룸 카테고리명 (선택)",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「룸 카테고리」에서 「+ 새 룸 카테고리 만들기」를 골랐을 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "추가",
+        "저장",
+        "객실 추가",
+        "편집",
+        "삭제"
+      ],
+      "notes": [
+        "이 드로어에는 「룸 이름」·「오퍼별 표시명」 칸이 없다 — 연결한 뒤 줄마다 [편집]에서 넣는다.",
+        "이미 그 오퍼에 연결된 룸은 회색으로 잠긴다."
+      ]
+    },
+    {
+      "id": "room-link-edit",
+      "name": "객실 편집 (연결 한 줄)",
+      "opens": [
+        "편집 화면 탭 `객실`",
+        "카드 `판매 연결` 의 그 줄 [편집]"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "오퍼",
+              "kind": "선택",
+              "required": true,
+              "options": null,
+              "options_note": "이 호텔에 만들어 둔 오퍼 목록",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "오퍼를 선택해주세요",
+                "이 호텔의 오퍼가 아닙니다"
+              ]
+            },
+            {
+              "label": "룸 카테고리",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "선택하세요",
+                "+ 새 룸 카테고리 만들기"
+              ],
+              "options_note": "이 호텔에 만들어 둔 룸 목록 + 「+ 새 룸 카테고리 만들기」",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "룸 카테고리를 선택해주세요",
+                "이 오퍼에 같은 룸이 이미 연결되어 있습니다 — 같은 룸을 두 번 팔 수는 없습니다"
+              ]
+            },
+            {
+              "label": "새 룸 카테고리명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「룸 카테고리」에서 「+ 새 룸 카테고리 만들기」를 골랐을 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "새로 만들 룸 카테고리명을 입력해주세요"
+              ]
+            },
+            {
+              "label": "룸 이름",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "오퍼별 표시명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "추가",
+        "저장"
+      ],
+      "notes": [
+        "「룸 이름」을 비우고 저장하면 「오퍼명 · 룸이름」으로 저절로 채워진다.",
+        "오퍼는 편집에서 바꿀 수 없다."
+      ]
+    },
+    {
+      "id": "season",
+      "name": "시즌 만들기 · 편집",
+      "opens": [
+        "편집 화면 탭 `시즌`",
+        "오퍼 카드의 [시즌 추가] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "시즌명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "시즌 코드",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "날짜 규칙 유형",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "기간 범위",
+                "월 목록",
+                "요일 규칙",
+                "비연속 날짜 나열"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "기간 시작",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「날짜 규칙 유형」이 「기간 범위」·「월 목록」·「요일 규칙」 중 하나일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)",
+                "기간 시작을 입력해주세요"
+              ]
+            },
+            {
+              "label": "기간 종료",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「날짜 규칙 유형」이 「기간 범위」·「월 목록」·「요일 규칙」 중 하나일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)",
+                "기간 종료를 입력해주세요",
+                "기간 종료(…)가 시작(…)보다 빠릅니다 — 두 날짜를 바꿔 넣으신 건 아닌지 확인해주세요"
+              ]
+            },
+            {
+              "label": "적용 월",
+              "kind": "다중 체크",
+              "required": false,
+              "options": [
+                "1월",
+                "2월",
+                "3월",
+                "4월",
+                "5월",
+                "6월",
+                "7월",
+                "8월",
+                "9월",
+                "10월",
+                "11월",
+                "12월"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「날짜 규칙 유형」이 「월 목록」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "적용할 월을 하나 이상 선택해주세요"
+              ]
+            },
+            {
+              "label": "적용 요일",
+              "kind": "다중 체크",
+              "required": false,
+              "options": [
+                "월",
+                "화",
+                "수",
+                "목",
+                "금",
+                "토",
+                "일"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「날짜 규칙 유형」이 「요일 규칙」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "적용할 요일을 하나 이상 선택해주세요"
+              ]
+            },
+            {
+              "label": "날짜 나열",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-07-01 ~ 2026-07-10 / 2026-12-24",
+              "help": "한 줄에 하나 — 'YYYY-MM-DD' 또는 'YYYY-MM-DD ~ YYYY-MM-DD'",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「날짜 규칙 유형」이 「비연속 날짜 나열」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜를 한 줄에 하나씩 입력해주세요"
+              ]
+            },
+            {
+              "label": "우선순위",
+              "kind": "숫자",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "겹치는 시즌 중 값이 큰 쪽이 이깁니다. 같으면 나중에 만든 시즌이 이겨 금액이 임의로 갈립니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "최소 숙박 override",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2",
+              "help": "비우면 오퍼 기본값을 따릅니다. 0을 넣으면 '제한 없음'이 되어 오퍼 기본값을 덮어씁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "취소 정책 override",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "(오퍼 기본 정책을 따름)"
+              ],
+              "options_note": "이 여행사의 취소정책 목록 + 「(오퍼 기본 정책을 따름)」",
+              "format": "",
+              "help": "비우면 오퍼 기본 정책을 따릅니다 — 이 시즌만 다른 규정을 쓸 때 고릅니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "체크인 시각 override",
+              "kind": "시각 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 14:00",
+              "help": "비우면 오퍼 기본값을 따릅니다. 목록에서 고르거나 24시간 형식으로 직접 입력 (예: 14:15)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "시각은 24시간 'HH:MM' 으로 입력해주세요 (예: 14:00 · 오후 2시는 14:00)"
+              ]
+            },
+            {
+              "label": "체크아웃 시각 override",
+              "kind": "시각 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 14:00",
+              "help": "비우면 오퍼 기본값을 따릅니다. 목록에서 고르거나 24시간 형식으로 직접 입력 (예: 14:15)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "시각은 24시간 'HH:MM' 으로 입력해주세요 (예: 14:00 · 오후 2시는 14:00)"
+              ]
+            },
+            {
+              "label": "호텔 예약 코드",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "호텔 발주 시 쓰는 시즌별 부킹 코드(예: ABC123).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "N",
+        "저장",
+        "시즌 추가",
+        "편집",
+        "가격",
+        "상태",
+        "재전개",
+        "삭제"
+      ],
+      "notes": [
+        "「날짜 규칙 유형」을 고르면 그 아래 날짜 칸이 갈린다."
+      ]
+    },
+    {
+      "id": "rate-plan-catalog",
+      "name": "요금제 정본 만들기 · 편집",
+      "opens": [
+        "편집 화면 탭 `요금제`",
+        "카드 `요금제 정본` 의 [정본 만들기] (고칠 때는 [편집])"
+      ],
+      "cards": [
+        "판매 조건 — 비우면 제한 없음"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "요금제명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "고객 화면 요금 행에 이 이름이 그대로 나갑니다 — 계약서 표기를 씁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "요금제 이름을 입력해주세요",
+                "같은 이름의 정본이 이미 있습니다 — 그 정본을 배포해 쓰세요"
+              ]
+            },
+            {
+              "label": "고객 노출명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "비우면 요금제명을 그대로 보여줍니다 — 계약 원문 라벨이 고객에게 나갑니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "호텔측 코드",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "호텔·ERP 대조용입니다. 고객 화면 요금 행에는 나오지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "식사 조건",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------",
+                "룸온리",
+                "조식 포함",
+                "조·석식 포함",
+                "3식 포함",
+                "올인클루시브"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "고객 화면 요금 행에 '조식 포함'처럼 나갑니다. 비우면 그 줄이 없습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "침대 구성",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------",
+                "더블",
+                "트윈",
+                "싱글",
+                "킹",
+                "퀸",
+                "벙크 (2층 침대)",
+                "소파베드",
+                "기타"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "요금 행에 '킹 1'처럼 나갑니다 — 룸 침대와 별개 축이고, 비우면 행에는 안 나옵니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "환불 가능",
+              "kind": "선택 (모르겠음/가능/불가능)",
+              "required": false,
+              "options": [
+                "모르겠음",
+                "가능",
+                "불가능"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "비움('모르겠음')이면 고객 화면에 환불 문구를 **아예 그리지 않습니다** — 모르겠음은 '환불 불가'가 아닙니다. '불가능'으로 두면 오퍼 취소정책이 무료 취소여도 이 행만 '환불 불가'로 나갑니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "최소 숙박(박)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 1",
+              "help": "비우면 최소 숙박 제한이 없습니다. 이 박수 미만이면 이 요금제가 안 뜹니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "최대 숙박(박)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2",
+              "help": "비우면 상한 없음입니다. '1~2박 요금'이라면 2를 넣어야 3박 검색에서 사라집니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "최대 숙박이 최소 숙박보다 작습니다 — 이 요금제는 어떤 박수로도 안 팔립니다"
+              ]
+            },
+            {
+              "label": "얼리버드 리드타임(체크인 D-N일)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 30",
+              "help": "비우면 리드타임 제한이 없습니다. 30이면 체크인 30일 전까지만 예약됩니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "전용 취소 정책",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "(시즌·오퍼 정책을 따름)"
+              ],
+              "options_note": "이 여행사의 취소정책 목록 + 「(시즌·오퍼 정책을 따름)」",
+              "format": "",
+              "help": "이 요금제만의 규정(얼리버드 NRF 등). 비우면 시즌·오퍼 정책을 따릅니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "새 객실에 자동 배포",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "새 룸(판매 연결)을 만들 때 이 요금제 사본을 자동으로 깝니다 — 기존 룸에는 소급되지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "정렬",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "요금 행이 표에 놓이는 순서입니다 — 저장하면 배포된 사본 전부의 순서가 함께 바뀝니다. 작은 숫자가 위입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "포함물",
+              "kind": "반복 행",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "고객 화면 요금 행 아래에 한 줄씩 나갑니다 — 계약서의 포함 항목을 그대로 옮깁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [],
+              "columns": [
+                "포함물 이름",
+                "설명 (선택)"
+              ]
+            },
+            {
+              "label": "지금 모든 객실에 배포",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "기본으로 체크돼 있습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "새로 만들 때만",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "행 추가",
+        "만들기",
+        "저장",
+        "정본 만들기",
+        "편집",
+        "전체 적용",
+        "삭제"
+      ],
+      "notes": [
+        "정본은 호텔당 한 번 정의하고, 객실들에는 그 사본이 깔린다."
+      ]
+    },
+    {
+      "id": "rate-plan-deploy",
+      "name": "요금제 추가 (룸에 깔기)",
+      "opens": [
+        "편집 화면 탭 `요금제`",
+        "룸 줄의 [요금제 추가]"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "요금제 정본",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "+ 새 정본 만들기"
+              ],
+              "options_note": "이 호텔의 요금제 정본 목록 + 「+ 새 정본 만들기」",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "새 정본 이름",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「요금제 정본」에서 「+ 새 정본 만들기」를 골랐을 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "새 정본 이름을 입력해주세요"
+              ]
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "이 객실에 배포"
+      ],
+      "notes": []
+    },
+    {
+      "id": "rate-plan-row",
+      "name": "요금제 편집 (룸에 깔린 사본)",
+      "opens": [
+        "편집 화면 탭 `요금제`",
+        "룸 아래 요금제 줄의 [편집]"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "요금제명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "고객 화면 요금 행에 이 이름이 그대로 나갑니다 — 계약서 표기를 씁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "요금제 이름을 입력해주세요",
+                "같은 룸에 같은 이름의 요금제가 이미 있습니다"
+              ]
+            },
+            {
+              "label": "호텔측 코드",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "호텔·ERP 대조용입니다. 고객 화면 요금 행에는 나오지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "정렬",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "요금 행이 표에 놓이는 순서입니다. 비우면 0 입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "기준 요금제",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "이 룸의 기준 요금제 표시입니다 — 시즌 일괄 전개가 룸마다 이 요금제를 찾아 단가를 깝니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "식사 조건",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------",
+                "룸온리",
+                "조식 포함",
+                "조·석식 포함",
+                "3식 포함",
+                "올인클루시브"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "고객 화면 요금 행에 '조식 포함'처럼 나갑니다. 비우면 그 줄이 없습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "침대 구성",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------",
+                "더블",
+                "트윈",
+                "싱글",
+                "킹",
+                "퀸",
+                "벙크 (2층 침대)",
+                "소파베드",
+                "기타"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "이 요금제만의 침대 구성입니다 — 요금 행에 '킹 1'처럼 나가고, 비우면 행에는 안 나옵니다(룸 침대와 별개 축).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "환불 가능",
+              "kind": "선택 (모르겠음/가능/불가능)",
+              "required": false,
+              "options": [
+                "모르겠음",
+                "가능",
+                "불가능"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "비움('모르겠음')이면 고객 화면에 환불 문구를 **아예 그리지 않습니다** — 모르겠음은 '환불 불가'가 아닙니다. '불가능'으로 두면 오퍼 취소정책이 무료 취소여도 이 행만 '환불 불가'로 나갑니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "포함물",
+              "kind": "반복 행",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "고객 화면 요금 행 아래에 한 줄씩 나갑니다 — 계약서의 포함 항목을 그대로 옮깁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [],
+              "columns": [
+                "포함물 이름",
+                "설명 (선택)"
+              ]
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "정본 편집 열기",
+        "행 추가",
+        "N",
+        "저장"
+      ],
+      "notes": [
+        "「기준 요금제」로 표시한 요금제에 시즌 가격 채우기가 값을 깐다."
+      ]
+    },
+    {
+      "id": "sale-day-open",
+      "name": "판매일 열기",
+      "opens": [
+        "편집 화면 탭 `판매일`",
+        "[판매일 열기]"
+      ],
+      "cards": [
+        "판매일"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "시작일",
+              "kind": "날짜 고르개",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "시작일을 입력해주세요",
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)"
+              ]
+            },
+            {
+              "label": "종료일",
+              "kind": "날짜 고르개",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "종료일을 입력해주세요",
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)",
+                "종료일이 시작일보다 빠릅니다",
+                "한 번에 열 수 있는 구간은 최대 …일입니다 (요청 …일)"
+              ]
+            },
+            {
+              "label": "요일",
+              "kind": "다중 체크",
+              "required": false,
+              "options": [
+                "월",
+                "화",
+                "수",
+                "목",
+                "금",
+                "토",
+                "일"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "비우면 구간의 **전 요일**을 엽니다. 주말만 열려면 여기서 골라주세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "선택한 요일에 해당하는 날짜가 이 구간에 없습니다"
+              ]
+            },
+            {
+              "label": "대상 룸",
+              "kind": "다중 체크",
+              "required": true,
+              "options": null,
+              "options_note": "이 호텔의 판매 연결(객실) 목록 — 체크",
+              "format": "",
+              "help": "하나 이상 골라야 합니다 — 비우면 저장되지 않습니다(안 고르면 전체가 아닙니다).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "판매일을 열 룸을 하나 이상 선택해주세요",
+                "이 호텔의 룸이 아닙니다 — 목록을 새로고침해주세요"
+              ]
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "판매일 열기",
+        "닫기",
+        "월 닫기"
+      ],
+      "notes": [
+        "한 번에 여는 구간은 최대 731일이다."
+      ]
+    },
+    {
+      "id": "sale-day-close",
+      "name": "판매일 닫기",
+      "opens": [
+        "편집 화면 탭 `판매일`",
+        "룸 줄의 월 버튼 또는 [닫기]"
+      ],
+      "cards": [
+        "판매일"
+      ],
+      "blocks": [],
+      "buttons": [
+        "판매일 열기",
+        "닫기",
+        "월 닫기"
+      ],
+      "notes": [
+        "입력 칸이 없다 — 룸 줄에서 닫을 달의 버튼을 누르면 그 달이 통째로 닫힌다."
+      ]
+    },
+    {
+      "id": "season-price-fill",
+      "name": "시즌 가격 채우기",
+      "opens": [
+        "편집 화면 탭 `시즌`",
+        "시즌 줄의 [가격]"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "판매 단가(공급 통화)",
+              "kind": "숫자",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [
+                "판매 단가"
+              ],
+              "reject": [
+                "단가를 입력해주세요",
+                "숫자로 입력해주세요"
+              ]
+            },
+            {
+              "label": "정가(취소선, 선택)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "할인 전 공표요금입니다. 비우면 취소선을 그리지 않고 기존 값을 그대로 둡니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "정가는 판매가보다 작을 수 없습니다"
+              ]
+            },
+            {
+              "label": "공급 원가(net, 선택)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "계약 매입가입니다. 고객에게는 보이지 않고, 비우면 기존 값을 그대로 둡니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "대상 룸",
+              "kind": "다중 체크",
+              "required": true,
+              "options": null,
+              "options_note": "이 호텔의 판매 연결(객실) 목록 — 체크",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "가격을 깔 룸을 하나 이상 선택해주세요"
+              ]
+            },
+            {
+              "label": "요금제(선택)",
+              "kind": "다중 체크",
+              "required": false,
+              "options": null,
+              "options_note": "이 호텔의 요금제 목록 — 체크(비우면 기준 요금제)",
+              "format": "",
+              "help": "비우면 룸마다 기준 요금제 한 곳에만 깝니다(종전과 같음). 조식 포함 / 룸 온리처럼 사본이 둘이면 여기서 골라야 그 사본에도 값이 들어갑니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "이 호텔의 요금제가 아닙니다 — 화면을 새로 고친 뒤 다시 골라주세요",
+                "대상 룸에 없는 요금제입니다 — 그 룸을 함께 고르거나 요금제를 빼주세요 (…)"
+              ]
+            },
+            {
+              "label": "기준 요금제 대비 조정(선택)",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: -8 또는 -5% · 20자까지",
+              "help": "고른 요금제 중 기준 요금제가 아닌 것에만 걸립니다 — 판매가·정가·원가가 함께 움직입니다. 예: 룸 온리가 조식 포함보다 8 싸면 -8, 5% 싸면 -5%.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "조정은 요금제를 고른 전개에서만 쓰입니다 — 요금제를 고르거나 이 칸을 비워주세요"
+              ]
+            },
+            {
+              "label": "인원 조합(선택)",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2,3,4 · 120자까지",
+              "help": "비우면 인원 무관 단일가 한 좌표에만 깝니다(종전과 같음). 요금표가 '2인 100 / 3인 114' 처럼 정원별로 값을 주면 인원수를 쉼표로 적습니다 — 인원수로 값을 고르기 때문에 숫자로 적어야 합니다(A2 형식도 저장은 되지만 인원 판정에 못 씁니다).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "인원 조합별 조정(선택)",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 3:+14,4:+26 · 200자까지",
+              "help": "위 단가 대비 인원 조합별 차액입니다 — 비우면 모든 인원 조합이 같은 단가입니다. 예: 3인이 14 비싸고 4인이 26 비싸면 3:+14,4:+26 (부호 필수 · -5% 처럼 %도 됩니다).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "조정은 인원 조합을 적은 전개에서만 쓰입니다 — 인원 조합 칸을 채우거나 이 칸을 비워주세요"
+              ]
+            },
+            {
+              "label": "이미 값이 있는 날도 덮기",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "끄면 비어 있는 날에만 깝니다. 켜면 손으로 고쳐 둔 값도 이 단가로 바뀝니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "이번에 적은 인원 조합·요금제에 없는 좌표 중 이 시즌이 만든 가격 셀을 지웁니다. 예약이 걸린 날은 건너뜁니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "이 단가로 깔기"
+      ],
+      "notes": [
+        "「이미 값이 있는 날도 덮기」 체크 여부와 회차 순서가 곧 결과다."
+      ]
+    },
+    {
+      "id": "season-status-fill",
+      "name": "셀 상태 일괄",
+      "opens": [
+        "편집 화면 탭 `시즌`",
+        "시즌 줄의 [상태]"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "바꿀 상태",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "고르세요",
+                "판매 금지",
+                "마감",
+                "미공급",
+                "추후 공지",
+                "판매 가능"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "'판매 가능' 은 되돌리기입니다 — 이미 닫아 둔 셀을 다시 엽니다. 판매가가 0인 셀은 열지 않고 건너뜁니다(0원이 그 호텔 최저가로 고객 화면에 나갑니다).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "바꿀 상태를 골라주세요",
+                "일괄로 걸 수 없는 상태입니다 — 목록에서 골라주세요"
+              ]
+            },
+            {
+              "label": "시작 날짜",
+              "kind": "날짜 고르개",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "시작 날짜를 입력해주세요",
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)"
+              ]
+            },
+            {
+              "label": "종료 날짜",
+              "kind": "날짜 고르개",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "하루만 걸려면 시작 날짜와 같게 둡니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "종료 날짜를 입력해주세요",
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)"
+              ]
+            },
+            {
+              "label": "대상 룸",
+              "kind": "다중 체크",
+              "required": true,
+              "options": null,
+              "options_note": "이 호텔의 판매 연결(객실) 목록 — 체크",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "상태를 바꿀 룸을 하나 이상 선택해주세요"
+              ]
+            },
+            {
+              "label": "요금제(선택)",
+              "kind": "다중 체크",
+              "required": false,
+              "options": null,
+              "options_note": "이 호텔의 요금제 목록 — 체크(비우면 기준 요금제)",
+              "format": "",
+              "help": "비우면 고른 룸의 **전 요금제**에 겁니다 — 그게 보통 하려는 일입니다. 요금제 하나만 닫으면 캘린더는 그 날 남은 요금제를 보고 그대로 열어 둡니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "이 호텔의 요금제가 아닙니다 — 화면을 새로 고친 뒤 다시 골라주세요",
+                "대상 룸에 없는 요금제입니다 — 그 룸을 함께 고르거나 요금제를 빼주세요 (…)"
+              ]
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "이 상태로 바꾸기"
+      ],
+      "notes": []
+    },
+    {
+      "id": "price-cell",
+      "name": "가격 셀 손입력",
+      "opens": [
+        "편집 화면 탭 `가격 캘린더`",
+        "[룸별 입력]",
+        "날짜 칸을 눌러 열리는 작은 창"
+      ],
+      "cards": [
+        "인원별 가격 추가"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "인원 조합",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2, 4 … 인원수 (비우면 인원 무관 단일가) · 32자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "같은 인원 조합의 가격 행이 이미 있습니다 — 위 표에서 그 행을 고치세요",
+                "인원 조합은 인원수 숫자로 씁니다(2, 4 …). 인원 무관 단일가는 비워두세요"
+              ]
+            },
+            {
+              "label": "판매가",
+              "kind": "숫자",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: 180.00",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "판매 가능한 셀은 0원일 수 없습니다. 값을 넣거나 셀 상태를 '데이터 누락'으로 바꿔주세요",
+                "판매가는 0보다 작을 수 없습니다"
+              ]
+            },
+            {
+              "label": "정가",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 220.00",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "정가는 판매가보다 작을 수 없습니다",
+                "정가는 0보다 작을 수 없습니다"
+              ]
+            },
+            {
+              "label": "공급 원가",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 150.00",
+              "help": "계약 매입가. 비우면 기록하지 않습니다 — 0 은 '무료 제공'이라는 값입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "상태",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "판매 가능",
+                "미공급",
+                "마감",
+                "판매 금지",
+                "데이터 누락",
+                "추후 공지"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "닫기",
+        "저장",
+        "추가"
+      ],
+      "notes": [
+        "이 창은 드로어가 아니라 화면 가운데 뜨는 작은 창이다."
+      ]
+    },
+    {
+      "id": "charge",
+      "name": "부과금 추가 · 편집",
+      "opens": [
+        "편집 화면 탭 `부과금`",
+        "오퍼 카드의 [부과금 추가] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "시간대별 요율"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "종류",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "얼리 체크인",
+                "레이트 체크아웃",
+                "기타"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "부과 방식",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "정액",
+                "1박 요금의 %"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "“1박 요금의 %”의 기준 밤은 위 [종류]가 정합니다 — “얼리 체크인”이면 첫날 밤, 그 외에는 마지막 밤 요금입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "부과 단위",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "체류당 1회",
+                "박당",
+                "인당"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "금액에 곱해지는 수입니다 — 체류당 1회=예약 전체에 한 번(공항 픽업) · 박당=박수만큼(1박당 받는 리조트피) · 인당=투숙 인원수만큼(갈라디너).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "정액 금액 (공급 통화)",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "미정 (비움)",
+                "지정 (0 포함)"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「시간대별 요율」 표가 비어 있고 「부과 방식」이 「정액」일 때",
+              "same_row_as": null,
+              "aliases": [
+                "정액 금액"
+              ],
+              "reject": []
+            },
+            {
+              "label": "정액 금액 (공급 통화) 값",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 30.00",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「시간대별 요율」 표가 비어 있고 「부과 방식」이 「정액」일 때",
+              "same_row_as": "정액 금액 (공급 통화)",
+              "aliases": [
+                "정액 금액(공급 통화)",
+                "정액 금액 값"
+              ],
+              "reject": []
+            },
+            {
+              "label": "정률(%)",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "미정 (비움)",
+                "지정 (0 포함)"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「시간대별 요율」 표가 비어 있고 「부과 방식」이 「1박 요금의 %」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "정률(%) 값",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 10",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「시간대별 요율」 표가 비어 있고 「부과 방식」이 「1박 요금의 %」일 때",
+              "same_row_as": "정률(%)",
+              "aliases": [
+                "정률(%)"
+              ],
+              "reject": []
+            },
+            {
+              "label": "부과 유형",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "선택 — 고객이 고를 때만 붙습니다",
+                "의무 — 고객 선택 없이 자동으로 붙습니다"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "적용 날짜 (선택)",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-12-24, 2026-12-31",
+              "help": "비우면 이 오퍼의 전 기간에 붙습니다. 특정 날짜에만 붙는 계약일 때만 적으세요.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「부과 유형」이 「의무 — 고객 선택 없이 자동으로 붙습니다」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "적용 룸 scope",
+              "kind": "다중 체크",
+              "required": false,
+              "options": null,
+              "options_note": "이 오퍼의 판매 연결(객실) 목록 — 체크(비우면 전체)",
+              "format": "",
+              "help": "비우면 이 오퍼의 모든 객실에 적용됩니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "시간대별 요율",
+              "kind": "반복 행",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [],
+              "columns": [
+                "시작 시각",
+                "종료 시각",
+                "부과 방식",
+                "정액 금액 (공급 통화)",
+                "정률(%)"
+              ],
+              "column_options": [
+                [
+                  "정액",
+                  "1박 요금의 %"
+                ]
+              ]
+            },
+            {
+              "label": "설명",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "요율 행 추가",
+        "삭제",
+        "추가",
+        "저장",
+        "부과금 추가",
+        "편집"
+      ],
+      "notes": [
+        "「시간대별 요율」에 한 줄이라도 넣으면 「정액 금액 (…)」·「정률(%)」 칸이 사라진다 — 금액을 먼저 채우고 [요율 행 추가]."
+      ]
+    },
+    {
+      "id": "addon",
+      "name": "부가옵션 추가 · 편집",
+      "opens": [
+        "편집 화면 탭 `부가옵션`",
+        "[부가옵션 추가] (고칠 때는 카드 머리의 [편집])"
+      ],
+      "cards": [
+        "의무 규칙",
+        "수량",
+        "적용 범위 (비우면 전체)"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "오퍼",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "— 오퍼 선택 —"
+              ],
+              "options_note": "이 호텔에 만들어 둔 오퍼 목록",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "오퍼를 선택해주세요",
+                "연결 룸이 속한 오퍼와 다릅니다 — 후보 해소가 항상 실패합니다"
+              ]
+            },
+            {
+              "label": "이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "애드온 이름을 입력해주세요"
+              ]
+            },
+            {
+              "label": "적용 방식",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "---------",
+                "1회 적용 (박수·날짜와 무관)",
+                "날짜연동 (박수 따라감 — 엑스트라베드)",
+                "일자선택 (원하는 날만 — 조식)"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": "운영 번역 카탈로그 기준 문구",
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "화면 섹션",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "---------",
+                "침대 추가",
+                "식사",
+                "공항 이동",
+                "부대시설·액티비티",
+                "기타"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": "운영 번역 카탈로그 기준 문구",
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "의무 규칙",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "의무 아님 (고객이 원할 때만 선택)",
+                "전 숙박일 의무",
+                "첫 숙박일 의무",
+                "마지막 숙박일 의무",
+                "지정 날짜 의무 (갈라 디너 등)",
+                "기준 성인 초과 시 의무 (엑스트라베드)",
+                "총 인원 N명 이상일 때 의무"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "고르면 그 조건에서 고객이 뺄 수 없습니다 — 견적에 반드시 포함됩니다(갈라디너 등).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "의무 날짜",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "YYYY-MM-DD 를 쉼표로 구분 (예: 2026-12-24, 2026-12-31)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「의무 규칙」이 「지정 날짜 의무 (갈라 디너 등)」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "지정 날짜 의무는 날짜를 최소 1개 입력해야 합니다",
+                "날짜 형식이 올바르지 않습니다 (YYYY-MM-DD): …"
+              ]
+            },
+            {
+              "label": "총 인원 기준(명)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「의무 규칙」이 「총 인원 N명 이상일 때 의무」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "총 인원 기준을 입력해주세요"
+              ]
+            },
+            {
+              "label": "수량 상한",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": "운영 번역 카탈로그 기준 문구",
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "무료 제공 수량",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": "운영 번역 카탈로그 기준 문구",
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "무료 제공 수량이 최대 수량보다 클 수 없습니다"
+              ]
+            },
+            {
+              "label": "항목선택방식",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "단일선택",
+                "다중선택"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "정렬",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": "운영 번역 카탈로그 기준 문구",
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "연결 룸 (선택)",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------"
+              ],
+              "options_note": "이 호텔의 판매 연결(객실) 목록(비우면 오퍼 전체)",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "요금제 scope",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------"
+              ],
+              "options_note": "이 호텔의 요금제 목록(비우면 전 요금제)",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "요금제를 고르려면 연결 룸을 먼저 선택해주세요",
+                "연결 룸에 속하지 않는 요금제입니다 — 후보 해소가 항상 실패합니다"
+              ]
+            },
+            {
+              "label": "룸 레벨 scope",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------"
+              ],
+              "options_note": "이 호텔에 만들어 둔 룸 목록",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "추가",
+        "저장",
+        "부가옵션 추가",
+        "가격 추가",
+        "편집",
+        "삭제"
+      ],
+      "notes": [
+        "부가옵션은 정의를 먼저 저장하고, 그다음 가격 줄을 따로 넣는다."
+      ]
+    },
+    {
+      "id": "addon-price",
+      "name": "부가옵션 가격 추가 · 편집",
+      "opens": [
+        "편집 화면 탭 `부가옵션`",
+        "그 부가옵션 카드의 [가격 추가] (고칠 때는 가격 줄의 [편집])"
+      ],
+      "cards": [
+        "적용 좌표 (비우면 언제나)"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "가격행 이름을 입력해주세요"
+              ]
+            },
+            {
+              "label": "판매가(공급 통화)",
+              "kind": "숫자",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [
+                "판매가"
+              ],
+              "reject": [
+                "판매가를 입력해주세요 (무료면 0)",
+                "판매가는 0 이상이어야 합니다"
+              ]
+            },
+            {
+              "label": "공급 원가(선택)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "시즌 scope",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------"
+              ],
+              "options_note": "이 오퍼의 시즌 목록(비우면 전 시즌)",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "개별 날짜",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "달력에서 고르거나 직접 입력 (예: 2026-01-01)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)",
+                "시즌과 개별 날짜를 동시에 지정할 수 없습니다 — 좌표가 둘이 됩니다"
+              ]
+            },
+            {
+              "label": "요금제 scope",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "---------"
+              ],
+              "options_note": "이 호텔의 요금제 목록(비우면 전 요금제)",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "애드온의 요금제 scope 와 다릅니다",
+                "애드온이 연결된 룸에 속하지 않는 요금제입니다"
+              ]
+            },
+            {
+              "label": "설명",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": "운영 번역 카탈로그 기준 문구",
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "추가",
+        "저장"
+      ],
+      "notes": [
+        "무료면 0 을 넣는다 — 비우면 저장되지 않는다."
+      ]
+    },
+    {
+      "id": "promotion",
+      "name": "프로모션 추가 · 편집",
+      "opens": [
+        "편집 화면 탭 `프로모션`",
+        "오퍼 카드의 [프로모션 추가] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "적용 범위와 조합"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "프로모션명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "200자까지",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "코드",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "계약서·채널 연동에서 이 할인을 가리키는 약칭입니다. 비워도 됩니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "발동 조건",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "상시 — 조건 없이 항상",
+                "연박 — N박 이상 묵으면",
+                "얼리버드 — 체크인 D-N일 전에 예약하면",
+                "객실 수 — N개 이상 잡으면"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "혜택 방식",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "정률 — 요금의 %",
+                "정액 — 금액을 뺀다",
+                "무료 숙박 — N박을 공짜로 (STAY5PAY4형)"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "적용 단위",
+              "kind": "선택",
+              "required": true,
+              "options": [
+                "박당",
+                "체류당 1회"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "정액·무료숙박에서만 뜻이 갈립니다 — 정률은 밤마다 요금에 비례해 붙습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "단(tier)",
+              "kind": "반복 행",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "최소 한 단은 있어야 합니다 — 단이 없으면 고객이 이 할인을 고르는 순간 예약이 실패합니다",
+                "기준값이 같은 단이 둘 이상입니다 — 어느 단을 적용할지 정해지지 않습니다",
+                "‘상시’ 는 기준값을 보지 않습니다 — 기준값을 0 으로 두거나 발동 조건을 바꾸세요",
+                "…번째 단의 할인율은 0~100 사이여야 합니다",
+                "…번째 단의 무료 숙박은 박 단위 정수여야 합니다"
+              ],
+              "columns": [
+                "기준값",
+                "최소 숙박(박)",
+                "체크인 D-N일 전",
+                "최소 객실 수",
+                "기준 없음",
+                "값",
+                "할인율(%)",
+                "할인 금액",
+                "무료 숙박(박)"
+              ],
+              "columns_note": "첫 열 이름은 「발동 조건」이 정한다 — 최소 숙박(박) / 체크인 D-N일 전 / 최소 객실 수 / 기준 없음. 둘째 열 이름은 「혜택 방식」이 정한다 — 할인율(%) / 할인 금액 / 무료 숙박(박)."
+            },
+            {
+              "label": "적용 숙박일 시작",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "비우면 이 오퍼의 전 기간에 붙습니다. 예약한 날이 아니라 ‘묵는 날’ 기준입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)"
+              ]
+            },
+            {
+              "label": "적용 숙박일 종료",
+              "kind": "날짜 고르개",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 2026-01-01",
+              "help": "시작만 채우면 그 날부터, 종료만 채우면 그 날까지입니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "날짜는 'YYYY-MM-DD' 로 입력해주세요 (예: 2026-01-01)",
+                "종료일이 시작일보다 빠릅니다"
+              ]
+            },
+            {
+              "label": "시즌 한정",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "(전 시즌)"
+              ],
+              "options_note": "이 오퍼의 시즌 목록 + 「(전 시즌)」",
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "요금제 한정",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "(전 요금제)"
+              ],
+              "options_note": "이 오퍼의 요금제 목록 + 「(전 요금제)」",
+              "format": "",
+              "help": "요금제를 한정하면 이 할인은 객실 목록 가격에는 표시되지 않고 견적·예약 단계에서만 적용됩니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "다른 프로모션과 중복 적용",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "끄면 이 할인을 고르는 순간 다른 할인은 못 고릅니다(기본은 택일).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "배타 그룹",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "64자까지",
+              "help": "같은 이름을 적은 프로모션끼리는 하나만 고를 수 있습니다. 비우면 제한 없음.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "단 추가",
+        "삭제",
+        "추가",
+        "저장",
+        "프로모션 추가",
+        "편집"
+      ],
+      "notes": [
+        "단(tier)이 하나도 없으면 고객이 이 할인을 고르는 순간 예약이 실패한다."
+      ]
+    },
+    {
+      "id": "benefit-group",
+      "name": "택1 그룹 만들기 · 편집",
+      "opens": [
+        "편집 화면 탭 `혜택`",
+        "[택1 그룹 만들기] (고칠 때는 [그룹 편집])"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "그룹 이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "계약서 문장을 그대로 적는 편이 좋습니다 (예: 옵션 1과 2 중에서 선택 1) — 나중에 시트와 대조합니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "적용 조건 메모",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "발동 조건·예외를 문장 그대로 적으세요 (예: 3박 이상, 시그니처 룸타입 제외) — 아직 구조 칸이 없습니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "만들기",
+        "저장",
+        "혜택 추가",
+        "택1 그룹 만들기",
+        "편집",
+        "삭제",
+        "이 그룹에 혜택 추가",
+        "그룹 편집",
+        "그룹 삭제"
+      ],
+      "notes": [
+        "고객이 여럿 중 하나만 고르게 할 때만 그룹을 먼저 만든다."
+      ]
+    },
+    {
+      "id": "benefit",
+      "name": "혜택 추가 · 편집",
+      "opens": [
+        "편집 화면 탭 `혜택`",
+        "[혜택 추가] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "제공 조건",
+        "수령 절차"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "소속 택1 그룹",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "(그룹 없음 — 상시 포함되는 단독 혜택)"
+              ],
+              "options_note": "이 오퍼에 만들어 둔 택1 그룹 목록",
+              "format": "",
+              "help": "택1 그룹을 고르면 고객이 그 그룹에서 하나만 고릅니다. 비우면 예약에 항상 포함됩니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "혜택 이름",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "100자까지",
+              "help": "고객이 읽을 한 줄 (예: 웰컴 드링크 제공, 체크인 당일 조식 1회)",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "수량",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "계약서의 숫자만 적으세요 (예: 스파 1회 제공 → 1). 고객 화면에 “제공 수량 — 1회” 로 나옵니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "제공 주기",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "체크하면 “1박당”, 비우면 “체류당”입니다. 위 [수량]을 채워야 고객 화면에 나옵니다",
+              "checkbox_text": "1박당 제공 (비우면 체류당)",
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "수량 단위",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "16자까지",
+              "help": "“회”가 아닌 단위일 때만 적으세요 (예: 케이블카 2매 → 매). 고객 화면은 아직 수량 뒤에 “회”만 붙이므로, 다른 단위는 위 [혜택 이름]에도 적어 주세요",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "적용 인원 수",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "“2인 조식 포함”이면 2. 아직 고객 화면에는 안 나옵니다 — 계약 대조용으로 받습니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "제공 시간(분)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "“스파 60분”이면 60. 세션 전체와 시술 시간이 다르면 계약서가 값으로 적은 쪽만 넣고 나머지는 아래 메모에 문장으로 적으세요. 아직 고객 화면에는 안 나옵니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "금액 가치 (공급 통화)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "예: 25.00",
+              "help": "리조트 크레딧처럼 금액으로 적힌 혜택 (예: USD 25 상당). 이 호텔의 공급 통화로 적으세요. 아직 고객 화면에 안 나오고 요금 계산에도 안 들어갑니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [
+                "금액 가치"
+              ],
+              "reject": []
+            },
+            {
+              "label": "할인율 가치(%)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "“스파 15% 할인”이면 15. 아직 고객 화면에 안 나오고, 여기 적어도 요금은 깎이지 않습니다 — 깎이는 할인은 [프로모션]에서 만드세요",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "지급 방식",
+              "kind": "선택",
+              "required": false,
+              "options": [
+                "계약서에 절차 없음 — 자동 제공으로 안내",
+                "요청 필요 — 고객이 요청해야 제공"
+              ],
+              "options_note": null,
+              "format": "",
+              "help": "고객 화면에 그대로 나옵니다. 계약서에 요청 절차가 적혀 있는데 비워 두면 화면이 '자동 제공'이라고 안내합니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "요청 창구·기한·재고 조건은 [요청 필요]를 골라야 고객 화면에 나옵니다."
+              ]
+            },
+            {
+              "label": "요청 창구",
+              "kind": "텍스트",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "50자까지",
+              "help": "계약서 표기 그대로 적으세요 (예: 카카오톡 고객센터) — 나중에 시트와 대조합니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「지급 방식」이 「요청 필요 — 고객이 요청해야 제공」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "요청 기한 (체크인 D-N)",
+              "kind": "숫자",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "'체크인 3일 전까지 요청' 이면 3. 안 적혔으면 비웁니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "「지급 방식」이 「요청 필요 — 고객이 요청해야 제공」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "재고 조건부",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "'객실 상황에 따름' · '가능 시 제공' 처럼 확약이 아닌 경우 체크",
+              "checkbox_text": "가능 시에만 제공",
+              "_note": null,
+              "visible_when": "「지급 방식」이 「요청 필요 — 고객이 요청해야 제공」일 때",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "조건·안내 메모",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "적용 범위·예외를 문장 그대로 적으세요 (예: 가든 슈퍼리어 & 가든 디럭스 객실 제외) — 아직 구조 칸이 없습니다",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "추가",
+        "저장"
+      ],
+      "notes": []
+    },
+    {
+      "id": "campaign",
+      "name": "캠페인 만들기 · 수정",
+      "opens": [
+        "호텔 목록 화면 위 [캠페인]",
+        "[캠페인 만들기] (고칠 때는 그 줄의 [편집])"
+      ],
+      "cards": [
+        "캠페인"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "캠페인 코드",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: SAMPLE-CAMPAIGN-26 · 64자까지",
+              "help": "여행사 안에서 겹칠 수 없는 식별자입니다. 재발행해도 같은 코드를 씁니다. 예: SAMPLE-CAMPAIGN-26",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "여행사를 알 수 없어 저장할 수 없습니다 — 화면을 새로 여세요"
+              ]
+            },
+            {
+              "label": "고객 노출명",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "예: SAMPLE CAMPAIGN · 100자까지",
+              "help": "고객 화면 카드·뱃지에 그대로 나갑니다. 예: SAMPLE CAMPAIGN",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            },
+            {
+              "label": "뱃지 이미지",
+              "kind": "파일",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "고르지 않으면 지금 이미지가 그대로 남습니다. 5MB 이하.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "이미지가 아니거나 손상된 파일입니다"
+              ]
+            },
+            {
+              "label": "이미지 제거",
+              "kind": "체크박스",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "체크하면 이 캠페인에서 이미지를 뗍니다(원본은 이미지 카탈로그에 남습니다).",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "새 이미지를 올리면서 제거를 함께 켤 수 없습니다 — 하나만 고르세요"
+              ]
+            },
+            {
+              "label": "설명",
+              "kind": "여러 줄 글",
+              "required": false,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "담당자용 메모입니다. 고객 화면에 나가지 않습니다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "추가",
+        "저장",
+        "캠페인 만들기",
+        "검색하기"
+      ],
+      "notes": [
+        "캠페인은 오퍼가 골라 쓰는 이름표라 오퍼보다 먼저 만든다."
+      ]
+    },
+    {
+      "id": "master-images",
+      "name": "상세 이미지 올리기",
+      "opens": [
+        "편집 화면 탭 `기본정보` 아래 이미지 카드"
+      ],
+      "cards": [],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "이미지 파일",
+              "kind": "파일 (여러 장)",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "",
+              "help": "",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": [
+                "이미지 파일을 선택해주세요",
+                "이미지가 아니거나 손상된 파일이 있습니다"
+              ]
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "업로드",
+        "▲",
+        "▼",
+        "삭제"
+      ],
+      "notes": []
+    },
+    {
+      "id": "validation",
+      "name": "검증 배너 · 판매 시작",
+      "opens": [
+        "편집 화면 맨 위 검증 배너"
+      ],
+      "blocks": [
+        {
+          "name": "",
+          "fields": [
+            {
+              "label": "사유",
+              "kind": "텍스트",
+              "required": true,
+              "options": null,
+              "options_note": null,
+              "format": "화면 예시 문구: 사유 (예: 이 호텔은 원래 사진을 안 준다)",
+              "help": "[이건 넘어가기] 를 누르면 그 줄에만 열린다. 비우면 넘어갈 수 없다.",
+              "checkbox_text": null,
+              "_note": null,
+              "visible_when": "노란 항목의 [이건 넘어가기] 를 누른 뒤",
+              "same_row_as": null,
+              "aliases": [],
+              "reject": []
+            }
+          ]
+        }
+      ],
+      "buttons": [
+        "같은 문제 N건 ▼",
+        "제안값 보기",
+        "세후가로 확정",
+        "다시 보기",
+        "이건 넘어가기",
+        "넘어가기",
+        "판매 시작"
+      ],
+      "notes": [
+        "배너는 두 묶음이다 — 빨간 묶음 제목은 「🔴 이대로면 못 팝니다 (건수)」, 노란 묶음 제목은 「🟡 채우면 좋음 (건수)」.",
+        "같은 규칙이 여러 건이면 「같은 문제 N건 ▼」로 접히고, 그 안에서도 넘치면 「외 N건」으로 더 접힌다.",
+        "빨간 항목이 하나라도 있으면 [판매 시작]을 누를 수 없다.",
+        "노란 항목은 [이건 넘어가기] → 사유 칸에 적고 [넘어가기] 로 지나갈 수 있다. 사유는 필수다.",
+        "사유 칸의 예시 문구는 「사유 (예: 이 호텔은 원래 사진을 안 준다)」이고, 넘어간 항목에는 「넘어감」 표가 붙고 [다시 보기] 로 되돌린다.",
+        "같은 규칙은 호텔당 한 번만 넘어가면 된다.",
+        "판매 중이면 「판매중」 표와 「오퍼 N건이 고객 화면에 팔리는 중입니다」가, 없으면 「판매 없음」 표와 「판매 중인 오퍼가 없습니다」가 보인다."
+      ]
+    }
+  ],
+  "validation": {
+    "id": "validation",
+    "name": "검증 배너 · 판매 시작",
+    "opens": [
+      "편집 화면 맨 위 검증 배너"
+    ],
+    "blocks": [
+      {
+        "name": "",
+        "fields": [
+          {
+            "label": "사유",
+            "kind": "텍스트",
+            "required": true,
+            "options": null,
+            "options_note": null,
+            "format": "화면 예시 문구: 사유 (예: 이 호텔은 원래 사진을 안 준다)",
+            "help": "[이건 넘어가기] 를 누르면 그 줄에만 열린다. 비우면 넘어갈 수 없다.",
+            "checkbox_text": null,
+            "_note": null,
+            "visible_when": "노란 항목의 [이건 넘어가기] 를 누른 뒤",
+            "same_row_as": null,
+            "aliases": [],
+            "reject": []
+          }
+        ]
+      }
+    ],
+    "buttons": [
+      "같은 문제 N건 ▼",
+      "제안값 보기",
+      "세후가로 확정",
+      "다시 보기",
+      "이건 넘어가기",
+      "넘어가기",
+      "판매 시작"
+    ],
+    "notes": [
+      "배너는 두 묶음이다 — 빨간 묶음 제목은 「🔴 이대로면 못 팝니다 (건수)」, 노란 묶음 제목은 「🟡 채우면 좋음 (건수)」.",
+      "같은 규칙이 여러 건이면 「같은 문제 N건 ▼」로 접히고, 그 안에서도 넘치면 「외 N건」으로 더 접힌다.",
+      "빨간 항목이 하나라도 있으면 [판매 시작]을 누를 수 없다.",
+      "노란 항목은 [이건 넘어가기] → 사유 칸에 적고 [넘어가기] 로 지나갈 수 있다. 사유는 필수다.",
+      "사유 칸의 예시 문구는 「사유 (예: 이 호텔은 원래 사진을 안 준다)」이고, 넘어간 항목에는 「넘어감」 표가 붙고 [다시 보기] 로 되돌린다.",
+      "같은 규칙은 호텔당 한 번만 넘어가면 된다.",
+      "판매 중이면 「판매중」 표와 「오퍼 N건이 고객 화면에 팔리는 중입니다」가, 없으면 「판매 없음」 표와 「판매 중인 오퍼가 없습니다」가 보인다."
+    ],
+    "rules": [
+      {
+        "message": "공급 통화가 지정되지 않았습니다 — 환산·표시가가 계산되지 않습니다",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "세전(++/nett) 감지 후 세후 변환이 미확정인 가격 셀이 …개 있습니다",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "시즌 '…'(오퍼 '…')의 기간이 뒤집혀 있습니다 — 시작 … 이 종료 … 보다 늦습니다. 이 시즌은 어떤 날짜에도 적용되지 않습니다",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "오퍼 '…'과 '…'이 같은 날짜를 덮는데 우선순위가 같습니다(…)",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "오퍼 '…'의 판매 구간에 가격 셀이 없습니다",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "오퍼가 없습니다 — 금액을 계산할 수 없어 판매가 불가능합니다",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "의무 부과 항목 '…'(오퍼 '…')에 금액이 없습니다",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "판매 가능인데 판매가가 0원인 셀이 …개 있습니다 — 값을 넣거나 셀 상태를 '데이터 누락'으로 바꿔주세요",
+        "severity": "차단",
+        "dismissible": false
+      },
+      {
+        "message": "선택 항목 '…'(오퍼 '…')에 금액이 없어 판매 목록에서 제외됩니다",
+        "severity": "경고",
+        "dismissible": true
+      },
+      {
+        "message": "시즌 '…'(오퍼 '…')의 한 기간이 …~… 로 …일입니다 — …일을 넘습니다(연도 오타 의심). 같은 오퍼의 다른 시즌을 삼킵니다",
+        "severity": "경고",
+        "dismissible": true
+      },
+      {
+        "message": "시즌 '…'과 '…'의 기간이 …일 겹칩니다(오퍼 '…') — 겹치는 날의 금액은 우선순위(… vs …)로 갈립니다",
+        "severity": "경고",
+        "dismissible": true
+      },
+      {
+        "message": "시즌 '…'이 '…'을 통째로 포함합니다(오퍼 '…', …일) — 좁은 쪽('…', 우선순위 …)이 넓은 쪽(우선순위 …)보다 커야 의도대로 적용됩니다",
+        "severity": "경고",
+        "dismissible": true
+      },
+      {
+        "message": "오퍼 '…'에 시즌이 없습니다 — 재전개·일괄 편집이 불가합니다",
+        "severity": "경고",
+        "dismissible": true
+      },
+      {
+        "message": "오퍼 '…'에 취소정책이 없습니다 — 고객 화면에 취소·환불 규정이 보이지 않습니다",
+        "severity": "경고",
+        "dismissible": true
+      },
+      {
+        "message": "오퍼 '…'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다",
+        "severity": "경고",
+        "dismissible": true
+      }
+    ]
+  },
+  "not_covered": [
+    "왼쪽 메뉴의 이름과 순서 — 여행사마다 다르게 설정하는 값이라 화면을 열어 봐야 안다.",
+    "선택지에 실제로 뜨는 목록 — 룸·오퍼·시즌·요금제·취소정책·거래처·캠페인은 그 호텔에 무엇을 만들었는지가 정한다.",
+    "저절로 채워지는 값 — 상품코드·수수료 네 칸·정렬 기본값은 화면이 채운 뒤에야 보인다.",
+    "이미 있는 값 때문에 잠기는 칸 — 이미 연결된 룸의 체크박스가 회색으로 잠기는 것 등.",
+    "달력·시각 고르개가 실제로 펼쳐 보여 주는 목록.",
+    "저장한 뒤 잠깐 떴다 사라지는 안내 띠와 그 문구.",
+    "운영 번역이 덮어쓴 글자 — 아래 README 의 한계 참고."
+  ]
+}

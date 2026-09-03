@@ -1,0 +1,20 @@
+사진의 저작권·사용 허락 확인은 사용자(여행사) 책임이며, 이 스킬의 제공자는 사진의 권리 문제에 대해 책임지지 않습니다.
+
+사진은 호텔 공식 사이트에서만 골랐다. 실제 파일은 이 폴더에 두지 않는다 — 파일명 규칙과 출처를 보여 주는 목록이다.
+
+파일명 | 출처
+hotel_01.jpg | http://www.tougane-h.com/facilities/images/img_fac1.jpg
+hotel_02.jpg | http://www.tougane-h.com/facilities/images/img_fac2.jpg
+hotel_03.jpg | http://www.tougane-h.com/facilities/images/img_fac.jpg
+hotel_04.jpg | http://www.tougane-h.com/facilities/images/img_lis_fac1.jpg
+hotel_05.jpg | http://www.tougane-h.com/facilities/images/img_lis_fac2.jpg
+hotel_06.jpg | http://www.tougane-h.com/facilities/images/img_lis_fac3.jpg
+offer_hero.jpg | http://www.tougane-h.com/rooms/images/img_intro.jpg
+room_single_01.jpg | http://www.tougane-h.com/rooms/images/img_single.jpg
+room_standard-double_01.jpg | http://www.tougane-h.com/rooms/images/img_double.jpg
+room_economy-double_01.jpg | http://www.tougane-h.com/rooms/images/img_double2.jpg
+room_bunk-bed-twin_01.jpg | http://www.tougane-h.com/rooms/images/img_two.jpg
+room_twin_01.jpg | http://www.tougane-h.com/rooms/images/img_twin.jpg
+room_family_01.jpg | http://www.tougane-h.com/rooms/images/img_fourth.jpg
+
+룸 사진이 룸마다 한 장인 것은 공식 사이트가 룸 타입별로 한 장만 올려 두었기 때문이다.

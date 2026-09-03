@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+# Rendered guide HTML stores per-row progress keys (16-hex hashes), not credentials
+[allowlist]
+description = "rendered guide progress keys"
+regexTarget = "line"
+regexes = ["""data-keys?=\"[0-9a-f]{16}\""""]
