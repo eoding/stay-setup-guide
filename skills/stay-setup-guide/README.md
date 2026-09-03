@@ -17,6 +17,8 @@
 `SKILL.md` 를 읽고 그 절차(룰 정리 → 팩트 수집 → 지시서 작성 → 검사 → 렌더)를 그대로 따라간다. 자세한 값
 표기 규칙은 `references/MANUAL-SPEC.md`, 완성된 결과물의 모양은 `examples/우에노_토우가네야/`를 본다.
 
+지시서는 짝 스킬 `skills/stay-setup-run` 이 화면에서 그대로 실행한다 — 단계 제목·`카드:` 줄·마지막 `→ [버튼]` 표기가 그 러너가 알아보는 형식이다.
+
 ```
 python3 scripts/check_manual.py <manual.md> --photos <사진 폴더> --share-name <공유 폴더명>
 python3 scripts/render_card.py <manual.md> -o <이름>_입력지시서.html --font scripts/fonts/PretendardVariable.woff2 --title "<호텔> 입력 지시서"
@@ -33,7 +35,8 @@ python3 scripts/render_card.py <manual.md> -o <이름>_입력지시서.html --fo
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님): `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(정답지) → `changes.md` → 렌더된 HTML, `사진목록.txt`(파일명 · 출처) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |
 | `scripts/render_card.py` | `manual.md` → 표 셀마다 복사 버튼, 목차, 진행 체크가 달린 단일 HTML 파일 변환 |
-| `scripts/check_manual.py` | `manual.md` 형식 검사(단계=저장 1:1, 번호 연속, 금지어·원문자·절대경로 0, 사진 참조 확인) |
+| `scripts/check_manual.py` | `manual.md` 형식 검사(단계=저장 1:1, 번호 연속, 금지어·원문자·절대경로 0, 사진 참조 확인, 겹치는 시즌의 `덮기` 체크·부가옵션 카드의 오퍼 한정·프로모션 카드·시즌 만들기의 `→ [추가]`) |
+| `tests/` | 검사 스크립트 시험 — `python3 -m unittest discover -s skills/stay-setup-guide/tests` |
 | `scripts/fonts/PretendardVariable.woff2` | HTML 카드에 임베드하는 한글 폰트(라이선스: 같은 폴더 `LICENSE-Pretendard.txt`, SIL OFL) |
 
 ## 면책

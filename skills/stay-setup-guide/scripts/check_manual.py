@@ -13,6 +13,10 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 0단계(1·2·3 단계가 각각 환율 확인 · 거래처 확인 · 도시 확인)가 있는지
 - 표의 칸 이름이 화면 사전(screen-dictionary.json)에 있는지
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
+- 넓은 시즌 날짜 안에 든 좁은 시즌의 가격 채우기가 `이미 값이 있는 날도 덮기 | 체크` 인지
+- 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
+- 프로모션 단계의 카드가 `전 오퍼 공통` 이 아닌지(그런 카드는 화면에 없다)
+- `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 
 사용법:
     python3 check_manual.py <manual.md> [--photos DIR] [--share-name NAME]
@@ -24,6 +28,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 --contract 를 생략하면 금액 대조는 건너뛴다.
 """
 import argparse
+import datetime
 import decimal
 import json
 import os
@@ -50,6 +55,244 @@ PHOTO_SRC_RE = re.compile(
     re.IGNORECASE,
 )
 HTTP_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+# 단계 첫 줄들(`화면:` `탭:` `카드:` …)과 마지막 저장 줄
+HEAD_RE = re.compile(r"^(화면|탭|카드|블록|버튼|폴더|주의):\s*(.*)$")
+SAVE_RE = re.compile(r"^→\s*\[([^\]]+)\]")
+BACKTICK_RE = re.compile(r"`([^`]+)`")
+# 부가옵션 가격 넣기 카드 줄의 오퍼 한정 형식: `<이름>` — 오퍼 칸이 `<오퍼>` 인 카드
+ADDON_CARD_OFFER_RE = re.compile(
+    r"^`(?P<name>[^`]+)`\s*[\u2014\u2013-]+\s*오퍼 칸이\s*`(?P<offer>[^`]+)`\s*인 카드\s*$"
+)
+# 시즌 날짜 값 안의 날짜·기간
+DATE_TOKEN_RE = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
+DATE_SPAN_RE = re.compile(r"(\d{4}-\d{1,2}-\d{1,2})\s*~\s*(\d{4}-\d{1,2}-\d{1,2})")
+MONTH_RE = re.compile(r"(\d{1,2})월")
+# 시즌 하나가 담을 수 있는 날짜 수 상한 — 이보다 길면 값을 못 읽은 것으로 보고 대조에서 뺀다
+MAX_SEASON_DAYS = 4000
+
+OVERWRITE_FIELD = "이미 값이 있는 날도 덮기"
+PROMO_COMMON_CARD = "전 오퍼 공통"
+
+
+def strip_select(value):
+    """`선택: A, B` → `A, B`. 아니면 그대로."""
+    return value[len("선택:"):].strip() if value.startswith("선택:") else value.strip()
+
+
+def parse_steps(lines):
+    """manual.md 를 단계 단위로 쪼갠다 — 번호·제목·첫 줄들·표·저장 줄."""
+    steps = []
+    cur = None
+    for line in lines:
+        m = STEP_TITLE_RE.match(line)
+        if m:
+            cur = {"num": int(m.group(1)), "title": m.group(2).strip(),
+                   "heads": {}, "rows": [], "fields": {}, "saves": []}
+            steps.append(cur)
+            continue
+        if cur is None:
+            continue
+        h = HEAD_RE.match(line)
+        if h:
+            cur["heads"].setdefault(h.group(1), []).append(h.group(2).strip())
+            continue
+        s = SAVE_RE.match(line)
+        if s:
+            cur["saves"].append(s.group(1).strip())
+            continue
+        r = ROW.match(line)
+        if r:
+            key, value = r.group(1).strip(), r.group(2).strip()
+            if key in ("칸", "---"):
+                continue
+            cur["rows"].append((key, value))
+            cur["fields"].setdefault(key, value)
+    return steps
+
+
+def head(step, name):
+    """단계의 `<name>:` 첫 줄 하나(없으면 None)."""
+    values = step["heads"].get(name)
+    return values[0] if values else None
+
+
+def card_name(step):
+    """`카드:` 줄에서 백틱 안 이름(첫 번째)만."""
+    line = head(step, "카드")
+    if not line:
+        return None
+    m = BACKTICK_RE.search(line)
+    return m.group(1).strip() if m else line.strip()
+
+
+def step_subject(title):
+    """`시즌 만들기 (1번째, Regular)` → `Regular`. 괄호가 없으면 None."""
+    m = re.match(r"^.*?\((.*)\)\s*$", title)
+    if not m:
+        return None
+    inner = m.group(1)
+    return inner.split(",", 1)[1].strip() if "," in inner else inner.strip()
+
+
+def _date(token):
+    y, mo, d = (int(x) for x in token.replace("/", "-").split("-"))
+    try:
+        return datetime.date(y, mo, d)
+    except ValueError:
+        return None
+
+
+def _span(start, end):
+    """두 날짜 사이의 날짜 집합. 뒤집혔거나 너무 길면 None(모름)."""
+    if not start or not end or end < start or (end - start).days + 1 > MAX_SEASON_DAYS:
+        return None
+    return {start + datetime.timedelta(days=i) for i in range((end - start).days + 1)}
+
+
+def season_dates(step):
+    """시즌 만들기 단계의 표에서 날짜 집합을 읽는다. 읽을 수 없으면 None."""
+    fields = step["fields"]
+    kind = strip_select(fields.get("날짜 규칙 유형", ""))
+    if kind == "기간 범위":
+        return _span(_date_field(fields, "기간 시작"), _date_field(fields, "기간 종료"))
+    if kind == "월 목록":
+        whole = _span(_date_field(fields, "기간 시작"), _date_field(fields, "기간 종료"))
+        months = {int(m) for m in MONTH_RE.findall(strip_select(fields.get("적용 월", "")))}
+        if whole is None or not months:
+            return None
+        return {d for d in whole if d.month in months}
+    if kind == "비연속 날짜 나열":
+        return _listed_dates(fields.get("날짜 나열", ""))
+    return None  # 요일 규칙 등 — 표만으로는 못 정한다
+
+
+def _date_field(fields, name):
+    value = (fields.get(name) or "").strip()
+    m = DATE_TOKEN_RE.search(value)
+    return _date(m.group(0)) if m else None
+
+
+def _listed_dates(value):
+    """`2026-07-01 ~ 2026-07-10 / 2026-12-24` 같은 나열 → 날짜 집합(못 읽으면 None)."""
+    rest = value
+    days = set()
+    for m in DATE_SPAN_RE.finditer(value):
+        part = _span(_date(m.group(1)), _date(m.group(2)))
+        if part is None:
+            return None
+        days |= part
+        rest = rest.replace(m.group(0), " ")
+    for m in DATE_TOKEN_RE.finditer(rest):
+        one = _date(m.group(0))
+        if one is None:
+            return None
+        days.add(one)
+    return days or None
+
+
+def season_index(steps):
+    """`시즌 만들기` 단계들 → {(오퍼 카드, 시즌명): 날짜 집합 or None}."""
+    seasons = {}
+    for step in steps:
+        if not step["title"].startswith("시즌 만들기"):
+            continue
+        name = step_subject(step["title"]) or step["fields"].get("시즌명")
+        if not name:
+            continue
+        seasons[(card_name(step) or "", name)] = season_dates(step)
+    return seasons
+
+
+def find_overwrite_gaps(steps):
+    """넓은 시즌 안에 든 좁은 시즌인데 `덮기` 가 체크가 아닌 가격 채우기 단계를 찾는다."""
+    seasons = season_index(steps)
+    problems = []
+    for step in steps:
+        if not step["title"].startswith("시즌 가격 채우기"):
+            continue
+        card = card_name(step)
+        if not card:
+            continue
+        matches = [key for key in seasons if key[1] == card]
+        if len(matches) != 1:  # 이름이 겹치거나 없으면 판정하지 않는다
+            continue
+        offer, name = matches[0]
+        mine = seasons[(offer, name)]
+        if not mine:
+            continue
+        wider = [
+            other for (o, other), dates in seasons.items()
+            if o == offer and other != name and dates and mine < dates
+        ]
+        if not wider:
+            continue
+        if step["fields"].get(OVERWRITE_FIELD) == "체크":
+            continue
+        problems.append(
+            f"{step['num']}단계: 시즌 `{name}` 날짜가 `{wider[0]}` 안에 들어 있는데 "
+            f"`{OVERWRITE_FIELD}` 가 체크가 아니다"
+        )
+    return problems
+
+
+def find_addon_card_gaps(steps):
+    """같은 이름의 부가옵션이 오퍼 여럿에 있는데 가격 넣기 카드가 오퍼를 한정하지 않은 곳."""
+    offers_by_name = {}
+    for step in steps:
+        title = step["title"]
+        if "부가옵션" not in title or "가격" in title:
+            continue
+        name = step["fields"].get("이름")
+        offer = strip_select(step["fields"].get("오퍼", ""))
+        if name and offer:
+            offers_by_name.setdefault(name.strip(), set()).add(offer)
+    problems = []
+    for step in steps:
+        title = step["title"]
+        if "부가옵션" not in title or "가격" not in title:
+            continue
+        line = head(step, "카드")
+        if not line:
+            continue
+        if ADDON_CARD_OFFER_RE.match(line):
+            continue
+        name = card_name(step)
+        if name and len(offers_by_name.get(name, ())) > 1:
+            problems.append(
+                f"{step['num']}단계: 부가옵션 `{name}` 이 오퍼 "
+                f"{len(offers_by_name[name])}곳에 있다 — 카드 줄에 "
+                "`<이름>` — 오퍼 칸이 `<오퍼>` 인 카드 형식으로 오퍼를 적어야 한다"
+            )
+    return problems
+
+
+def find_promo_common_cards(steps):
+    """프로모션 단계의 카드가 `전 오퍼 공통` 인 곳 — 그런 카드는 화면에 없다."""
+    problems = []
+    for step in steps:
+        if "프로모션" not in step["title"]:
+            continue
+        line = head(step, "카드") or ""
+        if PROMO_COMMON_CARD in line:
+            problems.append(
+                f"{step['num']}단계: 프로모션 카드 `{PROMO_COMMON_CARD}` 는 화면에 없다 — "
+                "오퍼마다 단계를 하나씩 두고 카드에 그 오퍼를 적는다"
+            )
+    return problems
+
+
+def find_season_save_gaps(steps):
+    """`시즌 만들기` 단계는 `→ [추가]` 로 끝나야 한다(드로어 버튼 문구)."""
+    problems = []
+    for step in steps:
+        if not step["title"].startswith("시즌 만들기"):
+            continue
+        saves = step["saves"]
+        if saves and saves[-1] != "추가":
+            problems.append(f"{step['num']}단계: 시즌 만들기의 마지막 줄은 `→ [추가]` 다 (지금 [{saves[-1]}])")
+    return problems
+
 
 # 0단계 — 호텔을 만들기 전에 반드시 먼저 보는 세 화면. 제목에 이 낱말이 들어 있으면 통과한다
 # (`환율 등록 확인` 처럼 말이 붙어도 되게 부분 일치로 본다)
@@ -200,6 +443,12 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     missing_files = sorted(referenced - have) if photos_dir else []
     unused_files = sorted(have - referenced) if photos_dir else []
 
+    parsed = parse_steps(lines)
+    overwrite_gaps = find_overwrite_gaps(parsed)
+    addon_card_gaps = find_addon_card_gaps(parsed)
+    promo_common = find_promo_common_cards(parsed)
+    season_saves = find_season_save_gaps(parsed)
+
     nums = [int(m.group(1)) for l in steps for m in [STEP_RE.match(l)] if m]
     seq_ok = nums == list(range(1, len(nums) + 1))
 
@@ -258,6 +507,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "photos_missing": missing_files, "photos_unused": unused_files,
         "bad_sources": bad_sources,
         "zero_missing": zero_missing,
+        "overwrite_gaps": overwrite_gaps, "addon_card_gaps": addon_card_gaps,
+        "promo_common": promo_common, "season_saves": season_saves,
         "dict_checked": bool(dictionary_path), "dict_error": dict_error, "unknown_fields": unknown_fields,
         "contract_checked": bool(contract_path), "contract_error": contract_error,
         "loose_amounts": loose_amounts,
@@ -307,6 +558,8 @@ def main(argv=None):
         problems.append(f"없는 사진 참조 {r['photos_missing']}")
     if r["zero_missing"]:
         problems.append("0단계(환율·거래처·도시 확인) 누락")
+    for p in r["overwrite_gaps"] + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]:
+        problems.append(p)
     if r["dict_error"]:
         problems.append(f"화면 사전 읽기 실패 {r['dict_error']}")
     if r["contract_error"]:
