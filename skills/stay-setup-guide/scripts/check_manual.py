@@ -13,7 +13,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 0단계(1·2·3 단계가 각각 환율 확인 · 거래처 확인 · 도시 확인)가 있는지
 - 표의 칸 이름이 화면 사전(screen-dictionary.json)에 있는지
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
-- 넓은 시즌 날짜 안에 든 좁은 시즌의 가격 채우기가 `이미 값이 있는 날도 덮기 | 체크` 인지
+- 먼저 깐 시즌들이 덮은 날짜 위에 다시 까는 단계가 `이미 값이 있는 날도 덮기 | 체크` 인지(다 덮였으면 오류, 일부면 경고)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - 프로모션 단계의 카드가 `전 오퍼 공통` 이 아닌지(그런 카드는 화면에 없다)
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
@@ -58,6 +58,9 @@ HTTP_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 # 단계 첫 줄들(`화면:` `탭:` `카드:` …)과 마지막 저장 줄
 HEAD_RE = re.compile(r"^(화면|탭|카드|블록|버튼|폴더|주의):\s*(.*)$")
+# 표 대신 라벨 줄 + 펜스 코드블록으로 적는 긴 값(`날짜 나열:` `상세설명:`)
+LABEL_RE = re.compile(r"^([^|`#\-→\s][^|]*?)\s*:\s*$")
+FENCE_RE = re.compile(r"^(```|~~~)")
 SAVE_RE = re.compile(r"^→\s*\[([^\]]+)\]")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
 # 부가옵션 가격 넣기 카드 줄의 오퍼 한정 형식: `<이름>` — 오퍼 칸이 `<오퍼>` 인 카드
@@ -81,12 +84,28 @@ def strip_select(value):
 
 
 def parse_steps(lines):
-    """manual.md 를 단계 단위로 쪼갠다 — 번호·제목·첫 줄들·표·저장 줄."""
+    """manual.md 를 단계 단위로 쪼갠다 — 번호·제목·첫 줄들·표·긴 값 블록·저장 줄."""
     steps = []
     cur = None
+    label = None      # 방금 지나온 `<칸 이름>:` 라벨 줄
+    fence = None      # 펜스 블록을 모으는 중이면 (칸 이름, 줄 목록)
     for line in lines:
+        if fence is not None:
+            if FENCE_RE.match(line):
+                name, buf = fence
+                fence = None
+                if cur is not None and name:
+                    cur["fields"].setdefault(name, " / ".join(x.strip() for x in buf if x.strip()))
+            else:
+                fence[1].append(line)
+            continue
+        if FENCE_RE.match(line):
+            fence = (label, [])
+            label = None
+            continue
         m = STEP_TITLE_RE.match(line)
         if m:
+            label = None
             cur = {"num": int(m.group(1)), "title": m.group(2).strip(),
                    "heads": {}, "rows": [], "fields": {}, "saves": []}
             steps.append(cur)
@@ -108,6 +127,9 @@ def parse_steps(lines):
                 continue
             cur["rows"].append((key, value))
             cur["fields"].setdefault(key, value)
+            continue
+        lb = LABEL_RE.match(line)
+        label = lb.group(1).strip() if lb else (label if not line.strip() else None)
     return steps
 
 
@@ -204,36 +226,73 @@ def season_index(steps):
     return seasons
 
 
+def target_rooms(step):
+    """`대상 룸` 값 → 룸 이름 집합(못 읽으면 빈 집합 = 모든 룸과 겹치는 것으로 본다)."""
+    value = strip_select(step["fields"].get("대상 룸", ""))
+    return {part.strip() for part in value.split(",") if part.strip()}
+
+
+def fill_season(step, seasons):
+    """가격 채우기 단계 → (오퍼, 시즌명). 이름이 겹치거나 없으면 None."""
+    card = card_name(step)
+    if not card:
+        return None
+    matches = [key for key in seasons if key[1] == card]
+    return matches[0] if len(matches) == 1 else None
+
+
 def find_overwrite_gaps(steps):
-    """넓은 시즌 안에 든 좁은 시즌인데 `덮기` 가 체크가 아닌 가격 채우기 단계를 찾는다."""
+    """앞서 깐 시즌들이 덮은 날짜 위에 `덮기` 해제로 다시 까는 단계를 찾는다.
+
+    같은 오퍼·같은 룸을 이미 채운 시즌들의 날짜 **합집합**으로 본다 — 넓은 시즌 하나가
+    아니라 여러 시즌이 나눠 덮는 경우(1~3월·9~12월 + 4~8월)도 잡기 위해서다.
+    합집합이 이 시즌 날짜를 다 덮으면 한 셀도 안 들어가므로 오류, 일부만 덮으면 경고다.
+    반환값은 (오류 목록, 경고 목록).
+    """
     seasons = season_index(steps)
-    problems = []
+    problems, warnings = [], []
+    done = []  # 앞 단계에서 이미 깐 (오퍼, 시즌명, 룸 집합)
     for step in steps:
         if not step["title"].startswith("시즌 가격 채우기"):
             continue
-        card = card_name(step)
-        if not card:
+        key = fill_season(step, seasons)
+        if key is None:
             continue
-        matches = [key for key in seasons if key[1] == card]
-        if len(matches) != 1:  # 이름이 겹치거나 없으면 판정하지 않는다
-            continue
-        offer, name = matches[0]
-        mine = seasons[(offer, name)]
+        offer, name = key
+        mine = seasons[key]
+        rooms = target_rooms(step)
         if not mine:
+            done.append((offer, name, rooms))
             continue
-        wider = [
-            other for (o, other), dates in seasons.items()
-            if o == offer and other != name and dates and mine < dates
-        ]
-        if not wider:
+        covered, by = set(), []
+        for prev_offer, prev_name, prev_rooms in done:
+            if prev_offer != offer or prev_name == name:
+                continue
+            if rooms and prev_rooms and not (rooms & prev_rooms):
+                continue  # 다른 룸이라 겹치지 않는다
+            prev_dates = seasons.get((prev_offer, prev_name))
+            if not prev_dates:
+                continue
+            hit = mine & prev_dates
+            if hit:
+                covered |= hit
+                if prev_name not in by:
+                    by.append(prev_name)
+        done.append((offer, name, rooms))
+        if not covered or step["fields"].get(OVERWRITE_FIELD) == "체크":
             continue
-        if step["fields"].get(OVERWRITE_FIELD) == "체크":
-            continue
-        problems.append(
-            f"{step['num']}단계: 시즌 `{name}` 날짜가 `{wider[0]}` 안에 들어 있는데 "
-            f"`{OVERWRITE_FIELD}` 가 체크가 아니다"
-        )
-    return problems
+        names = " · ".join(f"`{x}`" for x in by[:3])
+        if covered >= mine:
+            problems.append(
+                f"{step['num']}단계: 시즌 `{name}` 날짜가 먼저 깐 {names} 에 다 덮여 있는데 "
+                f"`{OVERWRITE_FIELD}` 가 체크가 아니다 — 한 셀도 안 들어간다"
+            )
+        else:
+            warnings.append(
+                f"{step['num']}단계: 시즌 `{name}` 날짜 {len(covered)}일이 먼저 깐 {names} 와 겹친다 — "
+                f"`{OVERWRITE_FIELD}` 가 해제라 그 날은 앞 시즌 값이 남는다"
+            )
+    return problems, warnings
 
 
 def find_addon_card_gaps(steps):
@@ -332,7 +391,8 @@ def strip_repeat_prefix(name):
 
 def load_dictionary(path):
     """화면 사전에서 필드 label · screen_label 과 반복 행의 columns 를 모은다."""
-    data = json.load(open(path, encoding="utf-8"))
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
     labels = set()
     for screen in data.get("screens") or []:
         for block in screen.get("blocks") or []:
@@ -386,7 +446,8 @@ def amounts_in(text, min_digits=3):
 
 
 def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contract_path=None):
-    lines = open(md_path, encoding="utf-8").read().splitlines()
+    with open(md_path, encoding="utf-8") as handle:
+        lines = handle.read().splitlines()
     text = "\n".join(lines)
 
     steps = [l for l in lines if l.startswith("## ")]
@@ -444,7 +505,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     unused_files = sorted(have - referenced) if photos_dir else []
 
     parsed = parse_steps(lines)
-    overwrite_gaps = find_overwrite_gaps(parsed)
+    overwrite_gaps, overwrite_overlaps = find_overwrite_gaps(parsed)
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
@@ -483,7 +544,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     loose_amounts = []
     if contract_path:
         try:
-            contract_text = open(contract_path, encoding="utf-8").read()
+            with open(contract_path, encoding="utf-8") as handle:
+                contract_text = handle.read()
         except OSError as e:
             contract_error = str(e)
         else:
@@ -507,7 +569,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "photos_missing": missing_files, "photos_unused": unused_files,
         "bad_sources": bad_sources,
         "zero_missing": zero_missing,
-        "overwrite_gaps": overwrite_gaps, "addon_card_gaps": addon_card_gaps,
+        "overwrite_gaps": overwrite_gaps, "overwrite_overlaps": overwrite_overlaps,
+        "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
         "dict_checked": bool(dictionary_path), "dict_error": dict_error, "unknown_fields": unknown_fields,
         "contract_checked": bool(contract_path), "contract_error": contract_error,
@@ -566,6 +629,8 @@ def main(argv=None):
         problems.append(f"계약서 읽기 실패 {r['contract_error']}")
 
     warnings = []
+    for w in r["overwrite_overlaps"]:
+        warnings.append(w)
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]
         msg = f"사전에 없는 칸 이름 {len(r['unknown_fields'])}개: {shown}"

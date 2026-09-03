@@ -67,7 +67,8 @@ def season_step(num, name, card, rows, save="추가"):
 """
 
 
-def fill_step(num, season, room, overwrite="해제"):
+def fill_step(num, season, room, overwrite="해제", target=None):
+    target_row = f"| 대상 룸 | 선택: {target} |\n" if target else ""
     return f"""
 ## {num}. 시즌 가격 채우기 ({num}회차, {season} × {room})
 탭: `시즌`
@@ -77,71 +78,164 @@ def fill_step(num, season, room, overwrite="해제"):
 | 칸 | 값 |
 |---|---|
 | 판매 단가(공급 통화) | 100 |
-| 이미 값이 있는 날도 덮기 | {overwrite} |
+{target_row}| 이미 값이 있는 날도 덮기 | {overwrite} |
 
 → [이 단가로 깔기]
+"""
+
+
+def listed_season(num, name, card, days, save="추가"):
+    """`날짜 나열:` 을 표가 아니라 라벨 줄 + 펜스 블록으로 적은 시즌(실제 지시서 표기)."""
+    body = "\n".join(days)
+    return f"""
+## {num}. 시즌 만들기 ({num}번째, {name})
+탭: `시즌`
+카드: `{card}`
+버튼: [시즌 추가]
+
+| 칸 | 값 |
+|---|---|
+| 시즌명 | {name} |
+| 날짜 규칙 유형 | 선택: 비연속 날짜 나열 |
+| 우선순위 | 10 |
+
+날짜 나열:
+```
+{body}
+```
+
+→ [{save}]
 """
 
 
 RANGE = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-01-01"), ("기간 종료", "2026-12-31")]
 INSIDE = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-07-01"), ("기간 종료", "2026-07-10")]
 OUTSIDE = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2027-07-01"), ("기간 종료", "2027-07-10")]
+FIRST_HALF = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-01-01"), ("기간 종료", "2026-06-30")]
+SECOND_HALF = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-07-01"), ("기간 종료", "2026-12-31")]
 
 
 def steps_of(text):
     return cm.parse_steps(text.splitlines())
 
 
+def gaps(md):
+    """(오류 목록, 경고 목록)."""
+    return cm.find_overwrite_gaps(steps_of(md))
+
+
+def errors(md):
+    return gaps(md)[0]
+
+
+def warns(md):
+    return gaps(md)[1]
+
+
 class SeasonOverwriteTest(unittest.TestCase):
-    """좁은 시즌이 넓은 시즌 날짜 안에 들면 `덮기` 가 체크여야 한다."""
+    """먼저 깐 시즌들이 덮은 날짜 위에 `덮기` 해제로 다시 까는 단계를 잡는다."""
+
+    def wide_then_narrow(self, overwrite="해제", narrow=INSIDE):
+        """넓은 시즌을 먼저 깔고 좁은 시즌을 나중에 까는 지시서."""
+        return HEAD + season_step(4, "Regular", "오퍼A", RANGE) \
+            + season_step(5, "Peak", "오퍼A", narrow) \
+            + fill_step(6, "Regular", "싱글") + fill_step(7, "Peak", "싱글", overwrite=overwrite)
 
     def test_inside_without_overwrite_is_error(self):
-        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="해제")
-        problems = cm.find_overwrite_gaps(steps_of(md))
+        problems = errors(self.wide_then_narrow())
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("Peak", problems[0])
         self.assertIn("Regular", problems[0])
 
     def test_inside_with_overwrite_is_ok(self):
-        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="체크")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
-
-    def test_wide_season_fill_is_not_flagged(self):
-        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Regular", "싱글", overwrite="해제")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
+        self.assertEqual(gaps(self.wide_then_narrow(overwrite="체크")), ([], []))
 
     def test_not_overlapping_is_ok(self):
-        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Late", "오퍼A", OUTSIDE) \
-            + fill_step(6, "Late", "싱글", overwrite="해제")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
+        self.assertEqual(gaps(self.wide_then_narrow(narrow=OUTSIDE)), ([], []))
+
+    def test_wide_season_filled_first_is_not_flagged(self):
+        """넓은 시즌이 먼저면 그 단계에는 앞서 깐 것이 없다 — 오류도 경고도 아니다."""
+        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
+            + fill_step(6, "Regular", "싱글")
+        self.assertEqual(gaps(md), ([], []))
+
+    def test_narrow_filled_first_is_not_flagged(self):
+        """좁은 시즌을 먼저 깔았으면 넓은 시즌 채우기는 그 셀을 건드리지 않는다 — 경고만."""
+        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
+            + fill_step(6, "Peak", "싱글") + fill_step(7, "Regular", "싱글")
+        problems, alerts = gaps(md)
+        self.assertEqual(problems, [])
+        self.assertEqual(len(alerts), 1, alerts)
+
+    def test_union_of_two_wide_seasons_is_error(self):
+        """한 시즌이 아니라 여러 시즌의 합집합이 덮는 경우(실제 결함 모양)."""
+        md = HEAD + season_step(4, "앞반기", "오퍼A", FIRST_HALF) \
+            + season_step(5, "뒷반기", "오퍼A", SECOND_HALF) \
+            + listed_season(6, "Peak", "오퍼A", ["2026-01-01", "2026-06-30 ~ 2026-07-01", "2026-12-31"]) \
+            + fill_step(7, "앞반기", "싱글") + fill_step(8, "뒷반기", "싱글") \
+            + fill_step(9, "Peak", "싱글")
+        problems, alerts = gaps(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("Peak", problems[0])
+        self.assertIn("앞반기", problems[0])
+        self.assertIn("뒷반기", problems[0])
+        self.assertEqual(alerts, [])
+
+    def test_union_with_overwrite_is_ok(self):
+        md = HEAD + season_step(4, "앞반기", "오퍼A", FIRST_HALF) \
+            + season_step(5, "뒷반기", "오퍼A", SECOND_HALF) \
+            + listed_season(6, "Peak", "오퍼A", ["2026-01-01", "2026-12-31"]) \
+            + fill_step(7, "앞반기", "싱글") + fill_step(8, "뒷반기", "싱글") \
+            + fill_step(9, "Peak", "싱글", overwrite="체크")
+        self.assertEqual(gaps(md), ([], []))
+
+    def test_partial_coverage_is_warning(self):
+        """일부 날짜만 앞 시즌과 겹치면 경고(막지는 않는다)."""
+        md = HEAD + season_step(4, "앞반기", "오퍼A", FIRST_HALF) \
+            + listed_season(5, "Peak", "오퍼A", ["2026-06-30", "2026-12-31"]) \
+            + fill_step(6, "앞반기", "싱글") + fill_step(7, "Peak", "싱글")
+        problems, alerts = gaps(md)
+        self.assertEqual(problems, [])
+        self.assertEqual(len(alerts), 1, alerts)
+        self.assertIn("Peak", alerts[0])
+        self.assertIn("앞반기", alerts[0])
+
+    def test_other_room_is_not_compared(self):
+        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
+            + fill_step(6, "Regular", "싱글", target="오퍼A · 싱글") \
+            + fill_step(7, "Peak", "트윈", target="오퍼A · 트윈")
+        self.assertEqual(gaps(md), ([], []))
+
+    def test_same_room_is_compared(self):
+        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
+            + fill_step(6, "Regular", "싱글", target="오퍼A · 싱글") \
+            + fill_step(7, "Peak", "싱글", target="오퍼A · 싱글")
+        self.assertEqual(len(errors(md)), 1)
 
     def test_other_offer_is_not_compared(self):
         md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼B", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="해제")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
+            + fill_step(6, "Regular", "싱글") + fill_step(7, "Peak", "싱글")
+        self.assertEqual(gaps(md), ([], []))
 
     def test_listed_wide_season_excluding_the_days_is_ok(self):
         wide = [("날짜 규칙 유형", "선택: 비연속 날짜 나열"),
                 ("날짜 나열", "2026-01-01 ~ 2026-06-30 / 2026-08-01 ~ 2026-12-31")]
         md = HEAD + season_step(4, "Regular", "오퍼A", wide) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="해제")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
+            + fill_step(6, "Regular", "싱글") + fill_step(7, "Peak", "싱글")
+        self.assertEqual(gaps(md), ([], []))
 
     def test_listed_wide_season_containing_the_days_is_error(self):
         wide = [("날짜 규칙 유형", "선택: 비연속 날짜 나열"), ("날짜 나열", "2026-01-01 ~ 2026-12-31")]
         md = HEAD + season_step(4, "Regular", "오퍼A", wide) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="해제")
-        self.assertEqual(len(cm.find_overwrite_gaps(steps_of(md))), 1)
+            + fill_step(6, "Regular", "싱글") + fill_step(7, "Peak", "싱글")
+        self.assertEqual(len(errors(md)), 1)
 
     def test_month_list_season_is_compared(self):
         wide = [("날짜 규칙 유형", "선택: 월 목록"), ("기간 시작", "2026-01-01"),
                 ("기간 종료", "2026-12-31"), ("적용 월", "선택: 7월, 8월")]
         md = HEAD + season_step(4, "Summer", "오퍼A", wide) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="해제")
-        problems = cm.find_overwrite_gaps(steps_of(md))
+            + fill_step(6, "Summer", "싱글") + fill_step(7, "Peak", "싱글")
+        problems = errors(md)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("Summer", problems[0])
 
@@ -149,13 +243,19 @@ class SeasonOverwriteTest(unittest.TestCase):
         wide = [("날짜 규칙 유형", "선택: 요일 규칙"), ("기간 시작", "2026-01-01"),
                 ("기간 종료", "2026-12-31"), ("적용 요일", "선택: 토, 일")]
         md = HEAD + season_step(4, "주말", "오퍼A", wide) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="해제")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
+            + fill_step(6, "주말", "싱글") + fill_step(7, "Peak", "싱글")
+        self.assertEqual(gaps(md), ([], []))
 
     def test_same_season_name_twice_is_skipped(self):
         md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + season_step(6, "Peak", "오퍼B", INSIDE) + fill_step(7, "Peak", "싱글", overwrite="해제")
-        self.assertEqual(cm.find_overwrite_gaps(steps_of(md)), [])
+            + season_step(6, "Peak", "오퍼B", INSIDE) \
+            + fill_step(7, "Regular", "싱글") + fill_step(8, "Peak", "싱글")
+        self.assertEqual(gaps(md), ([], []))
+
+    def test_fenced_date_list_is_read(self):
+        md = HEAD + listed_season(4, "Peak", "오퍼A", ["2026-01-01", "2026-04-30 ~ 2026-05-01"])
+        step = steps_of(md)[-1]
+        self.assertEqual(len(cm.season_dates(step)), 3)
 
 
 ADDON_A = """
@@ -297,7 +397,8 @@ class EndToEndTest(unittest.TestCase):
 
     def test_bad_manual_fails(self):
         md = HEAD + season_step(4, "Regular", "오퍼A", RANGE, save="저장") \
-            + season_step(5, "Peak", "오퍼A", INSIDE, save="저장") + fill_step(6, "Peak", "싱글")
+            + season_step(5, "Peak", "오퍼A", INSIDE, save="저장") \
+            + fill_step(6, "Regular", "싱글") + fill_step(7, "Peak", "싱글")
         r, code = self.run_on(md)
         self.assertEqual(code, 1)
         self.assertEqual(len(r["season_saves"]), 2)
@@ -305,7 +406,7 @@ class EndToEndTest(unittest.TestCase):
 
     def test_good_manual_passes(self):
         md = HEAD + season_step(4, "Regular", "오퍼A", RANGE) + season_step(5, "Peak", "오퍼A", INSIDE) \
-            + fill_step(6, "Peak", "싱글", overwrite="체크")
+            + fill_step(6, "Regular", "싱글") + fill_step(7, "Peak", "싱글", overwrite="체크")
         r, code = self.run_on(md)
         self.assertEqual(code, 0, r)
         self.assertEqual(r["overwrite_gaps"] + r["season_saves"], [])
@@ -314,6 +415,7 @@ class EndToEndTest(unittest.TestCase):
         """정답지 예시는 새 검사까지 통과해야 한다(사진 폴더는 저장소에 없어 뺀다)."""
         r = cm.check(EXAMPLE, share_name="우에노_토우가네야", dictionary_path=DICTIONARY)
         self.assertEqual(r["overwrite_gaps"], [])
+        self.assertEqual(r["overwrite_overlaps"], [])
         self.assertEqual(r["addon_card_gaps"], [])
         self.assertEqual(r["promo_common"], [])
         self.assertEqual(r["season_saves"], [])
