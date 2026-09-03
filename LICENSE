@@ -1,4 +1,4 @@
-eoding 파트너 사용 라이선스 (eoding Partner Use License) v1.0
+eoding 파트너 사용 라이선스 (eoding Partner Use License) v1.1
 2026-09-03
 
 한국어 본문이 정본이며, 아래 영어는 참고 번역입니다.
@@ -29,10 +29,12 @@ The Korean text governs; the English text below is a reference translation.
    License 를 따릅니다 (skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt).
 
 4. 보증 부인·책임 제한
-   이 저장소의 내용은 "있는 그대로" 제공되며, 정확성·완전성·특정 목적 적합성을
-   포함한 어떠한 보증도 하지 않습니다. 생성된 지시서의 값은 사용자가 계약서와
-   대조한 뒤 입력해야 하며, 입력된 값·사진·설정으로 생긴 손해에 대해 eoding 은
-   책임지지 않습니다.
+   이 저장소의 내용은 무상으로 "있는 그대로" 제공되며, 법령이 허용하는 범위에서
+   정확성·완전성·특정 목적 적합성을 포함한 보증을 하지 않습니다. 생성된 지시서의
+   값은 사용자가 계약서와 대조한 뒤 입력해야 합니다. 법령이 허용하는 범위에서,
+   입력된 값·사진·설정으로 생긴 손해에 대해 eoding 은 책임을 지지 않습니다.
+   다만 eoding 또는 그 이행보조자의 고의 또는 중대한 과실로 인한 책임은 배제되지
+   않습니다.
 
 5. 종료
    사용자가 이 라이선스를 위반하면 허용은 자동으로 종료됩니다. eoding 은 향후
@@ -41,6 +43,10 @@ The Korean text governs; the English text below is a reference translation.
 
 6. 준거법
    이 라이선스는 대한민국 법을 따릅니다.
+
+7. 일부 무효
+   이 라이선스의 일부 조항이 무효이거나 효력이 없더라도 나머지 조항은 유효하게
+   존속합니다.
 
 ────────────────────────────────────────────────────────────
 English (reference translation)
@@ -71,10 +77,13 @@ Copyright (c) 2026 eoding. All rights reserved.
    SIL Open Font License (skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt).
 
 4. No warranty; limitation of liability
-   The contents are provided "AS IS" without warranty of any kind, including
-   accuracy, completeness or fitness for a particular purpose. Values in a
-   generated guide must be checked against the contract before entry; eoding is
-   not liable for damages arising from entered values, photos or settings.
+   The contents are provided free of charge and "AS IS"; to the extent permitted
+   by law, no warranty is given, including as to accuracy, completeness or
+   fitness for a particular purpose. Values in a generated guide must be checked
+   against the contract before entry. To the extent permitted by law, eoding is
+   not liable for damages arising from entered values, photos or settings;
+   liability for eoding's own wilful misconduct or gross negligence (or that of
+   its agents) is not excluded.
 
 5. Termination
    Permission terminates automatically upon breach. eoding may license future
@@ -83,3 +92,7 @@ Copyright (c) 2026 eoding. All rights reserved.
 
 6. Governing law
    This license is governed by the laws of the Republic of Korea.
+
+7. Severability
+   If any provision of this license is invalid or unenforceable, the remaining
+   provisions remain in effect.
