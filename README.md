@@ -109,7 +109,7 @@ The generated guide is a working aid. Verify every value against the contract be
 
 ## License
 
-MIT. See `LICENSE`. The bundled Pretendard font is under the SIL Open Font License (`skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt`).
+**eoding Partner Use License** — see `LICENSE`. In short: customers and partners with an eoding ERP account may use, copy and modify this repository internally to configure eoding ERP; redistribution outside your organization, resale, and use for other products are not permitted; no warranty. The bundled Pretendard font is separately under the SIL Open Font License (`skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt`).
 
 ## Repository rules
 

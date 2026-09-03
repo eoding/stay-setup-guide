@@ -1,21 +1,85 @@
-MIT License
+eoding 파트너 사용 라이선스 (eoding Partner Use License) v1.0
+2026-09-03
 
-Copyright (c) 2026 eoding
+한국어 본문이 정본이며, 아래 영어는 참고 번역입니다.
+The Korean text governs; the English text below is a reference translation.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+────────────────────────────────────────────────────────────
+한국어
+────────────────────────────────────────────────────────────
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+저작권 (c) 2026 eoding. 모든 권리 보유.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. 허용되는 사용
+   eoding 의 ERP(Stay 등) 계정을 가진 고객사·파트너사(이하 "사용자")는 이 저장소의
+   내용(문서, 화면 사전, 스크립트, 예시)을 eoding ERP 를 설정·운영할 목적으로
+   내부에서 사용·복사·수정할 수 있습니다. 사용자의 임직원과, 사용자를 위해 일하는
+   AI 에이전트 도구가 그 목적으로 실행하는 것도 포함합니다.
+
+2. 금지되는 사용
+   다음은 eoding 의 사전 서면 동의 없이 할 수 없습니다.
+   (a) 사용자 조직 밖으로 재배포·공개·판매·임대·서브라이선스하는 것
+   (b) eoding ERP 가 아닌 다른 제품·서비스를 만들거나 운영하는 데 쓰는 것
+   (c) 저작권·라이선스 표시를 지우거나 바꾸는 것
+   (d) eoding 의 상호·상표·로고를 쓰는 것 (이 라이선스는 상표권을 주지 않습니다)
+
+3. 제3자 자료
+   이 스킬이 찾거나 내려받는 사진·문구 등 제3자 자료의 저작권·사용 허락 확인은
+   전적으로 사용자의 책임입니다. 동봉된 Pretendard 글꼴은 별도의 SIL Open Font
+   License 를 따릅니다 (skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt).
+
+4. 보증 부인·책임 제한
+   이 저장소의 내용은 "있는 그대로" 제공되며, 정확성·완전성·특정 목적 적합성을
+   포함한 어떠한 보증도 하지 않습니다. 생성된 지시서의 값은 사용자가 계약서와
+   대조한 뒤 입력해야 하며, 입력된 값·사진·설정으로 생긴 손해에 대해 eoding 은
+   책임지지 않습니다.
+
+5. 종료
+   사용자가 이 라이선스를 위반하면 허용은 자동으로 종료됩니다. eoding 은 향후
+   버전에 다른 조건을 붙일 수 있으며, 이미 받은 버전에는 받은 시점의 조건이
+   적용됩니다.
+
+6. 준거법
+   이 라이선스는 대한민국 법을 따릅니다.
+
+────────────────────────────────────────────────────────────
+English (reference translation)
+────────────────────────────────────────────────────────────
+
+Copyright (c) 2026 eoding. All rights reserved.
+
+1. Permitted use
+   Customers and partners holding an eoding ERP (e.g. Stay) account ("Users") may
+   use, copy and modify the contents of this repository (documents, screen
+   dictionary, scripts, examples) internally for the purpose of configuring and
+   operating eoding ERP. This includes execution by the User's staff and by AI
+   agent tools acting on the User's behalf for that purpose.
+
+2. Prohibited use
+   Without eoding's prior written consent you may not:
+   (a) redistribute, publish, sell, rent or sublicense the contents outside your
+       organization;
+   (b) use the contents to build or operate any product or service other than
+       eoding ERP;
+   (c) remove or alter copyright or license notices;
+   (d) use eoding's names, trademarks or logos (no trademark rights are granted).
+
+3. Third-party material
+   Verifying the copyright and usage permission of photos, text and other
+   third-party material located or downloaded by this skill is solely the User's
+   responsibility. The bundled Pretendard font is licensed separately under the
+   SIL Open Font License (skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt).
+
+4. No warranty; limitation of liability
+   The contents are provided "AS IS" without warranty of any kind, including
+   accuracy, completeness or fitness for a particular purpose. Values in a
+   generated guide must be checked against the contract before entry; eoding is
+   not liable for damages arising from entered values, photos or settings.
+
+5. Termination
+   Permission terminates automatically upon breach. eoding may license future
+   versions under different terms; a version already received keeps the terms
+   under which it was received.
+
+6. Governing law
+   This license is governed by the laws of the Republic of Korea.
