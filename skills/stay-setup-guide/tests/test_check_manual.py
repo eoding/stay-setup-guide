@@ -320,7 +320,7 @@ class AddonCardTest(unittest.TestCase):
 
 
 class PromotionCardTest(unittest.TestCase):
-    """프로모션 카드 `전 오퍼 공통` 은 화면에 없다."""
+    """프로모션 카드 `전 오퍼 공통` 은 실재한다(오퍼 없는 공통 프로모션) — 오류가 아니다."""
 
     def make(self, card):
         return HEAD + f"""
@@ -336,10 +336,8 @@ class PromotionCardTest(unittest.TestCase):
 → [추가]
 """
 
-    def test_common_card_is_error(self):
-        problems = cm.find_promo_common_cards(steps_of(self.make("전 오퍼 공통")))
-        self.assertEqual(len(problems), 1, problems)
-        self.assertIn("전 오퍼 공통", problems[0])
+    def test_common_card_is_ok(self):
+        self.assertEqual(cm.find_promo_common_cards(steps_of(self.make("전 오퍼 공통"))), [])
 
     def test_offer_card_is_ok(self):
         self.assertEqual(cm.find_promo_common_cards(steps_of(self.make("오퍼A"))), [])

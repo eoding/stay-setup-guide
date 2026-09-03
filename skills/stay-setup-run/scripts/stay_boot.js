@@ -332,7 +332,26 @@
         if (hit) { spec = { button: bp.text, row: bp.row, within: hit }; out.cardPick = cm[1].trim() + ' / ' + cm[2].trim(); }
         else { out.open = 'not-found'; out.openDetail = '`' + spec.card + '` 카드를 찾지 못했습니다'; return out; }
       }
-      var o = await stayRun.open(spec);
+      // `전 오퍼 공통` 카드(오퍼 없는 프로모션)는 공통 프로모션이 하나도 없으면 화면이 카드를 감춘다 —
+      // 그때는 아무 오퍼 카드의 [프로모션 추가] 요청에서 오퍼 번호를 0 으로 바꿔 공통 드로어를 연다 (화면에서 얻은 요청만 쓴다)
+      var o;
+      if (/전 오퍼 공통/.test(cardStr) && /프로모션 추가/.test(bp.text || '')) {
+        var paneP = document.getElementById((location.hash || '').slice(1)) || document.body;
+        var commonCard = Array.from(paneP.querySelectorAll('.stay-card')).find(function (c) { var h = c.querySelector('.stay-card__head .stay-card__title'); return h && /전 오퍼 공통/.test(h.textContent); });
+        if (!commonCard) {
+          var anyBtn = Array.from(paneP.querySelectorAll('button')).find(function (b) { return /프로모션 추가/.test(b.textContent) && b.getAttribute('hx-get'); });
+          if (anyBtn && window.htmx) {
+            var url0 = anyBtn.getAttribute('hx-get').replace(/\/offers\/\d+\//, '/offers/0/');
+            var hxs = window.__stayRunHtmx, sw0 = hxs.swaps;
+            window.htmx.ajax('GET', url0, { target: '#stay_drawer_body', swap: 'innerHTML' });
+            await stayRun.waitFor(function () { return hxs.pending === 0 && hxs.swaps > sw0 && stayRun.state().drawer.open; }, 8000);
+            await stayRun.sleep(300);
+            o = stayRun.state().drawer.open && /전 오퍼 공통/.test(stayRun.state().drawer.title) ? { status: 'ok' } : { status: 'not-found', detail: '전 오퍼 공통 드로어가 열리지 않았습니다' };
+            out.commonViaOffer0 = true;
+          }
+        }
+      }
+      if (!o) o = await stayRun.open(spec);
       if (o.status === 'not-found' && o.reason === 'row') {
         var hint = window.titleHint(s);
         if (hint && hint !== bp.row) { spec.row = hint; o = await stayRun.open(spec); out.rowHint = hint; }

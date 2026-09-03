@@ -15,7 +15,6 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
 - 먼저 깐 시즌들이 덮은 날짜 위에 다시 까는 단계가 `이미 값이 있는 날도 덮기 | 체크` 인지(다 덮였으면 오류, 일부면 경고)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
-- 프로모션 단계의 카드가 `전 오퍼 공통` 이 아닌지(그런 카드는 화면에 없다)
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 
 사용법:
@@ -327,19 +326,9 @@ def find_addon_card_gaps(steps):
 
 
 def find_promo_common_cards(steps):
-    """프로모션 단계의 카드가 `전 오퍼 공통` 인 곳 — 그런 카드는 화면에 없다."""
-    problems = []
-    for step in steps:
-        if "프로모션" not in step["title"]:
-            continue
-        line = head(step, "카드") or ""
-        if PROMO_COMMON_CARD in line:
-            problems.append(
-                f"{step['num']}단계: 프로모션 카드 `{PROMO_COMMON_CARD}` 는 화면에 없다 — "
-                "오퍼마다 단계를 하나씩 두고 카드에 그 오퍼를 적는다"
-            )
-    return problems
-
+    """(비활성) `전 오퍼 공통` 카드는 실재한다 — 오퍼 없는 공통 프로모션이며 모든 오퍼에 붙는다.
+    공통 프로모션이 0건이면 화면이 카드를 감출 뿐이라(러너가 오퍼 0 요청으로 연다) 검사하지 않는다."""
+    return []
 
 def find_season_save_gaps(steps):
     """`시즌 만들기` 단계는 `→ [추가]` 로 끝나야 한다(드로어 버튼 문구)."""
