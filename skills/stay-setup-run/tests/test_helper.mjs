@@ -1,0 +1,126 @@
+/**
+ * stay_helper.js 자동 시험 — jsdom 이 이미 깔려 있을 때만 돈다.
+ *
+ *   node tests/test_helper.mjs
+ *   NODE_PATH=<jsdom 이 있는 node_modules> node tests/test_helper.mjs   # 다른 곳의 jsdom 을 빌려 쓸 때
+ *
+ * jsdom 이 없으면 아무것도 설치하지 않고 건너뛴다(종료 코드 0).
+ * jsdom 에는 레이아웃이 없어서 화면 좌표로는 아무것도 판정할 수 없다 — 도우미는 그런 환경에서
+ * 스타일(display/visibility)만 보고 판정하도록 되어 있다.
+ */
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const here = dirname(fileURLToPath(import.meta.url));
+
+let JSDOM = null;
+try { ({ JSDOM } = require('jsdom')); } catch (e) {
+  console.log('SKIP — jsdom 이 없어 브라우저 시험을 건너뜁니다 (설치하지 않습니다).');
+  console.log('       손으로 보려면 tests/helper_fixture.html 을 크롬에서 열고 콘솔에 scripts/stay_helper.js 를 붙여 넣으세요.');
+  process.exit(0);
+}
+
+let pass = 0, fail = 0;
+const ok = (cond, name, extra) => {
+  if (cond) { pass++; console.log('  ok   ' + name); }
+  else { fail++; console.log('  FAIL ' + name + (extra !== undefined ? ' — ' + JSON.stringify(extra) : '')); }
+};
+
+const dom = new JSDOM(readFileSync(join(here, 'helper_fixture.html'), 'utf8'), {
+  url: 'https://example.test/stay/43900/',
+  runScripts: 'dangerously',
+  pretendToBeVisual: true
+});
+const win = dom.window;
+win.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+const R = win.stayRun;
+
+const FIELDS = [
+  { label: '룸 이름', kind: 'typed', value: 'Single' },
+  { label: '상위 동/윙', kind: 'select', value: '(없음)' },
+  { label: '면적(㎡)', kind: 'typed', value: '12' },
+  { label: '전망', kind: 'empty' },
+  { label: '엑스트라베드 가능', kind: 'select', value: '불가능' },
+  { label: '침대 구성 1 · 침대 종류', kind: 'select', value: '싱글' },
+  { label: '침대 구성 1 · 개수', kind: 'typed', value: '1' },
+  { label: '침대 구성 2 · 침대 종류', kind: 'select', value: '벙크 (2층 침대)' },
+  { label: '침대 구성 2 · 개수', kind: 'typed', value: '1' },
+  { label: '어메니티', kind: 'multi', values: ['욕조', '무료 Wi-Fi'] },
+  { label: '직접 입력 (목록에 없을 때만, 콤마로 구분)', kind: 'typed', value: '비데, 짐받이' },
+  { label: '종류', kind: 'select', value: '리조트피' },
+  { label: '반려동물', kind: 'select', value: '가능' },
+  { label: '거래처', kind: 'select', value: '자사' },
+  { label: '룸 사진', kind: 'file', file: 'room_01.jpg' }
+];
+
+const run = async () => {
+  console.log('stay_helper 시험');
+
+  // 1. 화면 상태
+  const s0 = R.state();
+  ok(s0.hotelId === '43900', 'state: 주소에서 호텔 번호를 읽는다', s0.hotelId);
+  ok(s0.activeTab === '객실', 'state: 활성 탭 이름', s0.activeTab);
+  ok(s0.drawer.open === false, 'state: 드로어는 아직 닫혀 있다');
+  ok(s0.banner.blockers.length === 1 && s0.banner.warnings.length === 2,
+    'state: 검증 배너를 막힘/권고로 나눈다', s0.banner);
+
+  // 2. 행 안 버튼으로 드로어 열기
+  const op = await R.open({ button: '편집', row: '스탠다드', card: '객실 (룸 타입)' });
+  ok(op.status === 'ok' && /스탠다드/.test(op.drawer.title), 'open: 스탠다드 행의 [편집]', op);
+
+  // 3. 값 넣기
+  const res = await R.fill(FIELDS);
+  const by = {};
+  res.forEach((r) => { by[r.label] = r; });
+  const bad = res.filter((r) => r.status !== 'ok' && r.status !== 'needs-upload');
+  ok(bad.length === 0, 'fill: 모든 칸이 ok', bad);
+  ok(by['룸 이름'].status === 'ok', 'fill: 표 안 텍스트 칸(같은 행 th 라벨)');
+  ok(by['전망'].detail === '', 'fill: 비움은 값을 지운다', by['전망']);
+  ok(by['침대 구성 2 · 침대 종류'].status === 'ok', 'fill: 행이 모자라면 [침대 행 추가] 를 눌러 만든다', by['침대 구성 2 · 침대 종류']);
+  ok(/2칸 켬/.test(by['어메니티'].detail), 'fill: 체크 묶음은 라벨 글자로 켠다', by['어메니티'].detail);
+  ok(by['종류'].status === 'ok', 'fill: 한 칸에 입력이 둘이면 값 종류로 고른다', by['종류']);
+  ok(by['반려동물'].status === 'ok', 'fill: Materialize 셀렉트', by['반려동물']);
+  ok(by['거래처'].status === 'ok', 'fill: select2 자동완성(keyup 필요)', by['거래처']);
+  ok(by['룸 사진'].status === 'needs-upload' && by['룸 사진'].multiple === true,
+    'fill: 파일 칸은 needs-upload 로 돌려준다', by['룸 사진']);
+  ok(!!win.document.querySelector('[data-stay-upload]'), 'fill: 파일 칸에 표식을 남긴다');
+
+  // 실제 DOM 값 확인
+  const q = (sel) => win.document.querySelector(sel);
+  ok(q('[name=title]').value === 'Single', 'DOM: 룸 이름', q('[name=title]').value);
+  ok(q('[name=view]').value === '', 'DOM: 전망이 비었다');
+  ok(q('[name=extra]').value === 'n', 'DOM: 엑스트라베드 가능 = 불가능', q('[name=extra]').value);
+  ok(q('[name=pet]').value === '가능', 'DOM: Materialize 숨은 select 가 바뀌었다', q('[name=pet]').value);
+  ok(q('[name=agent]').value === '자사', 'DOM: select2 가 값을 넣었다', q('[name=agent]').value);
+  ok(win.document.querySelectorAll('#bed-rows tr').length === 2, 'DOM: 침대 행이 2개다');
+
+  // 4. 되읽어 대조
+  const rb = R.readback(FIELDS);
+  ok(rb.mismatch.length === 0, 'readback: 어긋난 칸이 없다', rb.mismatch);
+  ok(rb.ok === rb.total && rb.total >= 13, 'readback: 대조 개수', { ok: rb.ok, total: rb.total });
+
+  // 5. 위험한 버튼은 거부
+  const del = await R.submit('삭제');
+  ok(del.status === 'refused' && del.reason === 'dangerous', 'submit: [삭제] 거부', del);
+  const sale = await R.submit('판매 시작', { force: true });
+  ok(sale.status === 'refused' && sale.reason === 'sale-start', 'submit: [판매 시작] 은 force 로도 거부', sale);
+
+  // 6. 저장 → 드로어가 닫히면 closed
+  const sv = await R.submit('저장');
+  ok(sv.status === 'closed', 'submit: 저장 뒤 드로어가 닫히면 closed', sv);
+  ok(/저장했습니다/.test(sv.toast || ''), 'submit: 안내 띠 글자를 함께 돌려준다', sv.toast);
+
+  // 7. 자동 로그아웃 경고
+  win.document.getElementById('logout-warning-modal').style.display = 'block';
+  ok(R.state().logoutWarning === true, 'state: 자동 로그아웃 경고를 알아본다');
+  const ka = R.keepAlive();
+  ok(ka.clicked === true && ka.logoutWarning === false, 'keepAlive: [확인] 을 누른다', ka);
+
+  console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
+  process.exit(fail ? 1 : 0);
+};
+
+run().catch((e) => { console.error(e); process.exit(1); });

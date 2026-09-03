@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>stay_helper 시험용 화면</title>
+<!--
+  실제 화면의 뼈대만 흉내 낸 시험용 파일이다(실제 값·실제 회사 이름 없음).
+  브라우저로 열어 콘솔에서 stay_helper.js 를 붙여 넣어 손으로 시험할 수도 있고,
+  tests/test_helper.mjs 가 jsdom 으로 읽어 자동 시험에도 쓴다.
+-->
+</head>
+<body>
+
+<ul class="tab-container">
+  <li class="tab"><a href="#stay_tab_room_types" class="active">객실</a></li>
+  <li class="tab"><a href="#stay_tab_offers">오퍼</a></li>
+</ul>
+
+<div id="stay_validation_banner">
+  <div class="head">🔴 이대로면 못 팝니다 (1)</div>
+  <ul><li>오퍼가 없습니다 — 금액을 계산할 수 없어 판매가 불가능합니다</li></ul>
+  <div class="head">🟡 채우면 좋음 (2)</div>
+  <ul>
+    <li>오퍼 '기본 오퍼'에 취소정책이 없습니다 — 고객 화면에 취소·환불 규정이 보이지 않습니다</li>
+    <li>오퍼 '기본 오퍼'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다</li>
+  </ul>
+  <button type="button">판매 시작</button>
+</div>
+
+<div id="stay_tab_room_types">
+  <section class="card">
+    <h3 class="card-title">객실 (룸 타입)</h3>
+    <table>
+      <tbody>
+        <tr><td>스탠다드</td><td>2인</td><td><button type="button" onclick="openRoomDrawer('스탠다드')">편집</button></td></tr>
+        <tr><td>Twin</td><td>3인</td><td><button type="button" onclick="openRoomDrawer('Twin')">편집</button></td></tr>
+      </tbody>
+    </table>
+    <button type="button">룸 추가</button>
+  </section>
+</div>
+
+<div id="stay_tab_offers" style="display:none">
+  <section class="card"><h3 class="card-title">오퍼</h3></section>
+</div>
+
+<div class="stay-drawer">
+  <div class="stay-drawer__title"></div>
+  <div id="stay_drawer_body"></div>
+</div>
+
+<div id="logout-warning-modal" style="display:none">
+  <p>확인 버튼을 눌러 로그인을 유지하세요</p>
+  <button type="button" onclick="document.getElementById('logout-warning-modal').style.display='none'">확인</button>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+/* ── 드로어 열기 ───────────────────────────────────────────── */
+function openRoomDrawer(name) {
+  document.querySelector('.stay-drawer__title').textContent = '룸 편집 — ' + name;
+  document.getElementById('stay_drawer_body').innerHTML = DRAWER_HTML;
+  document.querySelector('.stay-drawer').classList.add('is-open');
+}
+function addBed() {
+  var tb = document.getElementById('bed-rows');
+  tb.insertAdjacentHTML('beforeend', BED_ROW);
+}
+
+/* ── 드로어 본문(표 구조 = 실제 화면과 같은 모양) ─────────────── */
+var BED_ROW =
+  '<tr><td><select name="bed_type"><option value="">선택</option><option>싱글</option><option>더블</option>' +
+  '<option>벙크 (2층 침대)</option></select></td><td><input type="text" name="bed_qty"></td></tr>';
+
+var DRAWER_HTML = [
+  '<table><tbody>',
+  '<tr><th>룸 이름</th><td><input type="text" name="title"><small>200자까지</small></td></tr>',
+  '<tr><th>상위 동/윙</th><td><select class="browser-default" name="wing">',
+  '<option value="">(없음)</option><option value="1">본관</option></select></td></tr>',
+  '<tr><th>면적(㎡)</th><td><input type="text" name="area"></td></tr>',
+  '<tr><th>전망</th><td><input type="text" name="view" value="지워야 함"></td></tr>',
+  '<tr><th>엑스트라베드 가능</th><td><select class="browser-default" name="extra">',
+  '<option value="">모르겠음</option><option value="y">가능</option><option value="n">불가능</option></select></td></tr>',
+  '<tr><th>침대 구성</th><td>',
+  '  <table class="beds"><thead><tr><th>침대 종류</th><th>개수</th></tr></thead>',
+  '  <tbody id="bed-rows">' + BED_ROW + '</tbody></table>',
+  '  <button type="button" onclick="addBed()">침대 행 추가</button>',
+  '</td></tr>',
+  '<tr><th>어메니티</th><td>',
+  '  <label><input type="checkbox" name="amenities_code" value="bath"> 욕조</label>',
+  '  <label><input type="checkbox" name="amenities_code" value="shower"> 샤워실</label>',
+  '  <label><input type="checkbox" name="amenities_code" value="wifi"> 무료 Wi-Fi</label>',
+  '  <input type="text" name="amenities_free" placeholder="직접 입력 (목록에 없을 때만, 콤마로 구분)">',
+  '</td></tr>',
+  // 한 칸에 입력이 둘인 행 (부과금 `종류` 모양)
+  '<tr><th>종류</th><td><select name="kind"><option value="">선택</option><option>세금</option>',
+  '<option>리조트피</option></select> <input type="text" name="kind_name"></td></tr>',
+  // Materialize 셀렉트
+  '<tr><th>반려동물</th><td><div class="select-wrapper">',
+  '  <input class="select-dropdown dropdown-trigger" type="text" readonly value="모르겠음" onclick="openMaterialize(this)">',
+  '  <ul class="select-dropdown dropdown-content" style="display:none">',
+  '    <li><span>모르겠음</span></li><li><span>가능</span></li><li><span>불가능</span></li></ul>',
+  '  <select name="pet" style="display:none"><option>모르겠음</option><option>가능</option><option>불가능</option></select>',
+  '</div></td></tr>',
+  // select2 자동완성
+  '<tr><th>거래처</th><td>',
+  '  <select class="select2-hidden-accessible" name="agent"><option value=""></option></select>',
+  '  <span class="select2 select2-container"><span class="select2-selection" role="combobox">',
+  '  <span class="select2-selection__rendered"></span></span></span>',
+  '</td></tr>',
+  '<tr><th>룸 사진</th><td><input type="file" name="images" multiple accept="image/*"></td></tr>',
+  '</tbody></table>',
+  '<button type="button" onclick="fakeSave()">저장</button>',
+  '<button type="button" hx-confirm="정말 삭제할까요?">삭제</button>'
+].join('');
+
+/* ── Materialize 셀렉트 흉내 ─────────────────────────────────── */
+function openMaterialize(trig) {
+  var wrap = trig.parentElement;
+  var ul = wrap.querySelector('ul.select-dropdown');
+  ul.style.display = 'block';
+  ul.querySelectorAll('li').forEach(function (li) {
+    li.onclick = function () {
+      var text = li.textContent.trim();
+      var sel = wrap.querySelector('select');
+      for (var i = 0; i < sel.options.length; i++) if (sel.options[i].text.trim() === text) sel.selectedIndex = i;
+      trig.value = text;
+      ul.style.display = 'none';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+  });
+}
+
+/* ── select2 흉내: mousedown 으로 열고, keyup 이 있어야 검색된다 ── */
+var S2_ROWS = ['자사', '자사여행사', '보기 거래처 A'];
+document.addEventListener('mousedown', function (e) {
+  var trig = e.target.closest ? e.target.closest('.select2-selection') : null;
+  if (!trig) return;
+  var sel = trig.closest('td').querySelector('select.select2-hidden-accessible');
+  var dd = document.createElement('span');
+  dd.className = 'select2-container select2-container--open';
+  dd.innerHTML = '<input class="select2-search__field"><ul class="select2-results__options">' +
+    '<li class="select2-results__option loading-results">검색 중…</li></ul>';
+  document.body.appendChild(dd);
+  var field = dd.querySelector('.select2-search__field');
+  // value 대입 + input 만으로는 검색되지 않는다 — keyup 이 와야 한다(실제 화면과 같은 조건)
+  field.addEventListener('keyup', function () {
+    var q = field.value.trim();
+    setTimeout(function () {
+      var ul = dd.querySelector('ul');
+      ul.innerHTML = S2_ROWS.filter(function (r) { return r.indexOf(q) >= 0; }).map(function (r) {
+        return '<li class="select2-results__option">' + r + '</li>';
+      }).join('') || '<li class="select2-results__option select2-results__message">결과 없음</li>';
+      ul.querySelectorAll('.select2-results__option').forEach(function (li) {
+        li.addEventListener('mouseup', function () {
+          var o = document.createElement('option');
+          o.value = li.textContent.trim(); o.text = li.textContent.trim(); o.selected = true;
+          sel.appendChild(o); sel.value = o.value;
+          trig.querySelector('.select2-selection__rendered').textContent = o.text;
+          dd.remove();
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      });
+    }, 200);
+  });
+});
+
+/* ── 저장 흉내: htmx 요청처럼 이벤트를 내고 드로어를 닫는다 ────── */
+function fakeSave() {
+  document.body.dispatchEvent(new CustomEvent('htmx:beforeRequest', { bubbles: true }));
+  setTimeout(function () {
+    document.querySelector('.stay-drawer').classList.remove('is-open');
+    document.getElementById('toast-container').innerHTML = '<div class="toast">저장했습니다</div>';
+    document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSwap', { bubbles: true }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSettle', { bubbles: true }));
+  }, 300);
+}
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any ot
 | Path | Contents |
 |---|---|
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |
+| [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: takes that guide and fills the ERP Stay screens in the browser tab the user is logged into, step by step, writing a run log. It never presses [판매 시작] (start selling) |
 
 ## Requirements
 
@@ -100,6 +101,25 @@ hermes -z "<the prompt above>" --skills stay-setup-guide
 Outputs: `<share_folder>_입력지시서.html` (the guide, with copy buttons), `사진/` (photos), `manual.md`, `rules.md`, `facts.json`, and `changes.md` (every value the agent decided differently from the contract, for review).
 
 On first run, `scripts/convert_contract.py` installs three Python packages into the current Python environment (`firecrawl-anydoc`, `rhwp-python`, `openpyxl`) and prints a notice before doing so.
+
+### Use (stay-setup-run)
+
+`skills/stay-setup-run` runs the guide the first skill produced. Install it the same way (`npx skills add eoding/stay-setup-guide`,
+or copy `skills/stay-setup-run` into your agent's skills directory). It needs an agent that can drive a browser: run JavaScript
+in the page, take screenshots, and upload a local file into a file input.
+
+Open the ERP in Chrome, log in, leave the tab on the hotel list, then ask:
+
+```text
+Use the stay-setup-run skill to run this guide in the browser.
+Guide: /abs/path/<share_folder>/<share_folder>_입력지시서.html
+Photos: /abs/path/<share_folder>/사진
+Chrome tab: the hotel list page that is open now (already logged in)
+Mode: 검토 (screenshot each step and ask before continuing)
+```
+
+It writes `<share_folder>_실행/` next to the guide folder, holding `steps.json` and `run-log.md` (one line per step).
+**The agent never presses [판매 시작]** — check the validation banner and start the sale yourself.
 
 ## Disclaimer
 
