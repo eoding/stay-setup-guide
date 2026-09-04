@@ -271,5 +271,156 @@ class TestCheckMode(unittest.TestCase):
         self.assertTrue(doc["steps"][0]["photos"][0]["missing"])
 
 
+AGE_BAND = """# 시험 호텔 — 입력 지시서
+
+## 1. 연령 구간 만들기 (1번째, CHILD)
+탭: `오퍼`
+카드: `2026 계약`
+화면: 오퍼 카드의 [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | CHILD |
+| 노출명 | 초등학생 |
+| 최소 연령 | 0 |
+| 최대 연령 | 11.99 |
+| 방 인원수에 포함 | 체크 |
+| 요금 기준 유형 | 선택: 성인 요금의 % |
+| 요금 기준 값 | 50 |
+| 상세(자유텍스트) | 비움 |
+
+→ [추가]
+
+## 2. 부과금 추가 (1번째, 갈라디너)
+탭: `부과금`
+카드: `2026 계약`
+화면: 오퍼 카드의 [부과금 추가]
+
+| 칸 | 값 |
+|---|---|
+| 이름 | 갈라디너 |
+| 부과 방식 | 선택: 인당 |
+| 정액 금액 | 100 |
+| 연령별 단가 · 초등학생 | 50 |
+| 연령별 단가 · 유아 | 0 |
+
+→ [추가]
+"""
+
+BAD_ORDER = AGE_BAND.replace(
+    "| 부과 방식 | 선택: 인당 |\n| 정액 금액 | 100 |\n| 연령별 단가 · 초등학생 | 50 |",
+    "| 연령별 단가 · 초등학생 | 50 |\n| 부과 방식 | 선택: 인당 |\n| 정액 금액 | 100 |")
+
+STALE = """# 시험 호텔 — 입력 지시서
+
+## 1. 오퍼 고치기 (기본 오퍼)
+탭: `오퍼`
+버튼: `기본 오퍼` 행의 [편집]
+
+| 칸 | 값 |
+|---|---|
+| 오퍼명 | 2026 계약 |
+
+→ [저장]
+"""
+
+
+class TestNewStepKinds(unittest.TestCase):
+    """2026-09-04 신설 화면 — 연령 구간 · 부과금의 연령별 단가.
+
+    예시 지시서가 아니라 여기 붙인 작은 본문을 쓴다. 예시는 `stay-setup-guide` 쪽이 다시 그리는
+    파일이라, 거기에 기대면 그쪽이 손댈 때마다 이 시험이 깨진다.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        _, cls.steps = parse_guide.parse_markdown(AGE_BAND)
+        cls.steps = [parse_guide.build_step(r) for r in cls.steps]
+
+    def test_age_band_kind_and_fields(self):
+        band = only_step(self.steps, "연령 구간 만들기")
+        self.assertEqual(band["head"]["tab"], "오퍼")
+        self.assertEqual(band["head"]["card"], "2026 계약")
+        self.assertEqual(band["submit"], "추가")
+        self.assertEqual(field_by_label(band, "밴드 코드")["value"], "CHILD")
+        self.assertEqual(field_by_label(band, "노출명")["value"], "초등학생")
+        self.assertEqual(field_by_label(band, "방 인원수에 포함")["kind"], "check")
+        basis = field_by_label(band, "요금 기준 유형")
+        self.assertEqual((basis["kind"], basis["value"]), ("select", "성인 요금의 %"))
+        self.assertEqual(field_by_label(band, "상세(자유텍스트)")["kind"], "empty")
+
+    def test_age_band_kind_is_known(self):
+        self.assertIn("연령 구간 만들기", parse_guide.KNOWN_KINDS)
+
+    def test_age_rate_rows_are_plain_fields(self):
+        """`연령별 단가 · <노출명>` 은 반복 행이 아니다 — 숫자가 없으니 `row_group` 이 붙으면 안 된다."""
+        charge = only_step(self.steps, "부과금 추가")
+        f = field_by_label(charge, "연령별 단가 · 초등학생")
+        self.assertEqual((f["kind"], f["value"]), ("typed", "50"))
+        self.assertNotIn("row_group", f)
+        # 0 은 "무료" 라는 뜻이고 비움과 다르다 — 파서가 비움으로 접으면 안 된다
+        self.assertEqual(field_by_label(charge, "연령별 단가 · 유아")["value"], "0")
+
+    def test_preflight_is_clean(self):
+        pre = parse_guide.preflight(self.steps)
+        self.assertEqual(pre["stale"], [])
+        self.assertEqual(pre["charge_order"], [])
+        self.assertEqual(pre["unknown_kinds"], [])
+
+
+class TestPreflight(unittest.TestCase):
+    def _steps(self, text):
+        _, raws = parse_guide.parse_markdown(text)
+        return [parse_guide.build_step(r) for r in raws]
+
+    def test_stale_guide_is_flagged(self):
+        pre = parse_guide.preflight(self._steps(STALE))
+        self.assertEqual([x["no"] for x in pre["stale"]], [1])
+        self.assertIn("기본 오퍼", pre["stale"][0]["why"])
+
+    def test_age_rate_before_mode_is_flagged(self):
+        pre = parse_guide.preflight(self._steps(BAD_ORDER))
+        self.assertEqual([x["no"] for x in pre["charge_order"]], [2])
+        self.assertIn("부과 방식", pre["charge_order"][0]["why"])
+
+    def test_unknown_kind_is_reported_not_blocking(self):
+        steps = self._steps(AGE_BAND)
+        steps[0]["kind"] = "우주선 만들기"
+        pre = parse_guide.preflight(steps)
+        self.assertEqual([x["kind"] for x in pre["unknown_kinds"]], ["우주선 만들기"])
+        self.assertEqual(pre["stale"], [])
+
+
+class TestCheckModeStale(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.dir = Path(self.tmp) / "시험"
+        (self.dir / "사진").mkdir(parents=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_check_fails_on_stale_guide(self):
+        (self.dir / "manual.md").write_text(STALE, encoding="utf-8")
+        r = run(str(self.dir), "--check")
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertIn("옛 화면 기준 단계: 1", r.stdout)
+
+    def test_check_passes_on_new_screen_guide(self):
+        (self.dir / "manual.md").write_text(AGE_BAND, encoding="utf-8")
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("옛 화면 기준 단계: 0", r.stdout)
+        self.assertIn("줄 차례가 어긋난 단계: 0", r.stdout)
+
+    def test_preflight_lands_in_json(self):
+        (self.dir / "manual.md").write_text(AGE_BAND, encoding="utf-8")
+        out = Path(self.tmp) / "steps.json"
+        r = run(str(self.dir), "-o", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        doc = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(doc["guide"]["preflight"]["stale"], [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

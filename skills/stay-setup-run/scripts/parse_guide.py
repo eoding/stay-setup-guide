@@ -440,6 +440,88 @@ def build_step(raw):
 
 PREFIX_TARGETS = {"호텔 만들기": "호텔명", "기본정보 글 입력": "상품명"}
 
+# ---------------------------------------------------------------------------
+# 실행 전 훑기 — 브라우저를 열기 전에 걸리는 것을 잡는다
+#
+# `stay_boot.js` 의 `staleStep` / `checkGuide` 와 **같은 판정**을 파일 단계에서 한 번 더 한다.
+# 그쪽은 페이지 안에서만 돌 수 있어서, 지시서가 옛 화면 기준이라는 사실을 알려면 로그인한 탭과
+# 파일 다리와 부트가 다 필요하다. 여기서 걸러 내면 그 전부를 건너뛴다.
+# ---------------------------------------------------------------------------
+
+#: 러너가 다루는 단계 갈래. 여기 없는 갈래는 **막지 않고 알리기만** 한다 — 지시서 쪽이 새 화면을
+#: 먼저 낼 수 있고, 그때 러너가 못 하는 것은 사람이 판단할 일이지 파서가 정할 일이 아니다.
+KNOWN_KINDS = {
+    "환율 확인", "거래처 확인", "도시 확인", "호텔 만들기",
+    "기본정보 글 입력", "대표이미지 올리기", "상품상세 이미지 올리기", "호텔 정보 입력",
+    "취소정책 만들기",
+    "룸 만들기", "룸 사진 올리기",
+    "오퍼 만들기",
+    "연령 구간 만들기",                       # 2026-09-04 신설 (`_age_bands_panel.html`)
+    "판매 연결 한 번에 만들기", "판매 연결 표시명 넣기", "판매 연결 표시명 고치기",
+    "시즌 만들기", "시즌 가격 채우기", "셀 상태 바꾸기",
+    "가격 셀 손으로 고치기", "가격 셀 만들기",
+    # 요금제는 지시서 쪽이 `요금제 고치기` 로도 적는다(정본을 고치는 것이 늘 같은 화면이라서다) —
+    # 두 표기를 다 받는다. 여기서 표기를 하나로 고르는 것은 사전(`stay-setup-guide`)의 몫이다.
+    "요금제 고치기", "요금제 만들기",
+    "요금제 정본 고치기", "요금제 정본 만들기", "요금제 배포", "요금제 전체 적용",
+    "기준 요금제 바꾸기", "요금제 삭제",
+    "판매일 열기",
+    "부과금 추가", "부가옵션 만들기", "부가옵션 가격 넣기",
+    "프로모션 추가", "혜택 추가", "택1 그룹 만들기", "그룹에 혜택 추가",
+    "경고 넘어가기", "판매 시작",
+}
+
+#: 러너가 실행을 거부하는 갈래·표시 — `stay_boot.js` `staleStep` 과 한 글자도 다르면 안 된다.
+STALE_KIND_RE = re.compile(r"^오퍼 고치기")
+STALE_HEAD_MARKS = ("기본 오퍼", "스탠다드")
+
+#: 연령별 단가 칸 — 부과금 드로어의 카드이고, [부과 방식]이 `인당 · 정액` 이고 시간대별 요율 행이
+#: 하나도 없을 때만 화면에 선다(`_charge_form.html`). 그래서 지시서의 줄 차례가 곧 결과다.
+AGE_RATE_LABEL_RE = re.compile(r"^연령별\s*단가(\s*[·・]\s*.+)?$")
+CHARGE_MODE_LABELS = ("부과 방식", "부과방식")
+TIER_ROW_LABEL_RE = re.compile(r"^(시간대별\s*요율|요율)\s+\d+\s*[·・]")
+
+
+def stale_reason(step):
+    """이 단계가 ERP 2026-09-04 이전 화면 기준인가 — 이유 한 줄, 아니면 None."""
+    kind, title = step.get("kind") or "", step.get("title") or ""
+    head = json.dumps(step.get("head") or {}, ensure_ascii=False)
+    if STALE_KIND_RE.match(kind) or STALE_KIND_RE.match(title):
+        return "`오퍼 고치기` 단계 — 고쳐 쓸 `기본 오퍼` 가 없습니다"
+    if "룸 만들기" in kind and "스탠다드" in head:
+        return "`룸 만들기` 단계가 `스탠다드` 행의 [편집] 을 가리킵니다"
+    if "기본 오퍼" in head:
+        return "`기본 오퍼` 를 가리키는 단계입니다"
+    return None
+
+
+def charge_order_problem(step):
+    """부과금 단계의 [연령별 단가] 줄이 화면에 설 수 없는 차례인가 — 이유 한 줄, 아니면 None."""
+    labels = [f.get("label_base") or f["label"] for f in step["fields"]]
+    age_at = [i for i, l in enumerate(labels) if AGE_RATE_LABEL_RE.match(l)]
+    if not age_at:
+        return None
+    mode_at = [i for i, l in enumerate(labels) if l in CHARGE_MODE_LABELS]
+    if not mode_at:
+        return "[연령별 단가] 줄이 있는데 [부과 방식] 줄이 없습니다 — 그 칸은 `인당 · 정액` 일 때만 화면에 섭니다"
+    if min(age_at) < min(mode_at):
+        return "[연령별 단가] 줄이 [부과 방식] 줄보다 앞에 있습니다 — 방식을 먼저 골라야 그 칸이 섭니다"
+    tier_at = [i for i, l in enumerate(labels) if TIER_ROW_LABEL_RE.match(l)]
+    if tier_at and min(tier_at) < max(age_at):
+        return "[시간대별 요율] 줄이 [연령별 단가] 줄보다 앞에 있습니다 — 요율 행이 하나라도 생기면 연령별 단가 카드가 사라집니다"
+    return None
+
+
+def preflight(steps):
+    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order}."""
+    stale = [{"no": s["no"], "title": s["title"], "why": w}
+             for s in steps for w in [stale_reason(s)] if w]
+    unknown = [{"no": s["no"], "kind": s["kind"]}
+               for s in steps if s["kind"] and s["kind"] not in KNOWN_KINDS]
+    order = [{"no": s["no"], "title": s["title"], "why": w}
+             for s in steps for w in [charge_order_problem(s)] if w]
+    return {"stale": stale, "unknown_kinds": unknown, "charge_order": order}
+
 
 def apply_title_prefix(steps, prefix):
     joined = prefix  # 접두를 그대로 붙인다 (예: __skills__호텔명)
@@ -481,6 +563,7 @@ def summarize(doc):
     unknown = [(s["no"], f["label"], f["raw_value"])
                for s in steps for f in s["fields"] if f.get("unknown")]
     missing = doc["guide"].get("photo_missing", [])
+    pre = doc["guide"].get("preflight") or {"stale": [], "unknown_kinds": [], "charge_order": []}
     lines = ["단계 %d개 · 값 %d행 · 사진 %d장"
              % (len(steps), sum(len(s["fields"]) for s in steps),
                 sum(len(s["photos"]) for s in steps)),
@@ -490,7 +573,16 @@ def summarize(doc):
     lines += ["  %d단계 · %s · %s" % u for u in unknown[:20]]
     lines.append("없는 사진 파일: %d" % len(missing))
     lines += ["  %s" % m for m in missing[:20]]
-    return "\n".join(lines), len(unknown), len(missing)
+    lines.append("옛 화면 기준 단계: %d" % len(pre["stale"]))
+    lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["stale"][:20]]
+    lines.append("줄 차례가 어긋난 단계: %d" % len(pre["charge_order"]))
+    lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["charge_order"][:20]]
+    if pre["unknown_kinds"]:
+        # 막지 않는다 — 알리기만 한다(`KNOWN_KINDS` 주석)
+        lines.append("러너가 모르는 단계 갈래: %d" % len(pre["unknown_kinds"]))
+        lines += ["  %d단계 · %s" % (x["no"], x["kind"]) for x in pre["unknown_kinds"][:20]]
+    blocking = len(unknown) + len(missing) + len(pre["stale"]) + len(pre["charge_order"])
+    return "\n".join(lines), len(unknown), len(missing), blocking
 
 
 def main(argv=None):
@@ -522,18 +614,21 @@ def main(argv=None):
 
     doc = {"guide": {"title": title, "source": source, "share_folder": guide_dir.name,
                      "photos_dir": str(photos_dir), "title_prefix": args.title_prefix,
-                     "photo_missing": missing},
+                     "photo_missing": missing, "preflight": preflight(steps)},
            "steps": steps}
 
-    text_summary, n_unknown, n_missing = summarize(doc)
+    text_summary, _n_unknown, _n_missing, blocking = summarize(doc)
     if args.check:
         print(text_summary)
-        return 1 if (n_unknown or n_missing) else 0
+        return 1 if blocking else 0
 
     out = Path(args.output) if args.output else guide_dir / "steps.json"
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(text_summary, file=sys.stderr)
     print("steps.json: %s" % out, file=sys.stderr)
+    if doc["guide"]["preflight"]["stale"]:
+        # 러너도 이 단계를 거부한다(`stay_boot.js` `staleStep`) — 여기서 먼저 말해 준다
+        print("⚠ 옛 화면 기준 단계가 있습니다 — 실행하지 말고 지시서를 다시 만드세요.", file=sys.stderr)
     return 0
 
 

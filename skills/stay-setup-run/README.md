@@ -10,12 +10,17 @@ the standard `SKILL.md` format **and can drive a browser**.
 
 `SKILL.md` is the authority on the procedure; the two files under `references/` are what it refers to.
 
-> **Screens as of the ERP release of 2026-09-04 (PR #9033).** For older screens use v0.2.x.
+> **Screens as of the production release of 2026-09-04 (basecamp `origin/develop` 64433dabeb).**
+> For older screens use v0.2.x.
 > A new hotel now starts with **zero offers and zero rooms**: the first offer is created with [오퍼 추가]
 > and the first room with [룸 추가], and every room including the first is linked to an offer in the
 > `판매 연결` card. Guides written for the older screens tell the runner to edit a `기본 오퍼` offer or a
 > `스탠다드` room row; the runner refuses those steps instead of clicking the wrong row, and asks for the
-> guide to be regenerated.
+> guide to be regenerated. Run `parse_guide.py --check` first: it makes that same judgement offline,
+> before a browser is opened.
+>
+> The 2026-09-04 release also adds an **age-band panel** (`연령 구간`) to the offer tab and a
+> conditional **per-age rate** card (`연령별 단가`) inside the charge drawer. Both are supported.
 
 ## Requirements
 
@@ -81,7 +86,16 @@ a supervisor pressed).
 | `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runCellStep`, `runWarnStep` |
 | `references/screen-mechanics.md` | Step kind → screen map, how each screen opens and saves, traps |
 | `references/run-log-spec.md` | `run-log.md` format, result words, resuming |
-| `tests/` | Parser tests, and a fixture page with helper tests (run only when jsdom is present) |
+| `tests/` | Parser tests, and two fixture pages with browser tests (run only when jsdom is present) |
+
+```bash
+python3 -m unittest discover -s tests            # parser
+node tests/test_helper.mjs                       # helper — drawer forms, danger buttons
+node tests/test_boot.mjs                         # boot — price-calendar cell editing
+```
+
+The two browser tests skip themselves with exit code 0 when `jsdom` is not installed; nothing is installed
+for you. To borrow a jsdom from elsewhere, set `NODE_PATH` to the `node_modules` that has it.
 
 ## Disclaimer
 

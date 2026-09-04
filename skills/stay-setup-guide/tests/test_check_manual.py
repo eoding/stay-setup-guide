@@ -754,6 +754,197 @@ if __name__ == "__main__":
     unittest.main()
 
 
+def age_band_step(num, name="초등학생", code="CHILD", card="`2026 시즌 요금`"):
+    return f"""
+## {num}. 연령 구간 만들기 (1번째, {name})
+탭: `오퍼`
+카드: {card}
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | {code} |
+| 노출명 | {name} |
+| 최소 연령 | 6 |
+| 최대 연령 | 11.99 |
+| 방 인원수에 포함 | 체크 |
+| 요금 기준 유형 | 선택: 성인 요금의 % |
+| 요금 기준 값 | 50 |
+| 상세(자유텍스트) | 비움 |
+
+→ [추가]
+"""
+
+
+def charge_with_age_rate(num, band="초등학생"):
+    return f"""
+## {num}. 부과금 만들기 (1개, 갈라 디너)
+탭: `부과금`
+카드: `2026 시즌 요금`
+버튼: [부과금 추가]
+
+| 칸 | 값 |
+|---|---|
+| 종류 | 선택: 기타 |
+| 이름 | 갈라 디너 |
+| 부과 방식 | 선택: 정액 |
+| 부과 단위 | 선택: 인당 |
+| 정액 금액 (USD) | 선택: 지정 (0 포함) |
+| 정액 금액 (USD) 값 | 40.00 |
+| 부과 유형 | 선택: 의무 — 고객 선택 없이 자동으로 붙습니다 |
+| 연령별 단가 · {band} | 20.00 |
+
+→ [추가]
+"""
+
+
+class AgeBandOrderTest(unittest.TestCase):
+    """연령 구간은 오퍼 뒤·부과금 앞이다 — 화면이 그 순서로만 칸을 보여 준다."""
+
+    def problems(self, md):
+        return cm.find_age_band_order(steps_of(md))
+
+    def test_band_before_offer_is_error(self):
+        md = HEAD + age_band_step(4) + offer_step(5)
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`오퍼 만들기` 보다 앞이다", problems[0])
+
+    def test_band_without_any_offer_step_is_error(self):
+        problems = self.problems(HEAD + age_band_step(4))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`오퍼 만들기` 보다 앞이다", problems[0])
+
+    def test_band_after_offer_is_ok(self):
+        self.assertEqual(self.problems(HEAD + offer_step(4) + age_band_step(5)), [])
+
+    def test_age_rate_without_band_step_is_error(self):
+        md = HEAD + offer_step(4) + charge_with_age_rate(5)
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`연령 구간 만들기` 단계가 없다", problems[0])
+
+    def test_age_rate_before_band_step_is_error(self):
+        md = HEAD + offer_step(4) + charge_with_age_rate(5) + age_band_step(6)
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`연령 구간 만들기` 단계보다 앞이다", problems[0])
+
+    def test_age_rate_after_band_step_is_ok(self):
+        md = HEAD + offer_step(4) + age_band_step(5) + charge_with_age_rate(6)
+        self.assertEqual(self.problems(md), [])
+
+    def test_manual_without_age_bands_is_ok(self):
+        self.assertEqual(self.problems(HEAD + offer_step(4) + room_step(5)), [])
+
+
+def catalog_step(num, title, save, with_apply_now=True):
+    row = "| 지금 모든 객실에 배포 | 체크 |\n" if with_apply_now else ""
+    return f"""
+## {num}. {title}
+탭: `요금제`
+카드: `요금제 정본`
+버튼: [정본 만들기]
+
+| 칸 | 값 |
+|---|---|
+| 요금제명 | 룸온리 |
+| 새 객실에 자동 배포 | 체크 |
+{row}
+→ [{save}]
+"""
+
+
+class CreateOnlyFieldTest(unittest.TestCase):
+    """`지금 모든 객실에 배포` 는 [정본 만들기] 드로어에만 있는 칸이다."""
+
+    def problems(self, md):
+        return cm.find_create_only_fields(steps_of(md))
+
+    def test_edit_step_with_apply_now_is_error(self):
+        """제목이 `요금제 고치기` 면 사람 말 그대로 돌려준다(팀 합의 문구)."""
+        md = HEAD + catalog_step(4, "요금제 고치기 (1개)", "저장")
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertEqual(
+            problems[0],
+            "4단계: `지금 모든 객실에 배포` 는 새로 만들 때만 있는 칸이다 — 고치기 표에서 뺀다",
+        )
+
+    def test_edit_step_is_caught_even_when_the_save_button_is_wrong(self):
+        """고치기 단계면 마지막 버튼이 [만들기] 로 잘못 적혀 있어도 잡는다."""
+        md = HEAD + catalog_step(4, "요금제 고치기 (1개)", "만들기")
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("새로 만들 때만 있는 칸이다", problems[0])
+
+    def test_non_edit_step_with_wrong_save_button_falls_back_to_the_button_message(self):
+        md = HEAD + catalog_step(4, "요금제 정본 손보기 (1개)", "저장")
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("[만들기] 로 끝나는 만들기 드로어에만 있다", problems[0])
+
+    def test_create_step_with_apply_now_is_ok(self):
+        md = HEAD + catalog_step(4, "요금제 정본 만들기 (1개)", "만들기")
+        self.assertEqual(self.problems(md), [])
+
+    def test_edit_step_without_apply_now_is_ok(self):
+        md = HEAD + catalog_step(4, "요금제 고치기 (1개)", "저장", with_apply_now=False)
+        self.assertEqual(self.problems(md), [])
+
+    def test_the_example_manual_has_no_create_only_field(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
+
+
+class AgeBandDictionaryTest(unittest.TestCase):
+    """연령 구간 칸과 `연령별 단가 · <노출명>` 이 화면 사전 대조를 통과해야 한다."""
+
+    def setUp(self):
+        self.labels = cm.load_dictionary(DICTIONARY)
+
+    def test_age_band_fields_are_in_the_dictionary(self):
+        for label in ("밴드 코드", "노출명", "최소 연령", "최대 연령",
+                      "방 인원수에 포함", "요금 기준 유형", "요금 기준 값",
+                      "참조 밴드 코드", "상세(자유텍스트)"):
+            self.assertIn(label, self.labels, label)
+
+    def test_age_rate_row_matches_by_prefix(self):
+        self.assertNotIn("연령별 단가 · 초등학생", self.labels)
+        self.assertEqual(cm.strip_row_suffix("연령별 단가 · 초등학생"), "연령별 단가")
+        self.assertIn(cm.norm_field("연령별 단가 · 〈연령 구간 노출명〉"), self.labels)
+
+    def test_room_link_edit_has_no_offer_field(self):
+        """편집 드로어에는 오퍼 칸이 없다 — 사전도 그렇게 적혀 있어야 한다."""
+        import json
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            data = json.load(handle)
+        screen = next(s for s in data["screens"] if s["id"] == "room-link-edit")
+        labels = [f["label"] for b in screen["blocks"] for f in b["fields"]]
+        self.assertNotIn("오퍼", labels)
+
+    def test_apply_now_is_marked_create_only(self):
+        """사전이 그 칸을 만들기 전용으로 적어 두어야 검사기 규칙과 어긋나지 않는다."""
+        import json
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            data = json.load(handle)
+        screen = next(s for s in data["screens"] if s["id"] == "rate-plan-catalog")
+        field = next(f for b in screen["blocks"] for f in b["fields"]
+                     if f["label"] == "지금 모든 객실에 배포")
+        self.assertIn("정본 만들기", field["visible_when"])
+        self.assertIn("편집", field["visible_when"])
+
+    def test_hotel_profile_puts_star_grade_after_the_years(self):
+        """화면은 `연식`(개장·리노베이션) 줄 다음에 성급을 세운다."""
+        import json
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            data = json.load(handle)
+        screen = next(s for s in data["screens"] if s["id"] == "hotel-profile")
+        labels = [f["label"] for b in screen["blocks"] for f in b["fields"]]
+        self.assertEqual(labels[:6], ["호텔 영문명", "개장 연도", "리노베이션 연도",
+                                      "성급", "총 객실 수", "프런트 운영"])
+
+
 class AddressCellTest(unittest.TestCase):
     """주소 칸의 필지 번호(`Lot TT13`)는 시트 좌표로 보지 않는다."""
 
