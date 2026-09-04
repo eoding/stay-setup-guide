@@ -44,6 +44,29 @@
   <section class="card"><h3 class="card-title">오퍼</h3></section>
 </div>
 
+<!-- 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] (2026-09-04, CO-31667).
+     ERP `_room_form_fields.html` 의 마크업 그대로다: 라벨 요소가 없고 자리표시 글자가 칸마다 같아서,
+     옆 체크박스 글자를 붙이지 않으면(`mateBoxLabel`) 어느 룸의 칸인지 가릴 수 없다. -->
+<section id="stay_bulk_rooms" class="card"><h3 class="card-title">판매 연결 (오퍼 × 객실)</h3>
+  <table class="bs-table"><tbody>
+    <tr><th>오퍼</th><td>
+      <select name="offer" class="browser-default"><option value="7">2026~2027 시즌 요금</option></select>
+    </td></tr>
+    <tr><th>룸 카테고리</th><td>
+      <div class="stay-bulk-room">
+        <label class="check_form"><input class="filled-in" type="checkbox" name="categories" value="11" id="id_categories_11"><span>Single</span></label>
+        <input type="text" name="display_name_11" id="id_display_name_11" placeholder="오퍼별 표시명 (비우면 룸 카테고리명)">
+      </div>
+      <div class="stay-bulk-room">
+        <label class="check_form"><input class="filled-in" type="checkbox" name="categories" value="12" id="id_categories_12"><span>Standard Double</span></label>
+        <input type="text" name="display_name_12" id="id_display_name_12" placeholder="오퍼별 표시명 (비우면 룸 카테고리명)">
+      </div>
+    </td></tr>
+    <tr><th>새 룸 카테고리명 (선택)</th><td><input type="text" name="new_category_name" id="id_new_category_name"></td></tr>
+    <tr><th>새 룸 오퍼별 표시명 (선택)</th><td><input type="text" name="new_category_display_name" id="id_new_category_display_name"></td></tr>
+  </tbody></table>
+</section>
+
 <div class="stay-drawer">
   <div class="stay-drawer__title"></div>
   <div id="stay_drawer_body"></div>

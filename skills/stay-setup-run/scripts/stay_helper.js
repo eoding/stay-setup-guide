@@ -1185,6 +1185,14 @@
     }
 
     var fit = cands.filter(function (c) { return fits(c.el, f.kind); });
+    // 글자 값을 체크 칸에 쓰지 않는다 (2026-09-04). `오퍼별 표시명 · Single` 같은 가운뎃점 이름은
+    // 못 찾으면 뒤 조각(`Single`)으로 다시 찾는데, 그 조각이 룸 체크박스 글자와 같다 — 막지 않으면
+    // 표시명이 체크박스에 조용히 쓰인다. 되읽기 경로(`readOne`)는 쓰지 않으므로 그대로 둔다.
+    if (!fit.length && /^(typed|file)$/.test(f.kind) && cands.every(function (c) { return /^(checkbox|radio)$/.test(c.el.type); })) {
+      out.detail = '`' + name + '` 에 맞는 것이 체크 칸뿐입니다 — 글자를 넣을 칸이 아닙니다 (' +
+        cands.map(function (c) { return c.matched; }).join(' · ') + ')';
+      return out;
+    }
     var use = fit.length ? fit : cands;
     if (use.length > 1 && !ix) use = disambiguate(use, f.kind, values);
     if (use.length > 1 && !ix && (f.kind === 'empty' || f.kind === 'uncheck')) {

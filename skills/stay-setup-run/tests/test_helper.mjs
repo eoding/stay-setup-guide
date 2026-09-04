@@ -119,6 +119,21 @@ const run = async () => {
   const ka = R.keepAlive();
   ok(ka.clicked === true && ka.logoutWarning === false, 'keepAlive: [확인] 을 누른다', ka);
 
+  // 8. 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] — 이름에 룸을 붙여 가려낸다
+  const bulk = { card: '판매 연결 (오퍼 × 객실)' };
+  const r8 = await R.fill([
+    { label: '오퍼별 표시명 · Single', kind: 'typed', value: '싱글룸' },
+    { label: '오퍼별 표시명 · Standard Double', kind: 'typed', value: '스탠다드 더블룸' }
+  ], bulk);
+  ok(r8.every((x) => x.status === 'ok'), 'fill: 룸별 표시명 두 칸이 다 찼다', r8);
+  ok(win.document.getElementById('id_display_name_11').value === '싱글룸', 'fill: Single 칸에 싱글룸');
+  ok(win.document.getElementById('id_display_name_12').value === '스탠다드 더블룸', 'fill: Standard Double 칸에 스탠다드 더블룸');
+  // 새 카테고리 한 쌍은 룸별 칸에 끌려가지 않는다
+  const r9 = await R.fill([{ label: '새 룸 오퍼별 표시명 (선택)', kind: 'typed', value: '새룸' }], bulk);
+  ok(r9[0].status === 'ok' && win.document.getElementById('id_new_category_display_name').value === '새룸',
+     'fill: `새 룸 오퍼별 표시명 (선택)` 은 제 칸으로 간다', r9);
+  ok(win.document.getElementById('id_display_name_11').value === '싱글룸', 'fill: 룸별 칸이 덮이지 않았다');
+
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
 };
