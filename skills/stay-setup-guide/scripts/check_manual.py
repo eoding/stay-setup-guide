@@ -61,6 +61,16 @@ PHOTO_SRC_RE = re.compile(
     re.IGNORECASE,
 )
 HTTP_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+# 사진 목록의 한 줄 — `- hotel_01.jpg` 또는 `- hotel_01.jpg — 출처: https://…`
+PHOTO_LINE_RE = re.compile(
+    r"^\s*-\s*(?P<name>[\w][\w.\-]*\.(?:jpe?g|png))"
+    r"(?:\s*[\u2014\u2013-]+\s*출처\s*:\s*\S+)?\s*$",
+    re.IGNORECASE,
+)
+# 표 칸의 파일 값 — `| 오퍼 이미지 | 파일: offer_hero.jpg |`
+PHOTO_FIELD_RE = re.compile(
+    r"^파일\s*:\s*(?P<name>[\w][\w.\-]*\.(?:jpe?g|png))\s*$", re.IGNORECASE
+)
 
 # 단계 첫 줄들(`화면:` `탭:` `카드:` …)과 마지막 저장 줄
 HEAD_RE = re.compile(r"^(화면|탭|카드|블록|버튼|폴더|주의):\s*(.*)$")
@@ -130,6 +140,18 @@ CREATE_ONLY_FIELDS = {"지금 모든 객실에 배포": "만들기"}
 # "고치기" 라고 말하는 단계에서는 사람 말로 그대로 돌려주는 편이 고칠 자리를 바로 가리킨다.
 CREATE_ONLY_EDIT_TITLES = ("요금제 고치기", "요금제 정본 고치기")
 
+# 룸 사진 카드에는 **저장 버튼이 없다** — 파일 input 이 `hx-trigger="change"` 라 고르는 순간 올라간다
+# (`_room_images_panel.html`). 드로어 아래 [저장] 은 룸 폼의 저장이라 사진과 무관하고, 올리는
+# 도중에 누르면 드로어가 먼저 닫힐 수 있다. 그래서 이 단계만 마지막 줄이 [사진 추가] 다.
+ROOM_PHOTO_TITLE = "룸 사진 올리기"
+ROOM_PHOTO_BUTTON = "사진 추가"
+
+# 사진 단계의 제목이 `(N장)` 으로 장수를 약속하면 파일 줄도 그만큼 있어야 한다.
+# 제목만 고치고 파일 줄을 안 늘린(또는 그 반대) 지시서가 실제로 나왔다 — 담당자는 제목을 세고
+# 올리므로, 어긋나면 몇 장을 올려야 하는지 화면 밖에서 알 길이 없다.
+PHOTO_STEP_TITLES = ("대표이미지", "상품상세 이미지", "룸 사진", "오퍼 이미지")
+PHOTO_COUNT_RE = re.compile(r"\((\d+)장\)")
+
 
 def strip_select(value):
     """`선택: A, B` → `A, B`. 아니면 그대로."""
@@ -160,7 +182,7 @@ def parse_steps(lines):
         if m:
             label = None
             cur = {"num": int(m.group(1)), "title": m.group(2).strip(),
-                   "heads": {}, "rows": [], "fields": {}, "saves": []}
+                   "heads": {}, "rows": [], "fields": {}, "saves": [], "files": []}
             steps.append(cur)
             continue
         if cur is None:
@@ -180,6 +202,13 @@ def parse_steps(lines):
                 continue
             cur["rows"].append((key, value))
             cur["fields"].setdefault(key, value)
+            pf = PHOTO_FIELD_RE.match(value)
+            if pf:
+                cur["files"].append(pf.group("name"))
+            continue
+        pl = PHOTO_LINE_RE.match(line)
+        if pl:
+            cur["files"].append(pl.group("name"))
             continue
         lb = LABEL_RE.match(line)
         label = lb.group(1).strip() if lb else (label if not line.strip() else None)
@@ -425,6 +454,44 @@ def find_rooms_before_offer(steps):
     ]
 
 
+def _age_value(step, name):
+    """`최소 연령` · `최대 연령` 칸의 숫자. 비었거나 숫자가 아니면 None."""
+    raw = (step["fields"].get(name) or "").strip()
+    try:
+        return decimal.Decimal(raw.replace(",", ""))
+    except (decimal.InvalidOperation, ValueError):
+        return None
+
+
+def find_age_band_overlaps(steps):
+    """같은 오퍼(카드)의 연령 구간이 한 살이라도 겹치면 오류 — **양끝 포함**이다.
+
+    화면이 거부하는 조합이라(`age_band.ranges_overlap`) 지시서에 남으면 담당자가 그 단계에서
+    막힌다. 흔한 실수가 "만 12세 미만" 을 `0~11.99` 로 적으면서 그 아래 유아 구간(`0~5.99`)을
+    함께 두는 것이다 — 아래 구간 위에서 시작해야 한다(`6~11.99`).
+    """
+    problems = []
+    by_card = {}
+    for step in steps:
+        if not step["title"].startswith(AGE_BAND_TITLE):
+            continue
+        low, high = _age_value(step, "최소 연령"), _age_value(step, "최대 연령")
+        if low is None or high is None:
+            continue
+        by_card.setdefault(card_name(step) or "", []).append((step, low, high))
+    for rows in by_card.values():
+        for index, (step, low, high) in enumerate(rows):
+            for other, other_low, other_high in rows[:index]:
+                if low <= other_high and other_low <= high:
+                    problems.append(
+                        f"{step['num']}단계: 연령 구간이 {other['num']}단계와 겹친다 — "
+                        f"만 {low}~{high}세 와 만 {other_low}~{other_high}세 "
+                        "(양끝이 포함이라 경계가 맞닿기만 해도 겹친다 — 아래 구간 위에서 시작한다)"
+                    )
+                    break
+    return problems
+
+
 def find_age_band_order(steps):
     """`연령 구간 만들기` 는 첫 `오퍼 만들기` 뒤에 오고, `연령별 단가` 를 쓰는 단계보다 앞이어야 한다.
 
@@ -460,6 +527,49 @@ def find_age_band_order(steps):
                 f"{step['num']}단계: `{AGE_RATE_FIELD}` 줄이 `{AGE_BAND_TITLE}` 단계보다 앞이다 — "
                 "연령 구간을 먼저 만들어야 그 칸이 화면에 생긴다"
             )
+    return problems
+
+
+def find_photo_count_gaps(steps):
+    """사진 단계 제목의 `(N장)` 과 그 단계의 파일 줄 수가 다르면 오류.
+
+    파일 줄은 두 모양을 함께 센다 — 목록 줄(`- hotel_02.jpg`, 출처가 붙은 것 포함)과
+    표 칸의 파일 값(`| 오퍼 이미지 | 파일: offer_hero.jpg |`).
+    제목에 장수가 없는 단계(`룸 사진 올리기 (1번째, Single)`)는 약속한 것이 없으므로 보지 않는다.
+    """
+    problems = []
+    for step in steps:
+        title = step["title"]
+        if not any(kind in title for kind in PHOTO_STEP_TITLES):
+            continue
+        m = PHOTO_COUNT_RE.search(title)
+        if not m:
+            continue
+        want, have = int(m.group(1)), len(step["files"])
+        if want != have:
+            problems.append(f"{step['num']}단계: 제목은 {want}장인데 파일 줄은 {have}개다")
+    return problems
+
+
+def find_room_photo_saves(steps):
+    """`룸 사진 올리기` 단계가 [저장] 으로 끝나면 오류 — 그 카드에는 저장 버튼이 없다.
+
+    「대표이미지」·「상품상세 이미지」는 대상이 아니다. 그쪽은 「기본정보」 탭(상품 공통 화면)이라
+    탭 오른쪽 위 [저장] 이 진짜 저장이다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ROOM_PHOTO_TITLE):
+            continue
+        saves = step["saves"]
+        last = saves[-1] if saves else ""
+        if last == ROOM_PHOTO_BUTTON:
+            continue
+        problems.append(
+            f"{step['num']}단계: `{ROOM_PHOTO_TITLE}` 는 `→ [{ROOM_PHOTO_BUTTON}]` 로 끝낸다 — "
+            f"룸 사진 카드에는 저장 버튼이 없고 파일을 고르면 바로 올라간다"
+            f"(지금은 [{last or '?'}])"
+        )
     return problems
 
 
@@ -761,7 +871,10 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     skip_warning_steps = find_skip_warning_steps(parsed)
     campaign_uses = find_campaign_uses(parsed)
     age_band_order = find_age_band_order(parsed)
+    age_band_overlaps = find_age_band_overlaps(parsed)
     create_only_fields = find_create_only_fields(parsed)
+    room_photo_saves = find_room_photo_saves(parsed)
+    photo_count_gaps = find_photo_count_gaps(parsed)
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
@@ -835,7 +948,10 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
         "age_band_order": age_band_order,
+        "age_band_overlaps": age_band_overlaps,
         "create_only_fields": create_only_fields,
+        "room_photo_saves": room_photo_saves,
+        "photo_count_gaps": photo_count_gaps,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
         "currency": currency,
@@ -890,7 +1006,8 @@ def main(argv=None):
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
-              + r["campaign_uses"] + r["age_band_order"] + r["create_only_fields"] + r["addon_card_gaps"]
+              + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"] + r["create_only_fields"]
+              + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["promo_common"] + r["season_saves"]):
         problems.append(p)
     if r["dict_error"]:

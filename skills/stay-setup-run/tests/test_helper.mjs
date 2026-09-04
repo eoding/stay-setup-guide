@@ -108,6 +108,14 @@ const run = async () => {
   const sale = await R.submit('판매 시작', { force: true });
   ok(sale.status === 'refused' && sale.reason === 'sale-start', 'submit: [판매 시작] 은 force 로도 거부', sale);
 
+  // 5b. 룸 사진의 [사진 추가] 는 저장 버튼이 아니라 파일 고르개다.
+  //     `not-found` 로 돌려주면 부르는 쪽이 대안을 훑다가 드로어의 [저장] 을 눌러
+  //     사진이 붙기 전에 드로어가 닫힌다 — 그래서 따로 알려 준다.
+  const up = await R.submit('사진 추가');
+  ok(up.status === 'upload-label', 'submit: [사진 추가] 는 파일 고르개라고 알려 준다', up);
+  ok(/takeFiles/.test(up.detail || ''), 'submit: 무엇으로 올려야 하는지 함께 알려 준다', up.detail);
+  ok(R.state().drawer.open === true, 'submit: [사진 추가] 때문에 드로어가 닫히지 않았다');
+
   // 6. 저장 → 드로어가 닫히면 closed
   const sv = await R.submit('저장');
   ok(sv.status === 'closed', 'submit: 저장 뒤 드로어가 닫히면 closed', sv);
@@ -164,13 +172,17 @@ const run = async () => {
   ok(q('[name=rate_basis_value]').value === '50', 'DOM: 늦게 선 [요금 기준 값] 이 찼다', q('[name=rate_basis_value]').value);
   ok(r10[6].retried === true, 'fill: [요금 기준 값] 은 2차 재시도에서 잡혔다', r10[6]);
 
-  // 10. 부과금의 연령별 단가 — [부과 방식]을 고른 뒤에야 서는 카드
+  // 10. 부과금의 연령별 단가 — [부과 단위]=인당 **과** [부과 방식]=정액 둘 다여야 서는 카드.
+  //     화면 차례 그대로 적는다: 종류 → 이름 → 부과 방식 → 부과 단위 → 정액 금액 → 적용 룸 scope → 연령별 단가
   win.openFragment('stay_charge_form', '부과금 추가 — 2026 계약');
   const chg = { card: '부과금' };
   const r11 = await R.fill([
+    { label: '종류', kind: 'select', value: '기타' },
     { label: '이름', kind: 'typed', value: '갈라디너' },
-    { label: '부과 방식', kind: 'select', value: '인당' },
+    { label: '부과 방식', kind: 'select', value: '정액' },
+    { label: '부과 단위', kind: 'select', value: '인당' },
     { label: '정액 금액', kind: 'typed', value: '100' },
+    { label: '적용 룸 scope', kind: 'multi', values: ['싱글룸'] },
     { label: '연령별 단가 · 초등학생', kind: 'typed', value: '50' },
     { label: '연령별 단가 · 유아', kind: 'typed', value: '0' }
   ], chg);
@@ -181,6 +193,24 @@ const run = async () => {
   ok(q('[name=age_rate_52]').value === '0', 'DOM: 유아 단가 0(무료)이 그대로 들어갔다', q('[name=age_rate_52]').value);
   const rb11 = R.readback([{ label: '연령별 단가 · 유아', kind: 'typed', value: '0' }], chg);
   ok(rb11.mismatch.length === 0, 'readback: 0 을 비움으로 읽지 않는다', rb11.mismatch);
+
+  // 10b. 요금제 정본의 `포함물` 반복 행 — 열 제목이 없어 자리표시 글자로만 갈린다
+  win.openFragment('stay_rate_plan_catalog', '요금제 정본 만들기');
+  const cat = { card: '요금제 정본' };
+  const r12 = await R.fill([
+    { label: '요금제명', kind: 'typed', value: '조식 포함' },
+    { label: '포함물 1 · 포함물 이름', kind: 'typed', value: '조식 2인' },
+    { label: '포함물 1 · 설명 (선택)', kind: 'typed', value: '뷔페' },
+    { label: '포함물 2 · 포함물 이름', kind: 'typed', value: '웰컴 드링크' }
+  ], cat);
+  const bad12 = r12.filter((x) => x.status !== 'ok');
+  ok(bad12.length === 0, 'fill: 열 제목 없는 포함물 행을 자리표시 글자로 찾는다', bad12);
+  const incl = [...win.document.querySelectorAll('[name=inclusions_name]')].map((e) => e.value);
+  const desc = [...win.document.querySelectorAll('[name=inclusions_description]')].map((e) => e.value);
+  ok(incl[0] === '조식 2인' && incl[1] === '웰컴 드링크', 'DOM: 포함물 이름 두 행', incl);
+  ok(desc[0] === '뷔페' && desc[1] === '', 'DOM: 설명은 제 칸에만 들어갔다', desc);
+  ok(win.document.querySelectorAll('[name=inclusions_name]').length === 2,
+    'fill: 행이 모자라면 [행 추가] 를 눌러 만든다');
 
   // 11. 2026-09-04 화면의 위험 버튼 — 이름만으로도 거부한다
   win.closeDrawer();

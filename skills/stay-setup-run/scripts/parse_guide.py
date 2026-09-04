@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import sys
+from decimal import Decimal, InvalidOperation
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
@@ -475,10 +476,18 @@ KNOWN_KINDS = {
 STALE_KIND_RE = re.compile(r"^오퍼 고치기")
 STALE_HEAD_MARKS = ("기본 오퍼", "스탠다드")
 
-#: 연령별 단가 칸 — 부과금 드로어의 카드이고, [부과 방식]이 `인당 · 정액` 이고 시간대별 요율 행이
-#: 하나도 없을 때만 화면에 선다(`_charge_form.html`). 그래서 지시서의 줄 차례가 곧 결과다.
+#: 연령별 단가 칸 — 부과금 드로어의 카드이고, **[부과 단위]가 `인당`** 이고 **[부과 방식]이 `정액`**
+#: 이며 시간대별 요율 행이 하나도 없을 때만 화면에 선다(`_charge_form.html` 의 두 x-show 조건은
+#: `per == 인당` 과 `basis == 정액` 이다 — `per` 의 화면 이름이 [부과 단위], `basis` 가 [부과 방식]이다).
+#: 그래서 지시서의 줄 차례가 곧 결과다.
 AGE_RATE_LABEL_RE = re.compile(r"^연령별\s*단가(\s*[·・]\s*.+)?$")
-CHARGE_MODE_LABELS = ("부과 방식", "부과방식")
+#: 카드를 세우는 두 셀렉트. 연령별 단가 줄은 **둘 다보다 뒤**여야 한다.
+CHARGE_GATE_LABELS = ("부과 단위", "부과단위", "부과 방식", "부과방식")
+#: 인당을 고르는 칸 — 이 줄이 아예 없으면 카드가 설 일이 없다.
+CHARGE_UNIT_LABELS = ("부과 단위", "부과단위")
+#: 화면 차례는 … → 적용 날짜 → 적용 룸 scope → 연령별 단가 → 시간대별 요율 → 설명 이다.
+#: 지시서도 그 차례를 따라야 사람이 화면과 나란히 읽는다(dict-audit 2026-09-04 합의).
+CHARGE_ROOM_SCOPE_LABELS = ("적용 룸 scope", "적용 룸", "적용룸 scope")
 TIER_ROW_LABEL_RE = re.compile(r"^(시간대별\s*요율|요율)\s+\d+\s*[·・]")
 
 
@@ -501,26 +510,82 @@ def charge_order_problem(step):
     age_at = [i for i, l in enumerate(labels) if AGE_RATE_LABEL_RE.match(l)]
     if not age_at:
         return None
-    mode_at = [i for i, l in enumerate(labels) if l in CHARGE_MODE_LABELS]
-    if not mode_at:
-        return "[연령별 단가] 줄이 있는데 [부과 방식] 줄이 없습니다 — 그 칸은 `인당 · 정액` 일 때만 화면에 섭니다"
-    if min(age_at) < min(mode_at):
-        return "[연령별 단가] 줄이 [부과 방식] 줄보다 앞에 있습니다 — 방식을 먼저 골라야 그 칸이 섭니다"
+    if not any(l in CHARGE_UNIT_LABELS for l in labels):
+        return "[연령별 단가] 줄이 있는데 [부과 단위] 줄이 없습니다 — 그 칸은 부과 단위가 `인당` 일 때만 화면에 섭니다"
+    gate_at = [i for i, l in enumerate(labels) if l in CHARGE_GATE_LABELS]
+    if min(age_at) < max(gate_at):
+        return "[연령별 단가] 줄이 [부과 단위]·[부과 방식] 줄보다 앞에 있습니다 — 둘을 먼저 골라야 그 칸이 섭니다"
+    scope_at = [i for i, l in enumerate(labels) if l in CHARGE_ROOM_SCOPE_LABELS]
+    if scope_at and min(age_at) < max(scope_at):
+        return "[연령별 단가] 줄이 [적용 룸 scope] 줄보다 앞에 있습니다 — 화면 차례는 적용 룸 scope 다음입니다"
     tier_at = [i for i, l in enumerate(labels) if TIER_ROW_LABEL_RE.match(l)]
     if tier_at and min(tier_at) < max(age_at):
         return "[시간대별 요율] 줄이 [연령별 단가] 줄보다 앞에 있습니다 — 요율 행이 하나라도 생기면 연령별 단가 카드가 사라집니다"
     return None
 
 
+#: 연령 구간 단계에서 나이를 읽는 칸.
+AGE_MIN_LABELS = ("최소 연령", "최소연령")
+AGE_MAX_LABELS = ("최대 연령", "최대연령")
+
+
+def _age_of(step, labels):
+    for f in step["fields"]:
+        if (f.get("label_base") or f["label"]) in labels and f.get("kind") == "typed":
+            try:
+                return Decimal(str(f.get("value") or "").strip())
+            except (InvalidOperation, ValueError):
+                return None
+    return None
+
+
+def _ranges_overlap(min_a, max_a, min_b, max_b) -> bool:
+    """서버와 **같은 판정**이다 — 경계는 양끝 포함이다(`stay.services.age_band.ranges_overlap`).
+
+    `0~5.99` 와 `6~11.99` 는 안 겹치고, `0~6` 과 `6~11.99` 는 만 6세에서 겹쳐 거부된다.
+    """
+    return min_a <= max_b and min_b <= max_a
+
+
+def age_band_overlaps(steps):
+    """같은 오퍼 안에서 나이 범위가 겹치는 연령 구간 단계 — 서버가 저장을 거부한다.
+
+    러너가 이것을 따로 보는 이유는 `staleStep` 을 파일 단계에서 한 번 더 보는 이유와 같다.
+    겹치는 구간은 **그 단계에서 저장이 막힐 뿐**이라, 그때는 이미 앞 단계들이 화면에 만들어져
+    있다. 브라우저를 열기 전에 걸러 내면 그 되돌리기가 통째로 없어진다.
+    카드(오퍼)별로 나눠 견준다 — 다른 오퍼의 구간끼리는 겹쳐도 된다.
+    """
+    seen, out = {}, []
+    for s in steps:
+        if s.get("kind") != "연령 구간 만들기":
+            continue
+        lo, hi = _age_of(s, AGE_MIN_LABELS), _age_of(s, AGE_MAX_LABELS)
+        if lo is None or hi is None:
+            continue
+        card = (s["head"].get("card") or "").strip()
+        for prev_no, prev_lo, prev_hi in seen.get(card, []):
+            if _ranges_overlap(lo, hi, prev_lo, prev_hi):
+                out.append({
+                    "no": s["no"], "title": s["title"],
+                    "why": "%d단계와 나이 범위가 겹칩니다 — 만 %s~%s세 와 만 %s~%s세 "
+                           "(양끝이 포함이라 경계가 맞닿기만 해도 겹칩니다)"
+                           % (prev_no, lo, hi, prev_lo, prev_hi),
+                })
+                break
+        seen.setdefault(card, []).append((s["no"], lo, hi))
+    return out
+
+
 def preflight(steps):
-    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order}."""
+    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order, age_overlap}."""
     stale = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [stale_reason(s)] if w]
     unknown = [{"no": s["no"], "kind": s["kind"]}
                for s in steps if s["kind"] and s["kind"] not in KNOWN_KINDS]
     order = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [charge_order_problem(s)] if w]
-    return {"stale": stale, "unknown_kinds": unknown, "charge_order": order}
+    return {"stale": stale, "unknown_kinds": unknown, "charge_order": order,
+            "age_overlap": age_band_overlaps(steps)}
 
 
 def apply_title_prefix(steps, prefix):
@@ -563,7 +628,8 @@ def summarize(doc):
     unknown = [(s["no"], f["label"], f["raw_value"])
                for s in steps for f in s["fields"] if f.get("unknown")]
     missing = doc["guide"].get("photo_missing", [])
-    pre = doc["guide"].get("preflight") or {"stale": [], "unknown_kinds": [], "charge_order": []}
+    pre = doc["guide"].get("preflight") or {"stale": [], "unknown_kinds": [], "charge_order": [], "age_overlap": []}
+    pre.setdefault("age_overlap", [])
     lines = ["단계 %d개 · 값 %d행 · 사진 %d장"
              % (len(steps), sum(len(s["fields"]) for s in steps),
                 sum(len(s["photos"]) for s in steps)),
@@ -577,11 +643,14 @@ def summarize(doc):
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["stale"][:20]]
     lines.append("줄 차례가 어긋난 단계: %d" % len(pre["charge_order"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["charge_order"][:20]]
+    lines.append("나이 범위가 겹치는 단계: %d" % len(pre["age_overlap"]))
+    lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["age_overlap"][:20]]
     if pre["unknown_kinds"]:
         # 막지 않는다 — 알리기만 한다(`KNOWN_KINDS` 주석)
         lines.append("러너가 모르는 단계 갈래: %d" % len(pre["unknown_kinds"]))
         lines += ["  %d단계 · %s" % (x["no"], x["kind"]) for x in pre["unknown_kinds"][:20]]
-    blocking = len(unknown) + len(missing) + len(pre["stale"]) + len(pre["charge_order"])
+    blocking = (len(unknown) + len(missing) + len(pre["stale"])
+                + len(pre["charge_order"]) + len(pre["age_overlap"]))
     return "\n".join(lines), len(unknown), len(missing), blocking
 
 

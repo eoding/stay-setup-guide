@@ -131,16 +131,29 @@
 </section>
 
 <!-- 부과금 드로어의 [연령별 단가] 카드 (ERP `_charge_form.html`).
-     [부과 방식]이 `인당` 이고 정액이며 시간대별 요율 행이 0일 때만 선다. -->
+     카드를 세우는 것은 **두 셀렉트**다 — [부과 단위]가 `인당`(모델 `per`)이고
+     [부과 방식]이 `정액`(모델 `basis`)이며 시간대별 요율 행이 0개일 때만 선다.
+     둘은 다른 축이다: 방식은 정액/정률, 단위는 체류당 1회/박당/인당. -->
 <section id="stay_charge_form" class="card"><h3 class="card-title">부과금</h3>
   <table class="bs-table"><tbody>
+    <tr><th>종류</th><td><select class="browser-default" name="kind">
+      <option value="">선택</option><option>기타</option><option>리조트피</option></select></td></tr>
     <tr><th>이름</th><td><input type="text" name="charge_name"></td></tr>
     <tr><th>부과 방식</th><td>
-      <select class="browser-default" name="per" onchange="lateShow('age_rate_card', this.value === 'pax')">
-        <option value="">선택</option><option value="stay">1박당</option><option value="pax">인당</option>
+      <select class="browser-default" name="basis" onchange="chargeGate()">
+        <option value="0">정액</option><option value="1">1박 요금의 %</option>
+      </select>
+    </td></tr>
+    <tr><th>부과 단위</th><td>
+      <select class="browser-default" name="per" onchange="chargeGate()">
+        <option value="">선택</option><option value="0">체류당 1회</option>
+        <option value="1">박당</option><option value="2">인당</option>
       </select>
     </td></tr>
     <tr><th>정액 금액</th><td><input type="text" name="amount"></td></tr>
+    <tr><th>적용 룸 scope</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="room_scope" value="9"><span>싱글룸</span></label>
+    </td></tr>
   </tbody></table>
   <div id="age_rate_card" style="display:none">
     <h4 class="stay-section-title">연령별 단가</h4>
@@ -152,6 +165,24 @@
       </tbody>
     </table>
   </div>
+</section>
+
+<!-- 요금제 정본 드로어 (`_rate_plan_catalog_form.html`).
+     ① `지금 모든 객실에 배포` 는 **[정본 만들기] 드로어에만** 있다(`{% if create %}`) —
+        [편집] 로 연 정본에는 그 체크도 `배포` 머리도 없다. 그래서 여기에는 두지 않는다.
+     ② `포함물` 반복 행에는 **열 제목이 없다.** 두 입력은 자리표시 글자로만 갈린다. -->
+<section id="stay_rate_plan_catalog" class="card"><h3 class="card-title">요금제 정본</h3>
+  <table class="bs-table"><tbody>
+    <tr><th>요금제명</th><td><input type="text" name="plan_name"></td></tr>
+    <tr><th>포함물</th><td>
+      <div>
+        <input type="text" name="inclusions_name" placeholder="포함물 이름 (예: 조식 2인)">
+        <input type="text" name="inclusions_description" placeholder="설명 (선택)">
+      </div>
+      <button type="button" onclick="addInclusion()">행 추가</button>
+    </td></tr>
+  </tbody></table>
+  <button type="button">저장</button>
 </section>
 
 </div><!-- /#stay_fragments -->
@@ -193,6 +224,22 @@
    도우미의 1차 훑기(칸마다 60ms)가 반드시 못 찾고 2차 재시도가 잡아야 하기 때문이다. */
 function lateShow(id, on) {
   setTimeout(function () { document.getElementById(id).style.display = on ? '' : 'none'; }, 200);
+}
+
+/* 부과금 카드 게이트 — 부과 단위 `인당`(2) + 부과 방식 `정액`(0) 둘 다여야 선다 */
+function chargeGate() {
+  var per = document.querySelector('[name=per]').value;
+  var basis = document.querySelector('[name=basis]').value;
+  lateShow('age_rate_card', per === '2' && basis === '0');
+}
+
+/* 포함물 행 추가 — 열 제목이 없는 반복 행 */
+function addInclusion() {
+  var wrap = document.querySelector('[name=inclusions_name]').parentElement.parentElement;
+  var row = document.createElement('div');
+  row.innerHTML = '<input type="text" name="inclusions_name" placeholder="포함물 이름 (예: 조식 2인)">' +
+                  '<input type="text" name="inclusions_description" placeholder="설명 (선택)">';
+  wrap.insertBefore(row, wrap.querySelector('button'));
 }
 
 /* ── 탭 (ERP 는 `ul.tab-container li a.active` 로 활성 탭을 말한다) ── */
@@ -278,7 +325,13 @@ var DRAWER_HTML = [
   '  <span class="select2 select2-container"><span class="select2-selection" role="combobox">',
   '  <span class="select2-selection__rendered"></span></span></span>',
   '</td></tr>',
-  '<tr><th>룸 사진</th><td><input type="file" name="images" multiple accept="image/*"></td></tr>',
+  // 룸 사진 — 실제 화면 그대로다: 파일 칸이 [사진 추가] 라벨 **안**에 숨어 있고 `hx-trigger="change"`
+  // 라 고르는 즉시 올라간다. `<button>` 이 아니라 `<label>` 이므로 저장 버튼으로 찾히면 안 된다.
+  '<tr><th>룸 사진</th><td>',
+  '  <label class="stay-btn stay-btn--primary" style="cursor:pointer">사진 추가',
+  '    <input type="file" name="images" multiple accept="image/*" style="display:none" hx-trigger="change">',
+  '  </label>',
+  '</td></tr>',
   '</tbody></table>',
   '<button type="button" onclick="fakeSave()">저장</button>',
   '<button type="button" hx-confirm="정말 삭제할까요?">삭제</button>'
