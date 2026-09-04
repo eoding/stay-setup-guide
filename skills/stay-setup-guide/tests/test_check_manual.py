@@ -268,18 +268,54 @@ class NeedlessOverwriteTest(unittest.TestCase):
         self.assertEqual(needless(HEAD + fill_step(4, "Peak", "싱글")), [])
 
 
-def offer_step(num, title="오퍼 고치기 (1개)", policy="선택: 표준 D-7 무료취소", with_row=True):
+def offer_step(num, title="오퍼 만들기 (1번째, 2026 시즌 요금)",
+               policy="선택: 표준 D-7 무료취소", with_row=True):
     row = f"| 기본 취소 정책 | {policy} |\n" if with_row else ""
     return f"""
 ## {num}. {title}
 탭: `오퍼`
-버튼: `기본 오퍼` 행의 [편집]
+버튼: [오퍼 추가]
 
 | 칸 | 값 |
 |---|---|
 | 관리용 이름 | 2026 시즌 요금 |
 {row}
 → [저장]
+"""
+
+
+def room_step(num, name="Single"):
+    return f"""
+## {num}. 룸 만들기 (1번째, {name})
+탭: `객실`
+카드: `객실 (룸 타입)`
+버튼: [룸 추가]
+
+| 칸 | 값 |
+|---|---|
+| 룸 이름 | {name} |
+| 룸 설명 | 비움 |
+
+→ [저장]
+"""
+
+
+def room_link_step(num, rooms="Single", display="싱글룸"):
+    return f"""
+## {num}. 판매 연결 한 번에 만들기 (룸 1개)
+탭: `객실`
+카드: `판매 연결 (오퍼 × 객실)`
+버튼: [객실 추가]
+
+| 칸 | 값 |
+|---|---|
+| 오퍼 | 선택: 2026 시즌 요금 |
+| 룸 카테고리 | 선택: {rooms} |
+| 오퍼별 표시명 · {rooms} | {display} |
+| 새 룸 카테고리명 (선택) | 비움 |
+| 새 룸 오퍼별 표시명 (선택) | 비움 |
+
+→ [추가]
 """
 
 
@@ -312,6 +348,48 @@ class CancelPolicyTest(unittest.TestCase):
     def test_other_steps_are_not_checked(self):
         md = HEAD + offer_step(4, title="시즌 만들기 (1번째, Regular)", with_row=False)
         self.assertEqual(self.problems(md), [])
+
+    def test_legacy_edit_step_is_not_checked_here(self):
+        """`오퍼 고치기` 는 이 검사가 아니라 전용 규칙이 잡는다 — 사유가 둘로 갈리지 않게."""
+        md = HEAD + offer_step(4, title="오퍼 고치기 (1개)", with_row=False)
+        self.assertEqual(self.problems(md), [])
+
+
+class LegacyOfferEditTest(unittest.TestCase):
+    """호텔이 빈 상태로 만들어지므로 `오퍼 고치기` 단계는 성립하지 않는다."""
+
+    def test_legacy_title_is_error(self):
+        problems = cm.find_legacy_offer_edit_steps(steps_of(HEAD + offer_step(4, title="오퍼 고치기 (1개)")))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("오퍼 고치기", problems[0])
+
+    def test_create_title_is_ok(self):
+        self.assertEqual(cm.find_legacy_offer_edit_steps(steps_of(HEAD + offer_step(4))), [])
+
+
+class OfferBeforeRoomsTest(unittest.TestCase):
+    """오퍼가 없으면 객실 추가가 막힌다 — `룸 만들기`·`판매 연결` 은 첫 오퍼 뒤에 온다."""
+
+    def problems(self, md):
+        return cm.find_rooms_before_offer(steps_of(md))
+
+    def test_offer_first_is_ok(self):
+        md = HEAD + offer_step(4) + room_step(5) + room_link_step(6)
+        self.assertEqual(self.problems(md), [])
+
+    def test_room_before_offer_is_error(self):
+        md = HEAD + room_step(4) + offer_step(5)
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("오퍼가 없으면 객실 추가가 막힌다", problems[0])
+
+    def test_room_link_before_offer_is_error(self):
+        md = HEAD + room_link_step(4) + offer_step(5)
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_rooms_without_any_offer_step_are_errors(self):
+        md = HEAD + room_step(4) + room_link_step(5)
+        self.assertEqual(len(self.problems(md)), 2)
 
 
 SKIP_STEP = """
@@ -362,9 +440,9 @@ CAMPAIGN_STEP = """
 
 def offer_with_campaign(num, value):
     return f"""
-## {num}. 오퍼 고치기 (1개)
+## {num}. 오퍼 만들기 (1번째, 2026 시즌 요금)
 탭: `오퍼`
-버튼: `기본 오퍼` 행의 [편집]
+버튼: [오퍼 추가]
 
 | 칸 | 값 |
 |---|---|
@@ -613,6 +691,22 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(len(r["skip_warning_steps"]), 1)
 
+    def test_legacy_offer_edit_step_fails(self):
+        r, code = self.run_on(HEAD + offer_step(4, title="오퍼 고치기 (1개)"))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["legacy_offer_steps"]), 1)
+
+    def test_room_before_offer_fails(self):
+        r, code = self.run_on(HEAD + room_step(4) + offer_step(5))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["rooms_before_offer"]), 1)
+
+    def test_offer_then_rooms_passes(self):
+        md = HEAD + offer_step(4) + room_step(5) + room_link_step(6)
+        r, code = self.run_on(md)
+        self.assertEqual(code, 0, r)
+        self.assertEqual(r["rooms_before_offer"] + r["legacy_offer_steps"], [])
+
     def test_campaign_step_fails(self):
         r, code = self.run_on(HEAD + CAMPAIGN_STEP)
         self.assertEqual(code, 1)
@@ -630,6 +724,8 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(r["needless_overwrite"], [])
         self.assertEqual(r["cancel_policy_gaps"], [])
         self.assertEqual(r["skip_warning_steps"], [])
+        self.assertEqual(r["legacy_offer_steps"], [])
+        self.assertEqual(r["rooms_before_offer"], [])
         self.assertEqual(r["campaign_uses"], [])
         self.assertEqual(r["addon_card_gaps"], [])
         self.assertEqual(r["promo_common"], [])

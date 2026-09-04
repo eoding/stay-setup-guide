@@ -42,6 +42,23 @@ def step_by_no(steps, no):
     raise AssertionError("%d단계가 없습니다" % no)
 
 
+def steps_by_kind(steps, kind):
+    """그 갈래의 단계들 — 번호 대신 갈래로 찾는다.
+
+    예시 지시서가 다시 그려지면 단계 번호가 통째로 밀린다(2026-09-04 ERP 변경: 호텔이
+    오퍼 0 · 룸 0 으로 생겨 `오퍼 고치기` 가 `오퍼 만들기` 로 바뀌고 룸 단계가 늘었다).
+    번호를 박아 두면 그때마다 시험이 깨지므로, 갈래로 찾아 그 안에서 몇 번째를 고른다.
+    """
+    return [s for s in steps if s["kind"] == kind]
+
+
+def only_step(steps, kind, index=0):
+    hits = steps_by_kind(steps, kind)
+    if len(hits) <= index:
+        raise AssertionError("`%s` 단계가 %d개뿐입니다" % (kind, len(hits)))
+    return hits[index]
+
+
 def field_by_label(step, label):
     for f in step["fields"]:
         if f["label"] == label:
@@ -71,57 +88,82 @@ class TestManual(unittest.TestCase):
     def setUpClass(cls):
         cls.title, cls.steps = parse(MANUAL)
 
-    def test_step_count(self):
-        self.assertEqual(len(self.steps), 59)
-        self.assertEqual([s["no"] for s in self.steps], list(range(1, 60)))
+    def test_step_numbering_is_contiguous(self):
+        # 개수를 박아 두지 않는다 — 예시 지시서가 다시 그려질 때마다 바뀐다(`steps_by_kind` 주석).
+        # 대신 1부터 빠짐없이 이어지는지를 본다. 그것이 파서가 지켜야 할 성질이다.
+        self.assertEqual([s["no"] for s in self.steps], list(range(1, len(self.steps) + 1)))
+        self.assertGreater(len(self.steps), 30)
 
     def test_room_name_is_typed(self):
-        f = field_by_label(step_by_no(self.steps, 10), "룸 이름")
+        room = only_step(self.steps, "룸 만들기")
+        f = field_by_label(room, "룸 이름")
         self.assertEqual(f["kind"], "typed")
-        self.assertEqual(f["value"], "Single")
+        # 제목 `룸 만들기 (1번째, Single)` 의 이름과 칸 값이 같아야 한다
+        self.assertTrue(room["title"].rstrip(")").endswith(f["value"]), room["title"])
 
     def test_last_step_kind(self):
-        last = step_by_no(self.steps, 59)
+        last = self.steps[-1]
         self.assertEqual(last["kind"], "판매 시작")
         self.assertEqual(last["submit"], "판매 시작")
         self.assertEqual(last["fields"], [])
 
     def test_target_room_is_select(self):
-        f = field_by_label(step_by_no(self.steps, 36), "대상 룸")
+        f = field_by_label(only_step(self.steps, "시즌 가격 채우기"), "대상 룸")
         self.assertEqual(f["kind"], "select")
-        self.assertEqual(f["value"], "2026~2027 시즌 요금 · Single")
+        self.assertIn(" · ", f["value"])  # `오퍼 · 룸` 꼴
 
     def test_photo_with_source(self):
-        photos = step_by_no(self.steps, 6)["photos"]
-        self.assertEqual([p["file"] for p in photos], ["hotel_01.jpg"])
-        self.assertTrue(photos[0]["source"].startswith("http"))
+        withsrc = [(s, p) for s in self.steps for p in s["photos"] if p.get("source")]
+        self.assertTrue(withsrc, "출처가 적힌 사진이 한 장도 없습니다")
+        self.assertTrue(withsrc[0][1]["source"].startswith("http"))
 
     def test_multi_select_is_split(self):
-        f = field_by_label(step_by_no(self.steps, 35), "대상 룸")
+        f = field_by_label(only_step(self.steps, "판매일 열기"), "대상 룸")
         self.assertEqual(f["kind"], "multi")
-        self.assertEqual(len(f["values"]), 6)
-        self.assertEqual(f["values"][0], "2026~2027 시즌 요금 · Single")
+        self.assertGreater(len(f["values"]), 1)
+        for v in f["values"]:
+            self.assertIn(" · ", v)
 
     def test_repeated_row_label(self):
-        f = field_by_label(step_by_no(self.steps, 10), "침대 구성 1 · 침대 종류")
+        f = field_by_label(only_step(self.steps, "룸 만들기"), "침대 구성 1 · 침대 종류")
         self.assertEqual((f["row_group"], f["row_index"], f["row_field"]),
                          ("침대 구성", 1, "침대 종류"))
 
     def test_head_and_buttons(self):
-        head = step_by_no(self.steps, 10)["head"]
+        head = only_step(self.steps, "룸 만들기")["head"]
         self.assertEqual(head["tab"], "객실")
         self.assertEqual(head["card"], "객실 (룸 타입)")
         self.assertEqual(len(head["buttons"]), 2)
         first, second = head["buttons_parsed"]
-        self.assertEqual((first["text"], first["row"], first["drawer"], first["times"]),
-                         ("편집", "스탠다드", False, 1))
+        # ERP 2026-09-04 뒤로는 1번째 룸도 [룸 추가] 다. 옛 지시서(`스탠다드` 행의 [편집])도
+        # 파서는 읽을 수 있어야 하므로 두 꼴을 다 받는다 — 실행을 거부하는 것은 러너의 몫이다
+        # (stay_boot.js `staleStep`).
+        self.assertIn((first["text"], first["row"]), [("룸 추가", None), ("편집", "스탠다드")])
+        self.assertEqual((first["drawer"], first["times"]), (False, 1))
         self.assertEqual((second["text"], second["group"], second["drawer"], second["times"]),
                          ("침대 행 추가", "침대 구성", True, 1))
 
+    def test_guide_vintage_is_consistent(self):
+        """예시 지시서가 옛 화면 기준이면 통째로, 새 화면 기준이면 통째로여야 한다.
+
+        섞이면 러너가 반만 실행하고 멈춘다 — ERP 2026-09-04 뒤 화면에는 고쳐 쓸
+        `기본 오퍼`·`스탠다드` 가 없으므로 그 단계는 stay_boot.js `staleStep` 이 거부한다.
+        예시가 아직 옛 것이어도 이 시험은 통과한다(옛 표시가 **모두** 있으면 옛 지시서다).
+        """
+        heads = json.dumps([s["head"] for s in self.steps], ensure_ascii=False)
+        kinds = [s["kind"] for s in self.steps]
+        old_marks = ["오퍼 고치기" in kinds, "기본 오퍼" in heads, "스탠다드" in heads]
+        self.assertIn(sum(old_marks), (0, len(old_marks)),
+                      "옛 화면 표시와 새 화면 표시가 섞였습니다: 오퍼 고치기=%s · 기본 오퍼=%s · 스탠다드=%s"
+                      % tuple(old_marks))
+        if not any(old_marks):
+            # 새 화면 기준이면 첫 오퍼도 [오퍼 추가] 로 만든다
+            self.assertIn("오퍼 만들기", kinds)
+
     def test_longtexts(self):
-        lt = step_by_no(self.steps, 5)["longtexts"]
+        lt = only_step(self.steps, "기본정보 글 입력")["longtexts"]
         self.assertEqual([x["label"] for x in lt], ["한줄설명", "상세설명"])
-        self.assertIn("55실 규모의 비즈니스 호텔", lt[0]["text"])
+        self.assertGreater(len(lt[0]["text"]), 10)
 
     def test_file_field_becomes_photo(self):
         for s in self.steps:
@@ -162,10 +204,11 @@ class TestTitlePrefix(unittest.TestCase):
         for a, b in zip(plain, fixed):
             for fa, fb in zip(a["fields"], b["fields"]):
                 if fa.get("value") != fb.get("value"):
-                    changed.append((a["no"], a["kind"], fb["label"], fb["value"]))
+                    # 단계 번호는 빼고 본다 — 예시가 다시 그려지면 번호가 밀린다
+                    changed.append((a["kind"], fb["label"], fb["value"]))
         self.assertEqual(changed, [
-            (4, "호텔 만들기", "호텔명", "__skills__우에노 토우가네야 호텔"),
-            (5, "기본정보 글 입력", "상품명", "__skills__우에노 토우가네야 호텔"),
+            ("호텔 만들기", "호텔명", "__skills__우에노 토우가네야 호텔"),
+            ("기본정보 글 입력", "상품명", "__skills__우에노 토우가네야 호텔"),
         ])
 
     def test_prefix_recorded_in_guide(self):

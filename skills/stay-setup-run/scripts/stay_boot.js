@@ -52,6 +52,32 @@
     return m ? m[1].trim() : null;
   };
 
+  // ── 지시서가 ERP 2026-09-04(PR #9033) 이전 화면 기준인가 ──────────────────────────────
+  // 그전에는 [호텔 만들기]가 오퍼 `기본 오퍼` · 룸 `스탠다드` · 그 둘의 연결행을 미리 만들어 두었고,
+  // 지시서는 그것들을 **고쳐 쓰는** 단계(`오퍼 고치기`, `스탠다드` 행의 [편집])를 적었다.
+  // 지금은 오퍼 0 · 룸 0 으로 시작하므로 그 단계는 누를 행이 화면에 아예 없다 — 엉뚱한 행을
+  // 고치는 사고를 막으려고 실행하지 않고 거부한다. 고쳐 쓸 방법은 없다: 지시서를 다시 만들어야 한다.
+  window.staleStep = function (s) {
+    var nfc = function (t) { return String(t || '').normalize('NFC'); };
+    var kind = nfc(s && s.kind), title = nfc(s && s.title);
+    var head = nfc(JSON.stringify((s && s.head) || {}));
+    if (/^오퍼 고치기/.test(kind) || /^오퍼 고치기/.test(title)) return '`오퍼 고치기` 단계 — 고쳐 쓸 `기본 오퍼` 가 없습니다';
+    if (/룸 만들기/.test(kind) && /스탠다드/.test(head)) return '`룸 만들기` 단계가 `스탠다드` 행의 [편집] 을 가리킵니다';
+    if (/기본 오퍼/.test(head)) return '`기본 오퍼` 를 가리키는 단계입니다';
+    return null;
+  };
+  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04(PR #9033) 이전 화면 기준입니다 — 이 러너(v0.3.0)는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
+
+  // 실행 전 한 번에 훑기 — 걸리는 단계 번호를 돌려준다 (빈 배열이면 이 지시서로 진행해도 된다)
+  window.checkGuide = function () {
+    return d.steps.map(function (s) { var why = window.staleStep(s); return why ? { no: s.no, title: s.title, why: why } : null; })
+      .filter(Boolean);
+  };
+  (function () {
+    var stale = window.checkGuide();
+    if (stale.length && window.console) console.warn('[stay-run] ' + window.STALE_GUIDE_MSG + ' 걸린 단계: ' + stale.map(function (x) { return x.no; }).join(', '));
+  })();
+
   // 가격 캘린더의 날짜 칸 편집 — 오퍼 줄 고르기 → 룸 줄 고르기 → 달 이동 → 날짜 칸 클릭 → 인원 조합 행의 칸 채우기 → 그 행의 [저장]
   window.runCellStep = async function (n, opt) {
     opt = opt || {};
@@ -292,6 +318,9 @@
     opt = opt || {};
     var s = window.step(n);
     var out = { no: n, title: s.title };
+    // 옛 화면(자동 생성물 고쳐 쓰기) 기준 단계는 실행하지 않는다 — 위 `staleStep` 주석
+    var stale = window.staleStep(s);
+    if (stale) return { no: n, title: s.title, refused: true, fatal: true, error: window.STALE_GUIDE_MSG + ' (' + stale + ')' };
     if (/가격 셀/.test(s.kind || '')) return window.runCellStep(n, opt);
     if (/경고 넘어가기/.test(s.kind || '')) return window.runWarnStep(n, opt);
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
@@ -332,26 +361,10 @@
         if (hit) { spec = { button: bp.text, row: bp.row, within: hit }; out.cardPick = cm[1].trim() + ' / ' + cm[2].trim(); }
         else { out.open = 'not-found'; out.openDetail = '`' + spec.card + '` 카드를 찾지 못했습니다'; return out; }
       }
-      // `전 오퍼 공통` 카드(오퍼 없는 프로모션)는 공통 프로모션이 하나도 없으면 화면이 카드를 감춘다 —
-      // 그때는 아무 오퍼 카드의 [프로모션 추가] 요청에서 오퍼 번호를 0 으로 바꿔 공통 드로어를 연다 (화면에서 얻은 요청만 쓴다)
-      var o;
-      if (/전 오퍼 공통/.test(cardStr) && /프로모션 추가/.test(bp.text || '')) {
-        var paneP = document.getElementById((location.hash || '').slice(1)) || document.body;
-        var commonCard = Array.from(paneP.querySelectorAll('.stay-card')).find(function (c) { var h = c.querySelector('.stay-card__head .stay-card__title'); return h && /전 오퍼 공통/.test(h.textContent); });
-        if (!commonCard) {
-          var anyBtn = Array.from(paneP.querySelectorAll('button')).find(function (b) { return /프로모션 추가/.test(b.textContent) && b.getAttribute('hx-get'); });
-          if (anyBtn && window.htmx) {
-            var url0 = anyBtn.getAttribute('hx-get').replace(/\/offers\/\d+\//, '/offers/0/');
-            var hxs = window.__stayRunHtmx, sw0 = hxs.swaps;
-            window.htmx.ajax('GET', url0, { target: '#stay_drawer_body', swap: 'innerHTML' });
-            await stayRun.waitFor(function () { return hxs.pending === 0 && hxs.swaps > sw0 && stayRun.state().drawer.open; }, 8000);
-            await stayRun.sleep(300);
-            o = stayRun.state().drawer.open && /전 오퍼 공통/.test(stayRun.state().drawer.title) ? { status: 'ok' } : { status: 'not-found', detail: '전 오퍼 공통 드로어가 열리지 않았습니다' };
-            out.commonViaOffer0 = true;
-          }
-        }
-      }
-      if (!o) o = await stayRun.open(spec);
+      // (2026-09-04, CO-31679) `전 오퍼 공통` 카드는 공통 프로모션이 0건이어도 늘 그려진다.
+      // 종전에는 카드가 감춰져서 아무 오퍼 카드의 [프로모션 추가] 요청 URL 의 오퍼 번호를 0 으로
+      // 바꿔 여는 우회가 있었다 — ERP 가 고쳐졌으므로 그 우회는 지웠다. 보통 카드처럼 연다.
+      var o = await stayRun.open(spec);
       if (o.status === 'not-found' && o.reason === 'row') {
         var hint = window.titleHint(s);
         if (hint && hint !== bp.row) { spec.row = hint; o = await stayRun.open(spec); out.rowHint = hint; }

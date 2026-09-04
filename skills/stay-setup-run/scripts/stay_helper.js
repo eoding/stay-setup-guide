@@ -468,8 +468,34 @@
       }
     }
     push(headLabel(el), 2);
+    // 체크박스 한 개와 짝지어 한 줄에 서는 입력 — 그 체크박스 글자를 이름에 붙인다 (2026-09-04)
+    // 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] 이 그 꼴이다(CO-31667): 라벨 요소가 없고
+    // 자리표시 글자가 N 칸 모두 같아서, 룸 이름을 붙이지 않으면 어느 칸인지 가릴 수가 없다.
+    // 지시서는 `오퍼별 표시명 · Single` 처럼 적는다(뒤집힌 차례도 받는다).
+    var mate = mateBoxLabel(el);
+    if (mate) {
+      var base = clean(noParen(el.placeholder || '')) || clean(headLabel(el));
+      if (base) { push(base + ' · ' + mate, 4); push(mate + ' · ' + base, 4); }
+    }
     if (el.placeholder) push(el.placeholder, 1);
     return out;
+  }
+
+  // 이 입력과 한 줄에 선 체크박스가 **하나뿐**일 때 그 체크박스의 글자. 아니면 빈 문자열.
+  // 조건을 좁게 잡는다 — 어메니티처럼 체크박스가 여럿인 칸에서는 엉뚱한 이름이 붙으면 안 된다.
+  function mateBoxLabel(el) {
+    if (/^(checkbox|radio)$/.test(el.type)) return '';
+    var node = el.parentElement;
+    for (var depth = 0; node && depth < 3; depth++, node = node.parentElement) {
+      var boxes = [].slice.call(node.querySelectorAll('input[type=checkbox],input[type=radio]'));
+      if (!boxes.length) continue;
+      if (boxes.length > 1) return '';
+      var others = [].slice.call(node.querySelectorAll(CTRL_SEL)).filter(function (c) { return isCtrl(c) && !/^(checkbox|radio)$/.test(c.type); });
+      if (others.length !== 1 || others[0] !== el) return '';
+      var lab = boxes[0].closest('label');
+      return lab ? clean(labelOwnText(lab)) : '';
+    }
+    return '';
   }
 
   // 라벨로 입력 요소 찾기 → [{el, tier, prio, matched}] (가장 잘 맞는 등급만)
@@ -658,7 +684,10 @@
     var hit = pickOption(sel, text);
     if (hit.status === 'not-found') return { status: 'not-found', detail: '`' + text + '` 옵션이 없습니다 · 화면 옵션: ' + optionList(sel) };
     if (hit.status === 'ambiguous') {
-      // 글자가 완전히 같은 옵션이 여럿(예: 취소정책 목록에 같은 이름이 호텔마다 하나씩)이면 값이 가장 큰(가장 최근에 만든) 것을 고른다
+      // 글자가 완전히 같은 옵션이 여럿이면 값이 가장 큰(가장 최근에 만든) 것을 고른다.
+      // 시즌 드로어의 취소정책 목록이 그랬다 — 다른 호텔의 같은 이름 정책까지 다 들어 있었다.
+      // 그 ERP 결함은 고쳐졌다(2026-09-04, CO-31675/31680: `policy_choices_for_master` 로 공용 +
+      // 이 호텔 전용만 내려준다). 이 갈래는 다른 목록에서 같은 일이 생길 때를 위한 보루로 남긴다.
       var same = [].slice.call(sel.options).filter(function (o) { return tier(o.textContent, text) === hit.tier; });
       var texts = same.map(function (o) { return clean(o.textContent); });
       var allSame = texts.every(function (t) { return t === texts[0]; });

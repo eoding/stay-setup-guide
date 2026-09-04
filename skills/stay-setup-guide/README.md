@@ -4,6 +4,9 @@
 복사 버튼 달린 HTML 카드)를 만드는 Agent Skill이다. `SKILL.md` 가 절차의 정본이고, 이 폴더의 나머지는
 그 절차가 참조하는 규칙·예시·도구다.
 
+**ERP 2026-09-04(PR #9033) 이후 화면 기준**이다 — 호텔을 만들면 오퍼 0건·룸 0건·판매 연결 0건이고,
+오퍼가 없는 동안에는 판매 연결의 [객실 추가] 가 막힌다. 그래서 지시서는 `오퍼 만들기` 를 룸·판매 연결보다 앞에 둔다.
+
 ## 설치
 
 - **클로드 코드(Claude Code)**: 이 `stay-setup-guide` 폴더를 프로젝트의 `.claude/skills/` 아래
@@ -35,7 +38,7 @@ python3 scripts/render_card.py <manual.md> -o <이름>_입력지시서.html --fo
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님): `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(정답지) → `changes.md` → 렌더된 HTML, `사진목록.txt`(파일명 · 출처) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |
 | `scripts/render_card.py` | `manual.md` → 표 셀마다 복사 버튼, 목차, 진행 체크가 달린 단일 HTML 파일 변환 |
-| `scripts/check_manual.py` | `manual.md` 형식 검사(단계=저장 1:1, 번호 연속, 금지어·원문자·절대경로 0, 사진 참조 확인, 같은 오퍼의 시즌 날짜 겹침 0·오퍼의 `기본 취소 정책` 지정·`경고 넘어가기` 단계 0·부가옵션 카드의 오퍼 한정·프로모션 카드·시즌 만들기의 `→ [추가]`) |
+| `scripts/check_manual.py` | `manual.md` 형식 검사(단계=저장 1:1, 번호 연속, 금지어·원문자·절대경로 0, 사진 참조 확인, 같은 오퍼의 시즌 날짜 겹침 0·오퍼의 `기본 취소 정책` 지정·`경고 넘어가기` 단계 0·`오퍼 고치기` 단계 0·`룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 뒤·부가옵션 카드의 오퍼 한정·프로모션 카드·시즌 만들기의 `→ [추가]`) |
 | `tests/` | 검사 스크립트 시험 — `python3 -m unittest discover -s skills/stay-setup-guide/tests` |
 | `scripts/fonts/PretendardVariable.woff2` | HTML 카드에 임베드하는 한글 폰트(라이선스: 같은 폴더 `LICENSE-Pretendard.txt`, SIL OFL) |
 

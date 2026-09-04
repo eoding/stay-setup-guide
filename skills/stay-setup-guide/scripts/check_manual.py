@@ -15,7 +15,9 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
 - 같은 오퍼의 시즌끼리 날짜가 하루라도 겹치는지(겹침·포함 모두 오류 — 배너에 🟡 가 남는다)
 - `시즌 가격 채우기` 에 `이미 값이 있는 날도 덮기 | 체크` 가 남아 있는지(겹치지 않으면 필요 없다 — 경고)
-- 오퍼마다 `기본 취소 정책` 이 있는지(`지정 안 함`·빈 값이면 오류)
+- 오퍼마다 `기본 취소 정책` 이 있는지(`지정 안 함`·빈 값이면 오류 — 배너가 🔴 로 막는다)
+- `오퍼 고치기` 단계가 있는지(있으면 오류 — 호텔은 빈 상태로 만들어져 고칠 기본 오퍼가 없다)
+- `룸 만들기`·`판매 연결` 단계가 첫 `오퍼 만들기` 보다 앞에 있는지(있으면 오류 — 오퍼가 없으면 객실 추가가 막힌다)
 - `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
 - `캠페인 만들기` 단계가 있는지(있으면 오류 — 캠페인은 걷혔다) · 오퍼의 `캠페인` 이 `선택: — 없음 —` 인지
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
@@ -97,6 +99,18 @@ CAMPAIGN_NONE = {"— 없음 —", "- 없음 -"}
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
 SKIP_WARNING_BUTTON = "넘어가기"
+
+# 오퍼 단계 — 호텔이 빈 상태로 만들어지므로(2026-09-04) 오퍼는 언제나 **만드는** 단계다.
+OFFER_CREATE_TITLE = "오퍼 만들기"
+# 종전 지시서의 흔적 — `기본 오퍼` 가 저절로 생기던 시절의 단계 제목이다.
+OFFER_EDIT_TITLE = "오퍼 고치기"
+
+# 오퍼가 없으면 판매 연결 카드의 [객실 추가] 가 아예 그려지지 않는다 —
+# 이 제목들은 첫 `오퍼 만들기` 뒤에 와야 한다.
+AFTER_OFFER_TITLES = ("룸 만들기", "판매 연결")
+
+# `오퍼별 표시명 · <룸 카테고리명>` 처럼 뒤에 행 이름이 붙는 칸 — 사전과는 앞부분으로 대조한다
+ROW_SUFFIX_FIELDS = ("오퍼별 표시명",)
 
 
 def strip_select(value):
@@ -340,11 +354,11 @@ def find_needless_overwrite(steps):
 
 
 def find_missing_cancel_policy(steps):
-    """오퍼마다 `기본 취소 정책` 이 있어야 한다 — `지정 안 함`·빈 값은 배너에 🟡 를 남긴다."""
+    """오퍼마다 `기본 취소 정책` 이 있어야 한다 — 빠지면 배너가 🔴 로 막는다(2026-09-04)."""
     problems = []
     for step in steps:
         title = step["title"]
-        if not (title.startswith("오퍼 만들기") or title.startswith("오퍼 고치기")):
+        if not title.startswith(OFFER_CREATE_TITLE):
             continue
         raw = step["fields"].get(CANCEL_POLICY_FIELD)
         if raw is None:
@@ -356,9 +370,41 @@ def find_missing_cancel_policy(steps):
         if value in CANCEL_POLICY_EMPTY:
             problems.append(
                 f"{step['num']}단계: `{CANCEL_POLICY_FIELD}` 가 `{value or '빈 값'}` 이다 — "
-                "판매 시작 배너에 🟡 가 남는다(계약서에 없으면 사용자가 정한 공용 정책을 고른다)"
+                "판매 시작 배너가 🔴 로 막는다(계약서에 없으면 사용자가 정한 공용 정책을 고른다)"
             )
     return problems
+
+
+def find_legacy_offer_edit_steps(steps):
+    """`오퍼 고치기` 단계는 쓰지 않는다 — 고칠 `기본 오퍼` 가 더 이상 생기지 않는다."""
+    return [
+        f"{step['num']}단계: `{OFFER_EDIT_TITLE}` 단계는 쓰지 않는다 — "
+        f"호텔은 오퍼 0건으로 만들어진다, `{OFFER_CREATE_TITLE}` 로 [오퍼 추가] 한다"
+        for step in steps
+        if step["title"].startswith(OFFER_EDIT_TITLE)
+    ]
+
+
+def find_rooms_before_offer(steps):
+    """`룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 보다 앞에 오면 오류.
+
+    오퍼가 하나도 없으면 판매 연결 카드의 [객실 추가] 버튼이 그려지지 않고, 드로어를 열어도
+    폼 대신 "오퍼를 먼저 만드세요" 만 뜬다 — 지시서가 그 순서로 가면 담당자가 막힌다.
+    """
+    first_offer = next(
+        (step["num"] for step in steps if step["title"].startswith(OFFER_CREATE_TITLE)), None
+    )
+    early = [
+        step
+        for step in steps
+        if step["title"].startswith(AFTER_OFFER_TITLES)
+        and (first_offer is None or step["num"] < first_offer)
+    ]
+    return [
+        f"{step['num']}단계: `{step['title']}` 가 `{OFFER_CREATE_TITLE}` 보다 앞이다 — "
+        "오퍼가 없으면 객실 추가가 막힌다(오퍼를 먼저 만든다)"
+        for step in early
+    ]
 
 
 def find_campaign_uses(steps):
@@ -371,7 +417,7 @@ def find_campaign_uses(steps):
                 f"{step['num']}단계: 캠페인 단계는 만들지 않는다(오퍼 이미지로 대신)"
             )
             continue
-        if not (title.startswith("오퍼 만들기") or title.startswith("오퍼 고치기")):
+        if not title.startswith(OFFER_CREATE_TITLE):
             continue
         raw = step["fields"].get(CAMPAIGN_FIELD)
         if raw is None:
@@ -498,6 +544,18 @@ def strip_repeat_prefix(name):
     return REPEAT_PREFIX_RE.sub("", name, count=1).strip()
 
 
+def strip_row_suffix(name):
+    """`오퍼별 표시명 · Single` → `오퍼별 표시명`. 그 칸 이름이 아니면 그대로.
+
+    판매 연결 일괄 드로어의 표시명은 체크한 룸마다 칸이 하나씩 늘어난다 — 사전에는 한 줄
+    (`오퍼별 표시명 · 〈룸 카테고리명〉`)로 있고 지시서는 룸 이름을 넣어 쓴다.
+    """
+    for base in ROW_SUFFIX_FIELDS:
+        if name.startswith(f"{base} · "):
+            return base
+    return name
+
+
 def load_dictionary(path):
     """화면 사전에서 필드 label · screen_label 과 반복 행의 columns 를 모은다."""
     with open(path, encoding="utf-8") as handle:
@@ -621,6 +679,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     season_overlaps = find_season_overlaps(parsed)
     needless_overwrite = find_needless_overwrite(parsed)
     cancel_policy_gaps = find_missing_cancel_policy(parsed)
+    legacy_offer_steps = find_legacy_offer_edit_steps(parsed)
+    rooms_before_offer = find_rooms_before_offer(parsed)
     skip_warning_steps = find_skip_warning_steps(parsed)
     campaign_uses = find_campaign_uses(parsed)
     addon_card_gaps = find_addon_card_gaps(parsed)
@@ -654,6 +714,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
                 if not n or n in labels or n in DICT_EXEMPT or n in seen:
                     continue
                 if strip_repeat_prefix(n) in labels:  # 반복 행은 열 이름으로 한 번 더 본다
+                    continue
+                if strip_row_suffix(n) in labels:  # `오퍼별 표시명 · <룸 이름>` 은 앞부분으로 본다
                     continue
                 seen.append(n)
             unknown_fields = seen
@@ -689,6 +751,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "zero_missing": zero_missing,
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
+        "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
@@ -743,6 +806,7 @@ def main(argv=None):
     if r["zero_missing"]:
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
+              + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]):
         problems.append(p)
     if r["dict_error"]:

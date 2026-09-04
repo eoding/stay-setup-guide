@@ -10,6 +10,13 @@ the standard `SKILL.md` format **and can drive a browser**.
 
 `SKILL.md` is the authority on the procedure; the two files under `references/` are what it refers to.
 
+> **Screens as of the ERP release of 2026-09-04 (PR #9033).** For older screens use v0.2.x.
+> A new hotel now starts with **zero offers and zero rooms**: the first offer is created with [오퍼 추가]
+> and the first room with [룸 추가], and every room including the first is linked to an offer in the
+> `판매 연결` card. Guides written for the older screens tell the runner to edit a `기본 오퍼` offer or a
+> `스탠다드` room row; the runner refuses those steps instead of clicking the wrong row, and asks for the
+> guide to be regenerated.
+
 ## Requirements
 
 - Python 3.10+ for the parser. No Python packages to install.
@@ -71,7 +78,7 @@ a supervisor pressed).
 | `SKILL.md` | Entry point: inputs → parse → inject helper → step loop → failure handling → rules → report |
 | `scripts/parse_guide.py` | Guide (HTML or `manual.md`) → `steps.json`, checking photo files and value kinds |
 | `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input |
-| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `runStep`, `runCellStep`, `runWarnStep` |
+| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runCellStep`, `runWarnStep` |
 | `references/screen-mechanics.md` | Step kind → screen map, how each screen opens and saves, traps |
 | `references/run-log-spec.md` | `run-log.md` format, result words, resuming |
 | `tests/` | Parser tests, and a fixture page with helper tests (run only when jsdom is present) |
