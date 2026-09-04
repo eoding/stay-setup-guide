@@ -1054,9 +1054,19 @@
       if (e.classList.contains('helper-text') && !/rgb\(2[0-9]{2},|red|f44336/i.test(st.color)) return;
       push(textOf(e));
     });
-    var t = toastText(); if (t) push(t);
+    // 안내 띠(토스트)는 여기서 담지 않는다 — 저장이 **성공**할 때도 뜨기 때문이다
+    // ("저장되었습니다."). 종전에는 그것이 `errors` 에 들어가 드로어 저장마다 오류가 난 것처럼
+    // 보였다(2026-09-04 운영 실행에서 확인). 띠 글자는 `submit` 이 `toast` 로 따로 돌려주고,
+    // **실패로 읽히는 글자일 때만** `errors` 에 얹는다(`failToast`).
     return out;
   }
+
+  // 안내 띠가 실패를 말하는가. 성공 문구("저장되었습니다." · "3장을 추가했습니다.")를 오류로
+  // 세지 않는 것이 목적이라, **실패로 읽히는 말이 있을 때만** 참이다. 새로운 실패 문구를
+  // 놓치더라도 저장 결과(`stayed`)와 폼 오류가 따로 알려 준다 — SKILL.md 의
+  // "`stayed` 인데 `errors` 가 비어 있으면 화면을 눈으로 확인한다" 가 그 자리다.
+  var FAIL_TOAST_RE = /실패|오류|에러|잘못|불가|권한|없습니다|할\s*수\s*없|다시\s*시도|초과|거부/;
+  function failToast(t) { return !!t && FAIL_TOAST_RE.test(nfc(t)); }
 
   /* ─────────────────────────── 공개 API ─────────────────────────── */
 
@@ -1439,6 +1449,8 @@
     var st = readState();
     var after = narrow(baseScope(), o);
     var errors = collectErrors(after);
+    // 안내 띠는 실패로 읽힐 때만 오류로 센다 — 성공 띠("저장되었습니다.")는 `toast` 로만 간다
+    if (failToast(st.toast) && errors.indexOf(clean(st.toast)) < 0) errors.push(trunc(clean(st.toast), 200));
     if (hx.error) errors.unshift(hx.error);
     var out = { status: status, errors: errors, toast: st.toast, url: st.url, banner: st.banner };
     if (st.loginPage) out.status = 'login';

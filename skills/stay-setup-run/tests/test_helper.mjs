@@ -119,7 +119,15 @@ const run = async () => {
   // 6. 저장 → 드로어가 닫히면 closed
   const sv = await R.submit('저장');
   ok(sv.status === 'closed', 'submit: 저장 뒤 드로어가 닫히면 closed', sv);
-  ok(/저장했습니다/.test(sv.toast || ''), 'submit: 안내 띠 글자를 함께 돌려준다', sv.toast);
+  ok(/저장되었습니다/.test(sv.toast || ''), 'submit: 안내 띠 글자를 함께 돌려준다', sv.toast);
+  // 성공 띠는 오류가 아니다 — 종전에는 이것이 errors 에 들어가 저장마다 실패로 보였다
+  ok(sv.errors.length === 0, 'submit: 성공 안내 띠를 errors 에 넣지 않는다', sv.errors);
+
+  // 6b. 실패로 읽히는 띠는 그대로 오류다 — 성공 띠만 걸러낸다
+  win.openRoomDrawer('스탠다드');
+  const fv = await R.submit('등록');
+  ok(fv.errors.some((e) => /실패/.test(e)), 'submit: 실패 안내 띠는 errors 에 남긴다', fv.errors);
+  ok(/실패/.test(fv.toast || ''), 'submit: 실패 띠도 toast 로 함께 돌려준다', fv.toast);
 
   // 7. 자동 로그아웃 경고
   win.document.getElementById('logout-warning-modal').style.display = 'block';
@@ -211,6 +219,21 @@ const run = async () => {
   ok(desc[0] === '뷔페' && desc[1] === '', 'DOM: 설명은 제 칸에만 들어갔다', desc);
   ok(win.document.querySelectorAll('[name=inclusions_name]').length === 2,
     'fill: 행이 모자라면 [행 추가] 를 눌러 만든다');
+
+  // 10c. 포함물 되읽기 — 열 제목이 없어 자리표시 글자로만 갈리는 칸이라
+  //      되읽기가 못 찾으면 값이 화면에 있는데도 매번 어긋난 것으로 보고된다(운영 실행에서 확인).
+  const inclFields = [
+    { label: '요금제명', kind: 'typed', value: '조식 포함' },
+    { label: '포함물 1 · 포함물 이름', kind: 'typed', value: '조식 2인' },
+    { label: '포함물 1 · 설명 (선택)', kind: 'typed', value: '뷔페' },
+    { label: '포함물 2 · 포함물 이름', kind: 'typed', value: '웰컴 드링크' }
+  ];
+  const rbIncl = R.readback(inclFields, cat);
+  ok(rbIncl.mismatch.length === 0, 'readback: 포함물 행을 자리표시 글자로 되읽는다', rbIncl.mismatch);
+  ok(rbIncl.ok === rbIncl.total && rbIncl.total === 4, 'readback: 네 칸을 모두 대조했다', { ok: rbIncl.ok, total: rbIncl.total });
+  // runStep 은 범위를 주지 않고 부른다 — 그 꼴에서도 같아야 한다
+  const rbIncl2 = R.readback(inclFields);
+  ok(rbIncl2.mismatch.length === 0, 'readback: 범위를 주지 않아도 같다', rbIncl2.mismatch);
 
   // 11. 2026-09-04 화면의 위험 버튼 — 이름만으로도 거부한다
   win.closeDrawer();
