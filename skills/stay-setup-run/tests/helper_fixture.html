@@ -40,9 +40,45 @@
   </section>
 </div>
 
+<!-- [오퍼] 탭 — 오퍼 목록과 그 아래 `연령 구간` 절이 **같은 오퍼 이름을 두 번** 들고 있다.
+     목록 행의 이름은 글자가 정확히 맞고(`.stay-card__title` 스팬), 연령 구간 카드의 머리에는
+     상태 표가 붙어 덜 맞는다. 이름만으로 고르면 버튼이 없는 행이 잡히고, 그다음 문서 전체
+     찾기가 **첫 오퍼의** [연령 구간 추가] 를 눌러 버린다 — 그래서 `narrowCard` 가 버튼을 본다. -->
 <div id="stay_tab_offers" style="display:none">
-  <section class="card"><h3 class="card-title">오퍼</h3></section>
+  <div class="erp_cont_head"><h4 class="stay-section-title">오퍼</h4></div>
+  <table class="bs-table">
+    <thead><tr><th>오퍼</th><th>상태</th><th>액션</th></tr></thead>
+    <tbody>
+      <tr><td><span class="stay-card__title">2026 계약</span></td><td>판매중</td>
+          <td><button type="button">편집</button></td></tr>
+      <tr><td><span class="stay-card__title">2027 계약</span></td><td>작성중</td>
+          <td><button type="button">편집</button></td></tr>
+    </tbody>
+  </table>
+
+  <div class="erp_cont_head"><h4 class="stay-section-title">연령 구간</h4></div>
+  <div class="stay-card">
+    <div class="stay-card__head">
+      <h4 class="stay-card__title">2026 계약 <span class="stay-badge">판매중</span></h4>
+      <button type="button" onclick="openAgeBand('2026 계약')">연령 구간 추가</button>
+    </div>
+    <p><small>연령 구간이 없습니다</small></p>
+  </div>
+  <div class="stay-card">
+    <div class="stay-card__head">
+      <h4 class="stay-card__title">2027 계약 <span class="stay-badge">작성중</span></h4>
+      <button type="button" onclick="openAgeBand('2027 계약')">연령 구간 추가</button>
+    </div>
+    <p><small>연령 구간이 없습니다</small></p>
+  </div>
 </div>
+
+<!-- 드로어에 실릴 조각들.
+     실제 화면에서 이 폼들은 패널 안에 서 있지 않다 — htmx 가 `#stay_drawer_body` 로 갈아 끼운다.
+     그래서 여기서도 넣어 두기만 하고, `openFragment()` 가 드로어 바디로 옮긴 뒤에야 보인다.
+     (패널 자리에 그대로 두면 도우미의 범위 규칙 `드로어 → 모달 → 활성 탭` 에서 탭 밖이라 안 잡힌다 —
+      실제 화면과 다른 자리에 둔 시험용 마크업이 시험을 거짓으로 통과시키는 자리다.) -->
+<div id="stay_fragments" style="display:none">
 
 <!-- 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] (2026-09-04, CO-31667).
      ERP `_room_form_fields.html` 의 마크업 그대로다: 라벨 요소가 없고 자리표시 글자가 칸마다 같아서,
@@ -67,6 +103,78 @@
   </tbody></table>
 </section>
 
+<!-- 연령 구간 드로어 (2026-09-04 신설, ERP `_age_band_form.html`).
+     `요금 기준 값` 행은 [요금 기준 유형]이 `성인 요금의 %` 이거나 `정액` 일 때만 선다 —
+     실제 화면은 Alpine `x-show` 로 접고, 여기서는 같은 일을 늦게(200ms) 한다.
+     늦게 서는 칸을 1차에서 놓치고 2차에서 잡는 것이 `fill` 의 재시도 갈래다. -->
+<section id="stay_age_band_form" class="card"><h3 class="card-title">연령 구간</h3>
+  <table class="bs-table"><tbody>
+    <tr><th>밴드 코드</th><td><input type="text" name="code" placeholder="CHILD"></td></tr>
+    <tr><th>노출명</th><td><input type="text" name="name" placeholder="초등학생"></td></tr>
+    <tr><th>최소 연령</th><td><input type="text" name="min_age"></td></tr>
+    <tr><th>최대 연령</th><td><input type="text" name="max_age"></td></tr>
+    <tr><th>방 인원수에 포함</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="included_in_occupancy"><span>방 인원수에 포함</span></label>
+    </td></tr>
+    <tr><th>요금 기준 유형</th><td>
+      <select class="browser-default" name="rate_basis_type" onchange="lateShow('age_basis_value_row', this.value === '0' || this.value === '1')">
+        <option value="0">성인 요금의 %</option>
+        <option value="1">정액</option>
+        <option value="2">타 밴드 요금과 동일</option>
+        <option value="3">무료</option>
+      </select>
+    </td></tr>
+    <tr id="age_basis_value_row" style="display:none"><th>요금 기준 값</th><td><input type="text" name="rate_basis_value"></td></tr>
+    <tr><th>상세(자유텍스트)</th><td><textarea name="description"></textarea></td></tr>
+  </tbody></table>
+  <button type="button">추가</button>
+</section>
+
+<!-- 부과금 드로어의 [연령별 단가] 카드 (ERP `_charge_form.html`).
+     [부과 방식]이 `인당` 이고 정액이며 시간대별 요율 행이 0일 때만 선다. -->
+<section id="stay_charge_form" class="card"><h3 class="card-title">부과금</h3>
+  <table class="bs-table"><tbody>
+    <tr><th>이름</th><td><input type="text" name="charge_name"></td></tr>
+    <tr><th>부과 방식</th><td>
+      <select class="browser-default" name="per" onchange="lateShow('age_rate_card', this.value === 'pax')">
+        <option value="">선택</option><option value="stay">1박당</option><option value="pax">인당</option>
+      </select>
+    </td></tr>
+    <tr><th>정액 금액</th><td><input type="text" name="amount"></td></tr>
+  </tbody></table>
+  <div id="age_rate_card" style="display:none">
+    <h4 class="stay-section-title">연령별 단가</h4>
+    <table class="bs-table">
+      <thead><tr><th>연령 구간</th><th>나이</th><th>1인 단가 (USD)</th></tr></thead>
+      <tbody>
+        <tr><th>초등학생</th><td><small>만 0~11.99세</small></td><td><input type="number" name="age_rate_51"></td></tr>
+        <tr><th>유아</th><td><small>만 0~1.99세</small></td><td><input type="number" name="age_rate_52"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div><!-- /#stay_fragments -->
+
+<!-- 위험 버튼 — 러너가 거부해야 하는 것들 (운영 2026-09-04 화면의 글자 그대로).
+     이것들은 조각이 아니라 패널의 행 버튼이라 화면에 그대로 서 있다. -->
+<section id="stay_danger" class="card"><h3 class="card-title">위험 버튼</h3>
+  <button type="button">전용으로 분리</button>
+  <button type="button">2026-01 닫기</button>
+  <button type="button">판매 재개</button>
+  <button type="button">세후가로 확정</button>
+</section>
+
+<!-- 가격 캘린더의 2층 모달 (`_calendar_cell_edit.html`) — `.modal.open` 이 아니라 `.stay-modal` 이다 -->
+<div id="stay_cell_edit" class="stay-modal stay-modal--page" style="display:none">
+  <div class="stay-modal__mask">
+    <div class="stay-modal__panel">
+      <div class="stay-modal__head"><h4 class="stay-modal__title">2026-01-01 · 싱글룸</h4></div>
+      <button type="button">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div class="stay-drawer">
   <div class="stay-drawer__title"></div>
   <div id="stay_drawer_body"></div>
@@ -80,6 +188,44 @@
 <div id="toast-container"></div>
 
 <script>
+/* ── 앞 칸이 뒤 칸을 세운다 (Alpine x-show 흉내) ──────────────
+   실제 화면은 Alpine 이 다음 틱에 세우는데, 여기서는 일부러 200ms 늦춘다 —
+   도우미의 1차 훑기(칸마다 60ms)가 반드시 못 찾고 2차 재시도가 잡아야 하기 때문이다. */
+function lateShow(id, on) {
+  setTimeout(function () { document.getElementById(id).style.display = on ? '' : 'none'; }, 200);
+}
+
+/* ── 탭 (ERP 는 `ul.tab-container li a.active` 로 활성 탭을 말한다) ── */
+document.querySelectorAll('ul.tab-container a').forEach(function (a) {
+  a.addEventListener('click', function () {
+    document.querySelectorAll('ul.tab-container a').forEach(function (x) { x.classList.remove('active'); });
+    a.classList.add('active');
+    document.querySelectorAll('#stay_tab_room_types,#stay_tab_offers').forEach(function (p) { p.style.display = 'none'; });
+    var pane = document.getElementById(a.getAttribute('href').slice(1));
+    if (pane) pane.style.display = '';
+    location.hash = a.getAttribute('href');
+  });
+});
+
+/* 연령 구간 드로어 — 어느 오퍼 카드의 버튼을 눌렀는지 제목에 남긴다 */
+function openAgeBand(offer) {
+  openFragment('stay_age_band_form', '연령 구간 추가 — ' + offer);
+}
+
+/* ── 조각을 드로어 바디로 옮긴다 (htmx 의 `hx-target="#stay_drawer_body"` 흉내) ── */
+function openFragment(id, title) {
+  var body = document.getElementById('stay_drawer_body');
+  body.innerHTML = '';
+  var el = document.getElementById(id);
+  body.appendChild(el);           // 조각째 옮긴다 — 복제하면 id 가 두 벌이 된다
+  el.style.display = '';
+  document.querySelector('.stay-drawer__title').textContent = title;
+  document.querySelector('.stay-drawer').classList.add('is-open');
+}
+function closeDrawer() {
+  document.querySelector('.stay-drawer').classList.remove('is-open');
+}
+
 /* ── 드로어 열기 ───────────────────────────────────────────── */
 function openRoomDrawer(name) {
   document.querySelector('.stay-drawer__title').textContent = '룸 편집 — ' + name;

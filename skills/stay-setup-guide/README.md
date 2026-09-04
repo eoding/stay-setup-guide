@@ -4,8 +4,10 @@
 복사 버튼 달린 HTML 카드)를 만드는 Agent Skill이다. `SKILL.md` 가 절차의 정본이고, 이 폴더의 나머지는
 그 절차가 참조하는 규칙·예시·도구다.
 
-**ERP 2026-09-04(PR #9033) 이후 화면 기준**이다 — 호텔을 만들면 오퍼 0건·룸 0건·판매 연결 0건이고,
+**운영 2026-09-04 화면 기준(basecamp origin/develop 64433dabeb)**이다 — 호텔을 만들면 오퍼 0건·룸 0건·판매 연결 0건이고,
 오퍼가 없는 동안에는 판매 연결의 [객실 추가] 가 막힌다. 그래서 지시서는 `오퍼 만들기` 를 룸·판매 연결보다 앞에 둔다.
+같은 날 배포로 **연령 구간**(`오퍼` 탭)과 부과금 드로어의 **연령별 단가** 표가 생겼다 — 계약서에 아동 정책이 있으면
+소아를 부가옵션으로 따로 만들지 않고 부과금 한 건에 나이대별 단가로 적는다.
 
 ## 설치
 
@@ -33,7 +35,7 @@ python3 scripts/render_card.py <manual.md> -o <이름>_입력지시서.html --fo
 |---|---|
 | `SKILL.md` | 이 스킬의 진입점. 입력 → 절차 → 하지 말 것 → 산출물 요약 |
 | `references/MANUAL-SPEC.md` | 지시서(manual.md) 형식 규칙 정본 — 구조·표 표기·순서·금지어 |
-| `references/screen-dictionary.md` / `.json` | ERP Stay 화면 26개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 기계용 json) |
+| `references/screen-dictionary.md` / `.json` | ERP Stay 화면 27개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 기계용 json) |
 | `references/facts-guide.md` | 호텔·룸 팩트(주소·시설·면적·전망·침대·좌표 등) 수집 절차와 출처 우선순위 |
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님): `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(정답지) → `changes.md` → 렌더된 HTML, `사진목록.txt`(파일명 · 출처) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |

@@ -1,5 +1,5 @@
 /*!
- * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.1.0)
+ * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.4.0)
  *
  * 브라우저의 자바스크립트 실행 도구로 이 파일 전체를 페이지에서 실행하면 `window.stayRun` 이 생긴다.
  * 두 번 실행해도 안전하다(멱등). 페이지가 새로 뜨거나 주소가 바뀌면 다시 실행한다.
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.1.0';
+  var VERSION = '0.4.0'; // 운영 2026-09-04 화면(basecamp origin/develop 64433dabeb) 기준
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -197,8 +197,11 @@
     if (!d) return null;
     return d.querySelector('#stay_drawer_body') || d;
   }
+  // 모달은 두 계열이다 — ERP 공용 Materialize(`.modal.open`, 기본정보 탭의 이미지 모달)와
+  // Stay 자체의 2층 모달(`.stay-modal`, 가격 캘린더의 셀 편집 `#stay_cell_edit`).
+  // 뒤엣것은 열려 있을 때만 DOM 에 있다(닫으면 조각째 사라진다) — 그래서 `shown` 만으로 갈린다.
   function modalRoot() {
-    var list = [].slice.call(document.querySelectorAll('.modal.open')).filter(shown);
+    var list = [].slice.call(document.querySelectorAll('.modal.open, .stay-modal')).filter(shown);
     return list.length ? list[list.length - 1] : null;
   }
   function currentTabLink() {
@@ -215,6 +218,9 @@
   // prefer: 'drawer' 면 드로어/모달만, 'pane' 이면 활성 탭부터
   function baseScope(prefer) {
     var d = drawerRoot(), m = modalRoot(), p = paneRoot();
+    // 2층 모달은 드로어 **안**에 뜬다(`_drawer.html` 의 `.stay-modal__mask`). 그때는 모달이 먼저다 —
+    // 드로어를 골라 버리면 위에 덮인 모달 대신 아래 가려진 폼을 만지게 된다.
+    if (m && d && d.contains(m) && prefer !== 'pane') return m;
     if (prefer === 'drawer') return d || m || p || document.body;
     if (prefer === 'pane') return p || document.body;
     return d || m || p || document.body;
@@ -242,12 +248,26 @@
     return null;
   }
 
-  function narrowCard(root, card) {
+  // 상자 안에 그 글자의 버튼이 정말 있는가 (문서 전체로 넓히지 않는다 — 여기서는 상자를 가르는 데만 쓴다)
+  function boxHasButton(box, want) {
+    if (!want || !box || !box.querySelectorAll) return false;
+    var w = String(want).replace(/^\[(.*)\]$/, '$1').trim();
+    return [].slice.call(box.querySelectorAll(BTN_SEL)).some(function (b) {
+      return !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b) && tier(btnText(b), w) >= 3;
+    });
+  }
+
+  // wantButton: 같은 이름이 여러 상자에 있을 때 **그 버튼을 가진 상자**를 먼저 고른다.
+  // 오퍼 이름이 그런 이름이다 — [오퍼] 탭에서 오퍼 목록의 행에도, 그 아래 `연령 구간` 카드의
+  // 머리에도 같은 이름이 있다. 행 쪽이 글자가 더 정확히 맞아(카드 머리에는 상태 표가 붙는다)
+  // 이름만으로 고르면 [연령 구간 추가] 가 없는 행이 잡히고, 그다음 문서 전체 찾기가
+  // **첫 오퍼의** 버튼을 눌러 버린다.
+  function narrowCard(root, card, wantButton) {
     if (!card || !root) return root;
     var heads = [].slice.call(root.querySelectorAll(HEAD_SEL));
     // `오퍼 · 룸` 두 겹 이름은 먼저 표의 행 묶음으로 찾는다 — 앞 조각(오퍼)만 맞는 제목이 앞글자 일치로 먼저 잡히면 안 된다
     if (/[·・‧∙]/.test(nfc(card))) { var g0 = tableGroup(root, heads, card); if (g0) return g0; }
-    var best = null, bt = 0, bs = Infinity;
+    var best = null, bt = 0, bs = Infinity, bh = 0;
     for (var i = 0; i < heads.length; i++) {
       var t = tier(textOf(heads[i]), card);
       if (t < 2) continue;
@@ -260,7 +280,9 @@
         ? cardBox : (contentBox(heads[i], root) || containerOf(heads[i], root, CTRL_SEL + ',button,a'));
       if (!box) continue;
       var size = box.querySelectorAll('*').length;
-      if (t > bt || (t === bt && size < bs)) { best = box; bt = t; bs = size; }
+      var has = boxHasButton(box, wantButton) ? 1 : 0;
+      // 순서: 그 버튼을 가졌는가 → 글자가 얼마나 맞는가 → 작은 상자
+      if (has > bh || (has === bh && (t > bt || (t === bt && size < bs)))) { best = box; bt = t; bs = size; bh = has; }
     }
     if (!best) { var g = tableGroup(root, heads, card); if (g) return g; }
     return best || root;
@@ -387,7 +409,8 @@
   function narrow(root, o) {
     o = o || {};
     var card = o.card || o.block;
-    var s = narrowCard(root, card);
+    // 행을 따로 주지 않은 열기(`open({button, card})`)는 버튼으로 상자를 가른다 — `narrowCard` 주석
+    var s = narrowCard(root, card, o.row ? null : o.button);
     narrowState.rowMissing = false;
     if (!o.row) {
       // 카드 이름이 제목이 아니라 표의 한 행(예: 시즌 표의 `LOW SEASON`)일 때는 그 행으로 좁힌다
@@ -892,12 +915,20 @@
     return r.el || null;
   }
 
+  // 운영 2026-09-04 화면(basecamp origin/develop 64433dabeb)에서 실제로 쓰이는 글자다.
+  // 이 목록에 없어도 `hx-confirm` 이 붙은 버튼은 아래 `refusal()` 이 따로 막는다 — 목록은
+  // 확인창이 없어도 되돌릴 수 없는 버튼까지 잡기 위한 것이다.
   var DANGER = [
     [/^삭제$|^그룹\s*삭제$|^선택삭제$/, '삭제 버튼입니다'],
     [/^보관$/, '보관 버튼입니다'],
-    [/^닫기$|^\d+월\s*닫기$|^월\s*닫기$/, '닫기(판매일을 닫는) 버튼입니다'],
+    // 판매일 [닫기] 는 `1월 닫기` · `2026-01 닫기` 두 꼴로 그려진다(`_sale_days_panel.html`).
+    [/^(?:.*\s)?닫기$/, '닫기(판매일을 닫는) 버튼입니다'],
     [/^공용으로$/, '다른 호텔에도 영향을 주는 버튼입니다'],
-    [/^판매\s*종료$|^보관\s*해제$/, '판매 상태를 바꾸는 버튼입니다']
+    [/^판매\s*종료$|^보관\s*해제$|^판매\s*재개$/, '판매 상태를 바꾸는 버튼입니다'],
+    // 룸 카테고리를 이 호텔 전용으로 갈라낸다 — 다른 호텔이 쓰던 카탈로그가 끊긴다
+    [/^전용으로\s*분리$/, '룸 카테고리를 갈라내는 버튼입니다'],
+    // 검증 배너의 [세후가로 확정] — 저장된 금액을 통째로 환산해 덮는다
+    [/^세후가로\s*확정$/, '저장된 금액을 환산해 덮는 버튼입니다']
   ];
   function refusal(btn, want) {
     var t = btnText(btn) || String(want || '');
@@ -975,7 +1006,7 @@
       loggedIn: !loginPage(),
       logoutWarning: !!(lw && shown(lw)),
       drawer: { open: !!d, title: d ? textOf(d.querySelector('.stay-drawer__title')) : '' },
-      modal: { open: !!m, title: m ? trunc(textOf(m.querySelector('.modal-header,h4,h5,.modal-title')) || textOf(m).slice(0, 60), 80) : '' },
+      modal: { open: !!m, id: m ? (m.id || '') : '', title: m ? trunc(textOf(m.querySelector('.stay-modal__title,.modal-header,h4,h5,.modal-title')) || textOf(m).slice(0, 60), 80) : '' },
       activeTab: link ? textOf(link) : '',
       banner: bannerLines(),
       toast: toastText(),
@@ -1292,7 +1323,29 @@
       catch (e) { res.push({ label: list[i].label, kind: list[i].kind, status: 'error', detail: String(e && e.message || e) }); }
       els.push(res[i]._el || null); delete res[i]._el;
     }
-    // 2차: 이름으로 못 찾은 칸을 순서로
+    // 2차: 이름으로 못 찾았지만 **앞 칸이 화면을 바꿔 이제 서 있을** 칸을 한 번 더 시도한다.
+    // Stay 폼은 앞 칸의 값이 뒤 칸을 세우고 접는다(Alpine `x-show`): 부과금의 [정액 금액]·
+    // [연령별 단가] 는 [부과 방식]이 `인당 · 정액` 일 때만, 연령 구간의 [요금 기준 값]·
+    // [참조 밴드 코드] 는 [요금 기준 유형]에 따라 선다. 1차에서는 그 칸이 아직 `display:none`
+    // 이라 `usable()` 이 거른다 — Alpine 이 한 틱 뒤에 세우므로 잠깐 쉬고 같은 이름으로 다시 찾는다.
+    var retry = [];
+    for (var m0 = 0; m0 < list.length; m0++) if (res[m0].status === 'not-found') retry.push(m0);
+    if (retry.length) {
+      await sleep(300);
+      scope = narrow(baseScope(), o);
+      for (var m1 = 0; m1 < retry.length; m1++) {
+        var j1 = retry[m1];
+        var again;
+        try { again = await applyOne(scope, list[j1], o); }
+        catch (e) { again = { label: list[j1].label, kind: list[j1].kind, status: 'error', detail: String(e && e.message || e) }; }
+        if (again.status === 'not-found') { delete again._el; continue; }
+        again.retried = true;
+        els[j1] = again._el || null; delete again._el;
+        res[j1] = again;
+        await sleep(60);
+      }
+    }
+    // 3차: 그래도 이름으로 못 찾은 칸을 순서로
     for (var k = 0; k < list.length; k++) {
       if (res[k].status !== 'not-found') continue;
       var el = guessByOrder(scope, list, els, k);
@@ -1373,8 +1426,20 @@
     var ix = splitIndex(name); var idx = 0;
     if (ix) { name = ix.label; idx = ix.n - 1; }
     var cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
+    if (!cands.length && target !== scope) cands = findControls(scope, name);
     if (!cands.length && /^(multi|select|check|uncheck|empty)$/.test(f.kind)) cands = groupBoxes(scope, name);
-    if (cands.length && /^(multi|check|uncheck)$/.test(f.kind) && !cands.some(function (c) { return /^(checkbox|radio)$/.test(c.el.type); })) { var gb = groupBoxes(scope, name); if (gb.length) cands = gb; }
+    // 두 조각 이름(`연령별 단가 · 초등학생` · `제공 주기 · 1박당 제공 (…)`)은 뒤 조각이 화면 라벨이다.
+    // 채울 때(`applyOne`)는 이 갈래가 있었는데 되읽기에는 없어서, 그런 칸은 **늘** 어긋난 것으로
+    // 보고됐다(SKILL.md 가 "되읽기의 한계" 로 적어 둔 것이 이것이다). 같은 규칙을 여기에도 둔다.
+    if (!cands.length && /[·・‧∙]/.test(name)) {
+      var tparts = name.split(/\s+[·・‧∙]\s+/).filter(Boolean), tailName = tparts[tparts.length - 1];
+      var tc = rep ? findInRow(target, tailName, f.kind) : findControls(target, tailName);
+      if (!tc.length && target !== scope) tc = findControls(scope, tailName);
+      if (!tc.length && /^(multi|select|check|uncheck|empty)$/.test(f.kind)) tc = groupBoxes(scope, tailName);
+      // 글자 값을 체크 칸에서 읽지 않는다 — `오퍼별 표시명 · Single` 의 뒤 조각은 룸 체크박스 글자와 같다
+      if (tc.length && /^(typed|file)$/.test(f.kind) && tc.every(function (c) { return /^(checkbox|radio)$/.test(c.el.type); })) tc = [];
+      if (tc.length) { cands = tc; name = tailName; }
+    }
     if (!cands.length) { out.actual = '(칸 없음)'; out.same = false; return out; }
     var boxes = cands.filter(function (c) { return /^(checkbox|radio)$/.test(c.el.type); }).map(function (c) { return c.el; });
     var values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
@@ -1494,11 +1559,22 @@
       if (!want || want.indexOf(f.name) >= 0) { if (!target.multiple && dt.items.length) return; dt.items.add(f); moved.push(f.name); }
     });
     if (!moved.length) return remember({ status: 'not-found', detail: '옮길 파일이 없습니다: ' + (want || []).join(', '), have: [].slice.call(src.files).map(function (f) { return f.name; }) });
+    // 파일을 고르는 것만으로 올라가는 칸인가 — 룸 사진 칸이 그렇다
+    // (`_room_images_panel.html`: `hx-trigger="change"`). 그런 칸은 뒤에 [저장] 을 누르면 안 된다.
+    var auto = /(^|[\s,])change([\s,]|$)/.test(target.getAttribute('hx-trigger') || '');
+    var swaps0 = hx.swaps, settles0 = hx.settles;
     target.files = dt.files;
     fire(target, ['input', 'change']);
     // 화면이 파일을 읽어 미리보기를 만들 시간을 준다(이미지 모달은 이걸 기다리지 않으면 "등록해주세요" 가 뜬다)
     await sleep(spec.wait === undefined ? 900 : spec.wait);
-    return remember({ status: 'ok', moved: moved, target: target.name || target.id || '(file)', targetMultiple: !!target.multiple });
+    var out = { status: 'ok', moved: moved, target: target.name || target.id || '(file)', targetMultiple: !!target.multiple, autoUpload: auto };
+    if (auto) {
+      // 올리는 요청이 끝날 때까지 기다린다 — 끝나면 목록이 제자리에서 갈린다(패널 outerHTML 스왑)
+      out.uploaded = await waitFor(function () { return hx.pending === 0 && (hx.swaps > swaps0 || hx.settles > settles0); }, spec.uploadWait === undefined ? 20000 : spec.uploadWait);
+      out.errors = hx.error ? [hx.error] : [];
+      out.toast = toastText();
+    }
+    return remember(out);
   }
   function clearBridge() { var el = document.getElementById('stay_file_bridge'); if (el) el.value = ''; return remember({ ok: true }); }
 

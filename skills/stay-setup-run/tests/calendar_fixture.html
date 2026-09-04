@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>stay_boot 가격 캘린더 시험용 화면</title>
+<!--
+  가격 캘린더 탭의 뼈대만 흉내 낸 시험용 파일이다(실제 값·실제 회사 이름 없음).
+  ERP `_calendar_month.html` · `_calendar_cell.html` · `_calendar_cell_edit.html` 의 마크업을 따른다.
+
+  여기서 붙잡으려는 것은 하나다: **그 날짜에 가격 셀이 하나도 없을 때** 셀 편집 모달에는
+  `인원별 가격 추가` 표 **한 개만** 그려지고, 그 표의 인원 칸은 글자 칸이 아니라 셀렉트다
+  (`PriceCellForm._use_occupancy_select`). 종전 러너는 표가 둘일 때만 새 행을 찾아서
+  `가격 셀 만들기` 단계가 통째로 실패했다.
+-->
+</head>
+<body>
+
+<ul class="tab-container">
+  <li class="tab"><a href="#stay_tab_calendar" class="active">가격 캘린더</a></li>
+</ul>
+
+<div id="stay_tab_calendar">
+  <div id="stay_calendar">
+    <div class="erp_cont_head">
+      <h4 class="stay-section-title">2026-01</h4>
+      <button type="button" class="stay-btn stay-btn--ghost">◀ 이전 달</button>
+      <button type="button" class="stay-btn stay-btn--ghost">다음 달 ▶</button>
+      <button type="button" class="stay-view-btn stay-btn stay-btn--ghost">전체 보기</button>
+      <button type="button" class="stay-view-btn stay-btn stay-btn--primary">룸별 입력</button>
+    </div>
+
+    <!-- 오퍼 라디오도 `.stay-coord-group` 안에 든다 — 룸 칩을 `.stay-coord-group button` 으로
+         찾으면 이 오퍼 칩까지 후보가 된다(그래서 러너는 `.stay-coord-btn` 으로 찾는다). -->
+    <div class="stay-coord-group">
+      <button type="button" class="stay-offer-btn stay-btn stay-btn--primary">2026 계약</button>
+      <button type="button" class="stay-offer-btn stay-btn stay-btn--ghost">2027 계약</button>
+    </div>
+    <div class="stay-coord-group">
+      <button type="button" class="stay-coord-btn stay-btn stay-btn--primary">싱글룸 · 기본 요금제</button>
+      <button type="button" class="stay-coord-btn stay-btn stay-btn--ghost">트윈룸 · 기본 요금제</button>
+    </div>
+
+    <table class="bs-table"><tbody><tr>
+      <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(1)">
+        <span class="stay-cal-cell__day">1</span><span class="stay-cal-cell__price">–</span></button></td>
+      <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(2)">
+        <span class="stay-cal-cell__day">2</span><span class="stay-cal-cell__price">–</span></button></td>
+    </tr></tbody></table>
+
+    <div id="stay_cell_slot"></div>
+  </div>
+</div>
+
+<!-- 객실 탭의 판매 연결 표 — 룸 이름을 오퍼별 표시명으로 바꿔 읽는 자리 -->
+<div id="stay_tab_room_types" style="display:none">
+  <div class="stay-card">
+    <div class="stay-card__head"><h4 class="stay-card__title">2026 계약</h4></div>
+    <table class="bs-table">
+      <thead><tr><th>객실</th><th>오퍼별 표시명</th><th>요금제</th></tr></thead>
+      <tbody><tr><td>Single</td><td>싱글룸</td><td>기본 요금제</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="stay-drawer"><div class="stay-drawer__title"></div><div id="stay_drawer_body"></div></div>
+<div id="toast-container"></div>
+
+<script>
+/* 그 날짜에 셀이 하나도 없는 상태 — `인원별 가격 추가` 표 하나뿐이고 인원 칸은 셀렉트다.
+   (셀이 있는 날은 그 위에 기존 행 표가 하나 더 붙는다 — 여기서는 그 없는 쪽만 본다.) */
+var CELL_EDIT = [
+  '<div id="stay_cell_edit" class="stay-modal stay-modal--page"><div class="stay-modal__mask">',
+  '<div class="stay-modal__panel"><div class="stay-modal__head">',
+  '<h4 class="stay-modal__title">2026-01-DAY · 싱글룸</h4></div>',
+  '<div class="stay-banner stay-banner--info"><span>이 날짜에 아직 가격이 없습니다 — 아래에서 추가하세요.</span></div>',
+  '<h4 class="stay-section-title">인원별 가격 추가</h4>',
+  '<table class="bs-table"><thead><tr>',
+  '<th>인원 조합</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th><th>액션</th>',
+  '</tr></thead><tbody><tr>',
+  '<td><select name="occupancy_key" class="browser-default">',
+  '<option value="">인원 무관 단일가</option><option value="2">2인</option><option value="4">4인</option>',
+  '</select><input type="hidden" name="los_nights" value="1"></td>',
+  '<td><input type="number" name="amount"></td>',
+  '<td><input type="number" name="original_amount"></td>',
+  '<td><input type="number" name="net_amount"></td>',
+  '<td><select name="status" class="browser-default"><option>판매</option><option>블랙아웃</option></select>',
+  '<input type="hidden" name="option" value="9"><input type="hidden" name="rate_plan" value="5">',
+  '<input type="hidden" name="date" value="2026-01-DAY"></td>',
+  '<td><button type="button" onclick="fakeAdd()">추가</button></td>',
+  '</tr></tbody></table>',
+  '<button type="button" onclick="closeCell()">닫기</button>',
+  '</div></div></div>'
+].join('');
+
+function fire(name) { document.body.dispatchEvent(new CustomEvent(name, { bubbles: true })); }
+
+function openCell(day) {
+  document.getElementById('stay_cell_slot').innerHTML =
+    CELL_EDIT.replace(/2026-01-DAY/g, '2026-01-0' + day);
+  fire('htmx:afterSwap'); fire('htmx:afterSettle');
+}
+function closeCell() { document.getElementById('stay_cell_slot').innerHTML = ''; }
+function fakeAdd() {
+  document.getElementById('toast-container').innerHTML = '<div class="toast">추가했습니다</div>';
+  fire('htmx:afterSwap'); fire('htmx:afterSettle');
+}
+</script>
+</body>
+</html>

@@ -120,6 +120,7 @@ const run = async () => {
   ok(ka.clicked === true && ka.logoutWarning === false, 'keepAlive: [확인] 을 누른다', ka);
 
   // 8. 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] — 이름에 룸을 붙여 가려낸다
+  win.openFragment('stay_bulk_rooms', '객실 추가');
   const bulk = { card: '판매 연결 (오퍼 × 객실)' };
   const r8 = await R.fill([
     { label: '오퍼별 표시명 · Single', kind: 'typed', value: '싱글룸' },
@@ -133,6 +134,70 @@ const run = async () => {
   ok(r9[0].status === 'ok' && win.document.getElementById('id_new_category_display_name').value === '새룸',
      'fill: `새 룸 오퍼별 표시명 (선택)` 은 제 칸으로 간다', r9);
   ok(win.document.getElementById('id_display_name_11').value === '싱글룸', 'fill: 룸별 칸이 덮이지 않았다');
+
+  // 9. 연령 구간 드로어 (2026-09-04 신설)
+  //    ① 같은 오퍼 이름이 오퍼 목록 행과 연령 구간 카드에 둘 다 있다 — 버튼을 가진 상자를 골라야 한다
+  //    ② 늦게 서는 [요금 기준 값] 을 2차 재시도가 잡는다
+  const tb = await R.tab('오퍼');
+  ok(tb.status === 'ok' && tb.tab === '오퍼', 'tab: [오퍼] 탭으로 옮긴다', tb);
+  // 두 번째 오퍼를 고른다 — "첫 카드를 누른다" 는 실수가 그대로 드러나게
+  const opBand = await R.open({ button: '연령 구간 추가', card: '2027 계약' });
+  ok(opBand.status === 'ok', 'open: 오퍼 카드의 [연령 구간 추가]', opBand);
+  ok(/2027 계약/.test(opBand.drawer.title),
+    'open: 이름이 같은 목록 행이 아니라 **그 버튼을 가진 카드**를 고른다', opBand.drawer);
+  const band = { card: '연령 구간' };
+  const r10 = await R.fill([
+    { label: '밴드 코드', kind: 'typed', value: 'CHILD' },
+    { label: '노출명', kind: 'typed', value: '초등학생' },
+    { label: '최소 연령', kind: 'typed', value: '0' },
+    { label: '최대 연령', kind: 'typed', value: '11.99' },
+    { label: '방 인원수에 포함', kind: 'check' },
+    { label: '요금 기준 유형', kind: 'select', value: '성인 요금의 %' },
+    { label: '요금 기준 값', kind: 'typed', value: '50' },
+    { label: '상세(자유텍스트)', kind: 'empty' }
+  ], band);
+  const bad10 = r10.filter((x) => x.status !== 'ok');
+  ok(bad10.length === 0, 'fill: 연령 구간 칸이 모두 ok', bad10);
+  ok(q('[name=code]').value === 'CHILD', 'DOM: 밴드 코드', q('[name=code]').value);
+  ok(q('[name=included_in_occupancy]').checked === true, 'DOM: 방 인원수에 포함이 켜졌다');
+  ok(q('[name=rate_basis_type]').value === '0', 'DOM: 요금 기준 유형 = 성인 요금의 %', q('[name=rate_basis_type]').value);
+  ok(q('[name=rate_basis_value]').value === '50', 'DOM: 늦게 선 [요금 기준 값] 이 찼다', q('[name=rate_basis_value]').value);
+  ok(r10[6].retried === true, 'fill: [요금 기준 값] 은 2차 재시도에서 잡혔다', r10[6]);
+
+  // 10. 부과금의 연령별 단가 — [부과 방식]을 고른 뒤에야 서는 카드
+  win.openFragment('stay_charge_form', '부과금 추가 — 2026 계약');
+  const chg = { card: '부과금' };
+  const r11 = await R.fill([
+    { label: '이름', kind: 'typed', value: '갈라디너' },
+    { label: '부과 방식', kind: 'select', value: '인당' },
+    { label: '정액 금액', kind: 'typed', value: '100' },
+    { label: '연령별 단가 · 초등학생', kind: 'typed', value: '50' },
+    { label: '연령별 단가 · 유아', kind: 'typed', value: '0' }
+  ], chg);
+  const bad11 = r11.filter((x) => x.status !== 'ok');
+  ok(bad11.length === 0, 'fill: 연령별 단가 칸이 모두 ok', bad11);
+  ok(q('[name=age_rate_51]').value === '50', 'DOM: 초등학생 단가', q('[name=age_rate_51]').value);
+  // 0 은 "무료" 라는 뜻이라 비움으로 접히면 안 된다
+  ok(q('[name=age_rate_52]').value === '0', 'DOM: 유아 단가 0(무료)이 그대로 들어갔다', q('[name=age_rate_52]').value);
+  const rb11 = R.readback([{ label: '연령별 단가 · 유아', kind: 'typed', value: '0' }], chg);
+  ok(rb11.mismatch.length === 0, 'readback: 0 을 비움으로 읽지 않는다', rb11.mismatch);
+
+  // 11. 2026-09-04 화면의 위험 버튼 — 이름만으로도 거부한다
+  win.closeDrawer();
+  const danger = { card: '위험 버튼' };
+  for (const [label, reason] of [['전용으로 분리', 'dangerous'], ['2026-01 닫기', 'dangerous'],
+                                 ['판매 재개', 'dangerous'], ['세후가로 확정', 'dangerous']]) {
+    const r = await R.submit(label, danger);
+    ok(r.status === 'refused' && r.reason === reason, 'submit: [' + label + '] 거부', r);
+  }
+
+  // 12. 가격 캘린더의 2층 모달은 `.modal.open` 이 아니라 `.stay-modal` 이다
+  ok(R.state().modal.open === false, 'state: 닫힌 `.stay-modal` 은 열린 것으로 세지 않는다');
+  win.document.getElementById('stay_cell_edit').style.display = 'block';
+  const sm = R.state().modal;
+  ok(sm.open === true && sm.id === 'stay_cell_edit' && /싱글룸/.test(sm.title),
+    'state: 열린 `.stay-modal` 을 알아본다', sm);
+  win.document.getElementById('stay_cell_edit').style.display = 'none';
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);

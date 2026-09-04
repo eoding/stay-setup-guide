@@ -109,8 +109,26 @@ OFFER_EDIT_TITLE = "오퍼 고치기"
 # 이 제목들은 첫 `오퍼 만들기` 뒤에 와야 한다.
 AFTER_OFFER_TITLES = ("룸 만들기", "판매 연결")
 
-# `오퍼별 표시명 · <룸 카테고리명>` 처럼 뒤에 행 이름이 붙는 칸 — 사전과는 앞부분으로 대조한다
-ROW_SUFFIX_FIELDS = ("오퍼별 표시명",)
+# `오퍼별 표시명 · <룸 카테고리명>` 처럼 뒤에 행 이름이 붙는 칸 — 사전과는 앞부분으로 대조한다.
+# `연령별 단가 · <노출명>` 도 같다: 부과금 드로어의 그 표는 이 오퍼의 연령 구간마다 칸이 하나씩 늘어난다.
+ROW_SUFFIX_FIELDS = ("오퍼별 표시명", "연령별 단가")
+
+# 연령 구간 — 계약서에 아동 정책이 있을 때만 넣는 선택 단계.
+# 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표는
+# 이미 만들어 둔 구간만 보여 주므로 부과금보다 앞이다.
+AGE_BAND_TITLE = "연령 구간 만들기"
+AGE_RATE_FIELD = "연령별 단가"
+
+# 만들기 드로어에만 있는 칸 — `{칸 이름: 그 드로어의 저장 버튼}`.
+# 요금제 정본은 만들 때와 고칠 때가 **다른 드로어**다(`_rate_plan_catalog_form.html` 의 `{% if create %}`):
+# `지금 모든 객실에 배포` 체크박스와 그 묶음 머리 `배포` 는 [정본 만들기] 쪽에만 그려지고,
+# 기존 정본을 [편집] 로 열면 그 줄이 아예 없다 — 지시서가 그 줄을 쓰면 담당자가 없는 칸을 찾는다.
+# 두 드로어는 저장 버튼으로 갈리므로(만들기 [만들기] · 편집 [저장]) 그 버튼으로 판정한다.
+CREATE_ONLY_FIELDS = {"지금 모든 객실에 배포": "만들기"}
+
+# 그 칸을 쓰면 안 되는 **고치기 단계**의 제목. 버튼으로도 갈리지만(위 표), 제목이 이미
+# "고치기" 라고 말하는 단계에서는 사람 말로 그대로 돌려주는 편이 고칠 자리를 바로 가리킨다.
+CREATE_ONLY_EDIT_TITLES = ("요금제 고치기", "요금제 정본 고치기")
 
 
 def strip_select(value):
@@ -407,6 +425,73 @@ def find_rooms_before_offer(steps):
     ]
 
 
+def find_age_band_order(steps):
+    """`연령 구간 만들기` 는 첫 `오퍼 만들기` 뒤에 오고, `연령별 단가` 를 쓰는 단계보다 앞이어야 한다.
+
+    구간은 오퍼의 자식이라(오퍼 카드에서 [연령 구간 추가]) 오퍼가 없으면 만들 자리가 없고,
+    부과금 드로어의 `연령별 단가` 표는 **이미 만들어 둔 구간만** 칸으로 보여 준다 — 순서가
+    뒤집히면 담당자가 그 칸을 찾지 못한다.
+    """
+    problems = []
+    first_offer = next(
+        (step["num"] for step in steps if step["title"].startswith(OFFER_CREATE_TITLE)), None
+    )
+    band_steps = [step for step in steps if step["title"].startswith(AGE_BAND_TITLE)]
+    for step in band_steps:
+        if first_offer is None or step["num"] < first_offer:
+            problems.append(
+                f"{step['num']}단계: `{step['title']}` 가 `{OFFER_CREATE_TITLE}` 보다 앞이다 — "
+                "연령 구간은 오퍼 카드에서 만든다(오퍼를 먼저 만든다)"
+            )
+    first_band = band_steps[0]["num"] if band_steps else None
+    for step in steps:
+        uses_rate = any(
+            name == AGE_RATE_FIELD or name.startswith(f"{AGE_RATE_FIELD} · ") for name in step["fields"]
+        )
+        if not uses_rate:
+            continue
+        if first_band is None:
+            problems.append(
+                f"{step['num']}단계: `{AGE_RATE_FIELD}` 줄이 있는데 `{AGE_BAND_TITLE}` 단계가 없다 — "
+                "연령 구간을 먼저 만들어야 그 칸이 화면에 생긴다"
+            )
+        elif step["num"] < first_band:
+            problems.append(
+                f"{step['num']}단계: `{AGE_RATE_FIELD}` 줄이 `{AGE_BAND_TITLE}` 단계보다 앞이다 — "
+                "연령 구간을 먼저 만들어야 그 칸이 화면에 생긴다"
+            )
+    return problems
+
+
+def find_create_only_fields(steps):
+    """만들기 드로어에만 있는 칸이 편집 단계에 적혀 있으면 오류.
+
+    `지금 모든 객실에 배포` 가 그 첫 사례다 — [정본 만들기] 드로어에만 있는 체크박스라,
+    `요금제 고치기` 처럼 [저장] 으로 끝나는 단계에 적으면 화면에 없는 칸이 된다.
+    """
+    problems = []
+    for step in steps:
+        saves = step["saves"]
+        last = saves[-1] if saves else ""
+        is_edit_step = step["title"].startswith(CREATE_ONLY_EDIT_TITLES)
+        for name in step["fields"]:
+            want = CREATE_ONLY_FIELDS.get(norm_field(name))
+            if want is None:
+                continue
+            if is_edit_step:
+                problems.append(
+                    f"{step['num']}단계: `{name}` 는 새로 만들 때만 있는 칸이다 — 고치기 표에서 뺀다"
+                )
+                continue
+            if last == want:
+                continue
+            problems.append(
+                f"{step['num']}단계: `{name}` 칸은 [{want}] 로 끝나는 만들기 드로어에만 있다 — "
+                f"이 단계는 [{last or '?'}] 로 끝난다(그 줄을 뺀다)"
+            )
+    return problems
+
+
 def find_campaign_uses(steps):
     """캠페인은 화면에서 없어졌다 — 단계도, 어느 표의 `캠페인` 줄도 두지 않는다."""
     problems = []
@@ -675,6 +760,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     rooms_before_offer = find_rooms_before_offer(parsed)
     skip_warning_steps = find_skip_warning_steps(parsed)
     campaign_uses = find_campaign_uses(parsed)
+    age_band_order = find_age_band_order(parsed)
+    create_only_fields = find_create_only_fields(parsed)
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
@@ -747,6 +834,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
+        "age_band_order": age_band_order,
+        "create_only_fields": create_only_fields,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
         "currency": currency,
@@ -801,7 +890,8 @@ def main(argv=None):
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
-              + r["campaign_uses"] + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]):
+              + r["campaign_uses"] + r["age_band_order"] + r["create_only_fields"] + r["addon_card_gaps"]
+              + r["promo_common"] + r["season_saves"]):
         problems.append(p)
     if r["dict_error"]:
         problems.append(f"화면 사전 읽기 실패 {r['dict_error']}")

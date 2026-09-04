@@ -17,7 +17,9 @@
 
   // 만들기 단계의 "이름" 칸 — 목록에 같은 이름이 이미 있으면 그 단계를 건너뛴다(공용 정책 포함)
   window.nameOf = function (s) {
-    var keys = ['정책명', '룸 이름', '시즌명', '관리용 이름', '프로모션명', '혜택 이름', '이름', '그룹 이름', '요금제명'];
+    // `노출명`·`밴드 코드` 는 연령 구간 단계의 이름 칸이다(2026-09-04, `_age_band_form.html`).
+    // 코드보다 노출명이 앞이다 — 목록 표의 첫 칸이 코드라도, 사람이 같은 것으로 읽는 이름은 노출명이다.
+    var keys = ['정책명', '룸 이름', '시즌명', '관리용 이름', '프로모션명', '혜택 이름', '노출명', '밴드 코드', '이름', '그룹 이름', '요금제명'];
     for (var i = 0; i < keys.length; i++) {
       var f = s.fields.find(function (x) { return x.label === keys[i] && x.kind === 'typed' && x.value; });
       if (f) return f.value;
@@ -66,7 +68,7 @@
     if (/기본 오퍼/.test(head)) return '`기본 오퍼` 를 가리키는 단계입니다';
     return null;
   };
-  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04(PR #9033) 이전 화면 기준입니다 — 이 러너(v0.3.0)는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
+  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04(PR #9033) 이전 화면 기준입니다 — 이 러너(v0.4.0)는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
 
   // 실행 전 한 번에 훑기 — 걸리는 단계 번호를 돌려준다 (빈 배열이면 이 지시서로 진행해도 된다)
   window.checkGuide = function () {
@@ -150,9 +152,13 @@
     };
     if (!(await goMonth())) { out.error = '달을 ' + target + ' 로 옮기지 못했습니다 (지금 ' + monthOf() + ')'; return out; }
     // 3) 룸 줄 — 개요 화면의 룸 버튼(title: `표시명 · 요금제`) 또는 좌표 화면의 룸 칩. 이미 그 룸의 좌표 화면이면 건너뛴다
-    var onCoord = function () { return [].slice.call(pane.querySelectorAll('.stay-coord-group button')).some(function (b) { var tt = clean(b.textContent); return /--primary/.test(b.className) && tier(tt.split(/\s+[·・‧∙]\s+/)[0], display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0); }); };
+    // 좌표 칩은 `.stay-coord-btn` 이다. `.stay-coord-group` 은 **오퍼 줄에도 쓰인다**
+    // (`_calendar_month.html`: 오퍼가 둘 이상이면 오퍼 라디오도 같은 상자에 든다) — 그 상자의
+    // 아무 버튼이나 잡으면 오퍼 칩을 룸 칩으로 오인한다.
+    var coordBtns = function () { return [].slice.call(pane.querySelectorAll('.stay-coord-btn')); };
+    var onCoord = function () { return coordBtns().some(function (b) { var tt = clean(b.textContent); return /--primary/.test(b.className) && tier(tt.split(/\s+[·・‧∙]\s+/)[0], display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0); }); };
     var findRoomBtn = function () {
-      return [].slice.call(pane.querySelectorAll('button.stay-ov-row, .stay-coord-group button')).find(function (b) {
+      return [].slice.call(pane.querySelectorAll('button.stay-ov-row')).concat(coordBtns()).find(function (b) {
         var tt = clean(b.getAttribute('title') || b.textContent), head = tt.split(/\s+[·・‧∙]\s+/)[0];
         return tier(head, display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0);
       });
@@ -162,9 +168,9 @@
       if (!rb) { out.error = '룸 줄에서 `' + display + ' · ' + ratePlan + '` 을 찾지 못했습니다 (' + monthOf() + ')'; return out; }
       await settled(function () { rb.click(); });
       // 개요 화면에 머물면 [룸별 입력] 보기로 바꾼다 (룸은 방금 고른 것이 유지된다)
-      if (!pane.querySelector('.stay-coord-group button')) {
+      if (!pane.querySelector('.stay-coord-btn')) {
         var vb = [].slice.call(pane.querySelectorAll('.stay-view-btn, button')).find(function (x) { return /룸별 입력/.test(x.textContent) && !/--primary/.test(x.className); });
-        var hasCoord = function () { return !!pane.querySelector('.stay-coord-group button'); };
+        var hasCoord = function () { return !!pane.querySelector('.stay-coord-btn'); };
         for (var vi = 0; vi < 2 && vb && !hasCoord(); vi++) { // 화면 전환이 늦게 끝나기도 해서 칩이 보일 때까지 기다리고 한 번 더 누른다
           await settled(function () { vb.click(); });
           await waitFor(function () { return hx.pending === 0 && hasCoord(); }, 8000);
@@ -173,7 +179,7 @@
       }
       // 좌표 화면의 룸 칩이 다른 룸을 가리키면 이 룸 칩을 눌러 바꾼다 (최대 3번)
       for (var ci = 0; ci < 3 && !onCoord(); ci++) {
-        var chip2 = [].slice.call(pane.querySelectorAll('.stay-coord-group button')).find(function (x) { var tt = clean(x.textContent); return tier(tt.split(/\s+[·・‧∙]\s+/)[0], display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0); });
+        var chip2 = coordBtns().find(function (x) { var tt = clean(x.textContent); return tier(tt.split(/\s+[·・‧∙]\s+/)[0], display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0); });
         if (!chip2) break;
         chip2.click();
         await waitFor(function () { return hx.pending === 0 && onCoord(); }, 6000); await sleep(300);
@@ -198,22 +204,52 @@
     var ed = document.getElementById('stay_cell_edit');
     if (!ed || !ed.querySelector('table')) { out.error = '날짜 칸 편집창이 열리지 않았습니다'; return out; }
     // 5) 인원 조합 행 (기존 행 표 → 없으면 `인원별 가격 추가` 표의 새 행)
+    // 두 표의 인원 칸은 **위젯이 다르다**(`_calendar_cell_edit.html` · `PriceCellForm._use_occupancy_select`):
+    // 기존 행은 글자 칸, `인원별 가격 추가` 의 새 행은 이미 쓰는 키만 고르게 하는 셀렉트다.
+    // 그리고 그 날짜에 셀이 하나도 없으면 **기존 행 표 자체가 안 그려진다** — 표가 하나뿐이라
+    // 종전의 `tables.length > 1` 갈래로는 `가격 셀 만들기` 가 통째로 실패했다.
     var tables = [].slice.call(ed.querySelectorAll('table')), found = null, isNew = false;
-    tables.forEach(function (tb) {
+    var keyCtl = function (r) { return r.querySelector('input[name=occupancy_key],select[name=occupancy_key]'); };
+    // 새 행 표는 좌표를 숨은 칸으로 들고 있다(option · rate_plan · date) — 기존 행 표에는 없다
+    var isNewTable = function (tb) { return !!tb.querySelector('input[type=hidden][name=date],input[type=hidden][name=option]'); };
+    var oldTables = tables.filter(function (tb) { return !isNewTable(tb); });
+    var newTable = tables.filter(isNewTable)[0] || (tables.length > 1 ? tables[tables.length - 1] : null);
+    oldTables.forEach(function (tb) {
       if (found) return;
       [].slice.call(tb.querySelectorAll('tbody tr')).forEach(function (r) {
         if (found) return;
-        var oc = r.querySelector('input[name=occupancy_key]');
+        var oc = keyCtl(r);
         if (!oc) return;
         var v = clean(oc.value);
         if (occ === '무관' ? (v === '' || v === '0' || /무관/.test(clean(r.textContent))) : v === occ) found = { row: r, table: tb };
       });
     });
     // 인원 구분이 없는 카드면 기존 행이 하나뿐일 때 그 행을 쓴다
-    if (!found && occ === '무관' && tables.length) { var only = tables[0].querySelectorAll('tbody tr'); if (only.length === 1 && only[0].querySelector('input[name=occupancy_key]')) found = { row: only[0], table: tables[0] }; }
-    if (!found && tables.length > 1) { var nr = tables[tables.length - 1].querySelector('tbody tr'); if (nr) { found = { row: nr, table: tables[tables.length - 1] }; isNew = true; } }
-    if (!found) { out.error = '인원 조합 ' + occ + ' 행을 찾지 못했습니다'; return out; }
+    if (!found && occ === '무관' && oldTables.length) { var only = [].slice.call(oldTables[0].querySelectorAll('tbody tr')).filter(keyCtl); if (only.length === 1) found = { row: only[0], table: oldTables[0] }; }
+    if (!found && newTable) {
+      var nr = [].slice.call(newTable.querySelectorAll('tbody tr')).filter(keyCtl)[0] || newTable.querySelector('tbody tr');
+      if (nr) { found = { row: nr, table: newTable }; isNew = true; }
+    }
+    if (!found) { out.error = '인원 조합 ' + occ + ' 행을 찾지 못했습니다 (표 ' + tables.length + '개)'; return out; }
     out.newRow = isNew;
+    // 새 행은 인원 칸을 먼저 맞춘다 — 지시서 카드가 말한 조합 그대로다(값을 지어내지 않는다).
+    // 그 칸이 셀렉트면 `무관` 은 빈 값(`인원 무관 단일가`)이다.
+    if (isNew) {
+      var oc0 = keyCtl(found.row);
+      if (oc0) {
+        var want0 = occ === '무관' ? '' : occ;
+        if (oc0.tagName === 'SELECT') {
+          var hit0 = [].slice.call(oc0.options).find(function (o) { return clean(o.value) === want0; });
+          if (!hit0 && want0) { out.error = '새 행의 인원 조합 목록에 `' + occ + '` 이(가) 없습니다 (' + [].slice.call(oc0.options).map(function (o) { return clean(o.textContent); }).join(' / ') + ')'; return out; }
+          if (hit0) { oc0.value = hit0.value; ['input', 'change'].forEach(function (ev) { oc0.dispatchEvent(new Event(ev, { bubbles: true })); }); }
+        } else if (want0) {
+          var dsc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+          dsc && dsc.set ? dsc.set.call(oc0, want0) : (oc0.value = want0);
+          ['input', 'change'].forEach(function (ev) { oc0.dispatchEvent(new Event(ev, { bubbles: true })); });
+        }
+        out.occSet = oc0.value;
+      }
+    }
     // 6) 열 제목으로 칸을 찾아 채운다
     var ths = [].slice.call(found.table.querySelectorAll('thead th')).map(function (h) { return clean(h.textContent); });
     var tds = [].slice.call(found.row.children);
@@ -248,7 +284,13 @@
     await settled(function () { save.click(); }, 10000);
     out.submitted = true; out.submit = hx.error ? 'error' : 'settled'; out.errors = hx.error ? [hx.error] : [];
     var ed2 = document.getElementById('stay_cell_edit');
-    out.after = ed2 ? [].slice.call(ed2.querySelectorAll('tbody tr')).map(function (r) { return [].slice.call(r.querySelectorAll('input:not([type=hidden]),select')).map(function (i) { return i.name + '=' + (i.tagName === 'SELECT' ? clean((i.options[i.selectedIndex] || {}).textContent) : i.value); }).join(' '); }).filter(function (x) { return occ === '무관' ? /^occupancy_key=(0)?\s/.test(x) : x.indexOf('occupancy_key=' + occ) === 0; }) : [];
+    // 되읽기 — 인원 칸은 글자 칸일 수도 셀렉트일 수도 있으므로 **값**으로 읽는다(셀렉트의 보이는
+    // 글자는 `인원 무관 단일가` 라 값(빈 문자열)과 다르다).
+    out.after = ed2 ? [].slice.call(ed2.querySelectorAll('tbody tr')).map(function (r) {
+      return [].slice.call(r.querySelectorAll('input:not([type=hidden]),select')).map(function (i) {
+        return i.name + '=' + (i.tagName === 'SELECT' && i.name !== 'occupancy_key' ? clean((i.options[i.selectedIndex] || {}).textContent) : i.value);
+      }).join(' ');
+    }).filter(function (x) { return occ === '무관' ? /^occupancy_key=(0)?\s/.test(x) : x.indexOf('occupancy_key=' + occ + ' ') === 0; }) : [];
     var closeBtn = ed2 && [].slice.call(ed2.querySelectorAll('button')).find(function (b) { return tier(b.textContent, '닫기') >= 3; });
     if (closeBtn) { closeBtn.click(); await sleep(300); }
     return out;
