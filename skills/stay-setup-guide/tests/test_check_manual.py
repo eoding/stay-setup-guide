@@ -580,3 +580,25 @@ class EndToEndTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AddressCellTest(unittest.TestCase):
+    """주소 칸의 필지 번호(`Lot TT13`)는 시트 좌표로 보지 않는다."""
+
+    MD = HEAD + """
+## 4. 호텔 정보 입력
+탭: `호텔 정보`
+
+| 칸 | 값 |
+|---|---|
+| 주소(도로명 전체) | Lot TT13, Zone 4, Somewhere |
+
+→ [저장]
+"""
+
+    def test_address_lot_number_is_not_a_cell(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.MD)
+            self.assertEqual(cm.check(path)["sheet_cells"], [])

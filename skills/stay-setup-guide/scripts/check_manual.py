@@ -555,9 +555,13 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
 
     forb = {w: text.count(w) for w in FORBIDDEN if text.count(w)}
     circled = len(CIRCLED.findall(text))
+    # 주소 칸(`Lot TT13` 같은 필지 번호)은 시트 좌표가 아니다 — 그 행은 검사하지 않는다
+    def _address_row(l):
+        m = ROW.match(l)
+        return bool(m and "주소" in m.group(1))
     cells = [
         m.group(0)
-        for l in lines if not l.startswith("```")
+        for l in lines if not l.startswith("```") and not _address_row(l)
         for m in CELL.finditer(l)
         if not CELL_EXCLUDE.match(m.group(0))
     ]
