@@ -74,7 +74,8 @@ checkGuide();                                      // [] 면 진행. 비어 있�
 ```js
 stayRun.state()                    // {url, hotelId, loginPage, logoutWarning, drawer, modal, activeTab, banner, toast}
 stayRun.tab("객실") · stayRun.open({button, row, card, block}) · stayRun.fill(fields)
-stayRun.submit("저장")             // {status:"closed|stayed|navigated|login|timeout|refused|not-found", errors, toast}
+stayRun.submit("저장")             // {status:"closed|stayed|navigated|login|timeout|refused|not-found|upload-label", errors, toast}
+                                   // errors 는 진짜 오류만이다 — 성공 안내 띠는 toast 로만 온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
 stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFor(fn, ms) · stayRun.findButton(scope, "저장")
 ```
