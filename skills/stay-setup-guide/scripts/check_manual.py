@@ -13,9 +13,13 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 0단계(1·2·3 단계가 각각 환율 확인 · 거래처 확인 · 도시 확인)가 있는지
 - 표의 칸 이름이 화면 사전(screen-dictionary.json)에 있는지
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
-- 먼저 깐 시즌들이 덮은 날짜 위에 다시 까는 단계가 `이미 값이 있는 날도 덮기 | 체크` 인지(다 덮였으면 오류, 일부면 경고)
+- 같은 오퍼의 시즌끼리 날짜가 하루라도 겹치는지(겹침·포함 모두 오류 — 배너에 🟡 가 남는다)
+- `시즌 가격 채우기` 에 `이미 값이 있는 날도 덮기 | 체크` 가 남아 있는지(겹치지 않으면 필요 없다 — 경고)
+- 오퍼마다 `기본 취소 정책` 이 있는지(`지정 안 함`·빈 값이면 오류)
+- `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
+- `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
 
 사용법:
     python3 check_manual.py <manual.md> [--photos DIR] [--share-name NAME]
@@ -75,6 +79,18 @@ MAX_SEASON_DAYS = 4000
 
 OVERWRITE_FIELD = "이미 값이 있는 날도 덮기"
 PROMO_COMMON_CARD = "전 오퍼 공통"
+
+# 요일 규칙 시즌 — `적용 요일` 의 요일 글자를 파이썬 weekday(월=0)로 옮긴다
+WEEKDAYS = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
+WEEKDAY_TOKEN_RE = re.compile(r"[월화수목금토일](?:요일)?")
+
+# 오퍼의 기본 취소 정책 — 이 값이면 판매 시작 배너에 🟡 가 남는다
+CANCEL_POLICY_FIELD = "기본 취소 정책"
+CANCEL_POLICY_EMPTY = {"지정 안 함", "", "비움", "—", "-", "— 없음 —", "- 없음 -", "(지정 안 함)"}
+
+# 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
+SKIP_WARNING_TITLE = "경고 넘어가기"
+SKIP_WARNING_BUTTON = "넘어가기"
 
 
 def strip_select(value):
@@ -185,7 +201,36 @@ def season_dates(step):
         return {d for d in whole if d.month in months}
     if kind == "비연속 날짜 나열":
         return _listed_dates(fields.get("날짜 나열", ""))
-    return None  # 요일 규칙 등 — 표만으로는 못 정한다
+    if kind == "요일 규칙":
+        return _weekday_dates(fields)
+    return None  # 유형을 못 읽었으면 대조에서 뺀다
+
+
+def _weekday_dates(fields):
+    """요일 규칙 시즌 → 기간 안에서 그 요일에 해당하는 날짜 집합(못 읽으면 None).
+
+    기간은 `기간 시작`·`기간 종료` 두 칸에서 읽고, 한 칸에 `2026-06-01 ~ 2026-08-31 중 토`
+    처럼 몰아 적은 표기도 받는다.
+    """
+    weekday_value = strip_select(fields.get("적용 요일", ""))
+    days = _weekday_set(weekday_value)
+    if not days:
+        return None
+    whole = _span(_date_field(fields, "기간 시작"), _date_field(fields, "기간 종료"))
+    if whole is None:
+        m = DATE_SPAN_RE.search(weekday_value)
+        whole = _span(_date(m.group(1)), _date(m.group(2))) if m else None
+    if whole is None:
+        return None
+    picked = {d for d in whole if d.weekday() in days}
+    return picked or None
+
+
+def _weekday_set(value):
+    """`일, 월, 화` 또는 `2026-06-01 ~ 2026-08-31 중 토` → {0, 6, ...}. 못 읽으면 빈 집합."""
+    text = value.split("중", 1)[1] if "중" in value else value
+    text = DATE_SPAN_RE.sub(" ", text)
+    return {WEEKDAYS[m.group(0)[0]] for m in WEEKDAY_TOKEN_RE.finditer(text)}
 
 
 def _date_field(fields, name):
@@ -240,58 +285,88 @@ def fill_season(step, seasons):
     return matches[0] if len(matches) == 1 else None
 
 
-def find_overwrite_gaps(steps):
-    """앞서 깐 시즌들이 덮은 날짜 위에 `덮기` 해제로 다시 까는 단계를 찾는다.
+def find_season_overlaps(steps):
+    """같은 오퍼의 시즌끼리 날짜가 하루라도 겹치면 오류.
 
-    같은 오퍼·같은 룸을 이미 채운 시즌들의 날짜 **합집합**으로 본다 — 넓은 시즌 하나가
-    아니라 여러 시즌이 나눠 덮는 경우(1~3월·9~12월 + 4~8월)도 잡기 위해서다.
-    합집합이 이 시즌 날짜를 다 덮으면 한 셀도 안 들어가므로 오류, 일부만 덮으면 경고다.
-    반환값은 (오류 목록, 경고 목록).
+    판매 시작 배너에 🟡 를 남기지 않는 것이 합격선이라, 겹침(포함도 겹침이다)은 사유로
+    넘기는 것이 아니라 시즌 날짜 자체를 갈라 없앤다. 날짜를 못 읽는 시즌(유형이 없거나
+    값이 비었거나)은 대조에서 뺀다.
     """
-    seasons = season_index(steps)
-    problems, warnings = [], []
-    done = []  # 앞 단계에서 이미 깐 (오퍼, 시즌명, 룸 집합)
+    problems = []
+    seen = []  # 앞 단계에서 만든 (오퍼 카드, 시즌명, 날짜 집합)
     for step in steps:
-        if not step["title"].startswith("시즌 가격 채우기"):
+        if not step["title"].startswith("시즌 만들기"):
             continue
-        key = fill_season(step, seasons)
-        if key is None:
+        name = step_subject(step["title"]) or step["fields"].get("시즌명")
+        if not name:
             continue
-        offer, name = key
-        mine = seasons[key]
-        rooms = target_rooms(step)
+        name = name.strip()
+        offer = card_name(step) or ""
+        mine = season_dates(step)
         if not mine:
-            done.append((offer, name, rooms))
+            seen.append((offer, name, None))
             continue
-        covered, by = set(), []
-        for prev_offer, prev_name, prev_rooms in done:
-            if prev_offer != offer or prev_name == name:
-                continue
-            if rooms and prev_rooms and not (rooms & prev_rooms):
-                continue  # 다른 룸이라 겹치지 않는다
-            prev_dates = seasons.get((prev_offer, prev_name))
-            if not prev_dates:
+        for prev_offer, prev_name, prev_dates in seen:
+            if prev_offer != offer or prev_name == name or not prev_dates:
                 continue
             hit = mine & prev_dates
-            if hit:
-                covered |= hit
-                if prev_name not in by:
-                    by.append(prev_name)
-        done.append((offer, name, rooms))
-        if not covered or step["fields"].get(OVERWRITE_FIELD) == "체크":
-            continue
-        names = " · ".join(f"`{x}`" for x in by[:3])
-        if covered >= mine:
+            if not hit:
+                continue
+            how = "통째로 들어 있다" if mine <= prev_dates or prev_dates <= mine else f"{len(hit)}일 겹친다"
             problems.append(
-                f"{step['num']}단계: 시즌 `{name}` 날짜가 먼저 깐 {names} 에 다 덮여 있는데 "
-                f"`{OVERWRITE_FIELD}` 가 체크가 아니다 — 한 셀도 안 들어간다"
+                f"{step['num']}단계: 시즌 `{name}` 날짜가 같은 오퍼의 시즌 `{prev_name}` 와 {how} — "
+                "같은 오퍼의 시즌은 하루도 겹칠 수 없다(넓은 시즌 날짜에서 빼거나 요일로 가른다)"
             )
-        else:
-            warnings.append(
-                f"{step['num']}단계: 시즌 `{name}` 날짜 {len(covered)}일이 먼저 깐 {names} 와 겹친다 — "
-                f"`{OVERWRITE_FIELD}` 가 해제라 그 날은 앞 시즌 값이 남는다"
+        seen.append((offer, name, mine))
+    return problems
+
+
+def find_needless_overwrite(steps):
+    """`시즌 가격 채우기` 의 `이미 값이 있는 날도 덮기` 체크는 이제 쓸 일이 없다(경고).
+
+    시즌이 겹치지 않으면 덮을 값이 없다 — 체크가 남아 있으면 시즌을 아직 안 가른 흔적이다.
+    """
+    return [
+        f"{step['num']}단계: `{OVERWRITE_FIELD}` 가 체크다 — 시즌이 겹치지 않으면 덮기가 필요 없다"
+        for step in steps
+        if step["title"].startswith("시즌 가격 채우기") and step["fields"].get(OVERWRITE_FIELD) == "체크"
+    ]
+
+
+def find_missing_cancel_policy(steps):
+    """오퍼마다 `기본 취소 정책` 이 있어야 한다 — `지정 안 함`·빈 값은 배너에 🟡 를 남긴다."""
+    problems = []
+    for step in steps:
+        title = step["title"]
+        if not (title.startswith("오퍼 만들기") or title.startswith("오퍼 고치기")):
+            continue
+        raw = step["fields"].get(CANCEL_POLICY_FIELD)
+        if raw is None:
+            problems.append(
+                f"{step['num']}단계: `{CANCEL_POLICY_FIELD}` 줄이 없다 — 오퍼마다 취소 정책을 고른다"
             )
-    return problems, warnings
+            continue
+        value = strip_select(raw).strip()
+        if value in CANCEL_POLICY_EMPTY:
+            problems.append(
+                f"{step['num']}단계: `{CANCEL_POLICY_FIELD}` 가 `{value or '빈 값'}` 이다 — "
+                "판매 시작 배너에 🟡 가 남는다(계약서에 없으면 사용자가 정한 공용 정책을 고른다)"
+            )
+    return problems
+
+
+def find_skip_warning_steps(steps):
+    """`경고 넘어가기` 단계는 쓰지 않는다 — 배너에 🟡 가 남으면 지시서를 고친다."""
+    problems = []
+    for step in steps:
+        saves = step["saves"]
+        is_skip = SKIP_WARNING_TITLE in step["title"] or (saves and saves[-1] == SKIP_WARNING_BUTTON)
+        if is_skip:
+            problems.append(
+                f"{step['num']}단계: `{SKIP_WARNING_TITLE}` 단계는 쓰지 않는다 — "
+                "판매 시작 전 배너에 🟡 가 남으면 지시서가 틀린 것이니 원인을 지시서에서 고친다"
+            )
+    return problems
 
 
 def find_addon_card_gaps(steps):
@@ -330,6 +405,17 @@ def find_promo_common_cards(steps):
     공통 프로모션이 0건이면 화면이 카드를 감출 뿐이라(러너가 오퍼 0 요청으로 연다) 검사하지 않는다."""
     return []
 
+def supply_currency(steps):
+    """`호텔 만들기` 단계의 `공급 통화` 값. 단계나 칸이 없으면 None."""
+    for step in steps:
+        if step["title"].startswith(CURRENCY_STEP_TITLE):
+            value = step["fields"].get("공급 통화")
+            if value is None:
+                return None
+            return strip_select(value) or None
+    return None
+
+
 def find_season_save_gaps(steps):
     """`시즌 만들기` 단계는 `→ [추가]` 로 끝나야 한다(드로어 버튼 문구)."""
     problems = []
@@ -345,6 +431,10 @@ def find_season_save_gaps(steps):
 # 0단계 — 호텔을 만들기 전에 반드시 먼저 보는 세 화면. 제목에 이 낱말이 들어 있으면 통과한다
 # (`환율 등록 확인` 처럼 말이 붙어도 되게 부분 일치로 본다)
 ZERO_STEPS = ["환율", "거래처", "도시"]
+
+# 공급 통화는 USD 가 원칙이다 — 다른 통화면 경고만 한다(막지는 않는다)
+DEFAULT_CURRENCY = "USD"
+CURRENCY_STEP_TITLE = "호텔 만들기"
 
 # 칸 이름 뒤에 붙는 통화 꼬리표는 화면 사전과 표기가 달라 떼고 비교한다
 CURRENCY_SUFFIX_RE = re.compile(r"\s*\((?:[A-Z]{3}|공급 통화)\)")
@@ -494,10 +584,14 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     unused_files = sorted(have - referenced) if photos_dir else []
 
     parsed = parse_steps(lines)
-    overwrite_gaps, overwrite_overlaps = find_overwrite_gaps(parsed)
+    season_overlaps = find_season_overlaps(parsed)
+    needless_overwrite = find_needless_overwrite(parsed)
+    cancel_policy_gaps = find_missing_cancel_policy(parsed)
+    skip_warning_steps = find_skip_warning_steps(parsed)
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
+    currency = supply_currency(parsed)
 
     nums = [int(m.group(1)) for l in steps for m in [STEP_RE.match(l)] if m]
     seq_ok = nums == list(range(1, len(nums) + 1))
@@ -558,9 +652,11 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "photos_missing": missing_files, "photos_unused": unused_files,
         "bad_sources": bad_sources,
         "zero_missing": zero_missing,
-        "overwrite_gaps": overwrite_gaps, "overwrite_overlaps": overwrite_overlaps,
+        "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
+        "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
+        "currency": currency,
         "dict_checked": bool(dictionary_path), "dict_error": dict_error, "unknown_fields": unknown_fields,
         "contract_checked": bool(contract_path), "contract_error": contract_error,
         "loose_amounts": loose_amounts,
@@ -610,7 +706,8 @@ def main(argv=None):
         problems.append(f"없는 사진 참조 {r['photos_missing']}")
     if r["zero_missing"]:
         problems.append("0단계(환율·거래처·도시 확인) 누락")
-    for p in r["overwrite_gaps"] + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]:
+    for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
+              + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]):
         problems.append(p)
     if r["dict_error"]:
         problems.append(f"화면 사전 읽기 실패 {r['dict_error']}")
@@ -618,7 +715,12 @@ def main(argv=None):
         problems.append(f"계약서 읽기 실패 {r['contract_error']}")
 
     warnings = []
-    for w in r["overwrite_overlaps"]:
+    if r["currency"] and r["currency"] != DEFAULT_CURRENCY:
+        warnings.append(
+            f"공급 통화가 {DEFAULT_CURRENCY} 가 아니다({r['currency']}) — "
+            "사용자에게 확인받은 기록이 changes.md 에 있어야 한다"
+        )
+    for w in r["needless_overwrite"]:
         warnings.append(w)
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]
