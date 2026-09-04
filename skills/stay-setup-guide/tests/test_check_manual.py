@@ -346,6 +346,59 @@ class SkipWarningTest(unittest.TestCase):
         self.assertEqual(cm.find_skip_warning_steps(steps_of(HEAD + SELL_STEP)), [])
 
 
+CAMPAIGN_STEP = """
+## 4. 캠페인 만들기 (1개, RETREAT PACKAGE)
+화면: Stay 호텔 목록 화면 위 [캠페인]
+버튼: [캠페인 만들기]
+
+| 칸 | 값 |
+|---|---|
+| 캠페인 코드 | RETREAT-26 |
+| 고객 노출명 | RETREAT PACKAGE |
+
+→ [추가]
+"""
+
+
+def offer_with_campaign(num, value):
+    return f"""
+## {num}. 오퍼 고치기 (1개)
+탭: `오퍼`
+버튼: `기본 오퍼` 행의 [편집]
+
+| 칸 | 값 |
+|---|---|
+| 관리용 이름 | 2026 시즌 요금 |
+| 캠페인 | {value} |
+| 기본 취소 정책 | 선택: 표준 D-7 무료취소 |
+
+→ [저장]
+"""
+
+
+class CampaignTest(unittest.TestCase):
+    """캠페인은 걷혔다 — 단계로 만들지 않고, 오퍼의 `캠페인` 은 언제나 `— 없음 —`."""
+
+    def problems(self, md):
+        return cm.find_campaign_uses(steps_of(md))
+
+    def test_campaign_step_is_error(self):
+        problems = self.problems(HEAD + CAMPAIGN_STEP)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("캠페인 단계는 만들지 않는다(오퍼 이미지로 대신)", problems[0])
+
+    def test_offer_with_campaign_name_is_error(self):
+        problems = self.problems(HEAD + offer_with_campaign(4, "선택: RETREAT PACKAGE"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("캠페인", problems[0])
+
+    def test_offer_with_none_is_ok(self):
+        self.assertEqual(self.problems(HEAD + offer_with_campaign(4, "선택: — 없음 —")), [])
+
+    def test_offer_without_campaign_row_is_ok(self):
+        self.assertEqual(self.problems(HEAD + offer_step(4)), [])
+
+
 ADDON_A = """
 ## 4. 부가옵션 만들기 (1개, 조식)
 탭: `부가옵션`
@@ -560,6 +613,16 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(len(r["skip_warning_steps"]), 1)
 
+    def test_campaign_step_fails(self):
+        r, code = self.run_on(HEAD + CAMPAIGN_STEP)
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["campaign_uses"]), 1)
+
+    def test_offer_with_campaign_fails(self):
+        r, code = self.run_on(HEAD + offer_with_campaign(4, "선택: RETREAT PACKAGE"))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["campaign_uses"]), 1)
+
     def test_example_manual_is_all_ok(self):
         """정답지 예시는 새 검사까지 통과해야 한다(사진 폴더는 저장소에 없어 뺀다)."""
         r = cm.check(EXAMPLE, share_name="우에노_토우가네야", dictionary_path=DICTIONARY)
@@ -567,6 +630,7 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(r["needless_overwrite"], [])
         self.assertEqual(r["cancel_policy_gaps"], [])
         self.assertEqual(r["skip_warning_steps"], [])
+        self.assertEqual(r["campaign_uses"], [])
         self.assertEqual(r["addon_card_gaps"], [])
         self.assertEqual(r["promo_common"], [])
         self.assertEqual(r["season_saves"], [])

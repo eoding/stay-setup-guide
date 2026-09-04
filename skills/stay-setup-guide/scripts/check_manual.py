@@ -17,6 +17,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `시즌 가격 채우기` 에 `이미 값이 있는 날도 덮기 | 체크` 가 남아 있는지(겹치지 않으면 필요 없다 — 경고)
 - 오퍼마다 `기본 취소 정책` 이 있는지(`지정 안 함`·빈 값이면 오류)
 - `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
+- `캠페인 만들기` 단계가 있는지(있으면 오류 — 캠페인은 걷혔다) · 오퍼의 `캠페인` 이 `선택: — 없음 —` 인지
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 - `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
@@ -87,6 +88,11 @@ WEEKDAY_TOKEN_RE = re.compile(r"[월화수목금토일](?:요일)?")
 # 오퍼의 기본 취소 정책 — 이 값이면 판매 시작 배너에 🟡 가 남는다
 CANCEL_POLICY_FIELD = "기본 취소 정책"
 CANCEL_POLICY_EMPTY = {"지정 안 함", "", "비움", "—", "-", "— 없음 —", "- 없음 -", "(지정 안 함)"}
+
+# 캠페인은 걷혔다(오퍼가 `오퍼 이미지` 로 겉면을 직접 가진다) — 단계로 만들지 않고 오퍼 값은 언제나 「— 없음 —」
+CAMPAIGN_TITLE = "캠페인 만들기"
+CAMPAIGN_FIELD = "캠페인"
+CAMPAIGN_NONE = {"— 없음 —", "- 없음 -"}
 
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
@@ -355,6 +361,30 @@ def find_missing_cancel_policy(steps):
     return problems
 
 
+def find_campaign_uses(steps):
+    """캠페인은 걷혔다 — `캠페인 만들기` 단계도, 오퍼의 캠페인 이름표도 두지 않는다."""
+    problems = []
+    for step in steps:
+        title = step["title"]
+        if title.startswith(CAMPAIGN_TITLE):
+            problems.append(
+                f"{step['num']}단계: 캠페인 단계는 만들지 않는다(오퍼 이미지로 대신)"
+            )
+            continue
+        if not (title.startswith("오퍼 만들기") or title.startswith("오퍼 고치기")):
+            continue
+        raw = step["fields"].get(CAMPAIGN_FIELD)
+        if raw is None:
+            continue
+        value = strip_select(raw).strip()
+        if value not in CAMPAIGN_NONE:
+            problems.append(
+                f"{step['num']}단계: `{CAMPAIGN_FIELD}` 이 `{value or '빈 값'}` 이다 — "
+                "캠페인은 걷혔다, 언제나 `선택: — 없음 —`(오퍼의 겉면은 `오퍼 이미지`)"
+            )
+    return problems
+
+
 def find_skip_warning_steps(steps):
     """`경고 넘어가기` 단계는 쓰지 않는다 — 배너에 🟡 가 남으면 지시서를 고친다."""
     problems = []
@@ -592,6 +622,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     needless_overwrite = find_needless_overwrite(parsed)
     cancel_policy_gaps = find_missing_cancel_policy(parsed)
     skip_warning_steps = find_skip_warning_steps(parsed)
+    campaign_uses = find_campaign_uses(parsed)
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
@@ -658,6 +689,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "zero_missing": zero_missing,
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
+        "campaign_uses": campaign_uses,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
         "currency": currency,
@@ -711,7 +743,7 @@ def main(argv=None):
     if r["zero_missing"]:
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
-              + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]):
+              + r["campaign_uses"] + r["addon_card_gaps"] + r["promo_common"] + r["season_saves"]):
         problems.append(p)
     if r["dict_error"]:
         problems.append(f"화면 사전 읽기 실패 {r['dict_error']}")
