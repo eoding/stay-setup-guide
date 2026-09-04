@@ -4,6 +4,8 @@ An agent skill for travel-agency staff: from a hotel contract (rate sheet) file 
 
 Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any other agent that reads the standard `SKILL.md` skill format.
 
+The screen dictionary and the step order follow the ERP screens as of 2026-09-04 (PR #9033) — **ERP 2026-09-04(PR #9033) 이후 화면 기준**. A newly created hotel now starts empty: no offer, no room and no sale link are created for you, and the room-link drawer stays blocked until the first offer exists.
+
 | Path | Contents |
 |---|---|
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |

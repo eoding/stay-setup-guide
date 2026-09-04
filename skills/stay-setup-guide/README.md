@@ -33,7 +33,7 @@ python3 scripts/render_card.py <manual.md> -o <이름>_입력지시서.html --fo
 |---|---|
 | `SKILL.md` | 이 스킬의 진입점. 입력 → 절차 → 하지 말 것 → 산출물 요약 |
 | `references/MANUAL-SPEC.md` | 지시서(manual.md) 형식 규칙 정본 — 구조·표 표기·순서·금지어 |
-| `references/screen-dictionary.md` / `.json` | ERP Stay 화면 27개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 기계용 json) |
+| `references/screen-dictionary.md` / `.json` | ERP Stay 화면 26개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 기계용 json) |
 | `references/facts-guide.md` | 호텔·룸 팩트(주소·시설·면적·전망·침대·좌표 등) 수집 절차와 출처 우선순위 |
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님): `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(정답지) → `changes.md` → 렌더된 HTML, `사진목록.txt`(파일명 · 출처) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |

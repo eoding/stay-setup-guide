@@ -19,7 +19,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `오퍼 고치기` 단계가 있는지(있으면 오류 — 호텔은 빈 상태로 만들어져 고칠 기본 오퍼가 없다)
 - `룸 만들기`·`판매 연결` 단계가 첫 `오퍼 만들기` 보다 앞에 있는지(있으면 오류 — 오퍼가 없으면 객실 추가가 막힌다)
 - `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
-- `캠페인 만들기` 단계가 있는지(있으면 오류 — 캠페인은 걷혔다) · 오퍼의 `캠페인` 이 `선택: — 없음 —` 인지
+- `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 - `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
@@ -91,10 +91,10 @@ WEEKDAY_TOKEN_RE = re.compile(r"[월화수목금토일](?:요일)?")
 CANCEL_POLICY_FIELD = "기본 취소 정책"
 CANCEL_POLICY_EMPTY = {"지정 안 함", "", "비움", "—", "-", "— 없음 —", "- 없음 -", "(지정 안 함)"}
 
-# 캠페인은 걷혔다(오퍼가 `오퍼 이미지` 로 겉면을 직접 가진다) — 단계로 만들지 않고 오퍼 값은 언제나 「— 없음 —」
+# 캠페인은 2026-09-04 ERP 화면에서 제거됐다(모델·컬럼만 휴면 보존) — 오퍼가 `오퍼 이미지` 로
+# 겉면을 직접 가진다. 단계로도 만들지 않고, 어느 단계 표에도 `캠페인` 줄을 두지 않는다.
 CAMPAIGN_TITLE = "캠페인 만들기"
 CAMPAIGN_FIELD = "캠페인"
-CAMPAIGN_NONE = {"— 없음 —", "- 없음 -"}
 
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
@@ -408,25 +408,17 @@ def find_rooms_before_offer(steps):
 
 
 def find_campaign_uses(steps):
-    """캠페인은 걷혔다 — `캠페인 만들기` 단계도, 오퍼의 캠페인 이름표도 두지 않는다."""
+    """캠페인은 화면에서 없어졌다 — 단계도, 어느 표의 `캠페인` 줄도 두지 않는다."""
     problems = []
     for step in steps:
-        title = step["title"]
-        if title.startswith(CAMPAIGN_TITLE):
+        if step["title"].startswith(CAMPAIGN_TITLE):
             problems.append(
                 f"{step['num']}단계: 캠페인 단계는 만들지 않는다(오퍼 이미지로 대신)"
             )
             continue
-        if not title.startswith(OFFER_CREATE_TITLE):
-            continue
-        raw = step["fields"].get(CAMPAIGN_FIELD)
-        if raw is None:
-            continue
-        value = strip_select(raw).strip()
-        if value not in CAMPAIGN_NONE:
+        if CAMPAIGN_FIELD in step["fields"]:
             problems.append(
-                f"{step['num']}단계: `{CAMPAIGN_FIELD}` 이 `{value or '빈 값'}` 이다 — "
-                "캠페인은 걷혔다, 언제나 `선택: — 없음 —`(오퍼의 겉면은 `오퍼 이미지`)"
+                f"{step['num']}단계: `{CAMPAIGN_FIELD}` 칸은 화면에서 없어졌다 — 줄을 뺀다"
             )
     return problems
 
@@ -716,6 +708,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
                 if strip_repeat_prefix(n) in labels:  # 반복 행은 열 이름으로 한 번 더 본다
                     continue
                 if strip_row_suffix(n) in labels:  # `오퍼별 표시명 · <룸 이름>` 은 앞부분으로 본다
+                    continue
+                if n == CAMPAIGN_FIELD:  # 걷힌 칸 — `find_campaign_uses` 가 오류로 잡는다(두 번 알리지 않는다)
                     continue
                 seen.append(n)
             unknown_fields = seen

@@ -455,7 +455,7 @@ def offer_with_campaign(num, value):
 
 
 class CampaignTest(unittest.TestCase):
-    """캠페인은 걷혔다 — 단계로 만들지 않고, 오퍼의 `캠페인` 은 언제나 `— 없음 —`."""
+    """캠페인은 2026-09-04 화면에서 없어졌다 — 단계도, 어느 표의 `캠페인` 줄도 두지 않는다."""
 
     def problems(self, md):
         return cm.find_campaign_uses(steps_of(md))
@@ -468,10 +468,22 @@ class CampaignTest(unittest.TestCase):
     def test_offer_with_campaign_name_is_error(self):
         problems = self.problems(HEAD + offer_with_campaign(4, "선택: RETREAT PACKAGE"))
         self.assertEqual(len(problems), 1, problems)
-        self.assertIn("캠페인", problems[0])
+        self.assertIn("`캠페인` 칸은 화면에서 없어졌다 — 줄을 뺀다", problems[0])
 
-    def test_offer_with_none_is_ok(self):
-        self.assertEqual(self.problems(HEAD + offer_with_campaign(4, "선택: — 없음 —")), [])
+    def test_offer_with_none_is_error(self):
+        """종전에는 `— 없음 —` 이 정답이었다 — 이제는 칸 자체가 없다."""
+        problems = self.problems(HEAD + offer_with_campaign(4, "선택: — 없음 —"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`캠페인` 칸은 화면에서 없어졌다 — 줄을 뺀다", problems[0])
+
+    def test_campaign_row_outside_offer_is_error(self):
+        """오퍼 단계가 아니어도 마찬가지다 — 화면 어디에도 그 칸이 없다."""
+        step = offer_with_campaign(4, "선택: — 없음 —").replace(
+            "## 4. 오퍼 만들기 (1번째, 2026 시즌 요금)", "## 4. 프로모션 만들기 (1번째)"
+        )
+        problems = self.problems(HEAD + step)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
 
     def test_offer_without_campaign_row_is_ok(self):
         self.assertEqual(self.problems(HEAD + offer_step(4)), [])
