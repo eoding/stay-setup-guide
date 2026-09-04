@@ -776,6 +776,66 @@ def age_band_step(num, name="초등학생", code="CHILD", card="`2026 시즌 요
 """
 
 
+def age_band_range_step(num, name, code, low, high, card="`2026 시즌 요금`"):
+    return f"""
+## {num}. 연령 구간 만들기 ({num}번째, {name})
+탭: `오퍼`
+카드: {card}
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | {code} |
+| 노출명 | {name} |
+| 최소 연령 | {low} |
+| 최대 연령 | {high} |
+| 요금 기준 유형 | 선택: 무료 |
+
+→ [추가]
+"""
+
+
+class AgeBandOverlapTest(unittest.TestCase):
+    """같은 오퍼의 연령 구간은 양끝 포함으로 한 살도 겹칠 수 없다."""
+
+    def problems(self, md):
+        return cm.find_age_band_overlaps(steps_of(md))
+
+    def test_adjacent_bands_are_ok(self):
+        md = (HEAD + offer_step(4)
+              + age_band_range_step(5, "유아", "INFANT", "0", "5.99")
+              + age_band_range_step(6, "초등학생", "CHILD", "6", "11.99"))
+        self.assertEqual(self.problems(md), [])
+
+    def test_both_starting_at_zero_is_an_error(self):
+        """계약서 문구를 그대로 옮기면 나오는 실수 — 둘 다 0 부터."""
+        md = (HEAD + offer_step(4)
+              + age_band_range_step(5, "유아", "INFANT", "0", "5.99")
+              + age_band_range_step(6, "초등학생", "CHILD", "0", "11.99"))
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("6단계", problems[0])
+        self.assertIn("겹친다", problems[0])
+
+    def test_touching_boundary_is_an_error(self):
+        """`0~6` 과 `6~11.99` 는 만 6세에서 겹친다."""
+        md = (HEAD + offer_step(4)
+              + age_band_range_step(5, "유아", "INFANT", "0", "6")
+              + age_band_range_step(6, "초등학생", "CHILD", "6", "11.99"))
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_different_offers_do_not_collide(self):
+        """구간은 오퍼에 매달린다 — 다른 카드면 같은 범위여도 괜찮다."""
+        md = (HEAD + offer_step(4)
+              + age_band_range_step(5, "유아", "INFANT", "0", "5.99")
+              + age_band_range_step(6, "유아", "INFANT", "0", "5.99", card="`2027 시즌 요금`"))
+        self.assertEqual(self.problems(md), [])
+
+    def test_the_example_manual_has_no_overlap(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
+
+
 def charge_with_age_rate(num, band="초등학생"):
     return f"""
 ## {num}. 부과금 만들기 (1개, 갈라 디너)
@@ -853,6 +913,129 @@ def catalog_step(num, title, save, with_apply_now=True):
 {row}
 → [{save}]
 """
+
+
+def room_photo_step(num, save, title="룸 사진 올리기 (1번째, Single)"):
+    return f"""
+## {num}. {title}
+탭: `객실`
+카드: `객실 (룸 타입)`
+버튼: `Single` 행의 [편집]
+폴더: 시험호텔/사진
+
+파일 선택 → 아래 파일
+- room_single_01.jpg
+
+→ [{save}]
+"""
+
+
+def photo_count_step(num, title, files, save="저장", as_field=False):
+    if as_field:
+        body = "\n".join(f"| 오퍼 이미지 | 파일: {f} |" for f in files)
+        body = f"| 칸 | 값 |\n|---|---|\n{body}"
+    else:
+        body = "파일 선택 → 아래 파일\n" + "\n".join(f"- {f}" for f in files)
+    return f"""
+## {num}. {title}
+탭: `기본정보`
+버튼: [이미지 직접등록]
+폴더: 시험호텔/사진
+
+{body}
+
+→ [{save}]
+"""
+
+
+class PhotoCountTest(unittest.TestCase):
+    """사진 단계 제목의 `(N장)` 과 파일 줄 수가 같아야 한다."""
+
+    def problems(self, md):
+        return cm.find_photo_count_gaps(steps_of(md))
+
+    def test_title_promises_more_than_listed(self):
+        md = HEAD + photo_count_step(
+            4, "상품상세 이미지 올리기 (7장)",
+            ["hotel_02.jpg", "hotel_03.jpg", "hotel_04.jpg",
+             "hotel_05.jpg", "hotel_06.jpg", "hotel_07.jpg"],
+        )
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertEqual(problems[0], "4단계: 제목은 7장인데 파일 줄은 6개다")
+
+    def test_title_promises_fewer_than_listed(self):
+        md = HEAD + photo_count_step(
+            4, "상품상세 이미지 올리기 (2장)",
+            ["hotel_02.jpg", "hotel_03.jpg", "hotel_04.jpg"],
+        )
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertEqual(problems[0], "4단계: 제목은 2장인데 파일 줄은 3개다")
+
+    def test_matching_count_is_ok(self):
+        md = HEAD + photo_count_step(4, "대표이미지 올리기 (1장)", ["hotel_01.jpg"])
+        self.assertEqual(self.problems(md), [])
+
+    def test_source_urls_do_not_break_the_count(self):
+        md = HEAD + f"""
+## 4. 상품상세 이미지 올리기 (2장)
+탭: `기본정보`
+폴더: 시험호텔/사진
+
+파일 선택 → 아래 파일
+- hotel_02.jpg — 출처: https://example.com/a.jpg
+- hotel_03.jpg
+
+→ [저장]
+"""
+        self.assertEqual(self.problems(md), [])
+
+    def test_file_rows_in_a_table_are_counted(self):
+        """`| 오퍼 이미지 | 파일: offer_hero.jpg |` 도 파일 줄이다."""
+        md = HEAD + photo_count_step(4, "오퍼 이미지 올리기 (2장)", ["offer_hero.jpg"], as_field=True)
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertEqual(problems[0], "4단계: 제목은 2장인데 파일 줄은 1개다")
+
+    def test_step_without_a_count_is_not_checked(self):
+        """룸 사진 단계는 제목에 장수를 약속하지 않는다."""
+        md = HEAD + photo_count_step(
+            4, "룸 사진 올리기 (1번째, Single)", ["room_single_01.jpg"], save="사진 추가"
+        )
+        self.assertEqual(self.problems(md), [])
+
+    def test_non_photo_step_is_not_checked(self):
+        md = HEAD + photo_count_step(4, "시즌 가격 채우기 (1회차, Regular × Single)", [])
+        self.assertEqual(self.problems(md), [])
+
+    def test_the_example_manual_counts_match(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
+
+
+class RoomPhotoSaveTest(unittest.TestCase):
+    """룸 사진 카드에는 저장 버튼이 없다 — 파일을 고르면 바로 올라간다."""
+
+    def problems(self, md):
+        return cm.find_room_photo_saves(steps_of(md))
+
+    def test_save_button_is_error(self):
+        problems = self.problems(HEAD + room_photo_step(4, "저장"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("사진 추가", problems[0])
+
+    def test_photo_add_button_is_ok(self):
+        self.assertEqual(self.problems(HEAD + room_photo_step(4, "사진 추가")), [])
+
+    def test_hotel_image_step_is_not_checked(self):
+        """대표이미지·상품상세 이미지는 기본정보 탭이라 [저장] 이 맞다."""
+        md = HEAD + room_photo_step(4, "저장", title="대표이미지 올리기 (1장)")
+        self.assertEqual(self.problems(md), [])
+
+    def test_the_example_manual_uses_photo_add(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
 
 
 class CreateOnlyFieldTest(unittest.TestCase):

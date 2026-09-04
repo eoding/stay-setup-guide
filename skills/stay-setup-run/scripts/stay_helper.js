@@ -617,14 +617,23 @@
     }
     var tr = [].slice.call(sec.querySelectorAll('tr')).filter(function (r) { return r.querySelector(CTRL_SEL); });
     if (tr.length) return tr;
-    var best = [], bn = 0;
+    // 형제 묶음 후보는 두 갈래다: **칸을 품은 상자들**의 묶음과 **칸 자체**의 묶음.
+    // 상자 쪽이 먼저다. 요금제의 `포함물` 이 그 차이가 드러나는 자리다 —
+    // `<div><input 이름><input 설명></div>` 가 되풀이되는데(열 제목이 없다),
+    // 깊이만 보고 가장 많은 묶음을 고르면 **한 행의 두 입력**을 두 행으로 읽어
+    // `포함물 2 · 포함물 이름` 이 1행의 설명 칸에 들어간다(2026-09-04 실측).
+    var boxes = [], ctrls = [];
     var scan = function (node) {
       var kids = [].slice.call(node.children).filter(function (k) { return k.querySelector(CTRL_SEL) || isCtrl(k); });
-      if (kids.length > bn) { bn = kids.length; best = kids; }
+      if (kids.length) {
+        var allBoxes = kids.every(function (k) { return !isCtrl(k) && k.querySelector(CTRL_SEL); });
+        if (allBoxes) { if (kids.length > boxes.length) boxes = kids; }
+        else if (kids.length > ctrls.length) ctrls = kids;
+      }
       for (var i = 0; i < node.children.length; i++) scan(node.children[i]);
     };
     scan(sec);
-    return bn >= 1 ? best : [];
+    return boxes.length ? boxes : ctrls;
   }
 
   async function ensureRow(scope, group, n, opts) {
@@ -918,6 +927,25 @@
   // 운영 2026-09-04 화면(basecamp origin/develop 64433dabeb)에서 실제로 쓰이는 글자다.
   // 이 목록에 없어도 `hx-confirm` 이 붙은 버튼은 아래 `refusal()` 이 따로 막는다 — 목록은
   // 확인창이 없어도 되돌릴 수 없는 버튼까지 잡기 위한 것이다.
+  // 파일 고르개 라벨 — `<label class="stay-btn">사진 추가<input type="file" hidden …></label>`.
+  // 버튼처럼 생겼지만 `<button>` 이 아니고, 눌러 봐야 파일 대화상자가 열릴 뿐이다. 올리는 일은
+  // 파일을 칸에 담는 것(`takeFiles`)이 하고, 담는 순간 `change` 로 요청이 나간다.
+  // 이것을 저장 버튼으로 착각하면 **드로어의 [저장] 을 대신 누르는** 사고가 난다(룸 사진 단계).
+  function uploadLabel(scope, want) {
+    if (!want) return null;
+    var w = String(want).replace(/^\[(.*)\]$/, '$1').trim();
+    var roots = [];
+    if (scope && scope.querySelectorAll && scope !== document.body) roots.push(scope);
+    roots.push(document.body);
+    for (var i = 0; i < roots.length; i++) {
+      var hit = [].slice.call(roots[i].querySelectorAll('label')).find(function (l) {
+        return l.querySelector('input[type=file]') && tier(labelOwnText(l), w) >= 3;
+      });
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   var DANGER = [
     [/^삭제$|^그룹\s*삭제$|^선택삭제$/, '삭제 버튼입니다'],
     [/^보관$/, '보관 버튼입니다'],
@@ -1376,6 +1404,16 @@
     var scope = narrow(baseScope(), o);
     var drawerEl = document.querySelector('.stay-drawer.is-open');
     var btn = findButton(scope, buttonText) || (drawerEl && findButton(drawerEl, buttonText)) || findButton(document.body, buttonText, true);
+    // 저장 버튼이 아니라 파일 고르개인가 — 그렇다면 **다른 버튼을 대신 찾지 않는다**.
+    // `not-found` 로 돌려주면 부르는 쪽이 `저장·추가·…` 대안을 훑다가 드로어의 [저장] 을 누른다.
+    if (!btn) {
+      var up = uploadLabel(scope, buttonText);
+      if (up) return remember({
+        status: 'upload-label', reason: 'upload-label',
+        detail: '[' + buttonText + '] 는 저장 버튼이 아니라 파일 고르개입니다 — stayRun.takeFiles({label:"' + clean(labelOwnText(up)) + '"}) 로 올립니다. 이 화면에는 누를 저장 버튼이 없습니다.',
+        errors: [], url: location.href
+      });
+    }
     if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + buttonText + '] 을 찾지 못했습니다', buttons: buttonsIn(scope), url: location.href, errors: [] });
     var no = refusal(btn, buttonText);
     if (no && (no.reason === 'sale-start' || !o.force)) return remember({ status: 'refused', reason: no.reason, detail: no.detail, errors: [], url: location.href });

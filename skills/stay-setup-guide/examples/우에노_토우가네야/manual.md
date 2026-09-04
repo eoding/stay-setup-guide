@@ -355,73 +355,79 @@
 탭: `객실`
 카드: `객실 (룸 타입)`
 버튼: `Single` 행의 [편집]
-버튼: 드로어 아래 `룸 사진` 의 [사진 추가]
+주의: 파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.
 폴더: 우에노_토우가네야/사진
 
 파일 선택 → 아래 파일
 - room_single_01.jpg — 출처: http://www.tougane-h.com/rooms/images/img_single.jpg
 
-→ [저장]
+→ [사진 추가]
+
 
 ## 18. 룸 사진 올리기 (2번째, Standard Double)
 탭: `객실`
 카드: `객실 (룸 타입)`
 버튼: `Standard Double` 행의 [편집]
-버튼: 드로어 아래 `룸 사진` 의 [사진 추가]
+주의: 파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.
 폴더: 우에노_토우가네야/사진
 
 파일 선택 → 아래 파일
 - room_standard-double_01.jpg — 출처: http://www.tougane-h.com/rooms/images/img_double.jpg
 
-→ [저장]
+→ [사진 추가]
+
 
 ## 19. 룸 사진 올리기 (3번째, Economy Double)
 탭: `객실`
 카드: `객실 (룸 타입)`
 버튼: `Economy Double` 행의 [편집]
-버튼: 드로어 아래 `룸 사진` 의 [사진 추가]
+주의: 파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.
 폴더: 우에노_토우가네야/사진
 
 파일 선택 → 아래 파일
 - room_economy-double_01.jpg — 출처: http://www.tougane-h.com/rooms/images/img_double2.jpg
 
-→ [저장]
+→ [사진 추가]
+
 
 ## 20. 룸 사진 올리기 (4번째, Bunk Bed Twin)
 탭: `객실`
 카드: `객실 (룸 타입)`
 버튼: `Bunk Bed Twin` 행의 [편집]
-버튼: 드로어 아래 `룸 사진` 의 [사진 추가]
+주의: 파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.
 폴더: 우에노_토우가네야/사진
 
 파일 선택 → 아래 파일
 - room_bunk-bed-twin_01.jpg — 출처: http://www.tougane-h.com/rooms/images/img_two.jpg
 
-→ [저장]
+→ [사진 추가]
+
 
 ## 21. 룸 사진 올리기 (5번째, Twin)
 탭: `객실`
 카드: `객실 (룸 타입)`
 버튼: `Twin` 행의 [편집]
-버튼: 드로어 아래 `룸 사진` 의 [사진 추가]
+주의: 파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.
 폴더: 우에노_토우가네야/사진
 
 파일 선택 → 아래 파일
 - room_twin_01.jpg — 출처: http://www.tougane-h.com/rooms/images/img_twin.jpg
 
-→ [저장]
+→ [사진 추가]
+
 
 ## 22. 룸 사진 올리기 (6번째, Family)
 탭: `객실`
 카드: `객실 (룸 타입)`
 버튼: `Family` 행의 [편집]
-버튼: 드로어 아래 `룸 사진` 의 [사진 추가]
+주의: 파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.
 폴더: 우에노_토우가네야/사진
 
 파일 선택 → 아래 파일
 - room_family_01.jpg — 출처: http://www.tougane-h.com/rooms/images/img_fourth.jpg
 
-→ [저장]
+→ [사진 추가]
+
 
 ## 23. 판매 연결 한 번에 만들기 (룸 6개)
 탭: `객실`

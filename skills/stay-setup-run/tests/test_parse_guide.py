@@ -271,12 +271,17 @@ class TestCheckMode(unittest.TestCase):
         self.assertTrue(doc["steps"][0]["photos"][0]["missing"])
 
 
+# dict-audit 과 합의한 머리 줄 키를 그대로 쓴다 — `탭:` · `카드:` · `버튼:` 이고
+# 저장 버튼은 마지막 `→ [ … ]` 줄이다(이 갈래에 `화면:` 은 쓰지 않는다).
+# 부과금 단계의 줄 차례도 화면 차례 그대로다:
+#   종류 → 이름 → 부과 방식 → 부과 단위 → 정액 금액 → 적용 룸 scope → 연령별 단가 → 시간대별 요율 → 설명
+# 카드를 세우는 것은 **[부과 단위]=인당 + [부과 방식]=정액** 이다(`_charge_form.html` 의 x-show).
 AGE_BAND = """# 시험 호텔 — 입력 지시서
 
-## 1. 연령 구간 만들기 (1번째, CHILD)
+## 1. 연령 구간 만들기 (1번째, 초등학생)
 탭: `오퍼`
 카드: `2026 계약`
-화면: 오퍼 카드의 [연령 구간 추가]
+버튼: [연령 구간 추가]
 
 | 칸 | 값 |
 |---|---|
@@ -294,22 +299,29 @@ AGE_BAND = """# 시험 호텔 — 입력 지시서
 ## 2. 부과금 추가 (1번째, 갈라디너)
 탭: `부과금`
 카드: `2026 계약`
-화면: 오퍼 카드의 [부과금 추가]
+버튼: [부과금 추가]
 
 | 칸 | 값 |
 |---|---|
+| 종류 | 선택: 기타 |
 | 이름 | 갈라디너 |
-| 부과 방식 | 선택: 인당 |
+| 부과 방식 | 선택: 정액 |
+| 부과 단위 | 선택: 인당 |
 | 정액 금액 | 100 |
+| 적용 룸 scope | 비움 |
 | 연령별 단가 · 초등학생 | 50 |
 | 연령별 단가 · 유아 | 0 |
+| 설명 | 비움 |
 
 → [추가]
 """
 
 BAD_ORDER = AGE_BAND.replace(
-    "| 부과 방식 | 선택: 인당 |\n| 정액 금액 | 100 |\n| 연령별 단가 · 초등학생 | 50 |",
-    "| 연령별 단가 · 초등학생 | 50 |\n| 부과 방식 | 선택: 인당 |\n| 정액 금액 | 100 |")
+    "| 적용 룸 scope | 비움 |\n| 연령별 단가 · 초등학생 | 50 |",
+    "| 연령별 단가 · 초등학생 | 50 |\n| 적용 룸 scope | 비움 |")
+
+#: [부과 단위] 줄이 아예 없으면 그 카드는 화면에 설 일이 없다
+NO_UNIT = AGE_BAND.replace("| 부과 단위 | 선택: 인당 |\n", "")
 
 STALE = """# 시험 호텔 — 입력 지시서
 
@@ -342,6 +354,8 @@ class TestNewStepKinds(unittest.TestCase):
         self.assertEqual(band["head"]["tab"], "오퍼")
         self.assertEqual(band["head"]["card"], "2026 계약")
         self.assertEqual(band["submit"], "추가")
+        # 여는 버튼은 `버튼:` 줄에서 읽는다 — 러너의 `runStep` 이 쓰는 것이 이 값이다
+        self.assertEqual([b["text"] for b in band["head"]["buttons_parsed"]], ["연령 구간 추가"])
         self.assertEqual(field_by_label(band, "밴드 코드")["value"], "CHILD")
         self.assertEqual(field_by_label(band, "노출명")["value"], "초등학생")
         self.assertEqual(field_by_label(band, "방 인원수에 포함")["kind"], "check")
@@ -378,10 +392,16 @@ class TestPreflight(unittest.TestCase):
         self.assertEqual([x["no"] for x in pre["stale"]], [1])
         self.assertIn("기본 오퍼", pre["stale"][0]["why"])
 
-    def test_age_rate_before_mode_is_flagged(self):
+    def test_age_rate_before_room_scope_is_flagged(self):
         pre = parse_guide.preflight(self._steps(BAD_ORDER))
         self.assertEqual([x["no"] for x in pre["charge_order"]], [2])
-        self.assertIn("부과 방식", pre["charge_order"][0]["why"])
+        self.assertIn("적용 룸 scope", pre["charge_order"][0]["why"])
+
+    def test_age_rate_without_charge_unit_is_flagged(self):
+        """카드를 세우는 것은 [부과 단위]=인당 이다 — [부과 방식] 은 정액/정률 축이라 다른 칸이다."""
+        pre = parse_guide.preflight(self._steps(NO_UNIT))
+        self.assertEqual([x["no"] for x in pre["charge_order"]], [2])
+        self.assertIn("부과 단위", pre["charge_order"][0]["why"])
 
     def test_unknown_kind_is_reported_not_blocking(self):
         steps = self._steps(AGE_BAND)
@@ -389,6 +409,58 @@ class TestPreflight(unittest.TestCase):
         pre = parse_guide.preflight(steps)
         self.assertEqual([x["kind"] for x in pre["unknown_kinds"]], ["우주선 만들기"])
         self.assertEqual(pre["stale"], [])
+
+
+def age_band_step(no, name, lo, hi, card="2026 계약"):
+    """연령 구간 단계 한 개 — 겹침 시험용."""
+    return ("## %d. 연령 구간 만들기 (%d번째, %s)\n"
+            "탭: `오퍼`\n카드: `%s`\n버튼: [연령 구간 추가]\n\n"
+            "| 칸 | 값 |\n|---|---|\n"
+            "| 밴드 코드 | BAND%d |\n| 노출명 | %s |\n"
+            "| 최소 연령 | %s |\n| 최대 연령 | %s |\n\n→ [추가]\n"
+            % (no, no, name, card, no, name, lo, hi))
+
+
+def bands_manual(*specs):
+    return "# 시험 호텔 — 입력 지시서\n\n" + "\n".join(
+        age_band_step(i + 1, *spec) for i, spec in enumerate(specs))
+
+
+class TestAgeBandOverlap(unittest.TestCase):
+    """나이 경계는 **양끝 포함**이다 — 서버(`stay.services.age_band.ranges_overlap`)와 같은 판정.
+
+    러너가 이것을 파일 단계에서 보는 이유는 `staleStep` 과 같다: 겹치는 구간은 그 단계에서
+    저장이 막힐 뿐이라, 그때는 앞 단계들이 이미 화면에 만들어져 있다.
+    """
+
+    def _overlap(self, md):
+        _, raws = parse_guide.parse_markdown(md)
+        return parse_guide.preflight([parse_guide.build_step(r) for r in raws])["age_overlap"]
+
+    def test_adjacent_bands_pass(self):
+        self.assertEqual(self._overlap(bands_manual(("유아", "0", "5.99"), ("초등학생", "6", "11.99"))), [])
+
+    def test_both_starting_at_zero_fails(self):
+        hits = self._overlap(bands_manual(("유아", "0", "5.99"), ("초등학생", "0", "11.99")))
+        self.assertEqual([x["no"] for x in hits], [2])
+        self.assertIn("1단계", hits[0]["why"])
+
+    def test_touching_boundary_fails(self):
+        """`0~6` 과 `6~11.99` 는 만 6세에서 겹친다 — 계약서가 11.99 를 쓰는 이유다."""
+        hits = self._overlap(bands_manual(("유아", "0", "6"), ("초등학생", "6", "11.99")))
+        self.assertEqual([x["no"] for x in hits], [2])
+
+    def test_different_offers_do_not_collide(self):
+        md = bands_manual(("유아", "0", "11.99"), ("초등학생", "0", "11.99", "2027 계약"))
+        self.assertEqual(self._overlap(md), [])
+
+    def test_three_bands_report_each_clash_once(self):
+        md = bands_manual(("유아", "0", "5.99"), ("초등학생", "0", "11.99"), ("청소년", "6", "11.99"))
+        self.assertEqual([x["no"] for x in self._overlap(md)], [2, 3])
+
+    def test_example_guide_has_no_overlap(self):
+        _, steps = parse(MANUAL)
+        self.assertEqual(parse_guide.preflight(steps)["age_overlap"], [])
 
 
 class TestCheckModeStale(unittest.TestCase):
@@ -412,6 +484,14 @@ class TestCheckModeStale(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("옛 화면 기준 단계: 0", r.stdout)
         self.assertIn("줄 차례가 어긋난 단계: 0", r.stdout)
+        self.assertIn("나이 범위가 겹치는 단계: 0", r.stdout)
+
+    def test_check_fails_on_overlapping_bands(self):
+        (self.dir / "manual.md").write_text(
+            bands_manual(("유아", "0", "5.99"), ("초등학생", "0", "11.99")), encoding="utf-8")
+        r = run(str(self.dir), "--check")
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertIn("나이 범위가 겹치는 단계: 1", r.stdout)
 
     def test_preflight_lands_in_json(self):
         (self.dir / "manual.md").write_text(AGE_BAND, encoding="utf-8")

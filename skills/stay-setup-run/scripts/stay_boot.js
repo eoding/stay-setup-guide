@@ -426,6 +426,15 @@
     out.readback = rb.ok + '/' + rb.total; out.mismatch = rb.mismatch;
     if (opt.dry || out.bad.length || (out.uploads.length && !opt.uploaded) || (s.photos && s.photos.length && !opt.uploaded)) { out.submitted = false; return out; }
     var sub = await stayRun.submit(s.submit);
+    // 마지막 버튼이 저장이 아니라 **파일 고르개**인 단계가 있다(룸 사진 올리기 — 지시서는
+    // `→ [사진 추가]` 로 끝난다, 2026-09-04 dict-audit 합의). 그 화면에는 누를 저장 버튼이
+    // 아예 없고 파일을 담는 순간 올라간다. 여기서 대안(`저장`…)을 훑으면 룸 폼의 [저장] 을
+    // 눌러 사진이 붙기 전에 드로어를 닫는다 — 그래서 대안 훑기 전에 끊는다.
+    if (sub.status === 'upload-label') {
+      out.uploadAction = s.submit; out.submit = 'upload-label'; out.submitted = false;
+      out.note = sub.detail;
+      return out;
+    }
     // 지시서의 저장 글자와 화면 버튼 글자가 다를 때(예: 시즌 드로어는 [추가]) 흔한 대안을 차례로 시도한다
     if (sub.status === 'not-found') {
       var alts = ['저장', '추가', '만들기', '등록', '확인'].filter(function (a) { return a !== s.submit; });

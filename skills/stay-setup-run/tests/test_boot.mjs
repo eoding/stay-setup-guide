@@ -56,6 +56,25 @@ const STEPS = {
   ]
 };
 
+//: 룸 사진 올리기 — 마지막 줄이 `→ [사진 추가]` 인 단계. `버튼:` 줄은 룸 행의 [편집] 하나뿐이다.
+const PHOTO_STEPS = {
+  guide: { title: '시험 호텔' },
+  steps: [{
+    no: 1,
+    title: '룸 사진 올리기 (1번째, 스탠다드)',
+    kind: '룸 사진 올리기',
+    head: {
+      tab: '객실', card: '객실 (룸 타입)', block: null, screen: null,
+      notice: '파일을 고르면 바로 올라간다 — 드로어 아래 [저장] 은 누르지 않는다.',
+      buttons: ['`스탠다드` 행의 [편집]'],
+      buttons_parsed: [{ raw: '`스탠다드` 행의 [편집]', text: '편집', row: '스탠다드', card: null, group: null, drawer: false, times: 1 }]
+    },
+    fields: [], longtexts: [],
+    photos: [{ file: 'room_01.jpg', source: null }],
+    submit: '사진 추가'
+  }]
+};
+
 const dom = new JSDOM(readFileSync(join(here, 'calendar_fixture.html'), 'utf8'), {
   url: 'https://example.test/stay/43900/#stay_tab_calendar',
   runScripts: 'dangerously',
@@ -87,6 +106,26 @@ const run = async () => {
   ok(!r2.error, 'runCellStep: 인원 조합 카드도 새 행으로 잡는다', r2.error);
   ok(r2.want.occ === '2', 'runCellStep: 카드에서 인원 조합을 읽는다', r2.want);
   ok(r2.occSet === '2', 'runCellStep: 새 행의 인원 셀렉트를 그 조합으로 맞춘다', r2.occSet);
+
+  // 3) 룸 사진 올리기 — 지시서가 `→ [사진 추가]` 로 끝나는 단계(2026-09-04 합의).
+  //    그 버튼은 파일 고르개이고 이 화면에는 저장 버튼이 없다. 러너가 대안(`저장`…)을 훑으면
+  //    룸 폼의 [저장] 을 눌러 사진이 붙기 전에 드로어를 닫는다 — 그러지 않는지 본다.
+  const dom2 = new JSDOM(readFileSync(join(here, 'helper_fixture.html'), 'utf8'), {
+    url: 'https://example.test/stay/43900/#stay_tab_room_types',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true
+  });
+  const w2 = dom2.window;
+  w2.localStorage.setItem('staySteps', JSON.stringify(PHOTO_STEPS));
+  w2.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+  w2.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+
+  const r3 = await w2.runStep(1, { uploaded: true });
+  ok(r3.open === 'ok', 'runStep: 룸 행의 [편집] 로 드로어를 연다', r3.open);
+  ok(r3.submit === 'upload-label', 'runStep: [사진 추가] 를 저장으로 누르지 않는다', r3);
+  ok(r3.submitted === false, 'runStep: 저장한 것으로 세지 않는다', r3.submitted);
+  ok(w2.stayRun.state().drawer.open === true, 'runStep: 드로어가 닫히지 않았다 — 룸 폼 [저장] 을 누르지 않았다');
+  ok(!/저장|추가|만들기|등록|확인/.test(r3.submitAs || ''), 'runStep: 대안 버튼을 훑지 않았다', r3.submitAs);
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
