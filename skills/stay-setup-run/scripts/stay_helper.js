@@ -657,7 +657,19 @@
   function setNativeSelect(sel, text) {
     var hit = pickOption(sel, text);
     if (hit.status === 'not-found') return { status: 'not-found', detail: '`' + text + '` 옵션이 없습니다 · 화면 옵션: ' + optionList(sel) };
-    if (hit.status === 'ambiguous') return { status: 'ambiguous', detail: '`' + text + '` 에 맞는 옵션이 ' + hit.count + '개입니다' };
+    if (hit.status === 'ambiguous') {
+      // 글자가 완전히 같은 옵션이 여럿(예: 취소정책 목록에 같은 이름이 호텔마다 하나씩)이면 값이 가장 큰(가장 최근에 만든) 것을 고른다
+      var same = [].slice.call(sel.options).filter(function (o) { return tier(o.textContent, text) === hit.tier; });
+      var texts = same.map(function (o) { return clean(o.textContent); });
+      var allSame = texts.every(function (t) { return t === texts[0]; });
+      var nums = same.map(function (o) { return parseInt(o.value, 10); });
+      if (allSame && nums.every(function (n) { return !isNaN(n); })) {
+        var best = same.reduce(function (a, o) { return parseInt(o.value, 10) > parseInt(a.value, 10) ? o : a; }, same[0]);
+        setSelectValue(sel, best.value);
+        return { status: 'ok', detail: selectedText(sel) + ' (같은 이름 ' + same.length + '개 중 최근 것)' };
+      }
+      return { status: 'ambiguous', detail: '`' + text + '` 에 맞는 옵션이 ' + hit.count + '개입니다' };
+    }
     setSelectValue(sel, hit.el.value);
     return { status: 'ok', detail: selectedText(sel) };
   }
