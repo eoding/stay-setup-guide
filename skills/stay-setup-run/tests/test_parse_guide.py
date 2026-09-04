@@ -73,7 +73,7 @@ class TestManual(unittest.TestCase):
 
     def test_step_count(self):
         self.assertEqual(len(self.steps), 59)
-        self.assertEqual([s["no"] for s in self.steps], list(range(1, 61)))
+        self.assertEqual([s["no"] for s in self.steps], list(range(1, 60)))
 
     def test_room_name_is_typed(self):
         f = field_by_label(step_by_no(self.steps, 10), "룸 이름")
