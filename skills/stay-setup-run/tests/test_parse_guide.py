@@ -489,6 +489,47 @@ class TestPreflight(unittest.TestCase):
         self.assertEqual(pre["stale"], [])
 
 
+#: A-seasense 지시서(2026-09-07)가 `그룹에 혜택 추가` 대신 쓴 표기 — 같은 화면(그룹 카드
+#: [이 그룹에 혜택 추가])의 다른 제목이다. 러너는 드로어 일반 처리로 이미 실행했지만
+#: `--check` 가 "모르는 단계 갈래" 로 알렸다 — `KNOWN_KINDS` 에 이 표기를 더한다.
+GROUP_CANDIDATE = """# 시험 호텔 — 입력 지시서
+
+## 1. 택1 그룹 후보 추가 (1번째, 편도 픽업)
+탭: `혜택`
+카드: `공항 이동 서비스 (숙박일수 조건)`
+버튼: [이 그룹에 혜택 추가]
+
+| 칸 | 값 |
+|---|---|
+| 소속 택1 그룹 | 선택: 공항 이동 서비스 (숙박일수 조건) |
+| 혜택 이름 | 공항 → 리조트 편도 픽업 무료 (4박 이상 예약 시) |
+
+→ [추가]
+"""
+
+
+class TestGroupCandidateKind(unittest.TestCase):
+    """A-seasense 지시서의 `택1 그룹 후보 추가` — `그룹에 혜택 추가` 의 동의 표기."""
+
+    @classmethod
+    def setUpClass(cls):
+        _, raws = parse_guide.parse_markdown(GROUP_CANDIDATE)
+        cls.steps = [parse_guide.build_step(r) for r in raws]
+
+    def test_title_parses_to_group_candidate_kind(self):
+        step = only_step(self.steps, "택1 그룹 후보 추가")
+        self.assertEqual(step["head"]["tab"], "혜택")
+        self.assertEqual(step["head"]["card"], "공항 이동 서비스 (숙박일수 조건)")
+        self.assertEqual(step["submit"], "추가")
+
+    def test_group_candidate_kind_is_known(self):
+        self.assertIn("택1 그룹 후보 추가", parse_guide.KNOWN_KINDS)
+
+    def test_preflight_reports_no_unknown_kind(self):
+        pre = parse_guide.preflight(self.steps)
+        self.assertEqual(pre["unknown_kinds"], [])
+
+
 def age_band_step(no, name, lo, hi, card="2026 계약"):
     """연령 구간 단계 한 개 — 겹침 시험용."""
     return ("## %d. 연령 구간 만들기 (%d번째, %s)\n"
