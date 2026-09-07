@@ -1,7 +1,7 @@
 ---
 name: stay-setup-guide
 description: "호텔 계약서(요금표)만 있는 여행사 담당자를 위해 ERP Stay 화면에 그대로 따라 칠 수 있는 입력 지시서(`<이름>_입력지시서.html`)를 만든다. 계약서 → 룰 정리 → 호텔·룸 팩트 수집 → 원고(manual.md) → 검사 → 지시서(HTML). '호텔 세팅 지시서', '계약서로 ERP 입력 순서', '호텔 깔기 매뉴얼', 'hotel contract to ERP input guide' 요청에 쓴다."
-version: 0.9.4
+version: 0.9.5
 platforms: [linux, macos, windows]
 metadata:
   hermes:
