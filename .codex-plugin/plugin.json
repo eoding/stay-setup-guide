@@ -1,0 +1,20 @@
+{
+  "name": "stay-setup",
+  "version": "0.9.0",
+  "description": "호텔 계약서 → ERP Stay 입력 지시서(HTML) 생성과 브라우저 자동 입력. 스킬 2개: stay-setup-guide(지시서 만들기), stay-setup-run(로그인된 Chrome 탭에서 실행).",
+  "repository": "https://github.com/eoding/stay-setup-guide",
+  "author": { "name": "eoding", "url": "https://github.com/eoding" },
+  "homepage": "https://github.com/eoding/stay-setup-guide",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": ["erp", "stay", "hotel", "contract", "onboarding", "eoding"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "eoding Stay Setup",
+    "shortDescription": "호텔 계약서로 ERP Stay 입력 지시서를 만들고 자동 입력",
+    "longDescription": "여행사 담당자가 호텔 계약서(요금표) 파일만으로 ERP Stay 화면에 그대로 따라 칠 수 있는 HTML 입력 지시서를 만들고, 로그인된 Chrome 탭에서 그 지시서를 자동 실행합니다. 판매 시작은 사람이 누릅니다.",
+    "developerName": "eoding",
+    "category": "Productivity",
+    "capabilities": ["Write"],
+    "defaultPrompt": ["이 폴더의 계약서로 ERP Stay 입력 지시서를 만들어 줘."]
+  }
+}
