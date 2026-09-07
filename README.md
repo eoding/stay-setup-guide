@@ -16,8 +16,11 @@ The screen dictionary and the step order follow the ERP screens in production on
 
 > **비개발자용 설치·사용 안내(윈도우·맥, 1장)**: [`docs/설치-사용-안내.md`](docs/설치-사용-안내.md) — 영업·운영 담당자는 이 문서만 보면 됩니다. 데모용 계약서·사진은 이 저장소에 넣지 않고 따로 전달합니다(호텔 계약 단가와 사진 저작권 때문).
 
+> **Install as a plugin (auto-updating)** — in Claude Code (CLI or desktop app Code tab): `/plugin marketplace add eoding/stay-setup-guide`, then `/plugin install stay-setup@eoding-stay`, then turn on auto-update for `eoding-stay` under `/plugin` → Marketplaces. Skills are then invoked as `/stay-setup:stay-setup-guide` and `/stay-setup:stay-setup-run`. Copying `skills/*` into `~/.claude/skills/` still works but does not update itself.
+
 | Path | Contents |
 |---|---|
+| `.claude-plugin/` | Plugin + marketplace manifests (`plugin.json`, `marketplace.json`); bump both `version` fields when a skill version changes |
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |
 | [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: takes that guide and fills the ERP Stay screens in the browser tab the user is logged into, step by step, writing a run log. It never presses [판매 시작] (start selling) |
 

@@ -1,0 +1,17 @@
+{
+  "name": "eoding-stay",
+  "owner": { "name": "eoding", "url": "https://github.com/eoding" },
+  "metadata": { "description": "eoding ERP Stay 호텔 세팅 스킬(지시서 생성 + 자동 입력)을 배포하는 마켓플레이스" },
+  "plugins": [
+    {
+      "name": "stay-setup",
+      "source": "./",
+      "description": "호텔 계약서 → ERP Stay 입력 지시서(HTML) 생성과 Chrome 자동 입력 (stay-setup-guide · stay-setup-run)",
+      "version": "0.9.0",
+      "author": { "name": "eoding", "url": "https://github.com/eoding" },
+      "category": "productivity",
+      "keywords": ["erp", "stay", "hotel", "contract"],
+      "homepage": "https://github.com/eoding/stay-setup-guide"
+    }
+  ]
+}
