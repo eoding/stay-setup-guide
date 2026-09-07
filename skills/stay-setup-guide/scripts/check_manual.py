@@ -158,6 +158,18 @@ ROW_SUFFIX_FIELDS = ("오퍼별 표시명", "연령별 단가")
 AGE_BAND_TITLE = "연령 구간 만들기"
 AGE_RATE_FIELD = "연령별 단가"
 
+# 계약서가 아동을 말하면(나이대·정원 내 무료 투숙·성인 요금의 %·쉐어베드) 그것은 **인원**이다 —
+# 방에서 자는 아이는 `연령 구간` 으로 넣어야 고객 화면 인원 선택기에 소아·유아가 선다.
+# 부가옵션으로 만들면 "아이를 추가로 산다" 로 읽히고 인원 선택기에는 성인만 남는다.
+# 실제 사례(2026-09-07): 정원 내 소아·유아 무료 투숙 계약이 연령 구간 0개로 깔렸다.
+ADDON_STEP_TITLES = ("부가옵션 만들기", "부과금 추가")
+CHILD_AUDIENCE_RE = re.compile(r"(소아|유아|아동|어린이)")
+# 이름이 **대상만** 말하는 꼴 — `소아` · `소아 (만6~11세)`. 무엇을 파는지가 없다.
+AUDIENCE_ONLY_NAME_RE = re.compile(r"^(소아|유아|아동|어린이|성인)\s*(\(.*\))?$")
+# 아동이 방에서 잔다는 표시 — 이 말이 보이면 연령 구간이 있어야 한다.
+CHILD_STAY_RE = re.compile(r"(무료\s*투숙|무료\s*숙박|쉐어\s*베드|쉐어베드|share\s*bed|엑스트라베드\s*무료)", re.I)
+CHILD_POLICY_STEP_TITLES = ("부가옵션", "혜택")
+
 # 만들기 드로어에만 있는 칸 — `{칸 이름: 그 드로어의 저장 버튼}`.
 # 요금제 정본은 만들 때와 고칠 때가 **다른 드로어**다(운영 화면 실측 — 만들기 드로어에만 그려지는 칸이 있다):
 # `지금 모든 객실에 배포` 체크박스와 그 묶음 머리 `배포` 는 [정본 만들기] 쪽에만 그려지고,
@@ -555,6 +567,47 @@ def find_age_band_order(steps):
             problems.append(
                 f"{step['num']}단계: `{AGE_RATE_FIELD}` 줄이 `{AGE_BAND_TITLE}` 단계보다 앞이다 — "
                 "연령 구간을 먼저 만들어야 그 칸이 화면에 생긴다"
+            )
+    return problems
+
+
+def find_audience_only_names(steps):
+    """`부가옵션 만들기` · `부과금 추가` 의 `이름` 이 **대상만** 적혀 있으면 오류.
+
+    `소아 (만6~11세)` 처럼 파는 물건이 빠진 이름은 고객 화면에서 "아이를 따로 산다" 로 읽힌다.
+    하프보드 소아 식사면 `하프보드 소아 (만6~11세)` 처럼 **무엇을 파는지**를 앞에 적는다.
+    (방에서 자는 아이 자체는 부가옵션이 아니라 `연령 구간` 이다 — 아래 검사.)
+    """
+    problems = []
+    for step in steps:
+        if not any(step["title"].startswith(t) for t in ADDON_STEP_TITLES):
+            continue
+        name = (step["fields"].get("이름") or "").strip()
+        if name and AUDIENCE_ONLY_NAME_RE.match(name):
+            problems.append(
+                f"{step['num']}단계: 부가옵션 이름이 대상만 적혀 있다({name}) — "
+                "무엇을 파는지 앞에 적는다(예: 하프보드 소아)"
+            )
+    return problems
+
+
+def find_child_policy_without_age_band(steps):
+    """아동이 방에서 잔다는 말이 보이는데 `연령 구간 만들기` 단계가 없으면 경고.
+
+    계약서의 "정원 내 소아·유아 무료 투숙(쉐어베드)" 은 **인원**이다 — 연령 구간으로 넣어야
+    고객 화면 인원 선택기에 소아·유아가 선다. 부가옵션·혜택 글에만 적어 두면 인원은 성인뿐이다.
+    """
+    if any(step["title"].startswith(AGE_BAND_TITLE) for step in steps):
+        return []
+    problems = []
+    for step in steps:
+        if not any(kind in step["title"] for kind in CHILD_POLICY_STEP_TITLES):
+            continue
+        text = " ".join([step["title"]] + [str(v) for v in step["fields"].values()])
+        if CHILD_AUDIENCE_RE.search(text) and CHILD_STAY_RE.search(text):
+            problems.append(
+                f"{step['num']}단계: 아동 정책이 보이는데 연령 구간 단계가 없다 — "
+                "계약서의 아동 정책은 연령 구간으로 넣는다"
             )
     return problems
 
@@ -1008,6 +1061,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     campaign_uses = find_campaign_uses(parsed)
     age_band_order = find_age_band_order(parsed)
     age_band_overlaps = find_age_band_overlaps(parsed)
+    audience_only_names = find_audience_only_names(parsed)
+    child_policy_gaps = find_child_policy_without_age_band(parsed)
     create_only_fields = find_create_only_fields(parsed)
     room_photo_saves = find_room_photo_saves(parsed)
     photo_count_gaps = find_photo_count_gaps(parsed)
@@ -1090,6 +1145,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "campaign_uses": campaign_uses,
         "age_band_order": age_band_order,
         "age_band_overlaps": age_band_overlaps,
+        "audience_only_names": audience_only_names,
+        "child_policy_gaps": child_policy_gaps,
         "create_only_fields": create_only_fields,
         "room_photo_saves": room_photo_saves,
         "photo_count_gaps": photo_count_gaps,
@@ -1158,7 +1215,8 @@ def main(argv=None):
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
-              + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"] + r["create_only_fields"]
+              + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
+              + r["audience_only_names"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["promo_common"] + r["season_saves"] + r["cancel_policy_saves"]
               + r["repeat_row_formats"] + r["check_value_classes"]):
@@ -1175,6 +1233,8 @@ def main(argv=None):
             "사용자에게 확인받은 기록이 changes.md 에 있어야 한다"
         )
     for w in r["needless_overwrite"]:
+        warnings.append(w)
+    for w in r["child_policy_gaps"]:
         warnings.append(w)
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]

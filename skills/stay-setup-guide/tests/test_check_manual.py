@@ -1451,3 +1451,117 @@ class AddressCellTest(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(self.MD)
             self.assertEqual(cm.check(path)["sheet_cells"], [])
+
+
+def child_addon_step(num, name, title="부가옵션 만들기", extra=()):
+    body = "\n".join(f"| {k} | {v} |" for k, v in extra)
+    return f"""
+## {num}. {title} (1개, {name})
+탭: `부가옵션`
+버튼: [부가옵션 추가]
+
+| 칸 | 값 |
+|---|---|
+| 오퍼 | 선택: 오퍼A |
+| 이름 | {name} |
+{body}
+
+→ [추가]
+"""
+
+
+def free_band_step(num, code, label, low, high):
+    return f"""
+## {num}. 연령 구간 만들기 (1번째, {label})
+탭: `오퍼`
+카드: `오퍼A`
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | {code} |
+| 노출명 | {label} |
+| 최소 연령 | {low} |
+| 최대 연령 | {high} |
+| 방 인원수에 포함 | 체크 |
+| 요금 기준 유형 | 선택: 무료 |
+
+→ [추가]
+"""
+
+
+class AudienceOnlyNameTest(unittest.TestCase):
+    """부가옵션·부과금 이름은 무엇을 파는지로 시작한다 — 대상만 적으면 오류."""
+
+    def test_audience_only_name_is_error(self):
+        md = HEAD + child_addon_step(4, "소아 (만6~11세)")
+        problems = cm.find_audience_only_names(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("대상만 적혀 있다", problems[0])
+        self.assertIn("하프보드 소아", problems[0])
+
+    def test_bare_audience_name_is_error(self):
+        md = HEAD + child_addon_step(4, "유아")
+        self.assertEqual(len(cm.find_audience_only_names(steps_of(md))), 1)
+
+    def test_product_first_name_is_ok(self):
+        md = HEAD + child_addon_step(4, "하프보드 소아 (만6~11세)")
+        self.assertEqual(cm.find_audience_only_names(steps_of(md)), [])
+
+    def test_surcharge_step_is_checked_too(self):
+        md = HEAD + child_addon_step(4, "아동", title="부과금 추가")
+        self.assertEqual(len(cm.find_audience_only_names(steps_of(md))), 1)
+
+    def test_other_step_kinds_are_not_checked(self):
+        md = HEAD + child_addon_step(4, "소아", title="혜택 추가")
+        self.assertEqual(cm.find_audience_only_names(steps_of(md)), [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_audience_only_names(steps), [])
+
+
+class ChildPolicyAgeBandTest(unittest.TestCase):
+    """아동이 방에서 잔다는 말이 보이는데 연령 구간 단계가 없으면 경고."""
+
+    FREE_STAY = (("설명", "룸별 최대 인원 내 소아·유아 무료 투숙 (쉐어베드)"),)
+
+    def test_child_free_stay_without_age_band_is_warning(self):
+        md = HEAD + child_addon_step(4, "조식 소아", extra=self.FREE_STAY)
+        problems = cm.find_child_policy_without_age_band(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("연령 구간 단계가 없다", problems[0])
+
+    def test_benefit_step_is_checked_too(self):
+        md = HEAD + child_addon_step(4, "소아 쉐어베드 무료 투숙", title="혜택 추가")
+        self.assertEqual(len(cm.find_child_policy_without_age_band(steps_of(md))), 1)
+
+    def test_age_band_step_silences_it(self):
+        md = HEAD + free_band_step(4, "INFANT", "유아", 0, "4.99") + child_addon_step(5, "조식 소아", extra=self.FREE_STAY)
+        self.assertEqual(cm.find_child_policy_without_age_band(steps_of(md)), [])
+
+    def test_addon_without_child_words_is_ok(self):
+        md = HEAD + child_addon_step(4, "엑스트라베드 (1대)")
+        self.assertEqual(cm.find_child_policy_without_age_band(steps_of(md)), [])
+
+    def test_child_word_without_stay_words_is_ok(self):
+        md = HEAD + child_addon_step(4, "하프보드 소아 (만6~11세)")
+        self.assertEqual(cm.find_child_policy_without_age_band(steps_of(md)), [])
+
+    def test_it_is_a_warning_not_an_error(self):
+        md = HEAD + child_addon_step(4, "조식 소아", extra=self.FREE_STAY)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+        self.assertEqual(len(r["child_policy_gaps"]), 1)
+        self.assertEqual(r["audience_only_names"], [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_child_policy_without_age_band(steps), [])
