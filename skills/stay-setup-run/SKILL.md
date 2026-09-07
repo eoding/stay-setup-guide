@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.6.0
+version: 0.7.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -69,6 +69,41 @@ npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/_inject/st
 - minify 는 브라우저 JS 도구의 한 번 호출 크기를 줄이려는 것이다. esbuild 가 없으면 원본 파일을 그대로 올려도 된다.
 - 탭이 편집 화면이면 `호텔 만들기` 단계는 `건너뜀 · 이미 있음` 으로 두고 이어서 한다.
 
+## 브라우저 도구 — 이 셋만 되면 무엇이든 된다
+
+러너가 브라우저 에이전트에게 요구하는 것은 셋뿐이다. 도구 이름은 상관없다.
+
+1. **로그인된 ERP 탭 안에서 자바스크립트 실행** — 값을 돌려받아야 한다(`await` 되는 표현식 하나를 넣고 결과를 받는 꼴).
+2. **그 페이지의 파일 칸에 로컬 파일 넣기** — 파일 다리(`input#stay_file_bridge`)에 올린다.
+3. **스크린샷** — 화면이 통째로 넘어간 뒤 컨텍스트를 다시 맞출 때, 그리고 사람에게 보일 때 쓴다.
+
+**시간·크기 예산** — 한 번의 JS 호출이 **45초**에서 끊긴다고 보고 한 호출에 3~10 단계, 단계마다
+9~15초 제한, 누적 **30초**에서 끊는다. 파일 업로드는 한 번에 **10MB** 까지다. 탭이 뒤에 있어도
+도우미는 워커 타이머로 대기를 재므로 돌아가지만, **스크린샷만은 탭이 앞에 있어야** 찍힌다.
+
+### Claude Code (Claude in Chrome 확장) — 실측 완료
+
+| 필요한 것 | 오늘 쓰는 도구 |
+|---|---|
+| JS 실행 | `mcp__claude-in-chrome__javascript_tool` |
+| 파일 넣기 | `mcp__claude-in-chrome__file_upload` |
+| 스크린샷 | `mcp__claude-in-chrome__computer` (screenshot) |
+| 탭 고르기·열기 | `mcp__claude-in-chrome__tabs_context_mcp` · `tabs_create_mcp` · `navigate` |
+
+호텔 7곳을 이 조합으로 1단계부터 끝까지 돌렸다. 확장은 **사이트마다 권한을 따로 받는다** —
+ERP 도메인을 미리 허용해 두어야 한다.
+
+### Codex (Codex Chrome 확장 + 개발자 모드/CDP) — **실측 전**
+
+**된다고 말하지 않는다.** 아래 셋을 먼저 확인하고, 셋 다 되면 위 표와 같은 꼴로 도구 이름을 적는다.
+
+1. 로그인된 탭에서 **임의의 JS 를 평가하고 값을 돌려받는지** — `(0,eval)(…)` 로 도우미를 올릴 수 있는지, `await` 되는 표현식의 결과가 오는지.
+2. **사이트별 파일 넣기 권한** — 페이지의 `input[type=file]` 에 로컬 파일을 넣을 수 있는지, 그 권한을 도메인마다 따로 받아야 하는지.
+3. **한 호출의 시간 제한** — 45초보다 짧으면 단계 묶음을 그만큼 줄인다.
+
+셋 중 하나라도 안 되면 그 부분은 사람이 한다 — 파일을 못 넣으면 사진 단계는
+`건너뜀 · 사용자 업로드 필요` 로 남기고 이어서 간다.
+
 ## 페이지에 도우미 올리기 (파일 다리)
 
 브라우저 JS 도구는 한 호출이 **45초**에서 끊기고 긴 글자를 넣기 힘들다. 그래서 파일을 **페이지 안 파일 칸(파일 다리)** 으로 올리고, 페이지가 스스로 읽게 한다.
@@ -98,6 +133,7 @@ stayRun.submit("저장")             // {status:"closed|stayed|navigated|login|t
                                    // errors 는 진짜 오류만이다 — 성공 안내 띠는 toast 로만 온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
 stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFor(fn, ms) · stayRun.findButton(scope, "저장")
+stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progressState() · stayRun.progressHide()
 ```
 
 ## 단계 반복
@@ -132,6 +168,54 @@ stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFo
 - `submit` 이 `closed` 가 아니면 화면을 보고 판단한다. `skipped: true` 는 같은 이름이 이미 목록에 있어 건너뛴 것이다(정상).
 - `mismatch`(되읽기 불일치)는 대개 되읽기의 한계다 — 포함물 행, 제공 주기, 요금제 scope, 정률 값, 침대 구성. **화면 값을 따로 확인**하고 맞으면 로그 비고에 `되읽기만` 이라고 적는다.
 - 지시서의 저장 글자와 화면 버튼 글자가 다르면(시즌 드로어는 [추가]) 도우미가 `저장·추가·만들기·등록·확인` 을 차례로 시도하고 `submitAs` 로 알려 준다.
+
+## 진행 상황 보이기
+
+옆에서 보는 사람이 **어디까지 갔는지** 알 수 있게 두 곳에 표시한다. 둘 다 실행을 바꾸지 않는다 —
+표시가 실패해도 단계는 그대로 돌고, 표시 때문에 멈추지 않는다.
+
+### ERP 화면의 진행 띠 (늘 켜져 있다)
+
+도우미가 ERP 페이지 **오른쪽 위**에 작은 띠(`div#stay_progress`)를 그린다. `runStep` 이 스스로
+갱신하므로 반복문에 따로 넣을 것이 없다.
+
+```
+12 / 77 · 지금: 룸 만들기 (2번째, 씨뷰 빌라) · 완료 11 · 건너뜀 1
+```
+
+- 돌아가는 중이면 초록, 실패하면 빨강(실패한 단계 제목이 `지금:` 자리에 그대로 남는다), 다 하면 회색 `끝`.
+- 클릭을 가로채지 않는다(`pointer-events:none`) — 검증 배너도 드로어도 가리지 않는다. ✕ 로 끌 수 있다.
+- 화면이 통째로 갈려도 스스로 다시 붙는다. 도우미를 다시 eval 해도 띠는 하나다.
+- 실행을 시작할 때 `progressReset()` 를 한 번 부른다(총 단계 수를 실행 계획에서 읽어 넣는다).
+- 세는 방식은 **단계 번호별 마지막 판정**이다 — 같은 단계를 다시 돌리면 그 판정이 갈릴 뿐 숫자가 늘지 않는다.
+  사진 단계처럼 파일을 넣고 다시 부르는 단계(`submit: 'upload-label'`)와 `{dry:true}` 는 어느 칸에도 세지 않는다.
+- 고쳐서 다시 돌린 단계는 판정이 `실패` 에서 `완료` 로 갈리고 실패 수가 도로 줄어든다. **띠는 지금 상태만 보인다** —
+  한 번 어긋났다는 자취는 로그가 지닌다(`**재실행**` 줄과 `완료(재실행)`, 앞 줄은 고치지 않는다).
+- 로그에 적을 때는 `stayRun.progressState()` 로 숫자를 읽는다.
+
+### 지시서 HTML 탭의 체크 (열려 있을 때만)
+
+지시서(`<이름>_입력지시서.html`)를 **같은 브라우저의 다른 탭**에 열어 두면 체크와 진행 막대가 저절로 오른다.
+
+1. 시작할 때 사용자에게 지시서를 옆 탭에 열어 달라고 부탁한다. 브라우저 도구가 로컬 파일(`file://…`)을
+   열 수 있으면 에이전트가 직접 연다. **못 열면 그냥 넘어간다** — 있으면 좋은 것이지 없으면 안 되는 것이 아니다.
+2. 한 묶음(3~10 단계)을 끝낼 때마다 **그 탭에서** 한 번 부른다. 방금 끝낸 단계를 목록으로 통째로 넘긴다.
+
+```js
+stayGuide.mark([
+  {no: 12, status: '완료'},
+  {no: 13, status: '건너뜀', note: '이미 있음: 디럭스'},
+  {no: 14, status: '실패',  note: '카드를 찾지 못했습니다'}
+]);
+stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된다
+```
+
+- 상태는 여섯이다: `대기` · `진행 중` · `완료` · `건너뜀` · `실패` · `확인 필요`.
+  `runStep` 결과를 그대로 옮긴다 — `skipped: true` → `건너뜀`, `refused`·`bad`·`open: 'not-found'` → `실패`,
+  `mismatch` 만 남았으면 `확인 필요`, 나머지는 `완료`.
+- 지시서 탭이 없으면 **말없이 건너뛴다.** 실행을 멈추거나 사용자에게 다시 묻지 않는다.
+- 사람이 손으로 체크하던 길은 그대로다. 손으로 켠 것은 `완료 (수동)` 로 구분해 남는다.
+- `stayGuide.export()` 는 단계별 상태·시각을 JSON 으로 돌려준다 — 로그에 그대로 붙일 수 있다.
 
 ## 화면이 통째로 바뀌는 단계
 
@@ -196,6 +280,8 @@ stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFo
 
 `<공유 폴더명>_실행/run-log.md` 에 단계마다 한 줄로 적는다(형식은 `references/run-log-spec.md`).
 같은 호텔을 다시 실행하면 마지막 `완료` 다음 단계부터 이어서 한다.
+지시서 탭을 썼다면 `stayGuide.export()` 가 돌려준 JSON 을 로그 끝에 코드블록으로 붙여도 된다 —
+단계별 상태와 시각이 한눈에 남는다.
 
 ## 지시서 쪽에 요청할 것
 
@@ -218,7 +304,7 @@ stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFo
 
 ## 끝낼 때
 
-- 완료·건너뜀·실패·재실행 단계 수와 목록
+- 완료·건너뜀·실패·재실행 단계 수와 목록 (`stayRun.progressState()` 의 숫자와 맞는지 본다)
 - 되읽기 불일치와 비워 둔 칸
 - `stayRun.state().banner` 의 남은 막힘(🔴)·권고(🟡)
 - 감독자가 직접 누른 위험 버튼 목록

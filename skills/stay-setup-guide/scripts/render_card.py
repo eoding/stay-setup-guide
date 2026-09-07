@@ -207,6 +207,22 @@ ACTION_LINE_RE = re.compile(r'^→\s*\[(.+?)\]\s*$')
 HEADING_NUM_RE = re.compile(r'^(\d+)\.\s*(.*)$')  # "## 1. 제목" -> 단계 번호/제목 분리
 
 
+def heading_step_no(text):
+    """`## N. 제목` 의 단계 번호 N(정수). 번호가 없으면 None.
+
+    이 번호가 곧 `data-step` 이고, 자동 실행기(window.stayGuide)와 주고받는 약속이다.
+    문서에서 몇 번째로 나왔는지가 아니라 **제목에 적힌 번호**에서만 뽑는다 —
+    렌더 순서가 바뀌어도 번호는 그대로여야 한다.
+    """
+    m = HEADING_NUM_RE.match(to_plain_text(text))
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
+
 def split_table_row(line):
     s = line.strip()
     if s.startswith('|'):
@@ -695,9 +711,15 @@ def render_block(b, stats, existing_ids, nav_items):
                 f'<label class="step-done-wrap"><input type="checkbox" class="step-done" '
                 f'data-key="{skey}"><span>완료</span></label>'
             )
+            # 상태 딱지 — 자동 실행기가 여기 글자를 갈아 끼운다. 번호가 없는 제목엔 붙이지 않는다.
+            step_no = heading_step_no(plain)
+            status_html = (
+                f'<span class="step-status" data-step="{step_no}" data-status="대기">대기</span>'
+                if step_no is not None else ''
+            )
             return (
                 f'<h2 id="{_id}"><span class="step-head">{num_span}'
-                f'<span class="step-title">{title_html}</span></span>{done_html}</h2>'
+                f'<span class="step-title">{title_html}</span></span>{status_html}{done_html}</h2>'
             )
 
         inner = render_inline(raw, stats, code_buttons=False)
@@ -928,6 +950,25 @@ def group_toc_items(nav_items):
     return groups
 
 
+def build_progress_panel(total):
+    """h1 바로 아래·목차 위에 붙는 "진행 현황" 머리말.
+
+    처음 글자는 아무것도 안 한 상태 그대로 두고, 실제 숫자는 화면에서 JS 가 채운다
+    (사람이 직접 체크하든 자동 실행기가 `window.stayGuide.mark()` 로 찍든 같은 자리를 고친다).
+    `data-total` 은 번호가 붙은 `##` 단계의 개수다 — JS 가 세지 않고 여기서 받아 쓴다.
+    """
+    return (
+        f'<section class="progress-panel" data-total="{total}">'
+        '<p class="progress-title">진행 현황</p>'
+        '<div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>'
+        '<p class="progress-counts"><span class="progress-done">완료 0</span> / '
+        f'<span class="progress-total">전체 {total}</span><span class="progress-extra"></span></p>'
+        '<p class="progress-current">아직 시작하지 않았습니다</p>'
+        '<p class="progress-times"></p>'
+        '</section>'
+    )
+
+
 def build_toc(nav_items):
     """nav_items: [(id, level, label)] — 실제 입력 단계인 ## 제목만 담긴다(### 중첩 없음).
     같은 접두로 연속되는 단계는 "N~M. 접두 (count회)" 한 줄로 묶고 첫 단계로 링크한다.
@@ -970,6 +1011,12 @@ _STYLE_CSS_BODY = """
   --brick:#C8553D;
   --code-bg:#E1E9F2;
   --panel:#FFFFFF;
+  --badge-wait-bg:#E3E9F1;  --badge-wait-ink:#5E6E82;
+  --badge-run-bg:#D9E8F6;   --badge-run-ink:#26567E;
+  --badge-done-bg:#DCEFE0;  --badge-done-ink:#2C6B3D;
+  --badge-skip-bg:#E7EAEE;  --badge-skip-ink:#69727E;
+  --badge-fail-bg:#F8DED8;  --badge-fail-ink:#9C3823;
+  --badge-check-bg:#FBEBC9; --badge-check-ink:#84600F;
   color-scheme:light dark;
 }
 @media (prefers-color-scheme:dark){
@@ -984,6 +1031,12 @@ _STYLE_CSS_BODY = """
     --brick:#E8846C;
     --code-bg:#1C2736;
     --panel:#182233;
+    --badge-wait-bg:#22303F;  --badge-wait-ink:#9FB0C3;
+    --badge-run-bg:#1E3A52;   --badge-run-ink:#8FC3EE;
+    --badge-done-bg:#1D3B2A;  --badge-done-ink:#8FD2A3;
+    --badge-skip-bg:#252E3A;  --badge-skip-ink:#93A1B2;
+    --badge-fail-bg:#40241E;  --badge-fail-ink:#F0A18C;
+    --badge-check-bg:#3D3218; --badge-check-ink:#F2C868;
   }
 }
 :root[data-theme="dark"]{
@@ -997,6 +1050,12 @@ _STYLE_CSS_BODY = """
   --brick:#E8846C;
   --code-bg:#1C2736;
   --panel:#182233;
+  --badge-wait-bg:#22303F;  --badge-wait-ink:#9FB0C3;
+  --badge-run-bg:#1E3A52;   --badge-run-ink:#8FC3EE;
+  --badge-done-bg:#1D3B2A;  --badge-done-ink:#8FD2A3;
+  --badge-skip-bg:#252E3A;  --badge-skip-ink:#93A1B2;
+  --badge-fail-bg:#40241E;  --badge-fail-ink:#F0A18C;
+  --badge-check-bg:#3D3218; --badge-check-ink:#F2C868;
 }
 body{
   margin:0;
@@ -1069,6 +1128,34 @@ section.step.done, section.step.done *{color:var(--muted) !important;border-colo
   cursor:pointer;white-space:nowrap;margin-left:auto;
 }
 .step-done-wrap input[type=checkbox]{width:20px;height:20px;}
+.step-status{
+  flex:0 0 auto;display:inline-block;border-radius:999px;
+  padding:1px 8px;font-size:13px;font-weight:700;line-height:1.6;white-space:nowrap;
+  background:var(--badge-wait-bg);color:var(--badge-wait-ink);
+}
+.step-status[data-status="진행 중"]{background:var(--badge-run-bg);color:var(--badge-run-ink);}
+.step-status[data-status="완료"]{background:var(--badge-done-bg);color:var(--badge-done-ink);}
+.step-status[data-status="건너뜀"]{background:var(--badge-skip-bg);color:var(--badge-skip-ink);}
+.step-status[data-status="실패"]{background:var(--badge-fail-bg);color:var(--badge-fail-ink);}
+.step-status[data-status="확인 필요"]{background:var(--badge-check-bg);color:var(--badge-check-ink);}
+/* 끝난 단계는 본문을 통째로 회색으로 죽이므로, 딱지만 다시 살려 읽히게 한다. */
+section.step.done .step-status{background:var(--badge-done-bg) !important;color:var(--badge-done-ink) !important;}
+section.step.done .step-status[data-status="건너뜀"]{background:var(--badge-skip-bg) !important;color:var(--badge-skip-ink) !important;}
+.step-note{margin:8px 0 0;font-size:15px;line-height:1.5;color:var(--muted);}
+.progress-panel{
+  position:sticky;top:0;z-index:20;
+  background:var(--panel);border-bottom:1px solid var(--rule);
+  margin:0 -24px 32px;padding:12px 24px 10px;
+}
+.progress-title{margin:0 0 6px;font-size:15px;font-weight:700;}
+.progress-bar{height:8px;border-radius:999px;background:var(--code-bg);overflow:hidden;}
+.progress-fill{height:100%;width:0;background:var(--sky);border-radius:999px;transition:width .25s ease;}
+.progress-counts{margin:7px 0 0;font-size:15px;color:var(--muted);}
+.progress-done{font-weight:700;color:var(--ink);}
+.progress-extra{margin-left:2px;}
+.progress-current{margin:2px 0 0;font-size:15px;}
+.progress-times{margin:2px 0 0;font-size:13px;color:var(--muted);}
+.progress-times:empty{margin:0;}
 .table-wrap{overflow-x:auto;margin:12px 0;}
 table{width:100%;border-collapse:collapse;font-size:17px;}
 th,td{border:none;border-bottom:1px solid var(--rule);padding:14px 10px;text-align:left;vertical-align:top;word-wrap:break-word;}
@@ -1113,6 +1200,9 @@ td.value-cell .copy-btn{flex:0 0 auto;white-space:nowrap;}
   body{background:#fff;color:#000;}
   section.step,.toc,.action-box,.codeblock-wrap,code{background:none !important;}
   .copy-btn{display:none !important;}
+  /* 종이에는 붙어 다닐 자리가 없다 — 진행 현황은 맨 위에 한 번만 찍는다. */
+  .progress-panel{position:static !important;margin:0 0 24px;padding:0 0 10px;background:none !important;}
+  .progress-panel{page-break-inside:avoid;}
   a{color:#000;text-decoration:underline;}
   tr{page-break-inside:avoid;}
   h1,h2,h3,h4{page-break-after:avoid;}
@@ -1202,6 +1292,15 @@ SCRIPT_JS = """
     triggerCopy(t.querySelector('.copy-btn'));
   });
 
+  // 아래 "완료" 체크박스 블록과 그 밑 진행 현황 블록을 잇는 다리.
+  // setChecked 는 진행 현황 쪽이 체크박스를 대신 켜고 끌 때 쓰고(저장·목차 표시는 기존 길을 그대로 탄다),
+  // onManualToggle 은 사람이 직접 체크했을 때만 불린다 — programmaticTick 이 켜져 있으면 기계가 켠 것이다.
+  var stepHooks = {
+    setChecked: null,
+    onManualToggle: function(){}
+  };
+  var programmaticTick = false;
+
   try {
     var STORE_KEY = 'stay-card-progress-v1';
     var store = {};
@@ -1251,10 +1350,383 @@ SCRIPT_JS = """
             window.localStorage.setItem(STORE_KEY, JSON.stringify(s));
             store = s;
           } catch (e) {}
-          if (isStep) syncStepDone(cb);
+          if (isStep) {
+            syncStepDone(cb);
+            if (!programmaticTick) { try { stepHooks.onManualToggle(cb); } catch (e2) {} }
+          }
         });
       })(boxes[i]);
     }
+
+    // 진행 현황 쪽에서 체크박스를 대신 켜고 끄는 길. 위의 change 처리기를 그대로 태워
+    // 저장(stay-card-progress-v1)과 목차 표시를 한 번에 맞춘다.
+    stepHooks.setChecked = function(sec, checked){
+      if (!sec) return;
+      var cb = sec.querySelector('input.step-done');
+      if (!cb || cb.checked === checked) return;
+      cb.checked = checked;
+      programmaticTick = true;
+      try {
+        var ev;
+        if (typeof window.Event === 'function') {
+          ev = new window.Event('change', {bubbles: true});
+        } else {
+          ev = document.createEvent('HTMLEvents');
+          ev.initEvent('change', true, false);
+        }
+        cb.dispatchEvent(ev);
+      } catch (e) {}
+      programmaticTick = false;
+    };
+  } catch (e) {}
+
+  // ---------------------------------------------------------------------
+  // 진행 현황 — 자동 실행기가 부르는 window.stayGuide 와 그 머리말 표시
+  // ---------------------------------------------------------------------
+  try {
+    var WAIT = '대기';
+    var RUN = '진행 중';
+    var DONE = '완료';
+    var SKIP = '건너뜀';
+    var FAIL = '실패';
+    var CHECK = '확인 필요';
+    var MANUAL_DONE = '완료 (수동)';
+    var CANON = [WAIT, RUN, DONE, SKIP, FAIL, CHECK];
+    var ALIAS = {
+      'pending': WAIT, 'waiting': WAIT,
+      'running': RUN, 'current': RUN, 'active': RUN,
+      'done': DONE, 'ok': DONE, 'success': DONE,
+      'skipped': SKIP, 'skip': SKIP,
+      'failed': FAIL, 'fail': FAIL, 'error': FAIL,
+      'check': CHECK, 'review': CHECK, 'warn': CHECK
+    };
+
+    function normStatus(raw){
+      if (raw === null || raw === undefined) return null;
+      var t = String(raw).trim();
+      if (!t) return null;
+      if (t === MANUAL_DONE) return MANUAL_DONE;
+      var i;
+      for (i = 0; i < CANON.length; i++) { if (CANON[i] === t) return CANON[i]; }
+      var low = t.toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(ALIAS, low)) return ALIAS[low];
+      // "진행중" 처럼 사이 띄어쓰기가 빠진 것도 받아 준다
+      var squeezed = t.replace(/\\s+/g, '');
+      for (i = 0; i < CANON.length; i++) {
+        if (CANON[i].replace(/\\s+/g, '') === squeezed) return CANON[i];
+      }
+      return null;  // 모르는 상태는 조용히 버린다
+    }
+
+    // 저장 열쇠는 검사 도장의 sha256 에 매단다 — 지시서가 다시 렌더되면 기록도 새로 시작한다.
+    var STEP_STORE_KEY = 'stayGuide:nostamp';
+    try {
+      // 도장 meta 의 이름은 통째로 적지 않고 이어 붙인다 — 도장을 안 박은 지시서에도
+      // 이 스크립트 때문에 그 글자가 남으면 도장 있는 문서와 글자만 보고는 구분이 안 된다.
+      var stampMeta = document.querySelector('meta[name="' + 'stay-guide' + '-stamp"]');
+      var stampVal = stampMeta ? (stampMeta.getAttribute('content') || '') : '';
+      var shaMatch = /sha256=([0-9a-fA-F]+)/.exec(stampVal);
+      if (shaMatch) STEP_STORE_KEY = 'stayGuide:' + shaMatch[1];
+    } catch (e) {}
+
+    var panel = document.querySelector('.progress-panel');
+    var total = 0;
+    if (panel) {
+      total = parseInt(panel.getAttribute('data-total'), 10);
+      if (isNaN(total)) total = 0;
+    }
+
+    var steps = {};
+    var order = [];
+    var secs = document.querySelectorAll('section.step[data-step]');
+    for (var s0 = 0; s0 < secs.length; s0++) {
+      var sec = secs[s0];
+      var no = parseInt(sec.getAttribute('data-step'), 10);
+      if (isNaN(no) || steps[no]) continue;
+      var titleEl = sec.querySelector('.step-title');
+      steps[no] = {
+        no: no,
+        title: titleEl ? (titleEl.textContent || '').replace(/\\s+/g, ' ').trim() : '',
+        sec: sec,
+        badge: sec.querySelector('.step-status'),
+        noteEl: sec.querySelector('.step-note'),
+        status: WAIT,
+        note: '',
+        at: null
+      };
+      order.push(no);
+    }
+    order.sort(function(a, b){ return a - b; });
+
+    var startedAt = null;
+    var updatedAt = null;
+    var currentNo = null;
+
+    function nowIso(){
+      try { return new Date().toISOString(); } catch (e) { return null; }
+    }
+
+    function touch(iso){
+      if (!iso) return;
+      if (!startedAt) startedAt = iso;
+      updatedAt = iso;
+    }
+
+    function isDone(st){ return st.status === DONE || st.status === MANUAL_DONE; }
+
+    function setChecked(st, checked){
+      try { if (stepHooks.setChecked) stepHooks.setChecked(st.sec, checked); } catch (e) {}
+    }
+
+    function renderStep(st){
+      var manual = st.status === MANUAL_DONE;
+      var shown = manual ? DONE : st.status;
+      if (st.badge) {
+        st.badge.textContent = shown;
+        st.badge.setAttribute('data-status', shown);
+        if (manual) {
+          st.badge.setAttribute('data-manual', '1');
+          st.badge.setAttribute('title', '사람이 직접 체크한 완료');
+        } else {
+          st.badge.removeAttribute('data-manual');
+          st.badge.removeAttribute('title');
+        }
+      }
+      if (st.noteEl) {
+        if (st.note) {
+          st.noteEl.textContent = st.note;
+          st.noteEl.hidden = false;
+        } else {
+          st.noteEl.textContent = '';
+          st.noteEl.hidden = true;
+        }
+      }
+    }
+
+    function pad2(n){ return (n < 10 ? '0' : '') + n; }
+
+    function hhmm(iso){
+      if (!iso) return '';
+      try {
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+      } catch (e) { return ''; }
+    }
+
+    function pickCurrent(){
+      var i;
+      if (currentNo !== null && steps[currentNo]) return steps[currentNo];
+      for (i = 0; i < order.length; i++) { if (steps[order[i]].status === RUN) return steps[order[i]]; }
+      for (i = 0; i < order.length; i++) { if (steps[order[i]].status === WAIT) return steps[order[i]]; }
+      return null;
+    }
+
+    function renderPanel(){
+      if (!panel) return;
+      var done = 0, skipped = 0, failed = 0, pending = 0, running = 0, i;
+      for (i = 0; i < order.length; i++) {
+        var st = steps[order[i]];
+        if (isDone(st)) done++;
+        else if (st.status === SKIP) skipped++;
+        else if (st.status === FAIL) failed++;
+        else if (st.status === RUN) running++;
+        else if (st.status === WAIT) pending++;
+      }
+      var t = total || order.length;
+      var pct = t ? Math.round(((done + skipped) / t) * 100) : 0;
+      if (pct > 100) pct = 100;
+      if (pct < 0) pct = 0;
+
+      var fill = panel.querySelector('.progress-fill');
+      if (fill) fill.style.width = pct + '%';
+      var doneEl = panel.querySelector('.progress-done');
+      if (doneEl) doneEl.textContent = '완료 ' + done;
+      var totalEl = panel.querySelector('.progress-total');
+      if (totalEl) totalEl.textContent = '전체 ' + t;
+      var extraEl = panel.querySelector('.progress-extra');
+      if (extraEl) {
+        var extra = '';
+        if (skipped) extra += ' · 건너뜀 ' + skipped;
+        if (failed) extra += ' · 실패 ' + failed;
+        extraEl.textContent = extra;
+      }
+
+      var curEl = panel.querySelector('.progress-current');
+      if (curEl) {
+        if (!startedAt) {
+          curEl.textContent = '아직 시작하지 않았습니다';
+        } else if (order.length && pending === 0 && running === 0) {
+          // 남은 단계도, 붙잡고 있는 단계도 없으면 끝난 것이다(실패·확인 필요도 매듭은 지어졌다)
+          curEl.textContent = '끝';
+        } else {
+          var cur = pickCurrent();
+          curEl.textContent = cur ? ('지금: ' + (cur.title || ('' + cur.no + '단계'))) : '끝';
+        }
+      }
+
+      var timeEl = panel.querySelector('.progress-times');
+      if (timeEl) {
+        var a = hhmm(startedAt);
+        var b = hhmm(updatedAt);
+        timeEl.textContent = a ? ('시작 ' + a + ' · 마지막 ' + (b || a)) : '';
+      }
+    }
+
+    function save(){
+      try {
+        var out = {v: 1, startedAt: startedAt, updatedAt: updatedAt, current: currentNo, steps: {}};
+        for (var i = 0; i < order.length; i++) {
+          var st = steps[order[i]];
+          if (st.status === WAIT && !st.note && !st.at) continue;
+          out.steps['' + st.no] = {status: st.status, note: st.note, at: st.at};
+        }
+        window.localStorage.setItem(STEP_STORE_KEY, JSON.stringify(out));
+      } catch (e) {}
+    }
+
+    function load(){
+      try {
+        var raw = window.localStorage.getItem(STEP_STORE_KEY);
+        if (!raw) return;
+        var data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return;
+        startedAt = data.startedAt || null;
+        updatedAt = data.updatedAt || null;
+        currentNo = (typeof data.current === 'number' && steps[data.current]) ? data.current : null;
+        var src = data.steps || {};
+        for (var k in src) {
+          if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
+          var st = steps[parseInt(k, 10)];
+          if (!st) continue;
+          var rec = src[k] || {};
+          st.status = normStatus(rec.status) || WAIT;
+          st.note = rec.note ? String(rec.note) : '';
+          st.at = rec.at || null;
+        }
+      } catch (e) {}
+    }
+
+    function markOne(no, status, note){
+      var st = steps[parseInt(no, 10)];
+      if (!st) return false;                    // 이 렌더에 없는 단계 번호는 조용히 넘긴다
+      var s = normStatus(status);
+      if (!s) return false;                     // 모르는 상태도 마찬가지
+      st.status = s;
+      if (note !== undefined && note !== null) st.note = String(note);
+      st.at = nowIso();
+      touch(st.at);
+      setChecked(st, s === DONE || s === MANUAL_DONE || s === SKIP);
+      if (s === RUN) currentNo = st.no;
+      else if (currentNo === st.no) currentNo = null;
+      renderStep(st);
+      return true;
+    }
+
+    function mark(no, status, note){
+      try {
+        var changed = false;
+        var isArr = (typeof Array.isArray === 'function') ? Array.isArray(no)
+                    : (Object.prototype.toString.call(no) === '[object Array]');
+        if (isArr) {
+          for (var i = 0; i < no.length; i++) {
+            var it = no[i] || {};
+            if (markOne(it.no, it.status, it.note)) changed = true;
+          }
+        } else {
+          changed = markOne(no, status, note);
+        }
+        renderPanel();
+        save();
+        return changed;
+      } catch (e) { return false; }
+    }
+
+    function current(no){
+      try {
+        var st = steps[parseInt(no, 10)];
+        if (!st) return false;
+        markOne(st.no, RUN);
+        currentNo = st.no;
+        renderPanel();
+        save();
+        try {
+          if (st.sec && st.sec.scrollIntoView) st.sec.scrollIntoView({block: 'center', behavior: 'smooth'});
+        } catch (e) {}
+        return true;
+      } catch (e) { return false; }
+    }
+
+    function reset(){
+      try {
+        for (var i = 0; i < order.length; i++) {
+          var st = steps[order[i]];
+          st.status = WAIT;
+          st.note = '';
+          st.at = null;
+          setChecked(st, false);
+          renderStep(st);
+        }
+        startedAt = null;
+        updatedAt = null;
+        currentNo = null;
+        try { window.localStorage.removeItem(STEP_STORE_KEY); } catch (e) {}
+        renderPanel();
+        return true;
+      } catch (e) { return false; }
+    }
+
+    function exportState(){
+      var out = {total: 0, done: 0, skipped: 0, failed: 0, pending: 0,
+                 startedAt: null, updatedAt: null, steps: []};
+      try {
+        out.total = total || order.length;
+        out.startedAt = startedAt;
+        out.updatedAt = updatedAt;
+        for (var i = 0; i < order.length; i++) {
+          var st = steps[order[i]];
+          if (isDone(st)) out.done++;
+          else if (st.status === SKIP) out.skipped++;
+          else if (st.status === FAIL) out.failed++;
+          else if (st.status === WAIT) out.pending++;
+          out.steps.push({no: st.no, title: st.title, status: st.status,
+                          note: st.note, at: st.at});
+        }
+      } catch (e) {}
+      return out;
+    }
+
+    // 사람이 직접 "완료" 를 켜고 끈 것 — 기계가 켠 것과 구분해 "완료 (수동)" 으로 남긴다.
+    stepHooks.onManualToggle = function(cb){
+      try {
+        var sec2 = cb.closest ? cb.closest('section.step[data-step]') : null;
+        if (!sec2) return;
+        var st = steps[parseInt(sec2.getAttribute('data-step'), 10)];
+        if (!st) return;
+        st.status = cb.checked ? MANUAL_DONE : WAIT;
+        st.at = nowIso();
+        touch(st.at);
+        if (currentNo === st.no) currentNo = null;
+        renderStep(st);
+        renderPanel();
+        save();
+      } catch (e) {}
+    };
+
+    load();
+    for (var r = 0; r < order.length; r++) {
+      var st2 = steps[order[r]];
+      setChecked(st2, isDone(st2) || st2.status === SKIP);
+      renderStep(st2);
+    }
+    renderPanel();
+
+    window.stayGuide = {
+      mark: mark,
+      current: current,
+      reset: reset,
+      'export': exportState
+    };
   } catch (e) {}
 })();
 """
@@ -1291,7 +1763,7 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
     stats = {
         'tables': 0, 'checkboxes': 0, 'copy_code': 0, 'copy_cell': 0,
         'copy_photo': 0, 'copy_block': 0, 'photos': 0, 'nav_items': 0,
-        'photo_notices': 0, 'photo_sources': 0,
+        'photo_notices': 0, 'photo_sources': 0, 'steps': 0,
         'value_kinds': Counter(),  # typed/select/check/muted/file 셀 개수 (2열 표만)
     }
 
@@ -1334,18 +1806,28 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
     body_parts = []
     h1_pos = None
     step_open = False
+    step_total = 0  # 번호가 붙은 ## 단계의 수 — 진행 현황의 "전체 N"
     for idx, b in enumerate(blocks):
         if photos_dir and gallery_idx == idx:
             body_parts.append(build_gallery(photos_dir, stats))
         if idx in notice_positions:
             stats['photo_notices'] += 1
             body_parts.append(PHOTO_NOTICE_HTML)
+        step_no = None
         if b[0] == 'heading' and b[1] == 2:
             if step_open:
                 body_parts.append('</section>')
-            body_parts.append('<section class="step">')
+            step_no = heading_step_no(b[2])
+            if step_no is None:
+                body_parts.append('<section class="step">')
+            else:
+                step_total += 1
+                body_parts.append(f'<section class="step" data-step="{step_no}">')
             step_open = True
         body_parts.append(render_block(b, stats, existing_ids, nav_items))
+        if step_no is not None:
+            # 상태 딱지가 남기는 한 줄 — 비어 있는 동안은 감춰 둔다.
+            body_parts.append(f'<p class="step-note" data-step="{step_no}" hidden></p>')
         if b[0] == 'heading' and b[1] == 1 and h1_pos is None:
             h1_pos = len(body_parts) - 1
     if len(blocks) in notice_positions:
@@ -1357,10 +1839,14 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
         body_parts.append(build_gallery(photos_dir, stats))
 
     stats['nav_items'] = len(nav_items)
+    stats['steps'] = step_total
     toc_html = build_toc(nav_items)
+    insert_at = (h1_pos + 1) if h1_pos is not None else 0
     if toc_html:
-        insert_at = (h1_pos + 1) if h1_pos is not None else 0
         body_parts.insert(insert_at, toc_html)
+    if step_total:
+        # 순서는 h1 → 진행 현황 → 목차. 목차를 먼저 끼웠으니 같은 자리에 한 번 더 끼운다.
+        body_parts.insert(insert_at, build_progress_panel(step_total))
 
     body_html = '\n'.join(p for p in body_parts if p)
     full_html = assemble_page(page_title, filename, body_html, font_b64, stamp)
@@ -1442,6 +1928,7 @@ def main(argv=None):
     )
     print(f'  체크박스: {stats["checkboxes"]}개')
     print(f'  목차 항목: {stats["nav_items"]}개')
+    print(f'  진행 현황: 번호 붙은 단계 {stats["steps"]}개 (window.stayGuide 로 상태를 찍는다)')
     print(f'  사진: {stats["photos"]}장 (썸네일: {"PIL 축소" if HAS_PIL else "폴백(300KB 이하 원본만)"})')
     if stats['photo_notices'] or stats['photo_sources']:
         print(f'  사진 저작권 고지: {stats["photo_notices"]}개 · 출처 링크: {stats["photo_sources"]}개')

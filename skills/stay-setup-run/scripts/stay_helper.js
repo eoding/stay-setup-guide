@@ -1,5 +1,5 @@
 /*!
- * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.4.0)
+ * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.5.0)
  *
  * 브라우저의 자바스크립트 실행 도구로 이 파일 전체를 페이지에서 실행하면 `window.stayRun` 이 생긴다.
  * 두 번 실행해도 안전하다(멱등). 페이지가 새로 뜨거나 주소가 바뀌면 다시 실행한다.
@@ -10,13 +10,18 @@
  *  - 위험한 버튼(삭제·보관·닫기·공용으로·N월 닫기·확인창이 뜨는 버튼)은 거부한다. [판매 시작] 은 어떤 경우에도 누르지 않는다.
  *  - 돌려주는 값은 전부 JSON 으로 바꿀 수 있는 평범한 객체다.
  *
+ * `stayRun.progress({done, total, current, …})` 는 화면 오른쪽 위에 진행 표시 띠 한 줄을 그린다.
+ * 지켜보는 사람이 콘솔을 열지 않고도 몇 번째 단계인지, 무엇이 실패했는지 본다. 준 값만 덮고 나머지는
+ * 그대로 두며, 화면 조각이 갈려 띠가 사라지면 다시 붙인다. `progressState()` 로 지금 값을 읽고
+ * `progressHide()`(또는 띠의 ✕)로 지운다.
+ *
  * 기다리는 함수(open·fill·submit·addRow·tab·close)는 async 다. `await` 를 못 쓰는 도구라면
  * 호출한 뒤 잠깐 뒤에 `stayRun.last` 를 읽으면 마지막 결과가 들어 있다.
  */
 (function () {
   'use strict';
 
-  var VERSION = '0.4.0'; // 운영 2026-09-04 배포판 화면 기준
+  var VERSION = '0.5.0'; // 운영 2026-09-04 배포판 화면 기준
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -1639,6 +1644,156 @@
     return remember({ clicked: !!b, logoutWarning: shown(lw) });
   }
 
+  /* ─────────────────────────── 진행 표시 띠 ─────────────────────────── */
+  // 화면 오른쪽 위에 늘 떠 있는 한 줄이다. 지켜보는 사람이 콘솔을 열지 않고도 몇 번째 단계인지,
+  // 무엇이 실패했는지 본다. 화면 조각이 통째로 갈려도(htmx) 다시 붙는다.
+  // 상태는 `window.__stayProgress` 에 둔다 — 도우미를 다시 주입해도 띠도 감시자도 하나뿐이다.
+
+  var PROG_ID = 'stay_progress';
+  var PROG_COLOR = {
+    running: { bg: '#1F7A3D', fg: '#FFFFFF' },
+    failed: { bg: '#B3261E', fg: '#FFFFFF' },
+    done: { bg: '#5E6E82', fg: '#FFFFFF' },
+    idle: { bg: '#5E6E82', fg: '#FFFFFF' }
+  };
+
+  function progStore() {
+    var s = window.__stayProgress;
+    if (!s) {
+      s = window.__stayProgress = {
+        state: { total: 0, done: 0, skipped: 0, failed: 0, current: '', note: '', status: 'idle', startedAt: null, updatedAt: null },
+        hidden: false, observer: null, fixing: false
+      };
+    }
+    return s;
+  }
+  // 기록으로 남기기 좋게 JSON 으로 바꿀 수 있는 평범한 객체로 베껴 준다
+  function progCopy(st) {
+    return {
+      total: st.total, done: st.done, skipped: st.skipped, failed: st.failed,
+      current: st.current, note: st.note, status: st.status,
+      startedAt: st.startedAt, updatedAt: st.updatedAt
+    };
+  }
+
+  function progText(st) {
+    var processed = st.done + st.skipped + st.failed;
+    var t = st.total > 0 ? processed + ' / ' + st.total : processed + ' 단계';
+    if (st.status === 'done') t = '끝 · ' + t;               // 끝났으면 `지금:` 은 적지 않는다
+    else if (st.current) t += ' · 지금: ' + trunc(st.current, 48);
+    t += ' · 완료 ' + st.done;
+    if (st.skipped > 0) t += ' · 건너뜀 ' + st.skipped;
+    if (st.failed > 0) t += ' · 실패 ' + st.failed;
+    if (st.note) t += ' · ' + st.note;
+    return t;
+  }
+
+  // 띠 요소. 없거나 화면에서 떨어져 나갔으면 다시 만들어 붙인다.
+  function progEl() {
+    var el = document.getElementById(PROG_ID);
+    if (el && el.isConnected) return el;
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    el = document.createElement('div');
+    el.id = PROG_ID;
+    // 색은 하나도 빼지 않고 적는다 — ERP 화면의 제 색이 배어들면 글자가 안 보인다.
+    // 겹 차례는 파일 다리(2147483647)보다 하나 아래고, 눌림은 통과시킨다(검증 배너·드로어를 가리지 않는다).
+    el.style.cssText = 'position:fixed;top:6px;right:6px;z-index:2147483646;pointer-events:none;' +
+      'max-width:min(46vw,560px);padding:4px 10px;border-radius:6px;border:0;' +
+      'font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 5px rgba(0,0,0,0.28);' +
+      'background:#5E6E82;color:#FFFFFF;';
+    var txt = document.createElement('span');
+    txt.id = 'stay_progress_text';
+    el.appendChild(txt);
+    var x = document.createElement('button');
+    x.type = 'button';
+    x.id = 'stay_progress_close';
+    x.textContent = '✕';
+    x.setAttribute('aria-label', '진행 표시 닫기');
+    x.setAttribute('title', '진행 표시 닫기');
+    x.style.cssText = 'pointer-events:auto;background:transparent;color:inherit;border:0;' +
+      'margin-left:8px;padding:0 2px;font:inherit;line-height:1;cursor:pointer;';
+    x.addEventListener('click', function () { progressHide(); });
+    el.appendChild(x);
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function progRender(store) {
+    if (store.hidden || !document.body) return;
+    store.fixing = true;
+    try {
+      var el = progEl(), st = store.state;
+      var c = PROG_COLOR[st.status] || PROG_COLOR.idle;
+      el.style.background = c.bg;
+      el.style.color = c.fg;
+      var txt = el.querySelector('#stay_progress_text') || el;
+      txt.textContent = progText(st); // 상태 글자는 절대 innerHTML 로 넣지 않는다
+    } finally {
+      store.fixing = false;
+    }
+  }
+
+  // ERP 는 화면 조각을 통째로 갈아 끼운다(htmx). 띠가 사라지면 다시 붙인다 — 한 번만 단다.
+  function progObserve(store) {
+    if (store.observer || typeof MutationObserver !== 'function' || !document.body) return;
+    try {
+      store.observer = new MutationObserver(function () {
+        if (store.fixing || store.hidden) return;         // 다시 붙이는 동안의 되돌이를 막는다
+        var el = document.getElementById(PROG_ID);
+        if (el && el.isConnected) return;
+        try { progRender(store); } catch (e) { /* 그리기가 막혀도 실행은 계속한다 */ }
+      });
+      store.observer.observe(document.body, { childList: true });
+    } catch (e) { store.observer = null; }
+  }
+
+  // stayRun.progress({done, total, current, skipped, failed, note, status})
+  // 준 값만 덮고 나머지는 그대로 둔다. 인자 없이 부르면 다시 그리기만 한다. 절대 예외를 던지지 않는다.
+  function progress(patch) {
+    var store = progStore(), st = store.state;
+    try {
+      if (patch && typeof patch === 'object') {
+        var changed = false, seed = false;
+        ['total', 'done', 'skipped', 'failed'].forEach(function (k) {
+          if (!(k in patch) || patch[k] === null || patch[k] === undefined) return;
+          var v = parseInt(patch[k], 10);
+          if (isNaN(v) || v < 0) return;
+          if (k === 'total' || k === 'done') seed = true;
+          if (st[k] !== v) { st[k] = v; changed = true; }
+        });
+        ['current', 'note'].forEach(function (k) {
+          if (!(k in patch) || patch[k] === null || patch[k] === undefined) return;
+          if (k === 'current') seed = true;
+          var v = clean(patch[k]);
+          if (st[k] !== v) { st[k] = v; changed = true; }
+        });
+        if (seed && !st.startedAt) { st.startedAt = new Date().toISOString(); changed = true; }
+        // 상태는 따로 주지 않으면 숫자에서 뽑는다
+        var next = patch.status ? String(patch.status)
+          : st.failed > 0 ? 'failed'
+          : (st.total > 0 && st.done + st.skipped + st.failed >= st.total) ? 'done'
+          : (st.startedAt || st.current || st.done + st.skipped + st.failed > 0) ? 'running'
+          : 'idle';
+        if (st.status !== next) { st.status = next; changed = true; }
+        if (changed) st.updatedAt = new Date().toISOString();
+      }
+    } catch (e) { /* 값이 이상해도 실행을 막지 않는다 */ }
+    try { progObserve(store); progRender(store); } catch (e) { /* 그리기 실패는 삼킨다 */ }
+    return progCopy(st);
+  }
+  function progressState() { return progCopy(progStore().state); }
+  // ✕ 를 누르면 여기로 온다 — 지운 뒤에는 다시 부르더라도 붙이지 않는다
+  function progressHide() {
+    var store = progStore();
+    store.hidden = true;
+    try {
+      var el = document.getElementById(PROG_ID);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    } catch (e) { /* 무시 */ }
+    return progCopy(store.state);
+  }
+
   var api = {
     version: VERSION,
     last: null,
@@ -1654,6 +1809,9 @@
     readback: readback,
     close: close,
     keepAlive: keepAlive,
+    progress: progress,
+    progressState: progressState,
+    progressHide: progressHide,
     bridge: bridge,
     takeFiles: takeFiles,
     clearBridge: clearBridge,

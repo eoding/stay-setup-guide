@@ -1,6 +1,7 @@
 /* stay_boot.js — 페이지 안 실행 묶음 (stay_helper.js 위에 얹는다)
  * localStorage.staySteps 에 올려 둔 steps.json 을 읽어 window.step / stepFields / runStep 을 만든다.
  * 값은 절대 손으로 옮겨 적지 않는다 — steps.json 그대로 읽어 채운다.
+ * runStep 은 알맹이(runStepCore)를 감싸며 화면 오른쪽 위 진행 표시 띠를 스스로 갱신한다.
  */
 (function () {
   'use strict';
@@ -78,7 +79,7 @@
     if (/기본 오퍼/.test(head)) return '`기본 오퍼` 를 가리키는 단계입니다';
     return null;
   };
-  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04 이전 화면 기준입니다 — 이 러너(v0.4.0)는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
+  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04 이전 화면 기준입니다 — 이 러너는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
 
   // `경고 넘어가기` 는 **금지된 단계**다. 합격선은 판매 시작 전 🟡 0 이라 사유를 적어 넘기는 길이 없다 —
   // 🟡 가 남으면 지시서 결함이므로 원인을 지시서에서 고쳐 다시 깐다.
@@ -359,7 +360,7 @@
     return out;
   };
 
-  window.runStep = async function (n, opt) {
+  window.runStepCore = async function (n, opt) {
     opt = opt || {};
     var s = window.step(n);
     var out = { no: n, title: s.title };
@@ -445,5 +446,90 @@
     }
     out.submit = sub.status; out.errors = sub.errors; out.toast = sub.toast; out.submitted = true;
     return out;
+  };
+
+  /* ─────────────────────────── 진행 표시 띠 갱신 ─────────────────────────── */
+  // `runStep` 은 알맹이(`runStepCore`)를 감싼 얇은 껍데기다 — 부르는 쪽은 따로 손댈 것이 없다.
+  // 페이지에 옛 도우미가 깔려 있어 `progress` 가 없을 수도 있으므로 모든 호출을 감싼다.
+  function progSafe(patch) {
+    try {
+      if (window.stayRun && typeof window.stayRun.progress === 'function') return window.stayRun.progress(patch);
+    } catch (e) { /* 표시가 막혀도 실행은 계속한다 */ }
+    return null;
+  }
+  // 같은 단계를 두 번 부르는 일이 정상으로 있다 — 룸 사진 올리기는 파일 다리로 사진을 올린 뒤
+  // `{uploaded:true}` 로 다시 부르고, 고친 뒤 다시 돌리기도 한다. 숫자를 그때마다 +1 하면
+  // 전체 수를 넘어서고 한 단계가 실패이면서 완료로도 세어진다.
+  // 그래서 **단계마다 판정 하나만** 들고(덮어쓴다), 숫자는 그 판정을 세어 낸다.
+  // `pending` 은 아직 끝나지 않은 단계다 — 지도에는 있지만 셋 중 어디에도 세지 않는다.
+  function stepStatusMap() {
+    if (!window.__stayRunStatus) window.__stayRunStatus = {};
+    return window.__stayRunStatus;
+  }
+  function progCount() {
+    var map = stepStatusMap(), c = { done: 0, skipped: 0, failed: 0 };
+    Object.keys(map).forEach(function (k) { if (c[map[k]] !== undefined) c[map[k]]++; });
+    return c;
+  }
+  function progMark(n, klass, patch) {
+    stepStatusMap()[n] = klass;
+    var c = progCount(), p = { done: c.done, skipped: c.skipped, failed: c.failed };
+    Object.keys(patch || {}).forEach(function (k) { p[k] = patch[k]; });
+    return progSafe(p);
+  }
+  // 왜 실패했는지 한 줄 — 띠에 들어갈 만큼만 자른다
+  function progReason(r) {
+    var t = '';
+    if (r && r.bad && r.bad.length) t = String(r.bad[0]);
+    else if (r && r.error) t = String(r.error);
+    else if (r && r.openDetail) t = String(r.openDetail);
+    t = String(t).normalize('NFC').replace(/\s+/g, ' ').trim();
+    return t.length > 60 ? t.slice(0, 60) + '…' : t;
+  }
+  // 저장이 잘 끝난 상태들 — `stayRun.submit` 은 `ok` 를 돌려주지 않는다(`closed`·`stayed`·`settled`·`navigated`).
+  // 그래서 `submit !== 'ok'` 만 보면 저장이 성공한 단계까지 전부 실패로 세게 된다.
+  window.SUBMIT_OK = ['ok', 'closed', 'stayed', 'settled', 'navigated'];
+  window.stepFailed = function (r) {
+    if (!r) return false;
+    if (r.refused || r.fatal) return true;
+    if (r.bad && r.bad.length) return true;
+    if (r.open === 'not-found' || r.open === 'ambiguous') return true;
+    if (r.submit !== undefined && r.submit !== null && window.SUBMIT_OK.indexOf(String(r.submit)) < 0) return true;
+    return false;
+  };
+
+  window.runStep = async function (n, opt) {
+    opt = opt || {};
+    var s = null;
+    try { s = window.step(n); } catch (e) { s = null; }
+    var title = (s && s.title) || (n + '단계');
+    progSafe({ current: title, total: d.steps.length });
+    var r;
+    try {
+      r = await window.runStepCore(n, opt);
+    } catch (e) {
+      progMark(n, 'failed', { current: title, note: progReason({ error: (e && e.message) || String(e) }) });
+      throw e;
+    }
+    // 아직 끝나지 않은 단계는 어느 숫자에도 세지 않는다 —
+    // `upload-label` 은 파일 다리로 사진을 올린 뒤 다시 부르라는 넘김이지 실패가 아니고,
+    // 시험 삼아 돌린 단계(dry)도 마찬가지다. 다시 부르면 그때 판정이 덮인다.
+    // 판정은 `submit` 글자와 `dry` 로만 가른다 — `runCheckStep` 은 저장이 없는 정상 단계라
+    // `submitted:false` 에 `submit` 칸이 아예 없다(그것으로 가르면 확인 단계가 통째로 안 세어진다).
+    if (opt.dry || (r && r.submit === 'upload-label')) progMark(n, 'pending', { current: title, note: '' });
+    // 실패한 단계는 제목을 그대로 남긴다 — 지켜보는 사람이 어느 단계에서 깨졌는지 띠만 보고 안다
+    else if (window.stepFailed(r)) progMark(n, 'failed', { current: title, note: progReason(r) });
+    else if (r && r.skipped) progMark(n, 'skipped', { note: '' });
+    else progMark(n, 'done', { note: '' });
+    return r;
+  };
+
+  // 실행을 시작하기 전에 한 번 부른다 — 단계별 판정과 숫자를 0 으로 되돌리고 전체 단계 수를 넣는다
+  window.progressReset = function (total) {
+    window.__stayRunStatus = {};
+    return progSafe({
+      done: 0, skipped: 0, failed: 0, current: '', note: '',
+      total: total === undefined ? d.steps.length : total, status: 'idle'
+    });
   };
 })();
