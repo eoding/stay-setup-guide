@@ -16,6 +16,9 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 0단계(1·2·3 단계가 각각 환율 확인 · 거래처 확인 · 도시 확인)가 있는지
 - 표의 칸 이름이 화면 사전(screen-dictionary.json)에 있는지
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
+- 오퍼 `투숙 시작`·`판매일 열기` 시작일이 오늘보다 앞인지(오류 — 판매 구간은 지시서를 만드는 날부터다)
+- 오퍼의 `예약 시작`·`예약 종료` 가 `비움` 인지(경고 — 예약 기간 제한이 없어진다)
+- `시즌 만들기` 의 `기간 종료` 가 오늘보다 앞인지(오류 — 판매 구간 밖 시즌은 만들지 않는다)
 - 같은 오퍼의 시즌끼리 날짜가 하루라도 겹치는지(겹침·포함 모두 오류 — 배너에 🟡 가 남는다)
 - `시즌 가격 채우기` 에 `이미 값이 있는 날도 덮기 | 체크` 가 남아 있는지(겹치지 않으면 필요 없다 — 경고)
 - 오퍼마다 `기본 취소 정책` 이 있는지(`지정 안 함`·빈 값이면 오류 — 배너가 🔴 로 막는다)
@@ -43,6 +46,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 경로에서 알아낸다. 그 자리가 아니면 `폴더:` 줄 형식 확인은 건너뛴다(줄 목록만 보여준다).
 --dictionary 를 생략하면 스크립트 옆의 ../references/screen-dictionary.json 을 쓴다(없으면 건너뛴다).
 --contract 를 생략하면 금액 대조는 건너뛴다.
+날짜 검사의 "오늘" 은 원고 맨 앞의 `작성일: YYYY-MM-DD` 줄이고, 그 줄이 없으면 검사하는 날이다.
 """
 import argparse
 import datetime
@@ -220,6 +224,19 @@ ROOM_PHOTO_BUTTON = "사진 추가"
 # 올리므로, 어긋나면 몇 장을 올려야 하는지 화면 밖에서 알 길이 없다.
 PHOTO_STEP_TITLES = ("대표이미지", "상품상세 이미지", "룸 사진", "오퍼 이미지")
 PHOTO_COUNT_RE = re.compile(r"\((\d+)장\)")
+
+# 판매 구간은 **지시서를 만드는 날(오늘)부터**다. 계약(요금표)이 지난 날부터 유효해도 지난 날은
+# 팔 수 없으므로, 오퍼 `투숙 시작` 과 `판매일 열기` 의 시작일은 max(계약 시작일, 오늘) 이다.
+# 실제 사례(2026-09-07): 2026-01-05~2026-12-31 요금표를 그대로 옮겨 여덟 달 전 날짜를 열었다.
+SALE_START_FIELDS = ((OFFER_CREATE_TITLE, "투숙 시작"), ("판매일 열기", "시작일"))
+# 오퍼의 예약 창 — `비움` 으로 두면 예약 기간 제한이 없어져 지난 날짜·닫아야 할 날짜까지 열린다.
+BOOKING_WINDOW_FIELDS = ("예약 시작", "예약 종료")
+SEASON_CREATE_TITLE = "시즌 만들기"
+SEASON_END_FIELD = "기간 종료"
+# 원고가 맨 앞(첫 단계 앞)에 지닐 수 있는 작성일 — 있으면 이 날이 "오늘" 이다.
+GUIDE_DATE_RE = re.compile(r"^\s*(?:작성일|rendered)\s*[:：]\s*(\d{4}-\d{1,2}-\d{1,2})\s*$")
+#: 값이 비었다고 보는 표기
+BLANK_VALUES = {"", "—", "-", "없음"}
 
 
 def strip_select(value):
@@ -467,6 +484,81 @@ def find_needless_overwrite(steps):
         for step in steps
         if step["title"].startswith("시즌 가격 채우기") and step["fields"].get(OVERWRITE_FIELD) == "체크"
     ]
+
+
+def guide_date(lines, today=None):
+    """지시서를 만드는 날 — 원고 맨 앞의 `작성일: YYYY-MM-DD` 가 있으면 그 날, 없으면 검사하는 날."""
+    for line in lines:
+        if line.startswith("## "):
+            break
+        m = GUIDE_DATE_RE.match(line)
+        if m:
+            day = _date(m.group(1))
+            if day:
+                return day
+    return today or datetime.date.today()
+
+
+def find_past_sale_starts(steps, today):
+    """오퍼 `투숙 시작` 과 `판매일 열기` 시작일이 오늘보다 앞이면 오류.
+
+    계약(요금표)이 지난 날부터 유효해도 **지난 날은 팔 수 없다** — 시작일은
+    max(계약 시작일, 오늘) 이고, 종료일만 계약이 값을 주는 마지막 날이다.
+    """
+    problems = []
+    for step in steps:
+        for title, field in SALE_START_FIELDS:
+            if not step["title"].startswith(title):
+                continue
+            start = _date_field(step["fields"], field)
+            if start and start < today:
+                problems.append(
+                    f"{step['num']}단계: {field} {start.isoformat()} 이 "
+                    f"오늘({today.isoformat()})보다 앞이다 — 판매 구간은 오늘부터"
+                )
+    return problems
+
+
+def find_blank_booking_window(steps):
+    """오퍼의 `예약 시작`·`예약 종료` 를 `비움` 으로 두면 경고.
+
+    비우면 예약 기간 제한이 없어진다(화면 안내 그대로) — 예약 시작은 오늘 00:00,
+    예약 종료는 계약서의 예약 마감(없으면 판매 종료일 23:59)을 적는다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(OFFER_CREATE_TITLE):
+            continue
+        for field in BOOKING_WINDOW_FIELDS:
+            raw = step["fields"].get(field)
+            if raw is None:
+                continue  # 줄 자체가 없는 것은 사전 검사가 본다
+            value = strip_select(raw).strip()
+            if value.startswith("비움") or value in BLANK_VALUES:
+                problems.append(
+                    f"{step['num']}단계: `{field}` 가 비었다 — 예약 시작은 오늘 00:00, "
+                    "예약 종료는 계약서의 예약 마감(없으면 판매 종료일 23:59)"
+                )
+    return problems
+
+
+def find_past_seasons(steps, today):
+    """`시즌 만들기` 의 기간 종료가 오늘보다 앞이면 오류 — 판매 구간 밖 시즌은 만들지 않는다."""
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(SEASON_CREATE_TITLE):
+            continue
+        end = _date_field(step["fields"], SEASON_END_FIELD)
+        if end is None:
+            days = season_dates(step)
+            end = max(days) if days else None
+        if end and end < today:
+            name = step_subject(step["title"]) or step["fields"].get("시즌명") or ""
+            problems.append(
+                f"{step['num']}단계: 시즌 `{name}` 의 {SEASON_END_FIELD} {end.isoformat()} 가 "
+                f"오늘({today.isoformat()})보다 앞이다 — 판매 구간 밖 시즌은 만들지 않는다"
+            )
+    return problems
 
 
 def find_missing_cancel_policy(steps):
@@ -1155,7 +1247,8 @@ def amounts_in(text, min_digits=3):
     return found
 
 
-def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contract_path=None):
+def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contract_path=None,
+          today=None):
     with open(md_path, encoding="utf-8") as handle:
         lines = handle.read().splitlines()
     text = "\n".join(lines)
@@ -1219,6 +1312,10 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     unused_files = sorted(have - referenced) if photos_dir else []
 
     parsed = parse_steps(lines)
+    guide_day = guide_date(lines, today)
+    past_sale_starts = find_past_sale_starts(parsed, guide_day)
+    blank_booking_window = find_blank_booking_window(parsed)
+    past_seasons = find_past_seasons(parsed, guide_day)
     season_overlaps = find_season_overlaps(parsed)
     needless_overwrite = find_needless_overwrite(parsed)
     cancel_policy_gaps = find_missing_cancel_policy(parsed)
@@ -1310,6 +1407,10 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "photos_missing": missing_files, "photos_unused": unused_files,
         "bad_sources": bad_sources,
         "zero_missing": zero_missing,
+        "guide_date": guide_day,
+        "past_sale_starts": past_sale_starts,
+        "blank_booking_window": blank_booking_window,
+        "past_seasons": past_seasons,
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
@@ -1388,7 +1489,8 @@ def main(argv=None):
         problems.append(f"없는 사진 참조 {r['photos_missing']}")
     if r["zero_missing"]:
         problems.append("0단계(환율·거래처·도시 확인) 누락")
-    for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
+    for p in (r["past_sale_starts"] + r["past_seasons"]
+              + r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["audience_only_names"] + r["gala_addons"]
@@ -1409,6 +1511,8 @@ def main(argv=None):
             f"공급 통화가 {DEFAULT_CURRENCY} 가 아니다({r['currency']}) — "
             "사용자에게 확인받은 기록이 changes.md 에 있어야 한다"
         )
+    for w in r["blank_booking_window"]:
+        warnings.append(w)
     for w in r["needless_overwrite"]:
         warnings.append(w)
     for w in r["child_policy_gaps"]:

@@ -1,6 +1,6 @@
 {
   "name": "stay-setup",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "호텔 계약서 → ERP Stay 입력 지시서(HTML) 생성과 브라우저 자동 입력. 스킬 2개: stay-setup-guide(지시서 만들기), stay-setup-run(로그인된 Chrome 탭에서 실행).",
   "repository": "https://github.com/eoding/stay-setup-guide",
   "author": { "name": "eoding", "url": "https://github.com/eoding" },
