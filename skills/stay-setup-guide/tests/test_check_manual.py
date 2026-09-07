@@ -574,6 +574,46 @@ class PromotionCardTest(unittest.TestCase):
         self.assertEqual(cm.find_promo_common_cards(steps_of(self.make("오퍼A"))), [])
 
 
+def cancel_policy_step(num, save="추가", title=None):
+    head = title or f"취소정책 만들기 (1개, 표준 D-7 무료취소)"
+    return f"""
+## {num}. {head}
+탭: `취소정책`
+버튼: [정책 만들기]
+
+| 칸 | 값 |
+|---|---|
+| 정책명 | 표준 D-7 무료취소 |
+| 환불 가능 | 체크 |
+
+→ [{save}]
+"""
+
+
+class CancelPolicyCreateButtonTest(unittest.TestCase):
+    """`취소정책 만들기` 단계는 `→ [추가]` 로 끝난다 — [저장] 은 이미 있는 정책을 고칠 때다."""
+
+    def test_save_button_is_error(self):
+        problems = cm.find_cancel_policy_save_gaps(steps_of(HEAD + cancel_policy_step(4, save="저장")))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`→ [추가]`", problems[0])
+        self.assertIn("4단계", problems[0])
+
+    def test_add_button_is_ok(self):
+        self.assertEqual(cm.find_cancel_policy_save_gaps(steps_of(HEAD + cancel_policy_step(4))), [])
+
+    def test_policy_edit_step_is_not_checked(self):
+        md = HEAD + cancel_policy_step(4, save="저장", title="취소정책 고치기 (1개, 표준 D-7 무료취소)")
+        self.assertEqual(cm.find_cancel_policy_save_gaps(steps_of(md)), [])
+
+    def test_the_example_manual_uses_the_add_button(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_cancel_policy_save_gaps(steps), [])
+        made = [s for s in steps if s["title"].startswith("취소정책 만들기")]
+        self.assertEqual([s["saves"][-1] for s in made], ["추가"])
+
+
 class SeasonSaveButtonTest(unittest.TestCase):
     """`시즌 만들기` 단계는 `→ [추가]` 로 끝난다."""
 
@@ -697,6 +737,32 @@ class EndToEndTest(unittest.TestCase):
         r, code = self.run_on(md)
         self.assertEqual(code, 1)
         self.assertEqual(len(r["cancel_policy_gaps"]), 1)
+
+    def test_cancel_policy_step_with_save_button_fails(self):
+        r, code = self.run_on(HEAD + cancel_policy_step(4, save="저장"))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["cancel_policy_saves"]), 1)
+
+    def test_cancel_policy_step_with_add_button_passes(self):
+        r, code = self.run_on(HEAD + cancel_policy_step(4) + offer_step(5))
+        self.assertEqual(code, 0, r)
+        self.assertEqual(r["cancel_policy_saves"], [])
+
+    def test_off_value_on_a_multi_check_field_fails(self):
+        """이 검사는 사전이 있어야 돈다 — main() 은 사전을 스스로 찾아 실패를 낸다."""
+        md = HEAD + rows_step(4, [("요금제(선택)", "해제")])
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path, dictionary_path=DICTIONARY)
+            self.assertEqual(cm.main([path]), 1)
+        self.assertEqual(len(r["check_value_classes"]), 1)
+
+    def test_broken_repeat_row_label_fails(self):
+        r, code = self.run_on(HEAD + rows_step(4, [("구간 1 ・ 수수료 값", "0")]))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["repeat_row_formats"]), 1)
 
     def test_skip_warning_step_fails(self):
         r, code = self.run_on(HEAD + SKIP_STEP)
@@ -838,7 +904,7 @@ class AgeBandOverlapTest(unittest.TestCase):
 
 def charge_with_age_rate(num, band="초등학생"):
     return f"""
-## {num}. 부과금 만들기 (1개, 갈라 디너)
+## {num}. 부과금 추가 (1개, 갈라 디너)
 탭: `부과금`
 카드: `2026 시즌 요금`
 버튼: [부과금 추가]
@@ -1126,6 +1192,196 @@ class AgeBandDictionaryTest(unittest.TestCase):
         labels = [f["label"] for b in screen["blocks"] for f in b["fields"]]
         self.assertEqual(labels[:6], ["호텔 영문명", "개장 연도", "리노베이션 연도",
                                       "성급", "총 객실 수", "프런트 운영"])
+
+
+def rows_step(num, rows, title="호텔 정보 입력", save="저장"):
+    body = "\n".join(f"| {k} | {v} |" for k, v in rows)
+    return f"""
+## {num}. {title}
+탭: `호텔 정보`
+
+| 칸 | 값 |
+|---|---|
+{body}
+
+→ [{save}]
+"""
+
+
+class RepeatRowFormatTest(unittest.TestCase):
+    """반복 행 이름은 `<칸 이름> <N> · <하위 칸>` 한 형식뿐이다."""
+
+    def problems(self, label):
+        md = HEAD + rows_step(4, [(label, "값")])
+        return cm.find_repeat_row_format_gaps(steps_of(md))
+
+    def test_canonical_form_passes(self):
+        for label in ("구간 1 · 수수료 값", "추천 포인트 2 · 제목",
+                      "포함물 1 · 포함물 이름", "요율 10 · 시작 시각"):
+            self.assertEqual(self.problems(label), [], label)
+
+    def test_wide_middot_is_an_error(self):
+        problems = self.problems("구간 1 ・ 수수료 값")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("정본 형식이 아니다", problems[0])
+
+    def test_missing_space_is_an_error(self):
+        self.assertEqual(len(self.problems("구간 1· 수수료 값")), 1)
+        self.assertEqual(len(self.problems("구간 1 ·수수료 값")), 1)
+
+    def test_plain_labels_are_not_touched(self):
+        for label in ("호텔명", "연령별 단가 · 초등학생", "오퍼별 표시명 · Single",
+                      "정액 금액 (USD) 값", "성급"):
+            self.assertEqual(self.problems(label), [], label)
+
+    def test_the_example_manual_is_canonical(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_repeat_row_format_gaps(steps), [])
+
+
+class CheckValueClassTest(unittest.TestCase):
+    """`체크`/`해제` 는 체크박스 칸에만 쓴다 — 다중 체크는 `선택: …` 또는 `비움`."""
+
+    def setUp(self):
+        self.kinds = cm.load_dictionary_kinds(DICTIONARY)
+
+    def gaps(self, label, value):
+        md = HEAD + rows_step(4, [(label, value)])
+        return cm.find_check_value_class_gaps(steps_of(md), self.kinds)
+
+    def test_multi_check_with_off_is_an_error(self):
+        for label in ("요금제(선택)", "적용 룸 scope", "요일"):
+            problems = self.gaps(label, "해제")
+            self.assertEqual(len(problems), 1, (label, problems))
+            self.assertIn("체크박스가 아니라", problems[0])
+            self.assertIn("비움", problems[0])
+
+    def test_multi_check_with_empty_or_choice_passes(self):
+        for value in ("비움", "선택: 기본 요금제"):
+            self.assertEqual(self.gaps("요금제(선택)", value), [], value)
+
+    def test_real_checkbox_keeps_on_off(self):
+        for label in ("이미 값이 있는 날도 덮기", "환불 가능", "제공 주기"):
+            for value in ("체크", "해제"):
+                self.assertEqual(self.gaps(label, value), [], (label, value))
+
+    def test_unknown_labels_are_left_alone(self):
+        self.assertEqual(self.gaps("사전에 없는 칸", "해제"), [])
+
+    def test_the_example_manual_uses_the_right_class(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_check_value_class_gaps(steps, self.kinds), [])
+
+
+DICTIONARY_MD = os.path.join(SKILL, "references", "screen-dictionary.md")
+
+
+def read_dictionary_md():
+    """사람용 사전(.md)에서 화면 이름과 칸 이름을 차례대로 읽는다.
+
+    `## <번호>. <화면 이름>` 이 화면이고, 그 아래 `| 칸 | 종류 | …` 표의 첫 열이 칸 이름이다.
+    (배너 문구 표처럼 머리가 다른 표는 세지 않는다.)
+    """
+    import re
+    screens, cur, in_table = [], None, False
+    with open(DICTIONARY_MD, encoding="utf-8") as handle:
+        for line in handle.read().splitlines():
+            m = re.match(r"^## (\d+)\.\s*(.+?)\s*$", line)
+            if m:
+                cur = {"num": int(m.group(1)), "name": m.group(2), "fields": []}
+                screens.append(cur)
+                in_table = False
+                continue
+            if line.startswith("## "):
+                cur, in_table = None, False
+                continue
+            if cur is None:
+                continue
+            if line.startswith("| 칸 | 종류 |"):
+                in_table = True
+                continue
+            if in_table:
+                if not line.startswith("|"):
+                    in_table = False
+                    continue
+                cells = [c.strip() for c in line.strip("|").split("|")]
+                if set("".join(cells)) <= set("- "):   # 표 머리 아래 구분 줄
+                    continue
+                cur["fields"].append(cells[0])
+    return screens
+
+
+def read_dictionary_json():
+    """기계용 사전(.json)에서 같은 것을 읽는다 — 참조(`ref`) 줄은 정본을 따라간다."""
+    import json
+    with open(DICTIONARY, encoding="utf-8") as handle:
+        data = json.load(handle)
+    out = []
+    for screen in data["screens"]:
+        source = data[screen["ref"]] if screen.get("ref") else screen
+        labels = [f["label"] for b in (source.get("blocks") or []) for f in (b.get("fields") or [])]
+        out.append({"name": screen["name"], "fields": labels})
+    return out
+
+
+class DictionaryMdJsonAgreeTest(unittest.TestCase):
+    """`.json` 은 `.md` 의 기계용 사본이다 — 화면 이름·칸 이름·차례가 한 글자도 다르면 안 된다.
+
+    지시서를 쓰는 쪽은 `.md` 를 읽고 검사기는 `.json` 만 읽는다. 둘이 벌어지면 사람이 보고 쓴
+    칸을 검사기가 모른다고 하거나, 그 반대가 된다 — 이 시험이 그 벌어짐을 막는다.
+    """
+
+    def setUp(self):
+        self.md = read_dictionary_md()
+        self.js = read_dictionary_json()
+
+    def test_screen_count_matches(self):
+        self.assertEqual(len(self.md), len(self.js))
+
+    def test_screen_numbers_run_in_order(self):
+        self.assertEqual([s["num"] for s in self.md], list(range(1, len(self.md) + 1)))
+
+    def test_screen_names_match_in_order(self):
+        self.assertEqual([s["name"] for s in self.md], [s["name"] for s in self.js])
+
+    def test_field_labels_and_order_match(self):
+        for md, js in zip(self.md, self.js):
+            self.assertEqual(md["fields"], js["fields"], f"{md['num']}. {md['name']}")
+
+    def test_the_meta_count_matches_the_screens(self):
+        import json
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            data = json.load(handle)
+        self.assertEqual(data["meta"]["screen_count"], len(self.js))
+
+
+class ValidationScreenTest(unittest.TestCase):
+    """검증 배너는 사전에 **한 벌만** 있다 — 최상위 `validation` 이 정본이고 `screens` 줄은 참조다."""
+
+    def setUp(self):
+        import json
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            self.data = json.load(handle)
+
+    def test_screens_hold_only_a_reference(self):
+        rows = [s for s in self.data["screens"] if s["id"] == "validation"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ref"], "validation")
+        self.assertNotIn("blocks", rows[0])
+        self.assertNotIn("rules", rows[0])
+
+    def test_the_authoritative_copy_has_the_rules(self):
+        auth = self.data["validation"]
+        self.assertTrue(auth["rules"])
+        self.assertTrue(auth["blocks"])
+        severities = {r["severity"] for r in auth["rules"]}
+        self.assertEqual(severities, {"차단", "경고"})
+
+    def test_the_field_still_loads_into_the_dictionary(self):
+        """참조 줄이 됐어도 그 화면의 칸(`사유`)은 사전 대조에 들어와야 한다."""
+        self.assertIn("사유", cm.load_dictionary(DICTIONARY))
 
 
 class AddressCellTest(unittest.TestCase):

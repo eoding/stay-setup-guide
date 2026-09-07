@@ -218,7 +218,7 @@
   // prefer: 'drawer' 면 드로어/모달만, 'pane' 이면 활성 탭부터
   function baseScope(prefer) {
     var d = drawerRoot(), m = modalRoot(), p = paneRoot();
-    // 2층 모달은 드로어 **안**에 뜬다(`_drawer.html` 의 `.stay-modal__mask`). 그때는 모달이 먼저다 —
+    // 2층 모달은 드로어 **안**에 뜬다(`.stay-modal__mask` 로 덮인다). 그때는 모달이 먼저다 —
     // 드로어를 골라 버리면 위에 덮인 모달 대신 아래 가려진 폼을 만지게 된다.
     if (m && d && d.contains(m) && prefer !== 'pane') return m;
     if (prefer === 'drawer') return d || m || p || document.body;
@@ -565,8 +565,11 @@
   }
 
   // `침대 구성 1 · 침대 종류` → {group:'침대 구성', n:1, field:'침대 종류'}
+  // **정본 꼴만 받는다**: `<칸 이름> <N> · <하위 칸>` — 빈칸은 하나씩이고 가운뎃점은 앞뒤에 빈칸이
+  // 있는 U+00B7 이다. 지시서 검사기·`parse_guide.py` `ROW_LABEL_RE` 와 한 글자도 다르면 안 된다 —
+  // 한쪽만 반복 행으로 읽으면 N번째 행이 아니라 첫 행에 값이 들어간다.
   function splitRepeat(label) {
-    var m = nfc(label).match(/^(.*?)\s*(\d+)\s+[·・‧∙]\s+(.+)$/);
+    var m = nfc(label).match(/^(\S(?:.*?\S)?) (\d+) · (.+)$/);
     return m && m[1].trim() ? { group: m[1].trim(), n: parseInt(m[2], 10), field: m[3].trim() } : null;
   }
   // `종류#2` → {label:'종류', n:2}
@@ -949,7 +952,7 @@
   var DANGER = [
     [/^삭제$|^그룹\s*삭제$|^선택삭제$/, '삭제 버튼입니다'],
     [/^보관$/, '보관 버튼입니다'],
-    // 판매일 [닫기] 는 `1월 닫기` · `2026-01 닫기` 두 꼴로 그려진다(`_sale_days_panel.html`).
+    // 판매일 [닫기] 는 `1월 닫기` · `2026-01 닫기` 두 꼴로 그려진다.
     [/^(?:.*\s)?닫기$/, '닫기(판매일을 닫는) 버튼입니다'],
     [/^공용으로$/, '다른 호텔에도 영향을 주는 버튼입니다'],
     [/^판매\s*종료$|^보관\s*해제$|^판매\s*재개$/, '판매 상태를 바꾸는 버튼입니다'],
@@ -1363,7 +1366,7 @@
     }
     // 2차: 이름으로 못 찾았지만 **앞 칸이 화면을 바꿔 이제 서 있을** 칸을 한 번 더 시도한다.
     // Stay 폼은 앞 칸의 값이 뒤 칸을 세우고 접는다(Alpine `x-show`): 부과금의 [정액 금액]·
-    // [연령별 단가] 는 [부과 방식]이 `인당 · 정액` 일 때만, 연령 구간의 [요금 기준 값]·
+    // [연령별 단가] 는 [부과 단위]가 `인당` 이고 [부과 방식]이 `정액` 일 때만, 연령 구간의 [요금 기준 값]·
     // [참조 밴드 코드] 는 [요금 기준 유형]에 따라 선다. 1차에서는 그 칸이 아직 `display:none`
     // 이라 `usable()` 이 거른다 — Alpine 이 한 틱 뒤에 세우므로 잠깐 쉬고 같은 이름으로 다시 찾는다.
     var retry = [];
@@ -1609,8 +1612,8 @@
       if (!want || want.indexOf(f.name) >= 0) { if (!target.multiple && dt.items.length) return; dt.items.add(f); moved.push(f.name); }
     });
     if (!moved.length) return remember({ status: 'not-found', detail: '옮길 파일이 없습니다: ' + (want || []).join(', '), have: [].slice.call(src.files).map(function (f) { return f.name; }) });
-    // 파일을 고르는 것만으로 올라가는 칸인가 — 룸 사진 칸이 그렇다
-    // (`_room_images_panel.html`: `hx-trigger="change"`). 그런 칸은 뒤에 [저장] 을 누르면 안 된다.
+    // 파일을 고르는 것만으로 올라가는 칸인가 — 룸 사진 칸이 그렇다(`hx-trigger="change"` 가 붙어
+    // 고르는 즉시 올라간다). 그런 칸은 뒤에 [저장] 을 누르면 안 된다.
     var auto = /(^|[\s,])change([\s,]|$)/.test(target.getAttribute('hx-trigger') || '');
     var swaps0 = hx.swaps, settles0 = hx.settles;
     target.files = dt.files;

@@ -129,6 +129,23 @@ class TestManual(unittest.TestCase):
         self.assertEqual((f["row_group"], f["row_index"], f["row_field"]),
                          ("침대 구성", 1, "침대 종류"))
 
+    def test_row_label_takes_only_canonical_form(self):
+        """반복 행 칸 이름의 정본 꼴은 `<칸 이름> <N> · <하위 칸>` 하나뿐이다.
+
+        `stay_helper.js` 의 `splitRepeat` 과 같은 판정이어야 한다 — 한쪽만 반복 행으로 읽으면
+        N번째 행이 아니라 첫 행에 값이 들어간다.
+        """
+        from parse_guide import ROW_LABEL_RE
+        m = ROW_LABEL_RE.match("침대 구성 1 · 침대 종류")
+        self.assertEqual((m.group(1), m.group(2), m.group(3)), ("침대 구성", "1", "침대 종류"))
+        for bad in ("침대 구성 1 ·침대 종류",      # 가운뎃점 뒤 빈칸 없음
+                    "침대 구성 1· 침대 종류",      # 가운뎃점 앞 빈칸 없음
+                    "침대 구성  1 · 침대 종류",    # 빈칸 둘
+                    "침대 구성 1 ・ 침대 종류",   # U+00B7 이 아닌 가운뎃점(U+30FB)
+                    "침대 구성1 · 침대 종류",      # 숫자 앞 빈칸 없음
+                    "연령별 단가 · 초등학생"):     # 숫자 없음 — 반복 행이 아니다
+            self.assertIsNone(ROW_LABEL_RE.match(bad), bad)
+
     def test_head_and_buttons(self):
         head = only_step(self.steps, "룸 만들기")["head"]
         self.assertEqual(head["tab"], "객실")
@@ -275,7 +292,7 @@ class TestCheckMode(unittest.TestCase):
 # 저장 버튼은 마지막 `→ [ … ]` 줄이다(이 갈래에 `화면:` 은 쓰지 않는다).
 # 부과금 단계의 줄 차례도 화면 차례 그대로다:
 #   종류 → 이름 → 부과 방식 → 부과 단위 → 정액 금액 → 적용 룸 scope → 연령별 단가 → 시간대별 요율 → 설명
-# 카드를 세우는 것은 **[부과 단위]=인당 + [부과 방식]=정액** 이다(`_charge_form.html` 의 x-show).
+# 카드를 세우는 것은 **[부과 단위]=인당 + [부과 방식]=정액** 이다(화면이 그때만 그 칸을 세운다).
 AGE_BAND = """# 시험 호텔 — 입력 지시서
 
 ## 1. 연령 구간 만들기 (1번째, 초등학생)
@@ -334,6 +351,20 @@ STALE = """# 시험 호텔 — 입력 지시서
 | 오퍼명 | 2026 계약 |
 
 → [저장]
+"""
+
+#: 금지된 갈래 — 합격선이 판매 시작 전 🟡 0 이라 사유를 적어 넘기는 길이 없다
+WARN_SKIP = """# 시험 호텔 — 입력 지시서
+
+## 1. 경고 넘어가기 (오퍼에 취소정책이 없습니다)
+화면: 편집 화면 맨 위 점검 배너
+버튼: 노란 목록에서 `오퍼에 취소정책이 없습니다` 가 들어간 줄의 [이건 넘어가기]
+
+| 칸 | 값 |
+|---|---|
+| 사유 | 계약서에 없음 |
+
+→ [넘어가기]
 """
 
 
@@ -476,15 +507,24 @@ class TestCheckModeStale(unittest.TestCase):
         (self.dir / "manual.md").write_text(STALE, encoding="utf-8")
         r = run(str(self.dir), "--check")
         self.assertNotEqual(r.returncode, 0, r.stdout)
-        self.assertIn("옛 화면 기준 단계: 1", r.stdout)
+        self.assertIn("러너가 거부하는 단계: 1", r.stdout)
 
     def test_check_passes_on_new_screen_guide(self):
         (self.dir / "manual.md").write_text(AGE_BAND, encoding="utf-8")
         r = run(str(self.dir), "--check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("옛 화면 기준 단계: 0", r.stdout)
+        self.assertIn("러너가 거부하는 단계: 0", r.stdout)
         self.assertIn("줄 차례가 어긋난 단계: 0", r.stdout)
         self.assertIn("나이 범위가 겹치는 단계: 0", r.stdout)
+
+    def test_check_fails_on_warn_skip_step(self):
+        """`경고 넘어가기` 는 금지된 갈래다 — 브라우저를 열기 전에 막는다(🟡 0 이 합격선)."""
+        (self.dir / "manual.md").write_text(WARN_SKIP, encoding="utf-8")
+        r = run(str(self.dir), "--check")
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertIn("러너가 거부하는 단계: 1", r.stdout)
+        self.assertIn("금지된 단계", r.stdout)
+        self.assertNotIn("러너가 모르는 단계 갈래", r.stdout)
 
     def test_check_fails_on_overlapping_bands(self):
         (self.dir / "manual.md").write_text(

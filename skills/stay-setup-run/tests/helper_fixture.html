@@ -81,7 +81,7 @@
 <div id="stay_fragments" style="display:none">
 
 <!-- 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] (2026-09-04).
-     ERP `_room_form_fields.html` 의 마크업 그대로다: 라벨 요소가 없고 자리표시 글자가 칸마다 같아서,
+     운영 화면의 마크업 그대로다: 라벨 요소가 없고 자리표시 글자가 칸마다 같아서,
      옆 체크박스 글자를 붙이지 않으면(`mateBoxLabel`) 어느 룸의 칸인지 가릴 수 없다. -->
 <section id="stay_bulk_rooms" class="card"><h3 class="card-title">판매 연결 (오퍼 × 객실)</h3>
   <table class="bs-table"><tbody>
@@ -103,7 +103,7 @@
   </tbody></table>
 </section>
 
-<!-- 연령 구간 드로어 (2026-09-04 신설, ERP `_age_band_form.html`).
+<!-- 연령 구간 드로어 (2026-09-04 신설).
      `요금 기준 값` 행은 [요금 기준 유형]이 `성인 요금의 %` 이거나 `정액` 일 때만 선다 —
      실제 화면은 Alpine `x-show` 로 접고, 여기서는 같은 일을 늦게(200ms) 한다.
      늦게 서는 칸을 1차에서 놓치고 2차에서 잡는 것이 `fill` 의 재시도 갈래다. -->
@@ -130,7 +130,7 @@
   <button type="button">추가</button>
 </section>
 
-<!-- 부과금 드로어의 [연령별 단가] 카드 (ERP `_charge_form.html`).
+<!-- 부과금 드로어의 [연령별 단가] 카드.
      카드를 세우는 것은 **두 셀렉트**다 — [부과 단위]가 `인당`(모델 `per`)이고
      [부과 방식]이 `정액`(모델 `basis`)이며 시간대별 요율 행이 0개일 때만 선다.
      둘은 다른 축이다: 방식은 정액/정률, 단위는 체류당 1회/박당/인당. -->
@@ -167,8 +167,8 @@
   </div>
 </section>
 
-<!-- 요금제 정본 드로어 (`_rate_plan_catalog_form.html`).
-     ① `지금 모든 객실에 배포` 는 **[정본 만들기] 드로어에만** 있다(`{% if create %}`) —
+<!-- 요금제 정본 드로어.
+     ① `지금 모든 객실에 배포` 는 **[정본 만들기] 드로어에만** 있다 —
         [편집] 로 연 정본에는 그 체크도 `배포` 머리도 없다. 그래서 여기에는 두지 않는다.
      ② `포함물` 반복 행에는 **열 제목이 없다.** 두 입력은 자리표시 글자로만 갈린다. -->
 <section id="stay_rate_plan_catalog" class="card"><h3 class="card-title">요금제 정본</h3>
@@ -196,7 +196,7 @@
   <button type="button">세후가로 확정</button>
 </section>
 
-<!-- 가격 캘린더의 2층 모달 (`_calendar_cell_edit.html`) — `.modal.open` 이 아니라 `.stay-modal` 이다 -->
+<!-- 가격 캘린더의 2층 모달 — `.modal.open` 이 아니라 `.stay-modal` 이다 -->
 <div id="stay_cell_edit" class="stay-modal stay-modal--page" style="display:none">
   <div class="stay-modal__mask">
     <div class="stay-modal__panel">

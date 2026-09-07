@@ -21,6 +21,11 @@ the standard `SKILL.md` format **and can drive a browser**.
 >
 > The 2026-09-04 release also adds an **age-band panel** (`연령 구간`) to the offer tab and a
 > conditional **per-age rate** card (`연령별 단가`) inside the charge drawer. Both are supported.
+>
+> The pass mark before a hotel goes on sale is **zero red and zero yellow** banner items. The
+> `경고 넘어가기` step, which used to dismiss a yellow item with a written reason, is forbidden: the
+> runner refuses it and `parse_guide.py --check` blocks it before a browser is opened. A yellow item
+> that remains is a defect in the guide and is fixed there.
 
 ## Requirements
 
@@ -83,7 +88,7 @@ a supervisor pressed).
 | `SKILL.md` | Entry point: inputs → parse → inject helper → step loop → failure handling → rules → report |
 | `scripts/parse_guide.py` | Guide (HTML or `manual.md`) → `steps.json`, checking photo files and value kinds |
 | `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input |
-| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runCellStep`, `runWarnStep` |
+| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runCellStep`, `runCheckStep` |
 | `references/screen-mechanics.md` | Step kind → screen map, how each screen opens and saves, traps |
 | `references/run-log-spec.md` | `run-log.md` format, result words, resuming |
 | `tests/` | Parser tests, and two fixture pages with browser tests (run only when jsdom is present) |
@@ -91,7 +96,7 @@ a supervisor pressed).
 ```bash
 python3 -m unittest discover -s tests            # parser
 node tests/test_helper.mjs                       # helper — drawer forms, danger buttons
-node tests/test_boot.mjs                         # boot — price-calendar cell editing
+node tests/test_boot.mjs                         # boot — price-calendar cells, openers, refusals, 0-step checks
 ```
 
 The two browser tests skip themselves with exit code 0 when `jsdom` is not installed; nothing is installed

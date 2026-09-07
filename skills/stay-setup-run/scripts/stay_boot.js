@@ -17,7 +17,7 @@
 
   // 만들기 단계의 "이름" 칸 — 목록에 같은 이름이 이미 있으면 그 단계를 건너뛴다(공용 정책 포함)
   window.nameOf = function (s) {
-    // `노출명`·`밴드 코드` 는 연령 구간 단계의 이름 칸이다(2026-09-04, `_age_band_form.html`).
+    // `노출명`·`밴드 코드` 는 연령 구간 단계의 이름 칸이다(2026-09-04 신설 화면).
     // 코드보다 노출명이 앞이다 — 목록 표의 첫 칸이 코드라도, 사람이 같은 것으로 읽는 이름은 노출명이다.
     var keys = ['정책명', '룸 이름', '시즌명', '관리용 이름', '프로모션명', '혜택 이름', '노출명', '밴드 코드', '이름', '그룹 이름', '요금제명'];
     for (var i = 0; i < keys.length; i++) {
@@ -54,7 +54,17 @@
     return m ? m[1].trim() : null;
   };
 
-  // ── 지시서가 ERP 2026-09-04(PR #9033) 이전 화면 기준인가 ──────────────────────────────
+  // 반복 행을 하나 늘리는 버튼인가 — 그런 버튼은 **여는 버튼이 아니다**(칸을 채우면서 도우미가 누른다).
+  // `연령 구간 추가` 는 글자가 `구간 추가` 로 끝나지만 **오퍼 탭 `연령 구간` 카드의 드로어를 여는
+  // 버튼**이다(2026-09-04 신설). 낱말만 보고 거르면 그 드로어가 영영 열리지 않는다.
+  window.ROW_ADD_RE = /(행|구간|단|포인트)\s*추가$/;
+  window.ROW_ADD_EXCEPT_RE = /^연령\s*구간\s*추가$/;
+  window.isRowAddButton = function (text) {
+    var t = String(text || '').normalize('NFC').trim();
+    return window.ROW_ADD_RE.test(t) && !window.ROW_ADD_EXCEPT_RE.test(t);
+  };
+
+  // ── 지시서가 ERP 2026-09-04 이전 화면 기준인가 ────────────────────────────────────────
   // 그전에는 [호텔 만들기]가 오퍼 `기본 오퍼` · 룸 `스탠다드` · 그 둘의 연결행을 미리 만들어 두었고,
   // 지시서는 그것들을 **고쳐 쓰는** 단계(`오퍼 고치기`, `스탠다드` 행의 [편집])를 적었다.
   // 지금은 오퍼 0 · 룸 0 으로 시작하므로 그 단계는 누를 행이 화면에 아예 없다 — 엉뚱한 행을
@@ -68,16 +78,27 @@
     if (/기본 오퍼/.test(head)) return '`기본 오퍼` 를 가리키는 단계입니다';
     return null;
   };
-  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04(PR #9033) 이전 화면 기준입니다 — 이 러너(v0.4.0)는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
+  window.STALE_GUIDE_MSG = '지시서가 ERP 2026-09-04 이전 화면 기준입니다 — 이 러너(v0.4.0)는 오퍼 0 · 룸 0 으로 시작하는 화면만 다룹니다. 지시서를 다시 만드세요(옛 화면이면 러너 v0.2.x 를 쓰세요).';
+
+  // `경고 넘어가기` 는 **금지된 단계**다. 합격선은 판매 시작 전 🟡 0 이라 사유를 적어 넘기는 길이 없다 —
+  // 🟡 가 남으면 지시서 결함이므로 원인을 지시서에서 고쳐 다시 깐다.
+  window.FORBIDDEN_WARN_MSG = '`경고 넘어가기` 는 금지된 단계입니다 — 합격선은 판매 시작 전 🟡 0 입니다. 사유를 적어 넘기지 말고 지시서에서 원인을 고쳐 다시 까세요.';
+
+  // 실행을 거부하는 이유 한 줄 (없으면 null) — 옛 화면 기준 단계와 금지된 단계를 함께 본다
+  window.refusedStep = function (s) {
+    var nfc = function (t) { return String(t || '').normalize('NFC'); };
+    if (/경고 넘어가기/.test(nfc(s && s.kind)) || /^경고 넘어가기/.test(nfc(s && s.title))) return window.FORBIDDEN_WARN_MSG;
+    return window.staleStep(s);
+  };
 
   // 실행 전 한 번에 훑기 — 걸리는 단계 번호를 돌려준다 (빈 배열이면 이 지시서로 진행해도 된다)
   window.checkGuide = function () {
-    return d.steps.map(function (s) { var why = window.staleStep(s); return why ? { no: s.no, title: s.title, why: why } : null; })
+    return d.steps.map(function (s) { var why = window.refusedStep(s); return why ? { no: s.no, title: s.title, why: why } : null; })
       .filter(Boolean);
   };
   (function () {
-    var stale = window.checkGuide();
-    if (stale.length && window.console) console.warn('[stay-run] ' + window.STALE_GUIDE_MSG + ' 걸린 단계: ' + stale.map(function (x) { return x.no; }).join(', '));
+    var bad = window.checkGuide();
+    if (bad.length && window.console) console.warn('[stay-run] 실행을 거부하는 단계가 있습니다: ' + bad.map(function (x) { return x.no + '단계 — ' + x.why; }).join(' / '));
   })();
 
   // 가격 캘린더의 날짜 칸 편집 — 오퍼 줄 고르기 → 룸 줄 고르기 → 달 이동 → 날짜 칸 클릭 → 인원 조합 행의 칸 채우기 → 그 행의 [저장]
@@ -153,7 +174,7 @@
     if (!(await goMonth())) { out.error = '달을 ' + target + ' 로 옮기지 못했습니다 (지금 ' + monthOf() + ')'; return out; }
     // 3) 룸 줄 — 개요 화면의 룸 버튼(title: `표시명 · 요금제`) 또는 좌표 화면의 룸 칩. 이미 그 룸의 좌표 화면이면 건너뛴다
     // 좌표 칩은 `.stay-coord-btn` 이다. `.stay-coord-group` 은 **오퍼 줄에도 쓰인다**
-    // (`_calendar_month.html`: 오퍼가 둘 이상이면 오퍼 라디오도 같은 상자에 든다) — 그 상자의
+    // (오퍼가 둘 이상이면 오퍼 라디오도 같은 상자에 든다) — 그 상자의
     // 아무 버튼이나 잡으면 오퍼 칩을 룸 칩으로 오인한다.
     var coordBtns = function () { return [].slice.call(pane.querySelectorAll('.stay-coord-btn')); };
     var onCoord = function () { return coordBtns().some(function (b) { var tt = clean(b.textContent); return /--primary/.test(b.className) && tier(tt.split(/\s+[·・‧∙]\s+/)[0], display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0); }); };
@@ -204,7 +225,7 @@
     var ed = document.getElementById('stay_cell_edit');
     if (!ed || !ed.querySelector('table')) { out.error = '날짜 칸 편집창이 열리지 않았습니다'; return out; }
     // 5) 인원 조합 행 (기존 행 표 → 없으면 `인원별 가격 추가` 표의 새 행)
-    // 두 표의 인원 칸은 **위젯이 다르다**(`_calendar_cell_edit.html` · `PriceCellForm._use_occupancy_select`):
+    // 두 표의 인원 칸은 **위젯이 다르다**:
     // 기존 행은 글자 칸, `인원별 가격 추가` 의 새 행은 이미 쓰는 키만 고르게 하는 셀렉트다.
     // 그리고 그 날짜에 셀이 하나도 없으면 **기존 행 표 자체가 안 그려진다** — 표가 하나뿐이라
     // 종전의 `tables.length > 1` 갈래로는 `가격 셀 만들기` 가 통째로 실패했다.
@@ -296,63 +317,45 @@
     return out;
   };
 
-  // 점검 배너의 경고 넘어가기 — `채우면 좋음` 을 펼치고, 줄 글자가 지시서 패턴(… 은 아무 글자)과 맞는 줄마다 [이건 넘어가기] → 사유 → [넘어가기]
-  window.runWarnStep = async function (n, opt) {
+  // 0단계 확인(`환율 확인` · `거래처 확인` · `도시 확인`) — **저장이 없는 단계**다.
+  // [호텔 만들기] 폼을 열어 지시서 값이 그 화면의 목록(셀렉트·자동완성)에 뜨는지만 보고 돌아온다.
+  // 지시서 마지막 줄의 `→ [목록]` 은 저장 버튼이 아니라 **목록으로 돌아오는 행위**를 가리킨다.
+  window.CHECK_KIND_RE = /^(환율|거래처|도시)\s*확인/;
+  window.runCheckStep = async function (n, opt) {
     opt = opt || {};
-    var s = window.step(n), out = { no: n, title: s.title, kind: s.kind, done: [] };
-    var sleep = stayRun.sleep, waitFor = stayRun.waitFor, hx = window.__stayRunHtmx;
+    var s = window.step(n), out = { no: n, title: s.title, kind: s.kind, checked: false, found: [] };
+    var sleep = stayRun.sleep, waitFor = stayRun.waitFor;
     var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
-    var bp = (s.head.buttons_parsed || []).find(function (x) { return x && x.text && /넘어가기/.test(x.text); }) || (s.head.buttons_parsed || [])[0] || {};
-    var pat = clean(bp.row || '');
-    if (!pat) { // `노란 목록에서 \`…\` 가 들어간 줄의 [이건 넘어가기]` — 백틱 안 문구가 줄 패턴
-      var rawLine = String(bp.raw || (s.head.buttons || [])[0] || ''), bm = rawLine.match(/`([^`]+)`/);
-      if (bm) pat = clean(bm[1]);
-    }
-    if (!pat) { // `경고 넘어가기 (시즌 기간이 겹칩니다)` 처럼 제목 괄호 안 문구가 줄 패턴인 꼴 (번호 없음)
-      var tm = String(s.title || '').normalize('NFC').match(/\(([^()]*[가-힣][^()]*)\)\s*$/);
-      if (tm && !/^\s*\d+\s*(번째|회차|개)?\s*,/.test(tm[1])) pat = clean(tm[1].replace(/^\d+\s*(번째|회차|개)?\s*,\s*/, ''));
-    }
-    if (!pat) { out.error = '넘어갈 경고 줄 패턴이 없습니다'; return out; }
-    // 패턴의 낱말(빈칸·… 으로 나눔)이 그 순서대로 들어 있으면 맞는 줄로 본다 — `시즌 기간이 겹칩니다` 도 `시즌 'A'과 'B'의 기간이 3일 겹칩니다` 에 맞는다
-    // 낱말 끝 조사(에·이·가·을·를…) 앞에도 `.*` 를 허용한다 — `오퍼에 취소정책이 없습니다` 가 `오퍼 'X'에 취소정책이 없습니다` 에 맞도록
-    var esc = function (x) { return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
-    var re = new RegExp(pat.split(/…|\.\.\.|\s+/).map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) {
-      var pm = x.match(/^(.{2,}?)(에서|으로|에|이|가|을|를|은|는|의|와|과|로)$/);
-      return pm ? esc(pm[1]) + '.*' + esc(pm[2]) : esc(x);
-    }).join('.*'));
-    var reason = ((s.fields || []).find(function (f) { return /사유/.test(f.label); }) || {}).value || '';
-    var banner = function () { return document.getElementById('stay_validation_banner'); };
-    if (!banner()) { out.error = '점검 배너가 없습니다'; return out; }
-    var rowOf = function (btn) { var li = btn.closest('li,tr'); if (li && banner().contains(li)) return li; var b = banner(), node = btn.parentElement; while (node && node !== b && node.querySelectorAll('button').length <= 2) node = node.parentElement; return node === b ? btn.parentElement : node; };
-    var expand = async function () {
-      var b = banner();
-      var hidden = [].slice.call(b.querySelectorAll('button')).filter(function (x) { return /이건 넘어가기/.test(x.textContent) && !x.offsetParent; });
-      if (!hidden.length) return;
-      var tg = [].slice.call(b.querySelectorAll('*')).find(function (e) { return e.children.length <= 3 && /채우면 좋음/.test(e.textContent) && clean(e.textContent).length < 40 && (e.tagName === 'BUTTON' || e.tagName === 'SUMMARY' || e.hasAttribute('@click') || e.hasAttribute('x-on:click') || /pointer/.test(getComputedStyle(e).cursor)); });
-      if (tg) { tg.click(); await sleep(300); }
+    var onForm = function () {
+      return stayRun.fields().some(function (f) { return /^(호텔명|공급 통화|거래처|도시)$/.test(clean(f.label)); });
     };
-    for (var guard = 0; guard < 8; guard++) {
-      await expand();
-      var b = banner(); if (!b) break;
-      var btn = [].slice.call(b.querySelectorAll('button')).filter(function (x) { return /이건 넘어가기/.test(x.textContent) && x.offsetParent; })
-        .find(function (x) { return re.test(clean(rowOf(x).textContent)); });
-      if (!btn) break;
-      var row = rowOf(btn), rowText = clean(row.textContent).slice(0, 120);
-      // 사유 칸이 아직 안 보일 때만 [이건 넘어가기] 를 누른다 (다시 누르면 접힌다)
-      var inp = [].slice.call(row.querySelectorAll('input:not([type=hidden]),textarea')).find(function (i) { return i.offsetParent; });
-      if (!inp) { btn.click(); await sleep(300); inp = [].slice.call(row.querySelectorAll('input:not([type=hidden]),textarea')).find(function (i) { return i.offsetParent; }); }
-      if (inp) { var proto = inp.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; var d = Object.getOwnPropertyDescriptor(proto, 'value'); d && d.set ? d.set.call(inp, reason) : (inp.value = reason); ['input', 'change'].forEach(function (ev) { inp.dispatchEvent(new Event(ev, { bubbles: true })); }); }
-      var go = [].slice.call(row.querySelectorAll('button')).find(function (x) { return clean(x.textContent) === (s.submit || '넘어가기') && x.offsetParent; });
-      if (!go) { out.done.push({ row: rowText, error: '[' + (s.submit || '넘어가기') + '] 버튼이 없습니다' }); break; }
-      hx.error = null; go.click();
-      // 그 줄에 `넘어감` 이 찍히거나 [넘어가기] 가 사라질 때까지 기다린다
-      var okRow = await waitFor(function () { var b2 = banner(); if (!b2) return true; var again = [].slice.call(b2.querySelectorAll('li,tr')).find(function (li) { return re.test(clean(li.textContent)) && !/넘어감/.test(li.textContent); }); return hx.pending === 0 && (!again || !again.contains(go) || !go.isConnected); }, 10000);
-      await sleep(400);
-      out.done.push({ row: rowText, reason: reason, error: hx.error || (okRow ? null : '응답 없음') });
-      if (hx.error || !okRow) break;
+    // 폼이 화면에 없으면 목록의 [호텔 만들기] 로 연다. 그 이동은 **전체 화면 이동**이라 JS 호출이
+    // 결과를 못 돌려주고 끊길 수 있다 — 그때는 새 화면에서 부트를 다시 eval 하고 이 단계를 다시 부른다.
+    if (!onForm()) {
+      var opener = stayRun.findButton(document.body, '호텔 만들기');
+      if (!opener) { out.error = '[호텔 만들기] 폼도 그 버튼도 화면에 없습니다 — 호텔 목록에서 시작하세요'; return out; }
+      opener.click();
+      await waitFor(onForm, 8000);
+      if (!onForm()) { out.navigated = true; out.note = '[호텔 만들기] 폼으로 넘어갑니다 — 새 화면에서 부트를 다시 eval 하고 이 단계를 다시 부르세요'; return out; }
     }
-    out.remaining = stayRun.state().banner;
-    if (!out.done.length) out.note = '패턴에 맞는 경고 줄이 없습니다 (이미 넘어갔거나 경고가 없음)';
+    // 값을 골라 목록에 있는지 본다. 고르기만 할 뿐 **아무 것도 저장하지 않는다**
+    // (이 화면의 저장 버튼은 [호텔 만들기] 하나뿐이고 이 단계는 누르지 않는다).
+    var F = window.stepFields(n);
+    var r = await stayRun.fill(F);
+    out.found = r.filter(function (x) { return x.status === 'ok'; }).map(function (x) { return x.label + ': ' + (x.detail || ''); });
+    out.bad = r.filter(function (x) { return x.status !== 'ok' && x.status !== 'skipped'; })
+      .map(function (x) { return x.label + ': ' + x.status + ' ' + (x.detail || '').slice(0, 140); });
+    out.checked = out.bad.length === 0;
+    out.submitted = false; // 저장하는 단계가 아니다
+    // `→ [목록]` — 다음 단계도 이 폼을 쓰면(확인 단계·호텔 만들기) 그대로 두고, 아니면 목록으로 돌아온다.
+    // 값이 목록에 없으면(bad) 화면을 눈으로 볼 수 있게 폼에 남는다.
+    var nx = window.step(n + 1);
+    var sameForm = !!(nx && (window.CHECK_KIND_RE.test(nx.kind || '') || /^호텔 만들기/.test(nx.kind || '')));
+    if (opt.back === false || sameForm || out.bad.length) { out.stayOnForm = true; return out; }
+    var back = stayRun.findButton(document.body, s.submit || '목록') || stayRun.findButton(document.body, '목록');
+    if (!back) { out.stayOnForm = true; out.note = '[목록] 버튼을 찾지 못했습니다 — 폼에 그대로 있습니다'; return out; }
+    back.click(); await sleep(300);
+    out.left = true;
     return out;
   };
 
@@ -360,11 +363,11 @@
     opt = opt || {};
     var s = window.step(n);
     var out = { no: n, title: s.title };
-    // 옛 화면(자동 생성물 고쳐 쓰기) 기준 단계는 실행하지 않는다 — 위 `staleStep` 주석
-    var stale = window.staleStep(s);
-    if (stale) return { no: n, title: s.title, refused: true, fatal: true, error: window.STALE_GUIDE_MSG + ' (' + stale + ')' };
+    // 옛 화면(자동 생성물 고쳐 쓰기) 기준 단계와 금지된 단계(`경고 넘어가기`)는 실행하지 않는다 — 위 `refusedStep`
+    var why = window.refusedStep(s);
+    if (why) return { no: n, title: s.title, refused: true, fatal: true, error: why === window.FORBIDDEN_WARN_MSG ? why : window.STALE_GUIDE_MSG + ' (' + why + ')' };
     if (/가격 셀/.test(s.kind || '')) return window.runCellStep(n, opt);
-    if (/경고 넘어가기/.test(s.kind || '')) return window.runWarnStep(n, opt);
+    if (window.CHECK_KIND_RE.test(s.kind || '')) return window.runCheckStep(n, opt);
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
 
     // 같은 이름이 이미 있으면 만들지 않는다
@@ -376,7 +379,7 @@
     }
 
     // 여는 버튼만 고른다 — 드로어 안 버튼과 행 추가류(행/구간/단/요율 행 추가)는 칸을 채우면서 도우미가 누른다
-    var bps = (s.head.buttons_parsed || []).filter(function (b) { return b.text && !b.drawer && !/(행|구간|단|포인트)\s*추가$/.test(b.text.trim()); });
+    var bps = (s.head.buttons_parsed || []).filter(function (b) { return b.text && !b.drawer && !window.isRowAddButton(b.text); });
     // 버튼 줄이 없고 `화면:` 설명이 `… [호텔 만들기]` 처럼 대괄호 버튼으로 끝나면 그 버튼을 연다
     if (!bps.length && s.head.screen) { var sm = String(s.head.screen).normalize('NFC').match(/\[([^\]]+)\]\s*$/); if (sm) bps = [{ text: sm[1].trim(), row: null, card: null }]; }
     if (bps.length) {

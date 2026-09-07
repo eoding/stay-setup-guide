@@ -42,7 +42,10 @@ PHOTO_ITEM_RE = re.compile(
     r"(?:\s*[—–-]+\s*출처\s*:\s*(?P<url>\S+))?\s*$", re.IGNORECASE)
 SELECT_RE = re.compile(r"^선택\s*:\s*(.*)$")
 FILE_RE = re.compile(r"^파일\s*:\s*(.*)$")
-ROW_LABEL_RE = re.compile(r"^(.+?)\s+(\d+)\s*·\s*(.+)$")
+#: 반복 행 칸 이름의 **정본 꼴**은 `<칸 이름> <N> · <하위 칸>` 이다 — 빈칸은 하나씩이고
+#: 가운뎃점은 앞뒤에 빈칸이 있는 U+00B7 이다. 지시서 검사기·`stay_helper.js` `splitRepeat` 와
+#: **한 글자도 다르면 안 된다** — 한쪽만 반복 행으로 읽으면 N번째 행이 아니라 첫 행에 값이 들어간다.
+ROW_LABEL_RE = re.compile(r"^(\S(?:.*?\S)?) (\d+) · (.+)$")
 AUTO_MARKERS = ("자동 입력됨", "자동입력됨")
 
 
@@ -457,7 +460,7 @@ KNOWN_KINDS = {
     "취소정책 만들기",
     "룸 만들기", "룸 사진 올리기",
     "오퍼 만들기",
-    "연령 구간 만들기",                       # 2026-09-04 신설 (`_age_bands_panel.html`)
+    "연령 구간 만들기",                       # 2026-09-04 신설 (오퍼 탭 `연령 구간` 패널)
     "판매 연결 한 번에 만들기", "판매 연결 표시명 넣기", "판매 연결 표시명 고치기",
     "시즌 만들기", "시즌 가격 채우기", "셀 상태 바꾸기",
     "가격 셀 손으로 고치기", "가격 셀 만들기",
@@ -469,16 +472,21 @@ KNOWN_KINDS = {
     "판매일 열기",
     "부과금 추가", "부가옵션 만들기", "부가옵션 가격 넣기",
     "프로모션 추가", "혜택 추가", "택1 그룹 만들기", "그룹에 혜택 추가",
-    "경고 넘어가기", "판매 시작",
+    "판매 시작",
 }
+
+#: 러너가 **금지**하는 갈래 — 합격선이 판매 시작 전 🟡 0 이라 사유를 적어 넘기는 길이 없다.
+#: `stay_boot.js` 의 `refusedStep` 과 같은 판정이다.
+FORBIDDEN_KIND_RE = re.compile(r"^경고 넘어가기")
+FORBIDDEN_WARN_WHY = ("`경고 넘어가기` 는 금지된 단계입니다 — 합격선은 판매 시작 전 🟡 0 입니다. "
+                      "사유를 적어 넘기지 말고 지시서에서 원인을 고쳐 다시 까세요.")
 
 #: 러너가 실행을 거부하는 갈래·표시 — `stay_boot.js` `staleStep` 과 한 글자도 다르면 안 된다.
 STALE_KIND_RE = re.compile(r"^오퍼 고치기")
 STALE_HEAD_MARKS = ("기본 오퍼", "스탠다드")
 
 #: 연령별 단가 칸 — 부과금 드로어의 카드이고, **[부과 단위]가 `인당`** 이고 **[부과 방식]이 `정액`**
-#: 이며 시간대별 요율 행이 하나도 없을 때만 화면에 선다(`_charge_form.html` 의 두 x-show 조건은
-#: `per == 인당` 과 `basis == 정액` 이다 — `per` 의 화면 이름이 [부과 단위], `basis` 가 [부과 방식]이다).
+#: 이며 시간대별 요율 행이 하나도 없을 때만 화면에 선다(세 조건이 다 맞아야 그 카드가 선다).
 #: 그래서 지시서의 줄 차례가 곧 결과다.
 AGE_RATE_LABEL_RE = re.compile(r"^연령별\s*단가(\s*[·・]\s*.+)?$")
 #: 카드를 세우는 두 셀렉트. 연령별 단가 줄은 **둘 다보다 뒤**여야 한다.
@@ -492,9 +500,14 @@ TIER_ROW_LABEL_RE = re.compile(r"^(시간대별\s*요율|요율)\s+\d+\s*[·・]
 
 
 def stale_reason(step):
-    """이 단계가 ERP 2026-09-04 이전 화면 기준인가 — 이유 한 줄, 아니면 None."""
+    """러너가 실행을 거부하는 단계인가 — 이유 한 줄, 아니면 None.
+
+    옛 화면(ERP 2026-09-04 이전) 기준 단계와 금지된 단계(`경고 넘어가기`)를 함께 본다.
+    """
     kind, title = step.get("kind") or "", step.get("title") or ""
     head = json.dumps(step.get("head") or {}, ensure_ascii=False)
+    if FORBIDDEN_KIND_RE.match(kind) or FORBIDDEN_KIND_RE.match(title):
+        return FORBIDDEN_WARN_WHY
     if STALE_KIND_RE.match(kind) or STALE_KIND_RE.match(title):
         return "`오퍼 고치기` 단계 — 고쳐 쓸 `기본 오퍼` 가 없습니다"
     if "룸 만들기" in kind and "스탠다드" in head:
@@ -577,11 +590,17 @@ def age_band_overlaps(steps):
 
 
 def preflight(steps):
-    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order, age_overlap}."""
+    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order, age_overlap}.
+
+    `stale` 은 러너가 **거부하는** 단계다(옛 화면 기준 · 금지된 갈래).
+    """
     stale = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [stale_reason(s)] if w]
+    refused_nos = {x["no"] for x in stale}
+    # 거부하는 갈래는 위에서 이미 한 줄로 알린다 — `모르는 갈래` 로 두 번 세지 않는다
     unknown = [{"no": s["no"], "kind": s["kind"]}
-               for s in steps if s["kind"] and s["kind"] not in KNOWN_KINDS]
+               for s in steps
+               if s["kind"] and s["kind"] not in KNOWN_KINDS and s["no"] not in refused_nos]
     order = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [charge_order_problem(s)] if w]
     return {"stale": stale, "unknown_kinds": unknown, "charge_order": order,
@@ -639,7 +658,7 @@ def summarize(doc):
     lines += ["  %d단계 · %s · %s" % u for u in unknown[:20]]
     lines.append("없는 사진 파일: %d" % len(missing))
     lines += ["  %s" % m for m in missing[:20]]
-    lines.append("옛 화면 기준 단계: %d" % len(pre["stale"]))
+    lines.append("러너가 거부하는 단계: %d" % len(pre["stale"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["stale"][:20]]
     lines.append("줄 차례가 어긋난 단계: %d" % len(pre["charge_order"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["charge_order"][:20]]
