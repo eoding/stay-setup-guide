@@ -141,6 +141,24 @@ const CHECK_STEPS = {
   ]
 };
 
+//: [호텔 만들기] 단계 — 0단계 확인과 같은 폼에서 값을 채우고 저장한다.
+const HOTEL_STEPS = {
+  guide: { title: '시험 호텔' },
+  steps: [
+    {
+      no: 1, title: '호텔 만들기 (시험 호텔)', kind: '호텔 만들기',
+      head: { tab: null, card: null, block: null, screen: '왼쪽 메뉴 `자유여행` → `상품관리` → 목록 위 [호텔 만들기]', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '호텔명', kind: 'typed', value: '시험 호텔' },
+        { label: '도시', kind: 'select', value: '도쿄(TYO)' },
+        { label: '공급 통화', kind: 'select', value: 'JPY' },
+        { label: '거래처', kind: 'select', value: '자사' }
+      ],
+      longtexts: [], photos: [], submit: '호텔 만들기'
+    }
+  ]
+};
+
 //: [호텔 만들기] 폼 — 목록 화면에서 [호텔 만들기] 로 들어간 전체 화면 폼이다(저장 버튼은 [호텔 만들기] 하나).
 const CREATE_FORM_HTML = `<!doctype html><html lang="ko"><body>
   <div class="erp_cont_head"><h4>호텔 만들기</h4></div>
@@ -315,6 +333,137 @@ const run = async () => {
   ok(p9.done === 2 && p9.failed === 1, 'runStep: 같은 단계를 다시 돌려도 두 번 세지 않는다', p9);
   ok(w4.__stayRunStatus[1] === 'done' && w4.__stayRunStatus[2] === 'failed',
     'runStep: 단계별 판정을 하나씩만 들고 있다', w4.__stayRunStatus);
+
+  // 7) 늦게 그려지는 [호텔 만들기] 폼 (2026-09-07 운영 실행)
+  //    이 폼은 뼈대를 먼저 그리고 통화 목록을 나중에 채우며 도시·거래처 select2 는 가장 늦게 붙는다.
+  //    기다리지 않으면 0단계 확인이 `{checked:false, found:[]}` 로, 호텔 만들기가 칸마다
+  //    `not-found` 로 끝난다 — 여기서는 그 차례를 그대로 흉내 내 본다.
+  const DELAYED_CREATE_HTML = `<!doctype html><html lang="ko"><body>
+  <div class="erp_cont_head"><h4>호텔 만들기 폼</h4></div>
+  <div id="form_host"></div>
+  <script>
+    // 이 화면은 select2(jQuery 플러그인)를 쓴다 — 실려 있다는 표시는 처음부터 있고, 칸에 붙는 것은 가장 늦다
+    window.jQuery = { fn: { select2: function () {} } };
+    // (1) 250ms — 폼 뼈대(목록은 아직 '선택' 한 줄뿐)
+    setTimeout(function () {
+      document.getElementById('form_host').innerHTML =
+        '<form><table class="bs-table"><tbody>' +
+        '<tr><th>호텔명</th><td><input type="text" name="title"></td></tr>' +
+        '<tr><th>도시</th><td><select name="city"><option value="">선택</option></select></td></tr>' +
+        '<tr><th>공급 통화</th><td><select name="currency"><option value="">선택</option></select></td></tr>' +
+        '<tr><th>거래처</th><td><select name="vendor"><option value="">선택</option></select></td></tr>' +
+        '</tbody></table><button type="button">목록</button>' +
+        '<button type="button">호텔 만들기</button></form>';
+    }, 250);
+    // (2) 500ms — 목록이 찬다
+    setTimeout(function () {
+      var add = function (sel, rows) {
+        rows.forEach(function (r) { var o = document.createElement('option'); o.value = r[0]; o.textContent = r[1]; sel.appendChild(o); });
+      };
+      add(document.querySelector('select[name=currency]'), [['JPY', 'JPY'], ['USD', 'USD']]);
+      add(document.querySelector('select[name=city]'), [['1', '도쿄(TYO)'], ['2', '오사카(OSA)']]);
+      add(document.querySelector('select[name=vendor]'), [['9', '자사']]);
+    }, 500);
+    // (3) 750ms — 도시·거래처에 select2 가 붙는다(가장 늦다)
+    setTimeout(function () {
+      ['city', 'vendor'].forEach(function (n) {
+        var sel = document.querySelector('select[name=' + n + ']');
+        sel.classList.add('select2-hidden-accessible');
+        var box = document.createElement('span');
+        box.className = 'select2 select2-container';
+        box.innerHTML = '<span class="select2-selection" role="combobox"><span class="select2-selection__rendered"></span></span>';
+        sel.parentElement.appendChild(box);
+      });
+    }, 750);
+    // select2 흉내 — mousedown 으로 열고 keyup 이 와야 검색된다(helper_fixture 와 같은 조건)
+    document.addEventListener('mousedown', function (e) {
+      var trig = e.target.closest ? e.target.closest('.select2-selection') : null;
+      if (!trig) return;
+      var sel = trig.closest('td').querySelector('select.select2-hidden-accessible');
+      var dd = document.createElement('span');
+      dd.className = 'select2-container select2-container--open';
+      dd.innerHTML = '<input class="select2-search__field"><ul class="select2-results__options"></ul>';
+      document.body.appendChild(dd);
+      var field = dd.querySelector('.select2-search__field');
+      field.addEventListener('keyup', function () {
+        var q = field.value.trim();
+        setTimeout(function () {
+          var ul = dd.querySelector('ul');
+          var rows = [].slice.call(sel.options).map(function (o) { return o.textContent; })
+            .filter(function (r) { return r && r !== '선택' && r.indexOf(q) >= 0; });
+          ul.innerHTML = rows.map(function (r) { return '<li class="select2-results__option">' + r + '</li>'; }).join('')
+            || '<li class="select2-results__option select2-results__message">결과 없음</li>';
+          ul.querySelectorAll('.select2-results__option').forEach(function (li) {
+            li.addEventListener('mouseup', function () {
+              var txt = li.textContent.trim();
+              var hit = [].slice.call(sel.options).find(function (o) { return o.textContent.trim() === txt; });
+              if (hit) { sel.value = hit.value; }
+              trig.querySelector('.select2-selection__rendered').textContent = txt;
+              dd.remove();
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+          });
+        }, 120);
+      });
+    });
+  <\/script>
+</body></html>`;
+
+  const dom5 = new JSDOM(DELAYED_CREATE_HTML, {
+    url: 'https://example.test/stay/create/',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true
+  });
+  const w5 = dom5.window;
+  w5.localStorage.setItem('staySteps', JSON.stringify(CHECK_STEPS));
+  w5.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+  w5.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+
+  ok(w5.hotelFormReady() === false, 'hotelFormReady: 아직 아무것도 안 그려졌으면 거짓이다');
+  ok(w5.stayRun.fields().length === 0, 'fixture: 처음에는 화면에 칸이 하나도 없다', w5.stayRun.fields());
+
+  const t5a = Date.now();
+  const c5 = await w5.runStep(1);
+  const spent5 = Date.now() - t5a;
+  ok(c5.checked === true, 'runCheckStep: 늦게 그려지는 폼도 기다렸다가 본다', c5);
+  ok(c5.formReady === true, 'runCheckStep: 폼이 다 선 뒤에 읽었다', c5);
+  // select2 는 750ms 에 붙는다 — 그 전에 끝났다면 기다리지 않고 읽었다는 뜻이다
+  ok(spent5 >= 750, 'runCheckStep: select2 가 붙을 때까지 기다렸다', { spent: spent5, formWaited: c5.formWaited });
+  ok((c5.found || []).join(' ').indexOf('JPY') >= 0, 'runCheckStep: 늦게 찬 통화 목록에서 값을 찾았다', c5.found);
+  ok(w5.hotelFormReady() === true, 'hotelFormReady: 통화 목록이 차고 select2 가 붙으면 참이다');
+
+  // 이미 다 선 폼에서는 기다리지 않는다 — 서 있는 화면에 8초를 버리면 안 된다
+  const t5 = Date.now();
+  const w5b = await w5.waitHotelForm();
+  ok(w5b.ready === true && w5b.waited === 0 && Date.now() - t5 < 200,
+    'waitHotelForm: 이미 선 폼에서는 곧바로 돌아온다', w5b);
+
+  // 끝내 서지 않는 화면에서도 막지 않는다 — 한도까지만 기다리고 `{ready:false}` 로 알린다
+  const dom6 = new JSDOM('<!doctype html><html lang="ko"><body><div>빈 화면</div></body></html>', {
+    url: 'https://example.test/stay/create/', runScripts: 'dangerously', pretendToBeVisual: true
+  });
+  const w6 = dom6.window;
+  w6.localStorage.setItem('staySteps', JSON.stringify(CHECK_STEPS));
+  w6.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+  w6.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+  const w6r = await w6.waitHotelForm(400);
+  ok(w6r.ready === false && w6r.waited >= 400, 'waitHotelForm: 끝내 안 서면 한도까지만 기다리고 알린다', w6r);
+
+  //    [호텔 만들기] 단계도 같은 기다림을 쓴다 — 폼이 다 서기 전에 채우면 칸마다 not-found 로 끝난다
+  const dom7 = new JSDOM(DELAYED_CREATE_HTML, {
+    url: 'https://example.test/stay/create/', runScripts: 'dangerously', pretendToBeVisual: true
+  });
+  const w7 = dom7.window;
+  w7.localStorage.setItem('staySteps', JSON.stringify(HOTEL_STEPS));
+  w7.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+  w7.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+  const t7 = Date.now();
+  const h7 = await w7.runStep(1, { dry: true });
+  ok(h7.formReady === true, 'runStep: 호텔 만들기도 폼이 다 설 때까지 기다린다', h7);
+  ok(Date.now() - t7 >= 750, 'runStep: select2 가 붙기 전에는 채우지 않는다', Date.now() - t7);
+  ok((h7.bad || []).length === 0, 'runStep: 기다린 뒤에는 칸을 다 찾는다', h7.bad);
+  ok(w7.document.querySelector('[name=currency]').value === 'JPY', 'DOM: 늦게 찬 통화 목록에서 골랐다',
+    w7.document.querySelector('[name=currency]').value);
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);

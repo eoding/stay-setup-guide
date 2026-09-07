@@ -318,6 +318,48 @@
     return out;
   };
 
+  /* ──────────── [호텔 만들기] 폼이 다 그려질 때까지 기다리기 (2026-09-07) ──────────── */
+  // 이 폼은 뼈대를 먼저 그리고 **그 뒤에** 통화 목록을 채우고 도시·거래처에 select2 를 붙인다.
+  // 그전에 읽거나 채우면 아무 칸도 못 찾는다 — 운영 실행에서 0단계 확인 세 개가 모두
+  // `{checked:false, found:[]}` 로, [호텔 만들기] 는 칸마다 `not-found` 로 끝났고
+  // 몇 초 뒤 그대로 다시 부르니 한 번에 됐다. 그래서 읽기·채우기 앞에서 늘 기다린다.
+  window.HOTEL_FORM_WAIT_MS = 8000;
+  // [호텔 만들기] 폼 위에 서 있는가 (목록 화면과 가르는 기준)
+  window.onHotelForm = function () {
+    var nfc0 = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    try { return stayRun.fields().some(function (f) { return /^(호텔명|공급 통화|거래처|도시)$/.test(nfc0(f.label)); }); }
+    catch (e) { return false; }
+  };
+  window.hotelFormReady = function () {
+    var nfc = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var fs = [];
+    try { fs = stayRun.fields(); } catch (e) { return false; }
+    var byLabel = function (re) { return fs.find(function (x) { return re.test(nfc(x.label)); }); };
+    var ctlOf = function (f) { return f && f.name ? document.querySelector('[name="' + f.name + '"]') : null; };
+    // ① 공급 통화 목록이 찼는가 (뼈대만 그려진 사이에는 빈 `선택` 한 줄뿐이다)
+    var cur = document.querySelector('select[name=currency]') || ctlOf(byLabel(/통화/));
+    if (!cur || cur.tagName !== 'SELECT' || cur.options.length < 2) return false;
+    // ② 도시·거래처가 쓸 수 있는 꼴인가.
+    //    select2 를 쓰는 화면이면(라이브러리가 실려 있거나 이미 붙은 칸이 있으면) **붙을 때까지** 기다린다 —
+    //    붙기 전에는 그냥 셀렉트로 보여서 "다 됐다" 고 잘못 읽기 쉽다. 이것이 운영에서 깨진 지점이다.
+    var s2 = !!(window.jQuery && window.jQuery.fn && window.jQuery.fn.select2) || !!document.querySelector('.select2-container');
+    return [/도시/, /거래처/].every(function (re) {
+      var f = byLabel(re);
+      if (!f) return false;
+      var el = ctlOf(f);
+      if (s2) return f.kind === 'select2' && !!document.querySelector('.select2-container');
+      return el && el.tagName === 'SELECT' ? el.options.length >= 2 : true;
+    });
+  };
+  // 폼이 다 설 때까지 기다린다. 끝내 서지 않아도 막지 않고 `{ready:false}` 로 알린 뒤 그대로 이어 간다 —
+  // 화면이 조금 다른 경우까지 여기서 멈추면 실행이 통째로 서기 때문이다.
+  window.waitHotelForm = async function (ms) {
+    var t0 = Date.now();
+    if (window.hotelFormReady()) return { ready: true, waited: 0 };
+    var ready = await stayRun.waitFor(window.hotelFormReady, ms || window.HOTEL_FORM_WAIT_MS);
+    return { ready: ready, waited: Date.now() - t0 };
+  };
+
   // 0단계 확인(`환율 확인` · `거래처 확인` · `도시 확인`) — **저장이 없는 단계**다.
   // [호텔 만들기] 폼을 열어 지시서 값이 그 화면의 목록(셀렉트·자동완성)에 뜨는지만 보고 돌아온다.
   // 지시서 마지막 줄의 `→ [목록]` 은 저장 버튼이 아니라 **목록으로 돌아오는 행위**를 가리킨다.
@@ -327,11 +369,11 @@
     var s = window.step(n), out = { no: n, title: s.title, kind: s.kind, checked: false, found: [] };
     var sleep = stayRun.sleep, waitFor = stayRun.waitFor;
     var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
-    var onForm = function () {
-      return stayRun.fields().some(function (f) { return /^(호텔명|공급 통화|거래처|도시)$/.test(clean(f.label)); });
-    };
+    var onForm = window.onHotelForm;
     // 폼이 화면에 없으면 목록의 [호텔 만들기] 로 연다. 그 이동은 **전체 화면 이동**이라 JS 호출이
     // 결과를 못 돌려주고 끊길 수 있다 — 그때는 새 화면에서 부트를 다시 eval 하고 이 단계를 다시 부른다.
+    // 화면이 아직 그려지는 중이면 폼도 [호텔 만들기] 버튼도 없다 — 둘 중 하나가 설 때까지만 잠깐 본다
+    if (!onForm()) await waitFor(function () { return onForm() || !!stayRun.findButton(document.body, '호텔 만들기'); }, 4000);
     if (!onForm()) {
       var opener = stayRun.findButton(document.body, '호텔 만들기');
       if (!opener) { out.error = '[호텔 만들기] 폼도 그 버튼도 화면에 없습니다 — 호텔 목록에서 시작하세요'; return out; }
@@ -339,6 +381,9 @@
       await waitFor(onForm, 8000);
       if (!onForm()) { out.navigated = true; out.note = '[호텔 만들기] 폼으로 넘어갑니다 — 새 화면에서 부트를 다시 eval 하고 이 단계를 다시 부르세요'; return out; }
     }
+    // 통화 목록이 차고 도시·거래처 select2 가 붙을 때까지 기다린다 — 그전에 읽으면 다 못 찾는다
+    var fw = await window.waitHotelForm();
+    out.formReady = fw.ready; if (fw.waited) out.formWaited = fw.waited;
     // 값을 골라 목록에 있는지 본다. 고르기만 할 뿐 **아무 것도 저장하지 않는다**
     // (이 화면의 저장 버튼은 [호텔 만들기] 하나뿐이고 이 단계는 누르지 않는다).
     var F = window.stepFields(n);
@@ -383,6 +428,16 @@
     var bps = (s.head.buttons_parsed || []).filter(function (b) { return b.text && !b.drawer && !window.isRowAddButton(b.text); });
     // 버튼 줄이 없고 `화면:` 설명이 `… [호텔 만들기]` 처럼 대괄호 버튼으로 끝나면 그 버튼을 연다
     if (!bps.length && s.head.screen) { var sm = String(s.head.screen).normalize('NFC').match(/\[([^\]]+)\]\s*$/); if (sm) bps = [{ text: sm[1].trim(), row: null, card: null }]; }
+    // [호텔 만들기] 단계는 목록에서 시작할 수도, 0단계 확인이 끝나 이미 그 폼 위에 있을 수도 있다.
+    // ① 화면이 아직 그려지는 중이면 목록의 [호텔 만들기] 도 폼도 없다 — 둘 중 하나가 설 때까지 기다린다.
+    // ② 이미 폼 위라면 여는 버튼을 누르지 않는다: 이 화면의 [호텔 만들기] 는 **저장 버튼**이라
+    //    누르는 순간 빈 폼이 그대로 저장된다.
+    if (/^호텔 만들기/.test(s.kind || '')) {
+      await stayRun.waitFor(function () {
+        return window.onHotelForm() || !!stayRun.findButton(document.body, '호텔 만들기');
+      }, window.HOTEL_FORM_WAIT_MS);
+      if (window.onHotelForm()) { bps = []; out.onForm = true; }
+    }
     if (bps.length) {
       var bp = bps[0];
       var spec = { button: bp.text, row: bp.row, card: bp.card || s.head.card, block: s.head.block };
@@ -417,6 +472,12 @@
       }
       out.open = o.status;
       if (o.status !== 'ok') { out.openDetail = o.detail; out.buttons = o.buttons; out.rows = o.rows; return out; }
+    }
+
+    // [호텔 만들기] 는 전체 화면 폼이다 — 통화 목록·select2 가 다 설 때까지 기다린 뒤에 채운다
+    if (/^호텔 만들기/.test(s.kind || '')) {
+      var fw2 = await window.waitHotelForm();
+      out.formReady = fw2.ready; if (fw2.waited) out.formWaited = fw2.waited;
     }
 
     var F = window.stepFields(n);

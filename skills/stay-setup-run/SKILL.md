@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.7.0
+version: 0.7.1
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -160,7 +160,8 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
 - 뒤로 간 탭은 크롬이 페이지 타이머를 늦춘다. 도우미의 대기는 워커 타이머로 재므로 탭을 앞에 두지 않아도 되지만, **스크린샷은 탭이 앞에 있어야** 찍힌다.
 - `runStep` 이 돌려주는 키: `open`·`openDetail`·`fill`·`bad`·`warn`·`mismatch`·`submit`·`submitAs`·`skipped`·`cardPick`·`rowHint`·`uploads`·`refused`.
 - **0단계 확인**(`환율 확인`·`거래처 확인`·`도시 확인`)은 저장이 없는 단계다. `runStep` 이
-  `{checked, found, bad}` 로 돌려준다 — [호텔 만들기] 폼의 목록에 지시서 값이 뜨는지만 보고,
+  `{checked, found, bad}` 로 돌려준다 — 폼이 다 설 때까지 기다린 뒤(`formReady`·`formWaited`)
+  [호텔 만들기] 폼의 목록에 지시서 값이 뜨는지만 보고,
   폼을 떠나는 마지막 단계에서 `→ [목록]` 으로 돌아온다(`left: true`). 값이 목록에 없으면 `bad` 에
   담고 폼에 남는다 — 비슷한 값을 대신 고르지 않는다.
 - `refused: true` 는 옛 화면 기준 단계이거나 금지된 단계(`경고 넘어가기`)라 실행을 거부한 것이다(`fatal: true`). 다음 단계로 넘어가지 말고 멈춘다.
@@ -219,7 +220,14 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
 
 ## 화면이 통째로 바뀌는 단계
 
-- **호텔 만들기** — 목록의 [호텔 만들기] 는 전체 화면 폼이다. `stayRun.fill(stepFields(n))` 로 채우고 [호텔 만들기] 를 누른 뒤, **스크린샷을 한 번 찍어 JS 컨텍스트를 다시 맞추고** 새 편집 화면에서 부트를 다시 eval 한다. 호텔 번호는 `stayRun.state().hotelId` 로 읽어 로그 머리에 적는다.
+- **호텔 만들기** — 목록의 [호텔 만들기] 는 전체 화면 폼이다. 그 화면으로 넘어간 **직후에는
+  `await waitHotelForm()` 을 먼저 부른다** — 폼은 뼈대를 먼저 그리고 통화 목록과 도시·거래처
+  select2 를 나중에 붙이므로, 그전에 채우면 칸마다 `not-found` 로 끝난다(2026-09-07 운영 실행).
+  `{ready, waited}` 를 돌려주고 최대 8초까지만 기다린다. 그다음 `stayRun.fill(stepFields(n))` 로
+  채우고 [호텔 만들기] 를 누른 뒤, **스크린샷을 한 번 찍어 JS 컨텍스트를 다시 맞추고** 새 편집
+  화면에서 부트를 다시 eval 한다. 호텔 번호는 `stayRun.state().hotelId` 로 읽어 로그 머리에 적는다.
+  `runStep` 으로 돌리면 이 기다림은 저절로 들어가고(`formReady`·`formWaited`), 이미 폼 위에 있으면
+  [호텔 만들기] 를 **여는 버튼으로 누르지 않는다**(그 화면에서는 저장 버튼이다).
 - **기본정보 글 입력 · 호텔 정보 입력** — 저장이 전체 화면 저장이라 `submit` 이 `timeout` 으로 보일 수 있다. **스크린샷과 토스트("저장되었습니다")로 확인**하고 완료로 적는다.
 - **`캠페인` 은 화면에 없다**(2026-09-04). 지시서에 캠페인 단계나 `캠페인` 줄이 보이면 실행하지 말고 멈춰서 보고한다.
 
