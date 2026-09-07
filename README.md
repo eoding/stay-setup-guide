@@ -1,153 +1,146 @@
 # stay-setup-guide
 
-An agent skill for travel-agency staff: from a hotel contract (rate sheet) file alone, it produces a step-by-step **input guide (HTML)** for the ERP Stay screens plus a photo folder. The guide is written in Korean because the ERP screens are Korean.
-
-**Three files, three roles.** They have similar names and used to sit in one folder, so the layout keeps them apart:
-
-| File | What it is | Who reads it | Where it lives |
-|---|---|---|---|
-| `<name>_입력지시서.html` | **지시서** — the guide, the one deliverable, carrying the check stamp | the person doing the setup, and the runner skill | `<name>/` (top level of the share folder) |
-| `manual.md` | **원고** — the draft the guide is rendered from, with `rules.md`, `facts.json`, `contract.md` | the guide skill only; never handed out | `<name>/_원고/` |
-| `steps.json` | **실행 계획** — the run plan extracted from the guide, generated, never hand-edited | the runner skill only | `<name>_실행/` |
-
-Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any other agent that reads the standard `SKILL.md` skill format.
-
-The screen dictionary and the step order follow the ERP screens in production on 2026-09-04 — **운영 2026-09-04 배포판 화면 기준**, 27 screens. A newly created hotel starts empty: no offer, no room and no sale link are created for you, and the room-link drawer stays blocked until the first offer exists. The 2026-09-04 release also added per-offer **age bands** (연령 구간) and the per-band price table inside the charge drawer, so the guide can now write child pricing as one charge instead of an adult charge plus a child add-on.
-
-> **비개발자용 설치·사용 안내(윈도우·맥, 1장)**: [`docs/설치-사용-안내.md`](docs/설치-사용-안내.md) — 영업·운영 담당자는 이 문서만 보면 됩니다. 데모용 계약서·사진은 이 저장소에 넣지 않고 따로 전달합니다(호텔 계약 단가와 사진 저작권 때문).
-
-> **Install as a plugin (auto-updating)** — in Claude Code (CLI or desktop app Code tab): `/plugin marketplace add eoding/stay-setup-guide`, then `/plugin install stay-setup@eoding-stay`, then turn on auto-update for `eoding-stay` under `/plugin` → Marketplaces. Skills are then invoked as `/stay-setup:stay-setup-guide` and `/stay-setup:stay-setup-run`. Copying `skills/*` into `~/.claude/skills/` still works but does not update itself.
-
-| Path | Contents |
-|---|---|
-| `.claude-plugin/` | Plugin + marketplace manifests (`plugin.json`, `marketplace.json`); bump both `version` fields when a skill version changes |
-| [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |
-| [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: takes that guide and fills the ERP Stay screens in the browser tab the user is logged into, step by step, writing a run log. It never presses [판매 시작] (start selling) |
-
-## Requirements
-
-- Python 3.10+ (the skill's scripts are pure Python; converter packages install themselves on first run)
-- An agent that can read/write files, run a terminal command, and fetch web pages (for hotel facts and photos)
-
-The skill's scripts do not need Node.js (the optional `npx skills` installer below is a separate tool). Contract formats: xlsx, xlsm, xls, ods, csv, pdf, docx, pptx, odt, rtf, epub, hwp, hwpx.
+Two agent skills for travel-agency staff. From a hotel contract (rate sheet) file alone, `stay-setup-guide`
+produces a step-by-step **입력지시서** — an input guide as one HTML file, the deliverable a person follows on the
+ERP Stay screens — plus a photo folder and a list of the values that need a human decision. `stay-setup-run` then
+takes that same guide and fills the ERP Stay screens automatically, in the Chrome tab the user is already logged
+into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
+guides and the skill documents are Korean because the ERP screens are Korean.
 
 ## Install
 
-### Universal (recommended)
+**Claude Code plugin (recommended — it updates itself).** In Claude Code, the CLI or the desktop app's Code tab:
 
-Uses the [`skills`](https://github.com/vercel-labs/skills) CLI, which installs into every agent it finds on your machine (Claude Code, Codex, Gemini CLI, Grok, Cursor, Cline, Amp and more).
-
-```bash
-npx skills add eoding/stay-setup-guide            # current project
-npx skills add eoding/stay-setup-guide --global   # your user account
+```
+/plugin marketplace add eoding/stay-setup-guide
+/plugin install stay-setup@eoding-stay
 ```
 
-Update later with `npx skills update`.
+Then open `/plugin` → **Marketplaces** and turn on auto-update for `eoding-stay`. The skills are invoked as
+`/stay-setup:stay-setup-guide` and `/stay-setup:stay-setup-run`.
 
-### Hermes Agent
+**Copying the folders** also works and is the way to install into an agent that is not Claude Code: put
+`skills/stay-setup-guide` and `skills/stay-setup-run` into the tool's skills directory (`~/.claude/skills/`,
+`~/.codex/skills/`, `.cursor/skills/`, and so on). A copied skill does not update itself.
 
-```bash
-hermes skills install eoding/stay-setup-guide/skills/stay-setup-guide --yes
-hermes skills list
-```
+Sales and operations staff who do not use a terminal should follow
+[`docs/설치-사용-안내.md`](docs/설치-사용-안내.md) instead — one page, Windows and Mac, install to first hotel.
 
-Update with `hermes skills update stay-setup-guide`.
+## Requirements
 
-### Claude Code
-
-Either the universal command above, or copy the folder:
-
-```bash
-git clone https://github.com/eoding/stay-setup-guide
-cp -r stay-setup-guide/skills/stay-setup-guide ~/.claude/skills/     # personal
-# or into a project:  .claude/skills/stay-setup-guide
-```
-
-Invoke it with `/stay-setup-guide` or just describe the task.
-
-### Codex
-
-Codex reads `~/.codex/skills/<name>/SKILL.md` (user) and `.codex/skills/` or `.agents/skills/` (project).
-
-```bash
-git clone https://github.com/eoding/stay-setup-guide
-cp -r stay-setup-guide/skills/stay-setup-guide ~/.codex/skills/
-```
-
-### Gemini CLI
-
-```bash
-gemini skills install https://github.com/eoding/stay-setup-guide --path skills/stay-setup-guide
-gemini skills list
-```
-
-The default scope is your user account. Add `--scope workspace` to install into the current workspace only.
-
-### Grok
-
-Grok reads `~/.grok/skills/<name>/SKILL.md`. The universal command above places it there; or copy the folder:
-
-```bash
-git clone https://github.com/eoding/stay-setup-guide
-cp -r stay-setup-guide/skills/stay-setup-guide ~/.grok/skills/
-```
-
-### Cursor and others
-
-Copy `skills/stay-setup-guide` into the tool's skills directory (for Cursor: `.cursor/skills/`), or use the universal command.
+- **Python 3.10+** for the scripts. The contract converter installs its own packages on first run
+  (`firecrawl-anydoc`, `rhwp-python`, `openpyxl`) and prints a notice first. Node.js is optional and only minifies
+  the two browser helper files.
+- **Claude Code** (CLI or the desktop app's Code tab) **with the Claude in Chrome extension** for automatic entry.
+  That is the measured path: seven hotels ran end to end on it. The extension grants permission per site, so allow
+  the ERP domain first.
+- Other agents that read the standard `SKILL.md` format (Codex, Gemini CLI, Grok, Cursor, Hermes Agent) can produce
+  the guide. **Automatic entry on Codex is not yet verified** — we do not claim it works. `skills/stay-setup-run`
+  lists the three browser capabilities to confirm before trying it.
+- Contract formats the converter reads: xlsx, xlsm, xls, ods, csv, pdf, docx, pptx, odt, rtf, epub, hwp, hwpx.
 
 ## Use
 
-Put the contract file in a folder and ask the agent. Use absolute paths.
+Put the contract file and a photo folder in one folder, point the agent at it, and ask for the guide:
 
 ```text
-Use the stay-setup-guide skill to build the full ERP Stay input guide for this hotel.
-Contract: /abs/path/input/rates.xlsx. Hotel name <name>, city <city>, supply currency USD,
-contract party 자사, share folder name <share_folder>. Write outputs to /abs/path/output/<share_folder>/.
+/stay-setup:stay-setup-guide  Build the ERP Stay input guide from the contract in this folder.
+Hotel <name>, city <city>, supply currency USD, contract party 자사, cancellation policy <name>.
 Do not invent any rule, surcharge or value that is not in the contract.
 ```
 
-Hermes one-shot form:
+**Three files, three roles.** Their names are close and the roles are not, so the layout keeps them apart.
 
-```bash
-hermes -z "<the prompt above>" --skills stay-setup-guide
-```
+| File | What it is | Who reads it | Where it lives |
+|---|---|---|---|
+| `<name>_입력지시서.html` | **지시서** — the guide, the one deliverable, carrying the check stamp | the person doing the setup, and the runner skill | `<name>/` |
+| `manual.md` | **원고** — the draft the guide is rendered from, with `rules.md`, `facts.json`, `contract.md` | the guide skill only; never handed out | `<name>/_원고/` |
+| `steps.json` | **실행 계획** — the run plan extracted from the guide, generated, never hand-edited | the runner skill only | `<name>_실행/` |
 
-Outputs, in one share folder `<share_folder>/`: `<share_folder>_입력지시서.html` (the guide, with copy buttons — the file you hand over), `사진/` (photos), `changes.md` (every value the agent decided differently from the contract, plus the fields left blank for a person to fill in), and `_원고/` holding the working files `manual.md`, `rules.md`, `facts.json` and `contract.md`.
-
-On first run, `scripts/convert_contract.py` installs three Python packages into the current Python environment (`firecrawl-anydoc`, `rhwp-python`, `openpyxl`) and prints a notice before doing so.
-
-### Use (stay-setup-run)
-
-`skills/stay-setup-run` runs the guide the first skill produced. Install it the same way (`npx skills add eoding/stay-setup-guide`,
-or copy `skills/stay-setup-run` into your agent's skills directory). It needs an agent that can drive a browser: run JavaScript
-in the page, take screenshots, and upload a local file into a file input.
-
-Open the ERP in Chrome, log in, leave the tab on the hotel list, then ask:
+Alongside the guide you get `사진/` and `changes.md`, which lists every value decided differently from the contract
+plus the fields left blank for a person to fill in. Open the guide in a browser and follow it by hand, or hand it to
+the runner:
 
 ```text
-Use the stay-setup-run skill to run this guide in the browser.
-Guide: /abs/path/<share_folder>/<share_folder>_입력지시서.html
-Photos: /abs/path/<share_folder>/사진
-Chrome tab: the hotel list page that is open now (already logged in)
-Mode: 검토 (screenshot each step and ask before continuing)
+/stay-setup:stay-setup-run  Run this guide in the ERP tab that is open and logged in.
+Guide: /abs/path/<name>/<name>_입력지시서.html
+Photos: /abs/path/<name>/사진
 ```
 
-It writes `<share_folder>_실행/` next to the share folder, holding `steps.json` (the run plan), `parse.txt`, `run-log.md` (one line per step) and `_inject/`.
-**The agent never presses [판매 시작]** — check the validation banner and start the sale yourself.
+**Only a stamped, checker-passing guide runs.** The renderer stamps the HTML with the hash of the draft it came from
+and the checker's verdict. The runner's parser refuses a draft file, a missing stamp, a failed check, or a draft that
+has been edited since the render, and it exits before a browser is opened. The fix is always on the guide side: fix
+the draft, re-render, get the checker to pass.
+
+While the runner works, a small strip in the top-right corner of the ERP page shows where it is
+(`12 / 77 · 지금: 룸 만들기 (2번째, 씨뷰 빌라) · 완료 11 · 건너뜀 1`). Leave the guide open in a second tab of the
+same browser and its checkmarks and progress bar rise on their own. Neither display changes the run; if the guide tab
+is not open the agent skips it silently.
+
+Per-hotel wall-clock time in production runs, photos included:
+
+| Automatic entry, one hotel | 13–19 minutes |
+|---|---|
+
+At the end, read the validation banner. The pass mark is zero red and zero yellow items. Then press [판매 시작]
+yourself.
+
+## Rules the skills enforce
+
+- **USD is the default supply currency.** Another currency is used only after the user confirms it, and the
+  confirmation is recorded in `changes.md`. Amounts are never converted; the ERP handles currency.
+- **No invented values.** Anything absent from the contract or the fact sources is left `비움` and listed in
+  `changes.md` for a person to fill in. Prices, seasons and cancellation terms come from the contract only, never
+  from an existing sales page or a booking site.
+- **Seasons never overlap.** Two seasons of one offer cannot share a single day, containment included, and
+  `이미 값이 있는 날도 덮기` stays off.
+- **Every offer gets a 기본 취소 정책.** `지정 안 함` leaves a red banner item that blocks [판매 시작] outright.
+- **A child policy becomes 연령 구간 (age bands) plus per-band prices**, not a child add-on. A child sleeping in the
+  room is an occupancy band; an add-on is only something bought separately. Add-on and surcharge names start with
+  what is being sold, so `하프보드 소아 (만6~11세)`, not `소아 (만6~11세)`.
+- **Photo copyright is the user's responsibility**, stated in the final report and at the top of `changes.md`.
+- **The screen baseline is 운영 2026-09-04 배포판**, 27 screens. A new hotel starts empty: zero offers, zero rooms,
+  zero sale links, and the room-link drawer stays blocked until the first offer exists. When the ERP screens change,
+  both skills must be re-audited and the screen dictionary regenerated; the runner refuses steps written for older
+  screens rather than clicking the wrong row.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| [`.claude-plugin/`](.claude-plugin) | Plugin and marketplace manifests (`plugin.json`, `marketplace.json`); bump both `version` fields when a skill version changes |
+| [`skills/stay-setup-guide`](skills/stay-setup-guide) | The guide skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a worked example, converter/checker/renderer scripts |
+| [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: parser, in-page helper and boot scripts, screen mechanics, run-log format |
+| [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers |
+| [`LICENSE`](LICENSE) | eoding Partner Use License |
 
 ## Disclaimer
 
-**Photo copyright is the user's responsibility.** Any photos this skill locates or downloads (from the hotel's official website or elsewhere) must be checked for copyright and usage permission by the user (the travel agency) before use. The provider of this skill accepts no responsibility for the rights status of any photo. Obtain the hotel's permission before publishing photos on a sales page.
+**Photo copyright is the user's responsibility.** Any photos these skills locate or download (from the hotel's
+official website or elsewhere) must be checked for copyright and usage permission by the user (the travel agency)
+before use. The provider of these skills accepts no responsibility for the rights status of any photo. Obtain the
+hotel's permission before publishing photos on a sales page.
 
-The generated guide is a working aid. Verify every value against the contract before entering it; the provider is not liable for values entered into the ERP.
+The generated guide is a working aid. Verify every value against the contract before entering it. The runner copies
+what the guide says onto the screen; it does not check that the guide matches the contract. The provider is not
+liable for values entered into the ERP.
 
 ## License
 
-**eoding Partner Use License** — see `LICENSE`. In short: customers and partners with an eoding ERP account may use, copy and modify this repository internally to configure eoding ERP; redistribution outside your organization, resale, and use for other products are not permitted; no warranty. The bundled Pretendard font is separately under the SIL Open Font License (`skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt`).
+**eoding Partner Use License** — see [`LICENSE`](LICENSE). In short: customers and partners with an eoding ERP
+account may use, copy and modify this repository internally to configure eoding ERP; redistribution outside your
+organization, resale, and use for other products are not permitted; no warranty. The bundled Pretendard font is
+separately under the SIL Open Font License
+([`skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt`](skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt)).
 
 ## Repository rules
 
-- This repository is meant to be public. Never commit real contracts, real prices, contact details or company names. The example under `examples/` uses a real hotel's public facts (name, address, rooms, facilities from its official site and booking sites) with **sample rates, seasons and cancellation terms that are not an actual contract**. No real contract values are in this repository.
-- A skill folder holds only what is visible on screen (field names, options, buttons, order) and the document format rules. No internal code, database or API structure.
-- Later phases of this project (verification tools, MCP server) will live in this repository next to the skill.
+- This repository is public. Never commit real contracts, real prices, contact details, internal hostnames, internal
+  paths, hotel or customer ids, person names, or credentials. Run `gitleaks` on the staged diff before committing.
+- The example under `skills/stay-setup-guide/examples/` uses a real hotel's public facts (name, address, rooms,
+  facilities from its official site and booking sites) with **sample rates, seasons and cancellation terms that are
+  not an actual contract**. No real contract values are in this repository.
+- A skill folder holds only what is visible on screen (field names, options, buttons, order) and the document format
+  rules. No internal code, database or API structure.
+- Bump the `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` whenever a skill's
+  `SKILL.md` version changes.
