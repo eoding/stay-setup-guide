@@ -816,6 +816,11 @@ REPEAT_PREFIX_RE = re.compile(r"^.+? \d+ \u00b7 ")
 # 위 정본과 견줘 어긋난 것만 오류로 돌려준다.
 REPEAT_LOOSE_RE = re.compile(r"^.+?\s*\d+\s*[\u00b7\u30fb\u2027\u2219]\s*.+$")
 
+# 사전은 행마다 늘어나는 칸을 자리표시 라벨 한 줄로 담는다(`연령별 단가 · 〈연령 구간 노출명〉`).
+# 지시서는 그 자리에 실제 이름을 넣어 쓰므로(`연령별 단가 · 소아`) 허용 집합에는 자리표시를
+# 뗀 bare 이름(`연령별 단가`)도 함께 넣어 둔다 — `strip_row_suffix()` 가 줄인 형태와 만난다.
+PLACEHOLDER_SUFFIX_RE = re.compile(r"\s*\u00b7\s*\u3008[^\u3009]*\u3009\s*$")
+
 # 상품 공통 화면의 칸이라 화면 사전이 일부러 담지 않는 이름 — 대조에서 통과시킨다
 DICT_EXEMPT = {"상품명"}
 
@@ -854,6 +859,11 @@ def strip_row_suffix(name):
         if name.startswith(f"{base} · "):
             return base
     return name
+
+
+def strip_placeholder_suffix(label):
+    """`연령별 단가 · 〈연령 구간 노출명〉` → `연령별 단가`. 자리표시가 없으면 그대로."""
+    return PLACEHOLDER_SUFFIX_RE.sub("", label).strip()
 
 
 def find_repeat_row_format_gaps(steps):
@@ -909,6 +919,17 @@ def load_dictionary(path):
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
     labels = set()
+
+    def add(value):
+        """칸 이름 하나를 허용 집합에 넣는다 — 자리표시 라벨이면 bare 이름도 함께."""
+        norm = norm_field(value)
+        if not norm:
+            return
+        labels.add(norm)
+        bare = strip_placeholder_suffix(norm)
+        if bare and bare != norm:
+            labels.add(bare)
+
     # `screens` 의 검증 배너 줄은 최상위 `validation` 키를 가리키는 참조(`ref`)라 칸이 없다 —
     # 정본 한 벌을 함께 읽어 그 화면의 칸도 사전에 들어오게 한다.
     screens = list(data.get("screens") or [])
@@ -921,23 +942,23 @@ def load_dictionary(path):
                 for key in ("label", "screen_label"):
                     value = field.get(key)
                     if value:
-                        labels.add(norm_field(value))
+                        add(value)
                 # 체크박스 칸은 지시서에서 `<칸 이름> · <체크박스 문구>` 로도 쓴다
                 checkbox_text = field.get("checkbox_text")
                 if checkbox_text:
                     for key in ("label", "screen_label"):
                         value = field.get(key)
                         if value:
-                            labels.add(norm_field(f"{value} · {checkbox_text}"))
+                            add(f"{value} · {checkbox_text}")
                 # 반복 행 필드가 열 이름 목록을 들고 있으면 그것도 허용한다(아직 없는 사전이면 무시)
                 for column in field.get("columns") or []:
                     if isinstance(column, str):
-                        labels.add(norm_field(column))
+                        add(column)
                     elif isinstance(column, dict):
                         for key in ("label", "screen_label"):
                             value = column.get(key)
                             if value:
-                                labels.add(norm_field(value))
+                                add(value)
     return labels
 
 
