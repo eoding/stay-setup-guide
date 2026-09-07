@@ -19,8 +19,18 @@ guides and the skill documents are Korean because the ERP screens are Korean.
 Then open `/plugin` → **Marketplaces** and turn on auto-update for `eoding-stay`. The skills are invoked as
 `/stay-setup:stay-setup-guide` and `/stay-setup:stay-setup-run`.
 
-**Copying the folders** also works and is the way to install into an agent that is not Claude Code: put
-`skills/stay-setup-guide` and `skills/stay-setup-run` into the tool's skills directory (`~/.claude/skills/`,
+**Codex plugin.** In the Codex app or terminal Codex:
+
+```
+codex plugin marketplace add eoding/stay-setup-guide
+codex plugin add stay-setup@eoding-stay
+```
+
+Pick up a new release with `codex plugin marketplace upgrade`. Codex covers guide creation and entering the values
+by hand; automatic entry on Codex is 실측 전, not yet verified.
+
+**Copying the folders** also works and is the way to install into an agent that is neither Claude Code nor Codex:
+put `skills/stay-setup-guide` and `skills/stay-setup-run` into the tool's skills directory (`~/.claude/skills/`,
 `~/.codex/skills/`, `.cursor/skills/`, and so on). A copied skill does not update itself.
 
 Sales and operations staff who do not use a terminal should follow
@@ -34,9 +44,10 @@ Sales and operations staff who do not use a terminal should follow
 - **Claude Code** (CLI or the desktop app's Code tab) **with the Claude in Chrome extension** for automatic entry.
   That is the measured path: seven hotels ran end to end on it. The extension grants permission per site, so allow
   the ERP domain first.
-- Other agents that read the standard `SKILL.md` format (Codex, Gemini CLI, Grok, Cursor, Hermes Agent) can produce
-  the guide. **Automatic entry on Codex is not yet verified** — we do not claim it works. `skills/stay-setup-run`
-  lists the three browser capabilities to confirm before trying it.
+- **Codex** covers guide creation and entering the values by hand. **Automatic entry on Codex is not yet verified**
+  — we do not claim it works. `skills/stay-setup-run` lists the three browser capabilities to confirm before trying
+  it. Other agents that read the standard `SKILL.md` format (Gemini CLI, Grok, Cursor, Hermes Agent) can produce the
+  guide the same way.
 - Contract formats the converter reads: xlsx, xlsm, xls, ods, csv, pdf, docx, pptx, odt, rtf, epub, hwp, hwpx.
 
 ## Use
@@ -108,7 +119,7 @@ yourself.
 
 | Path | Contents |
 |---|---|
-| [`.claude-plugin/`](.claude-plugin) | Plugin and marketplace manifests (`plugin.json`, `marketplace.json`); bump both `version` fields when a skill version changes |
+| [`.claude-plugin/`](.claude-plugin) · [`.codex-plugin/`](.codex-plugin) · [`.agents/plugins/`](.agents/plugins) | Plugin and marketplace manifests for Claude Code and Codex; bump every `version` field when a skill version changes |
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The guide skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a worked example, converter/checker/renderer scripts |
 | [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: parser, in-page helper and boot scripts, screen mechanics, run-log format |
 | [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers |
@@ -142,5 +153,5 @@ separately under the SIL Open Font License
   not an actual contract**. No real contract values are in this repository.
 - A skill folder holds only what is visible on screen (field names, options, buttons, order) and the document format
   rules. No internal code, database or API structure.
-- Bump the `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` whenever a skill's
-  `SKILL.md` version changes.
+- Bump every `version` field in the plugin manifests — `.claude-plugin/plugin.json`,
+  `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` — whenever a skill's `SKILL.md` version changes.

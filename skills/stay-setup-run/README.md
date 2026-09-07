@@ -66,6 +66,10 @@ the standard `SKILL.md` format **and can drive a browser**.
 `/plugin marketplace add eoding/stay-setup-guide`, then `/plugin install stay-setup@eoding-stay`. The skill
 is then invoked as `/stay-setup:stay-setup-run`.
 
+**Codex plugin.** `codex plugin marketplace add eoding/stay-setup-guide`, then
+`codex plugin add stay-setup@eoding-stay`, refreshed with `codex plugin marketplace upgrade`. This installs the
+skill, but automatic entry on Codex is 실측 전 — confirm the three browser capabilities above first.
+
 **Copying the folder** also works and is the way to install into another agent:
 
 ```bash
