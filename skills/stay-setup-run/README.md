@@ -10,7 +10,7 @@ the standard `SKILL.md` format **and can drive a browser**.
 
 `SKILL.md` is the authority on the procedure; the two files under `references/` are what it refers to.
 
-> **Screens as of the production release of 2026-09-04 (basecamp `origin/develop` 64433dabeb).**
+> **Screens as of the production release of 2026-09-04.**
 > For older screens use v0.2.x.
 > A new hotel now starts with **zero offers and zero rooms**: the first offer is created with [오퍼 추가]
 > and the first room with [룸 추가], and every room including the first is linked to an offer in the

@@ -403,7 +403,7 @@
         if (hit) { spec = { button: bp.text, row: bp.row, within: hit }; out.cardPick = cm[1].trim() + ' / ' + cm[2].trim(); }
         else { out.open = 'not-found'; out.openDetail = '`' + spec.card + '` 카드를 찾지 못했습니다'; return out; }
       }
-      // (2026-09-04, CO-31679) `전 오퍼 공통` 카드는 공통 프로모션이 0건이어도 늘 그려진다.
+      // (2026-09-04) `전 오퍼 공통` 카드는 공통 프로모션이 0건이어도 늘 그려진다.
       // 종전에는 카드가 감춰져서 아무 오퍼 카드의 [프로모션 추가] 요청 URL 의 오퍼 번호를 0 으로
       // 바꿔 여는 우회가 있었다 — ERP 가 고쳐졌으므로 그 우회는 지웠다. 보통 카드처럼 연다.
       var o = await stayRun.open(spec);

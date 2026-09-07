@@ -5,7 +5,7 @@
   "field_count": 209,
   "currency_token": "공급 통화",
   "hotel_name_token": "〈호텔명〉",
-  "erp_baseline": "운영 2026-09-04 화면 기준 (basecamp origin/develop 64433dabeb)"
+  "erp_baseline": "운영 2026-09-04 배포판 화면 기준"
  },
  "tabs": [
   "기본정보",
