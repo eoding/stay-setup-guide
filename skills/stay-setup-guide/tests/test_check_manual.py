@@ -5,6 +5,7 @@
     python3 -m unittest discover -s skills/stay-setup-guide/tests -v
     (또는 pytest skills/stay-setup-guide/tests)
 """
+import datetime
 import os
 import sys
 import tempfile
@@ -319,6 +320,182 @@ def room_link_step(num, rooms="Single", display="싱글룸"):
 
 → [추가]
 """
+
+
+#: 판매 구간 시험의 고정된 "오늘" — 검사하는 날에 흔들리지 않게 값으로 준다.
+TODAY = datetime.date(2026, 9, 7)
+#: 계약(요금표)이 지난 날부터 유효한 시즌 — 판매 구간 밖이라 만들지 않는다.
+PAST = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-01-05"), ("기간 종료", "2026-03-31")]
+
+
+def offer_dates_step(num, stay_start="2026-09-07", book_start="2026-09-07 00:00",
+                     book_end="2026-12-31 23:59"):
+    return f"""
+## {num}. 오퍼 만들기 (1번째, 2026 시즌 요금)
+탭: `오퍼`
+버튼: [오퍼 추가]
+
+| 칸 | 값 |
+|---|---|
+| 관리용 이름 | 2026 시즌 요금 |
+| 예약 시작 | {book_start} |
+| 예약 종료 | {book_end} |
+| 투숙 시작 | {stay_start} |
+| 투숙 종료 | 2026-12-31 |
+| 기본 취소 정책 | 선택: 표준 D-7 무료취소 |
+
+→ [저장]
+"""
+
+
+def sale_days_step(num, start="2026-09-07", end="2026-12-31"):
+    return f"""
+## {num}. 판매일 열기 (116일)
+탭: `판매일`
+버튼: [판매일 열기]
+
+| 칸 | 값 |
+|---|---|
+| 시작일 | {start} |
+| 종료일 | {end} |
+| 요일 | 비움 |
+
+→ [판매일 열기]
+"""
+
+
+class SaleWindowTest(unittest.TestCase):
+    """판매 구간은 지시서를 만드는 날(오늘)부터다 — 계약이 지난 날부터 유효해도 지난 날은 못 판다."""
+
+    def starts(self, md):
+        return cm.find_past_sale_starts(steps_of(md), TODAY)
+
+    def blanks(self, md):
+        return cm.find_blank_booking_window(steps_of(md))
+
+    def seasons(self, md):
+        return cm.find_past_seasons(steps_of(md), TODAY)
+
+    # (a) 시작일이 오늘보다 앞이면 오류
+    def test_past_sale_open_start_is_error(self):
+        problems = self.starts(HEAD + sale_days_step(4, start="2026-01-05"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("시작일 2026-01-05", problems[0])
+        self.assertIn("오늘(2026-09-07)", problems[0])
+        self.assertIn("판매 구간은 오늘부터", problems[0])
+
+    def test_past_offer_stay_start_is_error(self):
+        problems = self.starts(HEAD + offer_dates_step(4, stay_start="2026-01-05"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("투숙 시작 2026-01-05", problems[0])
+
+    def test_today_is_not_past(self):
+        md = HEAD + offer_dates_step(4, stay_start="2026-09-07") + sale_days_step(5, start="2026-09-07")
+        self.assertEqual(self.starts(md), [])
+
+    def test_future_start_is_ok(self):
+        md = HEAD + offer_dates_step(4, stay_start="2026-11-01") + sale_days_step(5, start="2026-11-01")
+        self.assertEqual(self.starts(md), [])
+
+    def test_end_date_in_the_past_is_not_checked_here(self):
+        """종료일은 계약이 값을 주는 마지막 날이라 이 검사가 보지 않는다(시즌 쪽이 본다)."""
+        self.assertEqual(self.starts(HEAD + sale_days_step(4, start="2026-11-01", end="2026-01-31")), [])
+
+    # (b) 예약 창을 비우면 경고
+    def test_blank_booking_start_is_warning(self):
+        problems = self.blanks(HEAD + offer_dates_step(4, book_start="비움"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`예약 시작` 가 비었다", problems[0])
+
+    def test_blank_booking_end_is_warning(self):
+        problems = self.blanks(HEAD + offer_dates_step(4, book_end="비움"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`예약 종료` 가 비었다", problems[0])
+
+    def test_both_blank_is_two_warnings(self):
+        self.assertEqual(len(self.blanks(HEAD + offer_dates_step(4, book_start="비움", book_end="비움"))), 2)
+
+    def test_filled_booking_window_is_ok(self):
+        self.assertEqual(self.blanks(HEAD + offer_dates_step(4)), [])
+
+    def test_missing_row_is_left_to_the_dictionary_check(self):
+        self.assertEqual(self.blanks(HEAD + offer_step(4)), [])
+
+    def test_blank_booking_window_is_a_warning_not_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + "작성일: 2026-09-07\n" + offer_dates_step(4, book_start="비움"))
+            self.assertEqual(cm.main([path]), 0)
+
+    # (c) 판매 구간 밖(과거)에서 끝나는 시즌은 만들지 않는다
+    def test_season_ending_in_the_past_is_error(self):
+        problems = self.seasons(HEAD + season_step(4, "Low", "오퍼A", PAST))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("시즌 `Low`", problems[0])
+        self.assertIn("기간 종료 2026-03-31", problems[0])
+        self.assertIn("오늘(2026-09-07)", problems[0])
+
+    def test_season_ending_today_is_ok(self):
+        rows = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-01-05"), ("기간 종료", "2026-09-07")]
+        self.assertEqual(self.seasons(HEAD + season_step(4, "Low", "오퍼A", rows)), [])
+
+    def test_future_season_is_ok(self):
+        self.assertEqual(self.seasons(HEAD + season_step(4, "Peak", "오퍼A", OUTSIDE)), [])
+
+    def test_listed_season_wholly_in_the_past_is_error(self):
+        md = HEAD + listed_season(4, "Low", "오퍼A", ["2026-01-05 ~ 2026-01-20"])
+        self.assertEqual(len(self.seasons(md)), 1)
+
+    def test_unreadable_season_is_skipped(self):
+        rows = [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "비움"), ("기간 종료", "비움")]
+        self.assertEqual(self.seasons(HEAD + season_step(4, "Low", "오퍼A", rows)), [])
+
+    # 원고가 지닌 `작성일:` 이 그 원고의 "오늘" 이다
+    def test_guide_date_comes_from_the_manual(self):
+        lines = ("# 시험 호텔 — 입력 지시서\n\n작성일: 2026-09-07\n\n## 1. 환율 확인\n").splitlines()
+        self.assertEqual(cm.guide_date(lines), TODAY)
+
+    def test_guide_date_falls_back_to_the_check_day(self):
+        other = datetime.date(2027, 1, 1)
+        self.assertEqual(cm.guide_date(HEAD.splitlines(), today=other), other)
+
+    def test_a_date_inside_a_step_is_not_the_guide_date(self):
+        md = "# 시험 호텔\n\n## 1. 환율 확인\n작성일: 2026-01-05\n"
+        self.assertEqual(cm.guide_date(md.splitlines(), today=TODAY), TODAY)
+
+    def test_check_reads_the_guide_date_and_fails_on_a_past_start(self):
+        md = "# 시험 호텔 — 입력 지시서\n\n작성일: 2026-09-07\n" + HEAD.split("\n", 1)[1] \
+            + offer_dates_step(4, stay_start="2026-01-05")
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+            self.assertEqual(r["guide_date"], TODAY)
+            self.assertEqual(len(r["past_sale_starts"]), 1, r["past_sale_starts"])
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_past_season_fails_the_run(self):
+        md = "# 시험 호텔 — 입력 지시서\n\n작성일: 2026-09-07\n" + HEAD.split("\n", 1)[1] \
+            + season_step(4, "Low", "오퍼A", PAST)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+            self.assertEqual(len(r["past_seasons"]), 1, r["past_seasons"])
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_carries_a_guide_date_and_opens_no_past_day(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        day = cm.guide_date(lines)
+        self.assertEqual(day, TODAY)
+        steps = cm.parse_steps(lines)
+        self.assertEqual(cm.find_past_sale_starts(steps, day), [])
+        self.assertEqual(cm.find_past_seasons(steps, day), [])
+        self.assertEqual(cm.find_blank_booking_window(steps), [])
 
 
 class CancelPolicyTest(unittest.TestCase):
