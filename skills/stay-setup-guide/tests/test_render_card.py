@@ -220,5 +220,64 @@ class TestCliStamp(unittest.TestCase):
         self.assertEqual(self.render(WRONG_FOLDER, "--share-name", "시험")[0]["check"], "fail")
 
 
+class TestShareLayoutDefaults(unittest.TestCase):
+    """`<이름>/_원고/manual.md` 자리면 출력 경로와 공유 폴더명을 경로에서 알아낸다.
+
+    담당자에게 가는 것은 `<이름>/<이름>_입력지시서.html` 하나이므로, 그 자리가 기본값이다.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.share = os.path.join(self.tmp.name, "우에노_토우가네야")
+        self.draft = os.path.join(self.share, "_원고")
+        os.makedirs(self.draft)
+        self.md = os.path.join(self.draft, "manual.md")
+        with open(self.md, "w", encoding="utf-8") as handle:
+            handle.write(ZERO_OK)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_derive_share_name(self):
+        self.assertEqual(rc.derive_share_name(self.md), "우에노_토우가네야")
+
+    def test_derive_share_name_is_none_outside_the_layout(self):
+        flat = os.path.join(self.share, "manual.md")
+        with open(flat, "w", encoding="utf-8") as handle:
+            handle.write(ZERO_OK)
+        self.assertIsNone(rc.derive_share_name(flat))
+        self.assertIsNone(rc.default_output(flat))
+
+    def test_default_output_is_the_share_folder_guide(self):
+        self.assertEqual(str(rc.default_output(self.md)),
+                         os.path.join(self.share, "우에노_토우가네야_입력지시서.html"))
+
+    def test_cli_without_o_writes_the_guide_next_to_the_draft_folder(self):
+        proc = subprocess.run([sys.executable, RENDER, self.md],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        out = os.path.join(self.share, "우에노_토우가네야_입력지시서.html")
+        self.assertTrue(os.path.isfile(out), proc.stdout)
+        self.assertIn("공유 폴더명: 우에노_토우가네야", proc.stdout)
+
+    def test_cli_without_o_outside_the_layout_asks_for_o(self):
+        flat = os.path.join(self.tmp.name, "manual.md")
+        with open(flat, "w", encoding="utf-8") as handle:
+            handle.write(ZERO_OK)
+        proc = subprocess.run([sys.executable, RENDER, flat], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("출력 경로를 정할 수 없다", proc.stderr)
+
+    def test_derived_share_name_reaches_the_checker(self):
+        """`--share-name` 없이도 `폴더:` 줄 형식이 걸린다 — 경로에서 알아낸 이름이 검사기까지 간다."""
+        with open(self.md, "w", encoding="utf-8") as handle:
+            handle.write(WRONG_FOLDER)
+        proc = subprocess.run([sys.executable, RENDER, self.md], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        out = os.path.join(self.share, "우에노_토우가네야_입력지시서.html")
+        with open(out, encoding="utf-8") as handle:
+            self.assertEqual(parse_stamp(handle.read())["check"], "fail")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

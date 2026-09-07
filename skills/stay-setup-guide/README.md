@@ -1,8 +1,13 @@
 # stay-setup-guide — 호텔 세팅 입력 지시서 스킬
 
-호텔 계약서(요금표)만 있는 상태에서, ERP Stay 화면에 그대로 따라 칠 수 있는 "입력 지시서"(manual.md →
-복사 버튼 달린 HTML 카드)를 만드는 Agent Skill이다. `SKILL.md` 가 절차의 정본이고, 이 폴더의 나머지는
-그 절차가 참조하는 규칙·예시·도구다.
+호텔 계약서(요금표)만 있는 상태에서, ERP Stay 화면에 그대로 따라 칠 수 있는 **지시서**
+(`<이름>_입력지시서.html` — 복사 버튼 달린 HTML 카드)를 만드는 Agent Skill이다. `SKILL.md` 가 절차의
+정본이고, 이 폴더의 나머지는 그 절차가 참조하는 규칙·예시·도구다.
+
+> **세 파일의 구분** — 이름이 비슷해도 셋은 다른 물건이다.
+> - **지시서** `<이름>/<이름>_입력지시서.html` — **담당자에게 건네는 유일한 산출물**. 검사 도장을 지고, 러너도 이것만 읽는다.
+> - **원고** `<이름>/_원고/manual.md` (곁에 `rules.md`·`facts.json`·`contract.md`) — 지시서를 만드는 작업 파일. 건네지 않는다.
+> - **실행 계획** `<이름>_실행/steps.json` — 러너 스킬이 지시서에서 뽑는 내부 파일. 자동 생성이고 사람이 손대지 않는다.
 
 **운영 2026-09-04 배포판 화면 기준**이다 — 호텔을 만들면 오퍼 0건·룸 0건·판매 연결 0건이고,
 오퍼가 없는 동안에는 판매 연결의 [객실 추가] 가 막힌다. 그래서 지시서는 `오퍼 만들기` 를 룸·판매 연결보다 앞에 둔다.
@@ -19,24 +24,27 @@
 
 ## 사용법
 
-`SKILL.md` 를 읽고 그 절차(룰 정리 → 팩트 수집 → 지시서 작성 → 검사 → 렌더)를 그대로 따라간다. 자세한 값
+`SKILL.md` 를 읽고 그 절차(룰 정리 → 팩트 수집 → 원고 작성 → 검사 → 렌더)를 그대로 따라간다. 자세한 값
 표기 규칙은 `references/MANUAL-SPEC.md`, 완성된 결과물의 모양은 `examples/우에노_토우가네야/`를 본다.
 
-지시서는 짝 스킬 `skills/stay-setup-run` 이 화면에서 그대로 실행한다 — 단계 제목·`카드:` 줄·마지막 `→ [버튼]` 표기가 그 러너가 알아보는 형식이다.
+지시서는 짝 스킬 `skills/stay-setup-run` 이 화면에서 그대로 실행한다 — 원고에 쓴 단계 제목·`카드:` 줄·마지막 `→ [버튼]` 표기가 지시서에 실려 그 러너가 알아보는 형식이 된다. 러너는 원고를 읽지 않는다.
 
 ```
-python3 scripts/check_manual.py <manual.md> --photos <사진 폴더> --share-name <공유 폴더명>
-python3 scripts/render_card.py <manual.md> -o <이름>_입력지시서.html --font scripts/fonts/PretendardVariable.woff2 --title "<호텔> 입력 지시서"
+python3 scripts/check_manual.py <이름>/_원고/manual.md --photos <이름>/사진
+python3 scripts/render_card.py  <이름>/_원고/manual.md --font scripts/fonts/PretendardVariable.woff2 --title "<호텔> 입력 지시서"
 ```
 
-두 스크립트 모두 `--help` 로 쓸 수 있는 옵션을 보여 준다(`python3 scripts/check_manual.py --help`).
+원고가 `<이름>/_원고/manual.md` 자리에 있으면 공유 폴더명과 출력 경로를 경로에서 알아낸다 —
+렌더 결과는 `<이름>/<이름>_입력지시서.html` 이다. 원고를 다른 자리에 두었으면 예전처럼
+`--share-name <공유 폴더명>` 과 `-o <출력 HTML>` 을 준다. 두 스크립트 모두 `--help` 로 쓸 수 있는
+옵션을 보여 준다(`python3 scripts/check_manual.py --help`).
 
 **예시 세트에는 사진 파일이 없다** — 저작권 때문에 `examples/우에노_토우가네야/` 에는 파일명과 출처 목록(`사진목록.txt`)만
 두고 이미지 자체는 담지 않는다. 그래서 예시를 검사할 때는 `--photos` 를 빼고 돌린다(붙이면 지시서가 부르는 사진 13장이
 없다고 나온다). 이 스킬 폴더에서 그대로 실행되는 명령은 이렇다:
 
 ```
-python3 scripts/check_manual.py examples/우에노_토우가네야/manual.md --share-name 우에노_토우가네야
+python3 scripts/check_manual.py examples/우에노_토우가네야/_원고/manual.md --share-name 우에노_토우가네야
 ```
 
 실제 호텔을 세팅할 때는 사진을 준비한 폴더를 `--photos` 로 함께 주어 파일이 다 있는지까지 확인한다.
@@ -46,13 +54,13 @@ python3 scripts/check_manual.py examples/우에노_토우가네야/manual.md --s
 | 경로 | 내용 |
 |---|---|
 | `SKILL.md` | 이 스킬의 진입점. 입력 → 절차 → 하지 말 것 → 산출물 요약 |
-| `references/MANUAL-SPEC.md` | 지시서(manual.md) 형식 규칙 정본 — 구조·표 표기·순서·금지어 |
+| `references/MANUAL-SPEC.md` | 지시서 원고(`_원고/manual.md`) 형식 규칙 정본 — 구조·표 표기·순서·금지어 |
 | `references/screen-dictionary.md` / `.json` | ERP Stay 화면 27개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 기계용 json) |
 | `references/facts-guide.md` | 호텔·룸 팩트(주소·시설·면적·전망·침대·좌표 등) 수집 절차와 출처 우선순위 |
-| `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님): `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(정답지) → `changes.md` → 렌더된 HTML, `사진목록.txt`(파일명 · 출처 — **사진 파일 자체는 저작권 때문에 담지 않는다**) |
+| `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님). 공유 폴더 배치 그대로다: 맨 위에 지시서 `우에노_토우가네야_입력지시서.html` · `changes.md` · `사진목록.txt`(파일명 · 출처 — **사진 파일 자체는 저작권 때문에 담지 않는다**), 작업 파일은 `_원고/` 안에 `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(원고 정답지) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |
-| `scripts/render_card.py` | `manual.md` → 표 셀마다 복사 버튼, 목차, 진행 체크가 달린 단일 HTML 파일 변환 |
-| `scripts/check_manual.py` | `manual.md` 형식 검사(단계=저장 1:1, 번호 연속, 금지어·원문자·절대경로 0, 사진 참조 확인, 같은 오퍼의 시즌 날짜 겹침 0·오퍼의 `기본 취소 정책` 지정·`경고 넘어가기` 단계 0·`오퍼 고치기` 단계 0·`룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 뒤·부가옵션 카드의 오퍼 한정·프로모션 카드·시즌 만들기와 취소정책 만들기의 `→ [추가]`·반복 행 이름 형식·`체크`/`해제` 를 체크박스 아닌 칸에 썼는지) |
+| `scripts/render_card.py` | 원고(`_원고/manual.md`) → 지시서 `<이름>_입력지시서.html`(표 셀마다 복사 버튼, 목차, 진행 체크, 검사 도장이 달린 단일 HTML) |
+| `scripts/check_manual.py` | 원고(`_원고/manual.md`) 형식 검사(단계=저장 1:1, 번호 연속, 금지어·원문자·절대경로 0, 사진 참조 확인, 같은 오퍼의 시즌 날짜 겹침 0·오퍼의 `기본 취소 정책` 지정·`경고 넘어가기` 단계 0·`오퍼 고치기` 단계 0·`룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 뒤·부가옵션 카드의 오퍼 한정·프로모션 카드·시즌 만들기와 취소정책 만들기의 `→ [추가]`·반복 행 이름 형식·`체크`/`해제` 를 체크박스 아닌 칸에 썼는지) |
 | `tests/` | 검사 스크립트 시험 — `python3 -m unittest discover -s skills/stay-setup-guide/tests` |
 | `scripts/fonts/PretendardVariable.woff2` | HTML 카드에 임베드하는 한글 폰트(라이선스: 같은 폴더 `LICENSE-Pretendard.txt`, SIL OFL) |
 

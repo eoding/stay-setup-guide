@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""check_manual.py — 입력 지시서(manual.md) 형식 검사.
+"""check_manual.py — 지시서 원고(manual.md) 형식 검사.
+
+원고(`_원고/manual.md`)를 검사하고, 통과한 원고만 `render_card.py` 가 지시서
+(`<이름>_입력지시서.html`)로 렌더한다. 담당자에게 건네는 것은 그 지시서 하나다.
 
 references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 단계(## 제목) 수 = 저장/추가 버튼(→ [...]) 수
@@ -28,11 +31,12 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
 
 사용법:
-    python3 check_manual.py <manual.md> [--photos DIR] [--share-name NAME]
+    python3 check_manual.py <_원고/manual.md> [--photos DIR] [--share-name NAME]
                             [--dictionary screen-dictionary.json] [--contract contract.md]
 
 --photos 를 생략하면 사진 존재 확인은 건너뛴다.
---share-name 을 생략하면 `폴더:` 줄 형식 확인은 건너뛴다(줄 목록만 보여준다).
+--share-name 을 생략해도 원고가 `<이름>/_원고/manual.md` 자리에 있으면 공유 폴더명 `<이름>` 을
+경로에서 알아낸다. 그 자리가 아니면 `폴더:` 줄 형식 확인은 건너뛴다(줄 목록만 보여준다).
 --dictionary 를 생략하면 스크립트 옆의 ../references/screen-dictionary.json 을 쓴다(없으면 건너뛴다).
 --contract 를 생략하면 금액 대조는 건너뛴다.
 """
@@ -43,6 +47,24 @@ import json
 import os
 import re
 import sys
+
+#: 원고 폴더 이름 — 공유 폴더 `<이름>/` 안에서 원고·부속 파일이 사는 곳.
+#: 담당자에게 건네는 것은 `<이름>/<이름>_입력지시서.html` 하나이고, 원고는 여기 남는다.
+DRAFT_DIR = "_원고"
+
+
+def derive_share_name(manual_path):
+    """원고 경로가 `<이름>/_원고/manual.md` 꼴이면 공유 폴더명 `<이름>` 을 돌려준다.
+
+    옛 자리(`<이름>/manual.md`)나 그 밖의 경로면 None — 그때는 `--share-name` 으로 준다.
+    """
+    draft = os.path.dirname(os.path.abspath(os.path.expanduser(manual_path)))
+    if os.path.basename(draft) != DRAFT_DIR:
+        return None
+    share = os.path.dirname(draft)
+    name = os.path.basename(share)
+    return name or None
+
 
 # 지시서에 나오면 안 되는 내부 작업 용어 (회사·사람 이름은 계약서에서 온 값이면 표 안에서는 허용되므로
 # 여기 포함하지 않는다 — 값 자체의 정당성은 사람이 판단한다)
@@ -1087,7 +1109,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="입력 지시서(manual.md) 형식 검사")
     ap.add_argument("manual", help="검사할 manual.md 경로")
     ap.add_argument("--photos", default=None, help="사진 폴더 (선택 — 주면 파일 존재까지 확인)")
-    ap.add_argument("--share-name", default=None, help="공유 폴더명 (선택 — 주면 `폴더:` 줄 형식까지 확인, 예: 우에노_토우가네야)")
+    ap.add_argument("--share-name", default=None,
+                    help="공유 폴더명 (선택 — 주면 `폴더:` 줄 형식까지 확인, 예: 우에노_토우가네야. "
+                         "생략해도 원고가 `<이름>/_원고/manual.md` 자리면 경로에서 알아낸다)")
     ap.add_argument("--dictionary", default=None,
                     help="화면 사전 JSON (선택 — 생략하면 ../references/screen-dictionary.json 을 자동으로 씀)")
     ap.add_argument("--contract", default=None, help="계약서 md (선택 — 주면 금액이 계약서에 있는지 경고로 알림)")
@@ -1107,7 +1131,13 @@ def main(argv=None):
         if os.path.exists(default_dict):
             dictionary = os.path.normpath(default_dict)
 
-    r = check(args.manual, args.photos, args.share_name, dictionary, args.contract)
+    share_name = args.share_name
+    derived_share = None
+    if not share_name:
+        derived_share = derive_share_name(args.manual)
+        share_name = derived_share
+
+    r = check(args.manual, args.photos, share_name, dictionary, args.contract)
 
     problems = []
     if r["steps"] != r["saves"]:
@@ -1167,7 +1197,9 @@ def main(argv=None):
         print(f"사진 {r['photos_have']}장 확인 (미사용 {len(r['photos_unused'])})")
     else:
         print("사진 폴더 미지정 — 파일 존재 확인 건너뜀 (--photos 로 지정)")
-    if not args.share_name:
+    if derived_share:
+        print(f"공유 폴더명 `{derived_share}` — 원고 경로(`<이름>/{DRAFT_DIR}/manual.md`)에서 알아냄")
+    elif not share_name:
         print("공유 폴더명 미지정 — `폴더:` 줄 형식 확인 건너뜀 (--share-name 으로 지정)")
     if not r["dict_checked"]:
         print("화면 사전 없음 — 칸 이름 확인 건너뜀 (--dictionary 로 지정)")
