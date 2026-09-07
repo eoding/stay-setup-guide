@@ -136,15 +136,26 @@ class TestManual(unittest.TestCase):
         N번째 행이 아니라 첫 행에 값이 들어간다.
         """
         from parse_guide import ROW_LABEL_RE
-        m = ROW_LABEL_RE.match("침대 구성 1 · 침대 종류")
+        # 눈으로 가릴 수 없는 글자(가운뎃점 종류·붙임 빈칸)는 **코드포인트로 적는다** —
+        # 글자 그대로 적으면 편집·복사 과정에서 정본 꼴로 바뀌어 시험이 조용히 무력해진다.
+        SP, DOT = "\u0020", "\u00b7"          # 보통 빈칸 · 가운뎃점(U+00B7)
+        NBSP, FULL_DOT = "\u00a0", "\u30fb"   # 붙임 빈칸 · 전각 가운뎃점(U+30FB)
+        canonical = "침대 구성" + SP + "1" + SP + DOT + SP + "침대 종류"
+        m = ROW_LABEL_RE.match(canonical)
+        self.assertIsNotNone(m, canonical)
         self.assertEqual((m.group(1), m.group(2), m.group(3)), ("침대 구성", "1", "침대 종류"))
-        for bad in ("침대 구성 1 ·침대 종류",      # 가운뎃점 뒤 빈칸 없음
-                    "침대 구성 1· 침대 종류",      # 가운뎃점 앞 빈칸 없음
-                    "침대 구성  1 · 침대 종류",    # 빈칸 둘
-                    "침대 구성 1 ・ 침대 종류",   # U+00B7 이 아닌 가운뎃점(U+30FB)
-                    "침대 구성1 · 침대 종류",      # 숫자 앞 빈칸 없음
-                    "연령별 단가 · 초등학생"):     # 숫자 없음 — 반복 행이 아니다
-            self.assertIsNone(ROW_LABEL_RE.match(bad), bad)
+        bad = {
+            "가운뎃점 뒤 빈칸 없음": "침대 구성" + SP + "1" + SP + DOT + "침대 종류",
+            "가운뎃점 앞 빈칸 없음": "침대 구성" + SP + "1" + DOT + SP + "침대 종류",
+            "빈칸 둘": "침대 구성" + SP + SP + "1" + SP + DOT + SP + "침대 종류",
+            "전각 가운뎃점(U+30FB)": "침대 구성" + SP + "1" + SP + FULL_DOT + SP + "침대 종류",
+            "숫자 앞 빈칸 없음": "침대 구성" + "1" + SP + DOT + SP + "침대 종류",
+            "숫자 앞 붙임 빈칸(NBSP)": "침대 구성" + NBSP + "1" + SP + DOT + SP + "침대 종류",
+            "가운뎃점 둘레가 붙임 빈칸(NBSP)": "침대 구성" + SP + "1" + NBSP + DOT + NBSP + "침대 종류",
+            "숫자 없음 — 반복 행이 아니다": "연령별 단가" + SP + DOT + SP + "초등학생",
+        }
+        for why, sample in bad.items():
+            self.assertIsNone(ROW_LABEL_RE.match(sample), "%s: %r" % (why, sample))
 
     def test_head_and_buttons(self):
         head = only_step(self.steps, "룸 만들기")["head"]
