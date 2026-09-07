@@ -270,6 +270,55 @@ const run = async () => {
     'state: 열린 `.stay-modal` 을 알아본다', sm);
   win.document.getElementById('stay_cell_edit').style.display = 'none';
 
+  // 13. 진행 표시 띠 — 화면 오른쪽 위에 늘 떠 있는 한 줄. 지켜보는 사람이 콘솔 없이도 읽는다.
+  const strip = () => win.document.getElementById('stay_progress');
+  const stripText = () => (strip() ? strip().textContent : '');
+  const P1 = R.progress({ total: 77, done: 11, skipped: 1, current: '룸 만들기 (2번째, 씨뷰 빌라)' });
+  ok(!!strip(), 'progress: 띠를 화면에 붙인다');
+  ok(/12 \/ 77/.test(stripText()), 'progress: 처리한 수 / 전체 수', stripText());
+  ok(/지금:/.test(stripText()) && /룸 만들기/.test(stripText()), 'progress: 지금 하는 단계를 적는다', stripText());
+  ok(/완료 11/.test(stripText()), 'progress: 완료 수', stripText());
+  ok(/건너뜀 1/.test(stripText()), 'progress: 건너뛴 수', stripText());
+  ok(P1.done === 11 && P1.skipped === 1 && P1.total === 77 && P1.status === 'running',
+    'progressState: 지금 값을 그대로 돌려준다', P1);
+  ok(JSON.stringify(R.progressState()) === JSON.stringify(P1), 'progressState: progress 가 돌려주는 것과 같다', R.progressState());
+
+  // 준 값만 덮는다 — 나머지는 그대로 있어야 한다
+  const P2 = R.progress({ done: 12 });
+  ok(P2.total === 77 && P2.current === '룸 만들기 (2번째, 씨뷰 빌라)', 'progress: 준 값만 덮고 나머지는 그대로 둔다', P2);
+
+  // 실패해도 그 단계 제목은 남는다 — 어느 단계에서 깨졌는지 띠만 보고 알아야 한다
+  const P3 = R.progress({ failed: 1, current: '시즌 만들기' });
+  ok(P3.status === 'failed', 'progress: 실패가 있으면 상태가 실패다', P3);
+  ok(/시즌 만들기/.test(stripText()), 'progress: 실패해도 그 단계 제목을 보여 준다', stripText());
+
+  // 전체 수를 다 채우면 끝
+  const P4 = R.progress({ failed: 0, done: 76 });
+  ok(P4.status === 'done', 'progress: 전체 수를 채우면 상태가 끝이다', P4);
+  ok(/^끝 · /.test(stripText()), 'progress: 끝나면 앞에 `끝` 을 붙인다', stripText());
+
+  // 화면 조각이 통째로 갈려도(htmx) 다시 붙는다
+  strip().remove();
+  ok(!strip(), 'progress: 띠를 화면에서 떼어 냈다');
+  R.progress({});
+  ok(!!strip(), 'progress: 화면 조각이 갈려 없어져도 다시 붙인다');
+
+  const xbtn = strip().querySelector('button');
+  ok(!!xbtn && xbtn.getAttribute('aria-label') === '진행 표시 닫기', 'progress: 닫기 단추가 있다', xbtn && xbtn.outerHTML);
+
+  // 도우미를 다시 주입해도 띠는 하나다(멱등)
+  win.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+  win.stayRun.progress({});
+  ok(win.document.querySelectorAll('#stay_progress').length === 1, 'progress: 다시 주입해도 띠가 둘로 늘지 않는다',
+    win.document.querySelectorAll('#stay_progress').length);
+
+  // 13z. 지우기는 맨 끝에 둔다 — 지운 뒤에는 아무리 불러도 다시 붙지 않으므로 위 시험을 망가뜨릴 수 있다
+  xbtn.click();
+  ok(!strip(), 'progressHide: ✕ 를 누르면 띠가 사라진다');
+  win.stayRun.progress({ done: 1 });
+  ok(!strip(), 'progressHide: 지운 뒤에는 다시 붙지 않는다');
+  ok(win.stayRun.progressHide().done === 1, 'progressHide: 이미 지웠어도 지금 값을 돌려준다');
+
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
 };

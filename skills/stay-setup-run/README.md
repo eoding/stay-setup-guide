@@ -48,8 +48,16 @@ the standard `SKILL.md` format **and can drive a browser**.
 ## Requirements
 
 - Python 3.10+ for the parser. No Python packages to install.
-- A tool that can drive the browser: Claude in Chrome, Playwright MCP, or an equivalent. It must be able to
-  run JavaScript in the page, take screenshots, and upload a local file into a file input.
+- A tool that can drive the browser. The runner asks any browser agent for exactly three things, and the
+  tool's name does not matter: **run JavaScript inside the logged-in ERP tab and get the value back**,
+  **put a local file into a file input on that page**, and **take a screenshot**. Budget one JS call at
+  45 seconds and one upload at 10MB.
+  - **Claude Code (the Claude in Chrome extension) is the measured path** — seven hotels ran end to end on
+    `javascript_tool`, `file_upload`, `computer` and the tab tools. The extension grants permission per site,
+    so allow the ERP domain first.
+  - **Codex (the Codex Chrome extension with developer mode / CDP) is untested.** We do not claim it works.
+    Verify arbitrary JS evaluation with a returned value, per-site file-upload permission, and the per-call
+    time limit before using it. A tool that cannot upload skips the photo steps; the log records them.
 - Optional: Node.js, only to minify the two helper files with `esbuild` before injecting them. The originals work as they are.
 
 ## Install
@@ -95,6 +103,19 @@ Mode: 검토 (screenshot each step and ask before continuing)
 To continue an interrupted run, leave the hotel's edit screen open and say "continue this hotel" — the skill
 reads `run-log.md` and resumes after the last `완료` step.
 
+### Watching it go
+
+The helper draws a small strip in the **top-right corner of the ERP page** and `runStep` keeps it current, so
+anyone looking at the screen sees `12 / 77 · 지금: 룸 만들기 (2번째, 씨뷰 빌라) · 완료 11 · 건너뜀 1`. It is
+green while running, red with the failing step's title when a step breaks, grey `끝` when done. It never
+intercepts a click and re-attaches itself when the page swaps its body; the ✕ dismisses it.
+
+Open the guide HTML in a second tab of the same browser and the ticks rise there too: the agent calls
+`stayGuide.mark([{no, status, note}, …])` after each batch, which fills the sticky 진행 현황 header and the
+per-step badge (대기 / 진행 중 / 완료 / 건너뜀 / 실패 / 확인 필요). Ticking a box by hand still works and is
+recorded as `완료 (수동)`. `stayGuide.export()` returns the whole state as JSON for the run log. If the guide
+tab is not open the agent skips this silently.
+
 Outputs land next to the share folder in `<share_folder>_실행/`: `steps.json` (the run plan — generated,
 not hand-edited), `parse.txt` (the pre-flight summary), `run-log.md` (one line per step, plus a closing
 section listing guide defects and any dangerous button a supervisor pressed) and `_inject/` (the minified
@@ -107,8 +128,8 @@ guide in the share folder.
 |---|---|
 | `SKILL.md` | Entry point: inputs → parse → inject helper → step loop → failure handling → rules → report |
 | `scripts/parse_guide.py` | Stamped guide HTML → `steps.json` (the run plan), checking the stamp, photo files and value kinds |
-| `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input |
-| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runCellStep`, `runCheckStep` |
+| `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input, draw the progress strip |
+| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runStepCore`, `runCellStep`, `runCheckStep`, `progressReset` |
 | `references/screen-mechanics.md` | Step kind → screen map, how each screen opens and saves, traps |
 | `references/run-log-spec.md` | `run-log.md` format, result words, resuming |
 | `tests/` | Parser tests, and two fixture pages with browser tests (run only when jsdom is present) |

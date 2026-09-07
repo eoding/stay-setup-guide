@@ -279,5 +279,159 @@ class TestShareLayoutDefaults(unittest.TestCase):
             self.assertEqual(parse_stamp(handle.read())["check"], "fail")
 
 
+#: 번호 없는 `##` 절이 섞인 지시서 — 번호 붙은 단계만 진행 현황에 센다.
+WITH_PLAIN_SECTION = ZERO_OK + """
+## 참고
+이 절은 번호가 없으니 단계가 아니다.
+"""
+
+
+class TestStepMarkup(unittest.TestCase):
+    """단계마다 붙는 `data-step` — 자동 실행기(window.stayGuide)와 주고받는 약속이다.
+
+    번호는 문서에서 몇 번째로 나왔는지가 아니라 `## N. 제목` 의 N 에서만 나오므로,
+    같은 원고를 몇 번을 렌더해도 같은 번호가 나와야 한다.
+    """
+
+    def render(self, md_text=ZERO_OK):
+        html_text, _stats = rc.render_card(md_text, "manual.md", None, None)
+        return html_text
+
+    def test_section_and_badge_carry_the_step_number(self):
+        html_text = self.render()
+        for no in (1, 2, 3):
+            self.assertIn('<section class="step" data-step="%d">' % no, html_text)
+            self.assertIn('<span class="step-status" data-step="%d" data-status="대기">대기</span>' % no,
+                          html_text)
+
+    def test_note_line_follows_each_step_heading(self):
+        html_text = self.render()
+        for no in (1, 2, 3):
+            # 빈 줄은 `hidden` 으로 감춰 두고, 자리는 제목 바로 다음이다
+            self.assertIn('</h2>\n<p class="step-note" data-step="%d" hidden></p>' % no, html_text)
+
+    def test_badge_sits_before_the_done_checkbox(self):
+        html_text = self.render()
+        badge = html_text.index('<span class="step-status" data-step="1"')
+        done = html_text.index('<label class="step-done-wrap">')
+        self.assertLess(badge, done)
+
+    def test_step_numbers_are_stable_across_renders(self):
+        first = re.findall(r'data-step="(\d+)"', self.render())
+        second = re.findall(r'data-step="(\d+)"', self.render())
+        self.assertEqual(first, second)
+        self.assertTrue(first)
+
+    def test_unnumbered_section_has_no_step_number(self):
+        html_text = self.render(WITH_PLAIN_SECTION)
+        self.assertIn('<section class="step">', html_text)          # 번호 없는 절
+        self.assertEqual(sorted(set(re.findall(r'<section class="step" data-step="(\d+)">', html_text))),
+                         ["1", "2", "3"])
+
+    def test_heading_step_no_reads_only_the_heading_number(self):
+        self.assertEqual(rc.heading_step_no("7. 오퍼 만들기"), 7)
+        self.assertEqual(rc.heading_step_no("**12.** 사진 올리기"), 12)
+        self.assertIsNone(rc.heading_step_no("참고"))
+
+
+class TestProgressPanel(unittest.TestCase):
+    """h1 바로 밑에 붙는 "진행 현황" 머리말 — 전체 개수는 렌더가 세서 넘긴다."""
+
+    def render(self, md_text=ZERO_OK):
+        html_text, stats = rc.render_card(md_text, "manual.md", None, None)
+        return html_text, stats
+
+    def test_panel_markup_and_total(self):
+        html_text, stats = self.render()
+        self.assertIn('<section class="progress-panel" data-total="3">', html_text)
+        self.assertIn('<p class="progress-title">진행 현황</p>', html_text)
+        self.assertIn('<div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>',
+                      html_text)
+        self.assertIn('<span class="progress-done">완료 0</span>', html_text)
+        self.assertIn('<span class="progress-total">전체 3</span>', html_text)
+        self.assertIn('<p class="progress-current">아직 시작하지 않았습니다</p>', html_text)
+        self.assertIn('<p class="progress-times"></p>', html_text)
+        self.assertEqual(stats["steps"], 3)
+
+    def test_total_counts_only_numbered_steps(self):
+        html_text, stats = self.render(WITH_PLAIN_SECTION)
+        self.assertIn('data-total="3"', html_text)
+        self.assertEqual(stats["steps"], 3)
+
+    def test_order_is_h1_then_panel_then_toc(self):
+        html_text, _ = self.render()
+        self.assertLess(html_text.index("<h1 "), html_text.index('class="progress-panel"'))
+        self.assertLess(html_text.index('class="progress-panel"'), html_text.index('<nav class="toc"'))
+
+    def test_panel_is_sticky_and_flattened_for_print(self):
+        html_text, _ = self.render()
+        self.assertIn("position:sticky", html_text)
+        self.assertIn(".progress-panel{position:static !important", html_text)
+
+
+class TestStayGuideApi(unittest.TestCase):
+    """자동 실행기가 부르는 `window.stayGuide` — 이름 네 개가 다 나와야 한다."""
+
+    def setUp(self):
+        self.html, _ = rc.render_card(ZERO_OK, "manual.md", None, None)
+
+    def test_api_object_is_exposed(self):
+        self.assertIn("window.stayGuide", self.html)
+        for name in ("mark:", "current:", "reset:", "'export':"):
+            self.assertIn(name, self.html)
+
+    def test_storage_key_is_tied_to_the_stamp(self):
+        self.assertIn("'stayGuide:'", self.html)
+        self.assertIn("stayGuide:nostamp", self.html)
+
+    def test_all_canonical_statuses_are_known(self):
+        for status in ("대기", "진행 중", "완료", "건너뜀", "실패", "확인 필요"):
+            self.assertIn(status, self.html)
+        self.assertIn("완료 (수동)", self.html)  # 사람이 직접 켠 것은 따로 남긴다
+
+    def test_english_aliases_are_accepted(self):
+        for alias in ("pending", "waiting", "running", "current", "active", "done", "ok",
+                      "success", "skipped", "skip", "failed", "fail", "error",
+                      "check", "review", "warn"):
+            self.assertIn("'%s'" % alias, self.html)
+
+
+class TestRenderRegression(unittest.TestCase):
+    """진행 현황을 붙이면서 기존 것(단계별 완료 체크박스·목차)이 사라지지 않았는지 본다."""
+
+    def setUp(self):
+        self.html, self.stats = rc.render_card(ZERO_OK, "manual.md", None, None)
+
+    def test_step_done_checkbox_still_there(self):
+        self.assertEqual(self.html.count('<input type="checkbox" class="step-done"'), 3)
+        self.assertEqual(self.html.count("<span>완료</span></label>"), 3)
+
+    def test_toc_still_there(self):
+        self.assertIn('<nav class="toc" aria-label="목차">', self.html)
+        self.assertIn('<span class="toc-check">☐</span>', self.html)
+        self.assertEqual(self.stats["nav_items"], 3)
+
+    def test_copy_path_is_untouched(self):
+        """복사 버튼을 그리는 길과 그 클릭 처리기는 그대로다."""
+        self.assertIn(".copy-btn{", self.html)
+        self.assertIn("closest('.copy-btn')", self.html)
+
+    def test_cli_output_reports_the_step_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            md = os.path.join(tmp, "manual.md")
+            with open(md, "w", encoding="utf-8") as handle:
+                handle.write(ZERO_OK)
+            out = os.path.join(tmp, "시험_입력지시서.html")
+            proc = subprocess.run([sys.executable, RENDER, md, "-o", out],
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("번호 붙은 단계 3개", proc.stdout)
+            with open(out, encoding="utf-8") as handle:
+                rendered = handle.read()
+            self.assertIn('data-step="1"', rendered)
+            self.assertIn("window.stayGuide", rendered)
+            self.assertIn("진행 현황", rendered)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

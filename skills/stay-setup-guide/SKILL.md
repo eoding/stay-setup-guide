@@ -1,7 +1,7 @@
 ---
 name: stay-setup-guide
 description: "호텔 계약서(요금표)만 있는 여행사 담당자를 위해 ERP Stay 화면에 그대로 따라 칠 수 있는 입력 지시서(`<이름>_입력지시서.html`)를 만든다. 계약서 → 룰 정리 → 호텔·룸 팩트 수집 → 원고(manual.md) → 검사 → 지시서(HTML). '호텔 세팅 지시서', '계약서로 ERP 입력 순서', '호텔 깔기 매뉴얼', 'hotel contract to ERP input guide' 요청에 쓴다."
-version: 0.8.0
+version: 0.9.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -78,6 +78,13 @@ metadata:
 ```
 
 `<이름>_실행/`(실행 계획 `steps.json`·실행 로그)은 러너 스킬 `stay-setup-run` 이 만드는 폴더다 — 이 스킬은 건드리지 않는다.
+
+**지시서는 진행 표시를 지닌다.** `render_card.py` 가 렌더한 HTML 에는 맨 위에 붙는 `진행 현황` 띠(진행
+막대·`완료 n / 전체 N`·지금 하는 단계·시각)와 단계마다의 상태 표(`대기` · `진행 중` · `완료` · `건너뜀` ·
+`실패` · `확인 필요`)가 들어 있다. 사람이 손으로 체크하는 길은 그대로이고(손으로 켠 것은 `완료 (수동)` 로
+남는다), 러너가 옆 탭에서 `stayGuide.mark([{no, status, note}, …])` · `stayGuide.current(no)` 를 부르면
+같은 표가 저절로 오른다. 상태는 `localStorage` 에 도장(`sha256`)별로 남아 새로 고쳐도 유지되고,
+`stayGuide.export()` 가 단계별 상태·시각을 JSON 으로 돌려준다. 저장이 막힌 브라우저에서도 페이지는 그대로 뜬다.
 
 ## 끝낼 때
 비워 둔 칸(계약서·팩트 출처에 없어서 `비움` 으로 둔 것)을 `changes.md` 의 `## 담당자가 채울 칸` 절에 단계 번호·칸 이름과 함께 모으고, 마지막 보고에 그 목록을 그대로 보여 준다. 담당자는 화면에서 그 칸만 나중에 채우면 된다.

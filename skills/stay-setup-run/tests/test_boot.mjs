@@ -104,6 +104,18 @@ const AGE_STEPS = {
     head: { tab: null, card: null, block: null, screen: null, buttons: [], buttons_parsed: [] },
     fields: [{ label: '사유', kind: 'typed', value: '계약서에 없음' }],
     longtexts: [], photos: [], submit: '넘어가기'
+  }, {
+    //: 화면에 없는 카드를 가리키는 단계 — 열지 못하고 실패로 끝난다(진행 표시 띠가 실패로 세는지 본다)
+    no: 3,
+    title: '오퍼 만들기 (없는 카드)',
+    kind: '오퍼 만들기',
+    head: {
+      tab: null, card: '있지도 않은 카드', block: null, screen: null,
+      buttons: ['`있지도 않은 카드` 묶음의 [있지도 않은 버튼]'],
+      buttons_parsed: [{ raw: '`있지도 않은 카드` 묶음의 [있지도 않은 버튼]', text: '있지도 않은 버튼', row: null, card: '있지도 않은 카드', group: null, drawer: false, times: 1 }]
+    },
+    fields: [{ label: '이름', kind: 'typed', value: '없는오퍼' }],
+    longtexts: [], photos: [], submit: '저장'
   }]
 };
 
@@ -199,6 +211,13 @@ const run = async () => {
   ok(w2.stayRun.state().drawer.open === true, 'runStep: 드로어가 닫히지 않았다 — 룸 폼 [저장] 을 누르지 않았다');
   ok(!/저장|추가|만들기|등록|확인/.test(r3.submitAs || ''), 'runStep: 대안 버튼을 훑지 않았다', r3.submitAs);
 
+  //    그 단계는 파일을 올린 뒤 다시 부른다 — 아직 끝난 것이 아니므로 어느 숫자에도 세지 않는다
+  const p3 = w2.stayRun.progressState();
+  ok(p3.done === 0 && p3.skipped === 0 && p3.failed === 0,
+    'runStep: `사진 추가` 로 넘긴 단계는 아직 어느 숫자에도 세지 않는다', p3);
+  ok(p3.current === PHOTO_STEPS.steps[0].title, 'runStep: 넘긴 단계 제목이 띠에 그대로 있다', p3);
+  ok(p3.status === 'running', 'runStep: 넘긴 단계를 실패로 물들이지 않는다', p3);
+
   // 4) 여는 버튼 거르개 — 반복 행 추가만 걸러야 한다.
   //    `연령 구간 추가` 는 글자가 `구간 추가` 로 끝나지만 오퍼 탭 `연령 구간` 카드의 **드로어를 여는 버튼**이다.
   ok(w2.isRowAddButton('행 추가') === true, 'isRowAddButton: `행 추가` 는 걸러진다');
@@ -227,12 +246,39 @@ const run = async () => {
   ok((r4.bad || []).length === 0, 'runStep: 연령 구간 칸을 다 찾았다', r4.bad);
   ok(w3.document.querySelector('[name=rate_basis_value]').value === '50', 'runStep: 유형을 고른 뒤 늦게 선 `요금 기준 값` 도 채운다');
 
+  //    진행 표시 띠 — runStep 이 스스로 갱신한다(부르는 쪽은 따로 손댈 것이 없다)
+  ok(typeof w3.runStepCore === 'function', 'runStepCore: 알맹이가 이름을 바꿔 그대로 남아 있다');
+  const p4 = w3.stayRun.progressState();
+  ok(p4.current === AGE_STEPS.steps[0].title, 'runStep: 띠에 지금 하는 단계 제목이 든다', p4);
+  ok(p4.done === 0 && p4.failed === 0 && p4.skipped === 0,
+    'runStep: 시험 삼아 돌린 단계(dry)는 어느 숫자에도 세지 않는다', p4);
+  ok(p4.total === AGE_STEPS.steps.length, 'runStep: 전체 단계 수를 지시서에서 읽어 넣는다', p4);
+
   // 5) `경고 넘어가기` 는 금지된 단계다 — 실행하지 않고 거부한다(🟡 0 이 합격선)
   const r5 = await w3.runStep(2);
   ok(r5.refused === true && r5.fatal === true, 'runStep: `경고 넘어가기` 를 거부한다', r5);
   ok(/금지된 단계/.test(r5.error || ''), 'runStep: 왜 거부하는지 알려 준다', r5.error);
   ok(typeof w3.runWarnStep === 'undefined', 'runWarnStep: 갈래 자체가 없어졌다');
   ok(w3.checkGuide().some((x) => x.no === 2), 'checkGuide: 금지된 단계를 실행 전에 잡는다', w3.checkGuide());
+
+  const p5 = w3.stayRun.progressState();
+  ok(p5.failed === 1 && p5.status === 'failed', 'runStep: 거부된 단계는 실패로 센다', p5);
+  ok(p5.current === AGE_STEPS.steps[1].title, 'runStep: 실패한 단계 제목이 띠에 그대로 남는다', p5);
+
+  // 5b) 카드를 못 찾아 열지 못한 단계도 실패다
+  const r6 = await w3.runStep(3);
+  ok(r6.open === 'not-found', 'runStep: 화면에 없는 카드는 열지 못한다', r6);
+  const p6 = w3.stayRun.progressState();
+  ok(p6.failed === 2 && p6.done === 0, 'runStep: 열지 못한 단계도 실패로 센다', p6);
+  ok(p6.current === AGE_STEPS.steps[2].title, 'runStep: 어느 단계에서 깨졌는지 띠에 남는다', p6);
+  ok((p6.note || '').length > 0, 'runStep: 왜 실패했는지 한 줄을 남긴다', p6.note);
+
+  // 5c) 실행을 시작하기 전에 부르는 되돌리기
+  const p7 = w3.progressReset();
+  ok(p7.done === 0 && p7.skipped === 0 && p7.failed === 0, 'progressReset: 숫자를 0 으로 되돌린다', p7);
+  ok(p7.status === 'idle' && p7.current === '', 'progressReset: 상태와 지금 단계도 비운다', p7);
+  ok(p7.total === AGE_STEPS.steps.length, 'progressReset: 전체 단계 수는 지시서에서 읽는다', p7);
+  ok(Object.keys(w3.__stayRunStatus).length === 0, 'progressReset: 단계별 판정도 함께 비운다', w3.__stayRunStatus);
 
   // 6) 0단계 확인 — [호텔 만들기] 폼의 목록을 보고 `→ [목록]` 으로 돌아온다. 저장은 없다.
   const dom4 = new JSDOM(CREATE_FORM_HTML, {
@@ -258,6 +304,17 @@ const run = async () => {
   const c3 = await w4.runStep(3);
   ok(c3.checked === true, 'runCheckStep: 도시 확인 — 목록에서 값을 찾았다', c3);
   ok(c3.left === true, 'runCheckStep: 폼을 다 봤으면 `→ [목록]` 으로 돌아온다', c3);
+
+  // 저장이 없는 확인 단계도 끝난 단계다 — 완료로 센다(`submitted:false` 로 가르면 안 된다)
+  const p8 = w4.stayRun.progressState();
+  ok(p8.done === 2 && p8.failed === 1 && p8.skipped === 0,
+    'runStep: 저장 없는 확인 단계도 완료로 센다 (값을 못 찾은 2단계만 실패)', p8);
+  // 같은 단계를 다시 돌려도(사진 올린 뒤·고친 뒤) 두 번 세지 않는다 — 단계마다 판정 하나뿐이다
+  await w4.runStep(1);
+  const p9 = w4.stayRun.progressState();
+  ok(p9.done === 2 && p9.failed === 1, 'runStep: 같은 단계를 다시 돌려도 두 번 세지 않는다', p9);
+  ok(w4.__stayRunStatus[1] === 'done' && w4.__stayRunStatus[2] === 'failed',
+    'runStep: 단계별 판정을 하나씩만 들고 있다', w4.__stayRunStatus);
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
