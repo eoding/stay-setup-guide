@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.4.0'; // 운영 2026-09-04 화면(basecamp origin/develop 64433dabeb) 기준
+  var VERSION = '0.4.0'; // 운영 2026-09-04 배포판 화면 기준
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -492,7 +492,7 @@
     }
     push(headLabel(el), 2);
     // 체크박스 한 개와 짝지어 한 줄에 서는 입력 — 그 체크박스 글자를 이름에 붙인다 (2026-09-04)
-    // 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] 이 그 꼴이다(CO-31667): 라벨 요소가 없고
+    // 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] 이 그 꼴이다: 라벨 요소가 없고
     // 자리표시 글자가 N 칸 모두 같아서, 룸 이름을 붙이지 않으면 어느 칸인지 가릴 수가 없다.
     // 지시서는 `오퍼별 표시명 · Single` 처럼 적는다(뒤집힌 차례도 받는다).
     var mate = mateBoxLabel(el);
@@ -718,7 +718,7 @@
     if (hit.status === 'ambiguous') {
       // 글자가 완전히 같은 옵션이 여럿이면 값이 가장 큰(가장 최근에 만든) 것을 고른다.
       // 시즌 드로어의 취소정책 목록이 그랬다 — 다른 호텔의 같은 이름 정책까지 다 들어 있었다.
-      // 그 ERP 결함은 고쳐졌다(2026-09-04, CO-31675/31680: `policy_choices_for_master` 로 공용 +
+      // 그 ERP 결함은 고쳐졌다(2026-09-04: 공용 +
       // 이 호텔 전용만 내려준다). 이 갈래는 다른 목록에서 같은 일이 생길 때를 위한 보루로 남긴다.
       var same = [].slice.call(sel.options).filter(function (o) { return tier(o.textContent, text) === hit.tier; });
       var texts = same.map(function (o) { return clean(o.textContent); });
@@ -924,7 +924,7 @@
     return r.el || null;
   }
 
-  // 운영 2026-09-04 화면(basecamp origin/develop 64433dabeb)에서 실제로 쓰이는 글자다.
+  // 운영 2026-09-04 배포판 화면에서 실제로 쓰이는 글자다.
   // 이 목록에 없어도 `hx-confirm` 이 붙은 버튼은 아래 `refusal()` 이 따로 막는다 — 목록은
   // 확인창이 없어도 되돌릴 수 없는 버튼까지 잡기 위한 것이다.
   // 파일 고르개 라벨 — `<label class="stay-btn">사진 추가<input type="file" hidden …></label>`.

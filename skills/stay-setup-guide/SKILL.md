@@ -12,7 +12,7 @@ metadata:
 # 호텔 세팅 입력 지시서 만들기
 
 담당자가 읽는 문서가 아니라 **따라 치는** 문서를 만든다. "어디 들어가서 → 어느 탭/버튼 누르고 → 어느 칸에 무엇을 넣고(또는 비우고) → 저장"만 순서대로.
-형식·순서·값 표기의 정본은 `references/MANUAL-SPEC.md`, 화면의 칸·옵션·버튼 정본은 `references/screen-dictionary.md`다(**운영 2026-09-04 화면 기준 · basecamp origin/develop 64433dabeb**). 이 두 파일과 다르게 쓰지 않는다.
+형식·순서·값 표기의 정본은 `references/MANUAL-SPEC.md`, 화면의 칸·옵션·버튼 정본은 `references/screen-dictionary.md`다(**운영 2026-09-04 배포판 화면 기준**). 이 두 파일과 다르게 쓰지 않는다.
 여기서 만든 지시서는 짝 스킬 `skills/stay-setup-run` 이 화면에서 그대로 실행한다 — 아래 표기(단계 제목·`카드:` 줄·마지막 `→ [버튼]`)가 그 러너가 알아보는 형식이므로 글자 그대로 지킨다.
 
 ## 입력

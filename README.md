@@ -4,7 +4,7 @@ An agent skill for travel-agency staff: from a hotel contract (rate sheet) file 
 
 Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any other agent that reads the standard `SKILL.md` skill format.
 
-The screen dictionary and the step order follow the ERP screens in production on 2026-09-04 — **운영 2026-09-04 화면 기준(basecamp origin/develop 64433dabeb)**, 27 screens. A newly created hotel starts empty: no offer, no room and no sale link are created for you, and the room-link drawer stays blocked until the first offer exists. The 2026-09-04 release also added per-offer **age bands** (연령 구간) and the per-band price table inside the charge drawer, so the guide can now write child pricing as one charge instead of an adult charge plus a child add-on.
+The screen dictionary and the step order follow the ERP screens in production on 2026-09-04 — **운영 2026-09-04 배포판 화면 기준**, 27 screens. A newly created hotel starts empty: no offer, no room and no sale link are created for you, and the room-link drawer stays blocked until the first offer exists. The 2026-09-04 release also added per-offer **age bands** (연령 구간) and the per-band price table inside the charge drawer, so the guide can now write child pricing as one charge instead of an adult charge plus a child add-on.
 
 | Path | Contents |
 |---|---|
