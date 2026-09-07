@@ -6,6 +6,8 @@ Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any ot
 
 The screen dictionary and the step order follow the ERP screens in production on 2026-09-04 — **운영 2026-09-04 배포판 화면 기준**, 27 screens. A newly created hotel starts empty: no offer, no room and no sale link are created for you, and the room-link drawer stays blocked until the first offer exists. The 2026-09-04 release also added per-offer **age bands** (연령 구간) and the per-band price table inside the charge drawer, so the guide can now write child pricing as one charge instead of an adult charge plus a child add-on.
 
+> **비개발자용 설치·사용 안내(윈도우·맥, 1장)**: [`docs/설치-사용-안내.md`](docs/설치-사용-안내.md) — 영업·운영 담당자는 이 문서만 보면 됩니다. 데모용 계약서·사진은 이 저장소에 넣지 않고 따로 전달합니다(호텔 계약 단가와 사진 저작권 때문).
+
 | Path | Contents |
 |---|---|
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |
