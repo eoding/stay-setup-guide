@@ -22,6 +22,9 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
+- `취소정책 만들기` 단계가 `→ [추가]` 로 끝나는지(새 정책은 [추가], [저장] 은 이미 있는 정책을 고칠 때다)
+- 반복 행 이름이 정본 형식(`<칸 이름> <N> · <하위 칸>`)인지 — 홑 빈칸, 가운뎃점은 빈칸으로 감싼 ` · `
+- `체크`/`해제` 를 체크박스가 아닌 칸(다중 체크·선택·라디오)에 썼는지(고른 것은 `선택: …`, 안 고르면 `비움`)
 - `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
 
 사용법:
@@ -99,6 +102,10 @@ WEEKDAY_TOKEN_RE = re.compile(r"[월화수목금토일](?:요일)?")
 
 # 오퍼의 기본 취소 정책 — 이 값이면 판매 시작 배너에 🟡 가 남는다
 CANCEL_POLICY_FIELD = "기본 취소 정책"
+# 새 취소정책을 만드는 드로어의 저장 버튼은 [추가] 다 — [저장] 은 이미 있는 정책을 고칠 때다
+# (`references/screen-dictionary.md` §취소정책: "새로 만들 때의 저장 버튼은 [추가]").
+CANCEL_POLICY_CREATE_TITLE = "취소정책 만들기"
+CANCEL_POLICY_CREATE_BUTTON = "추가"
 CANCEL_POLICY_EMPTY = {"지정 안 함", "", "비움", "—", "-", "— 없음 —", "- 없음 -", "(지정 안 함)"}
 
 # 캠페인은 2026-09-04 ERP 화면에서 제거됐다(모델·컬럼만 휴면 보존) — 오퍼가 `오퍼 이미지` 로
@@ -691,6 +698,26 @@ def find_season_save_gaps(steps):
     return problems
 
 
+def find_cancel_policy_save_gaps(steps):
+    """`취소정책 만들기` 단계는 `→ [추가]` 로 끝나야 한다.
+
+    새 정책을 만드는 드로어의 버튼 문구가 [추가] 다(`references/screen-dictionary.md` §취소정책).
+    [저장] 은 **이미 있는 정책을 고칠 때**의 버튼이라, 만들기 단계에 적으면 담당자가 없는 버튼을 찾는다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(CANCEL_POLICY_CREATE_TITLE):
+            continue
+        saves = step["saves"]
+        if saves and saves[-1] != CANCEL_POLICY_CREATE_BUTTON:
+            problems.append(
+                f"{step['num']}단계: `{CANCEL_POLICY_CREATE_TITLE}` 의 마지막 줄은 "
+                f"`→ [{CANCEL_POLICY_CREATE_BUTTON}]` 다 — [저장] 은 이미 있는 정책을 고칠 때의 버튼이다"
+                f" (지금 [{saves[-1]}])"
+            )
+    return problems
+
+
 # 0단계 — 호텔을 만들기 전에 반드시 먼저 보는 세 화면. 제목에 이 낱말이 들어 있으면 통과한다
 # (`환율 등록 확인` 처럼 말이 붙어도 되게 부분 일치로 본다)
 ZERO_STEPS = ["환율", "거래처", "도시"]
@@ -705,11 +732,22 @@ CURRENCY_SUFFIX_RE = re.compile(r"\s*\((?:[A-Z]{3}|공급 통화)\)")
 # 금액이 아닌 숫자 칸(개수·연도·인원·전화·좌표·우선순위)
 NOT_MONEY_FIELD_RE = re.compile(r"(객실 수|개수|연도|인원|전화|위도|경도|우선순위|층|번호|수량|박\)|D-N)")
 
-# 반복 행 이름은 `<그룹> N · <열 이름>` 형식 — 사전과는 열 이름으로 대조한다
-REPEAT_PREFIX_RE = re.compile(r"^.+? \d+ · ")
+# 반복 행 이름의 **정본 형식**은 `<칸 이름> <N> · <하위 칸>` 이다 — 낱말 사이는 홑 빈칸 하나,
+# 가운뎃점은 U+00B7 을 빈칸으로 감싼 ` · ` 다. 지시서를 화면에서 실행하는 도우미가 이 형태로
+# 행을 찾으므로(빈칸 없는 `1·`, 전각 가운뎃점 `・`, 홑화살괄호 변종은 못 찾는다) 검사기도
+# 이 형태만 받는다. 사전과는 `<하위 칸>`(열 이름)으로 대조한다.
+REPEAT_PREFIX_RE = re.compile(r"^.+? \d+ \u00b7 ")
+# 정본에서 벗어난 반복 행을 잡는 그물 — 가운뎃점 변종·빈칸 빠짐·겹빈칸을 모두 받아 본 뒤
+# 위 정본과 견줘 어긋난 것만 오류로 돌려준다.
+REPEAT_LOOSE_RE = re.compile(r"^.+?\s*\d+\s*[\u00b7\u30fb\u2027\u2219]\s*.+$")
 
 # 상품 공통 화면의 칸이라 화면 사전이 일부러 담지 않는 이름 — 대조에서 통과시킨다
 DICT_EXEMPT = {"상품명"}
+
+# `체크` / `해제` 는 **체크박스 한 칸**의 값이다. `다중 체크`·`선택`·`라디오` 처럼 목록에서 고르는
+# 칸은 고른 것을 `선택: …` 으로 적고, 아무것도 안 고르면 `비움` 이다 — 그 칸에는 끌 스위치가 없다.
+CHECKBOX_KIND = "체크박스"
+CHECK_VALUES = {"체크", "해제"}
 
 # 금액이 아닌 숫자(날짜·시각·좌표·면적)는 대조에서 뺀다
 DATE_RE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}")
@@ -743,12 +781,66 @@ def strip_row_suffix(name):
     return name
 
 
+def find_repeat_row_format_gaps(steps):
+    """반복 행 이름이 정본 형식(`<칸 이름> <N> · <하위 칸>`)에서 벗어나면 오류.
+
+    화면에서 지시서를 실행하는 도우미는 이 형태로 행을 찾는다 — 빈칸 없는 `구간 1· 수수료 값`,
+    전각 가운뎃점 `구간 1 ・ 수수료 값` 은 같은 줄로 읽히지 않는다.
+    """
+    problems = []
+    seen = set()
+    for step in steps:
+        for name, _ in step["rows"]:
+            if not REPEAT_LOOSE_RE.match(name) or REPEAT_PREFIX_RE.match(name):
+                continue
+            if (step["num"], name) in seen:
+                continue
+            seen.add((step["num"], name))
+            problems.append(
+                f"{step['num']}단계: 반복 행 이름 `{name}` 이 정본 형식이 아니다 — "
+                "`<칸 이름> <N> · <하위 칸>` 으로 적는다(홑 빈칸 · 가운뎃점은 빈칸으로 감싼 ` · `)"
+            )
+    return problems
+
+
+def find_check_value_class_gaps(steps, kinds):
+    """`체크`/`해제` 를 체크박스가 아닌 칸에 쓰면 오류 — 그 칸에는 끌 스위치가 없다.
+
+    `다중 체크`·`선택`·`라디오` 는 고른 것을 `선택: …` 으로 적고, 아무것도 안 고르면 `비움` 이다.
+    사전에 없는 이름은 건드리지 않는다(그쪽은 `사전에 없는 칸 이름` 이 따로 알린다).
+    """
+    problems = []
+    for step in steps:
+        for name, value in step["rows"]:
+            if value.strip() not in CHECK_VALUES:
+                continue
+            n = norm_field(name)
+            for key in (n, strip_repeat_prefix(n), strip_row_suffix(n)):
+                found = kinds.get(key)
+                if found:
+                    break
+            if not found or CHECKBOX_KIND in found:
+                continue
+            kind = " · ".join(sorted(found))
+            problems.append(
+                f"{step['num']}단계: `{name}` 은 체크박스가 아니라 `{kind}` 다 — "
+                f"고른 것은 `선택: …`, 아무것도 안 고르면 `비움` 으로 적는다(지금 `{value}`)"
+            )
+    return problems
+
+
 def load_dictionary(path):
     """화면 사전에서 필드 label · screen_label 과 반복 행의 columns 를 모은다."""
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
     labels = set()
-    for screen in data.get("screens") or []:
+    # `screens` 의 검증 배너 줄은 최상위 `validation` 키를 가리키는 참조(`ref`)라 칸이 없다 —
+    # 정본 한 벌을 함께 읽어 그 화면의 칸도 사전에 들어오게 한다.
+    screens = list(data.get("screens") or [])
+    validation = data.get("validation")
+    if isinstance(validation, dict):
+        screens.append(validation)
+    for screen in screens:
         for block in screen.get("blocks") or []:
             for field in block.get("fields") or []:
                 for key in ("label", "screen_label"):
@@ -772,6 +864,28 @@ def load_dictionary(path):
                             if value:
                                 labels.add(norm_field(value))
     return labels
+
+
+def load_dictionary_kinds(path):
+    """화면 사전에서 `{칸 이름: {종류, …}}` 를 모은다 — 같은 이름이 화면마다 다른 종류일 수 있다."""
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    screens = list(data.get("screens") or [])
+    validation = data.get("validation")
+    if isinstance(validation, dict):
+        screens.append(validation)
+    kinds = {}
+    for screen in screens:
+        for block in screen.get("blocks") or []:
+            for field in block.get("fields") or []:
+                kind = field.get("kind")
+                if not kind:
+                    continue
+                for key in ("label", "screen_label"):
+                    value = field.get(key)
+                    if value:
+                        kinds.setdefault(norm_field(value), set()).add(kind)
+    return kinds
 
 
 def norm_num(token):
@@ -878,6 +992,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
+    cancel_policy_saves = find_cancel_policy_save_gaps(parsed)
+    repeat_row_formats = find_repeat_row_format_gaps(parsed)
     currency = supply_currency(parsed)
 
     nums = [int(m.group(1)) for l in steps for m in [STEP_RE.match(l)] if m]
@@ -894,12 +1010,15 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
 
     dict_error = None
     unknown_fields = []
+    check_value_classes = []
     if dictionary_path:
         try:
             labels = load_dictionary(dictionary_path)
+            field_kinds = load_dictionary_kinds(dictionary_path)
         except (OSError, ValueError) as e:
             dict_error = str(e)
         else:
+            check_value_classes = find_check_value_class_gaps(parsed, field_kinds)
             seen = []
             for name, _ in rows:
                 n = norm_field(name)
@@ -954,6 +1073,9 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "photo_count_gaps": photo_count_gaps,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
+        "cancel_policy_saves": cancel_policy_saves,
+        "repeat_row_formats": repeat_row_formats,
+        "check_value_classes": check_value_classes,
         "currency": currency,
         "dict_checked": bool(dictionary_path), "dict_error": dict_error, "unknown_fields": unknown_fields,
         "contract_checked": bool(contract_path), "contract_error": contract_error,
@@ -1008,7 +1130,8 @@ def main(argv=None):
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
-              + r["promo_common"] + r["season_saves"]):
+              + r["promo_common"] + r["season_saves"] + r["cancel_policy_saves"]
+              + r["repeat_row_formats"] + r["check_value_classes"]):
         problems.append(p)
     if r["dict_error"]:
         problems.append(f"화면 사전 읽기 실패 {r['dict_error']}")

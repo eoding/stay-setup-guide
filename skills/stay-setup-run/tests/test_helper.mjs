@@ -88,6 +88,20 @@ const run = async () => {
     'fill: 파일 칸은 needs-upload 로 돌려준다', by['룸 사진']);
   ok(!!win.document.querySelector('[data-stay-upload]'), 'fill: 파일 칸에 표식을 남긴다');
 
+  // 3b. 반복 행 칸 이름은 **정본 꼴**(`<칸 이름> <N> · <하위 칸>`)만 반복 행으로 읽는다.
+  //     빈칸이나 가운뎃점이 어긋난 이름은 반복 행이 아니라 그냥 칸 이름으로 찾다가 못 찾는다 —
+  //     파서의 `ROW_LABEL_RE` 와 같은 판정이라야 한다. 한쪽만 반복 행으로 읽으면 N번째 행이
+  //     아니라 첫 행에 값이 들어간다.
+  const rep = await R.fill([
+    { label: '침대 구성 2 ·개수', kind: 'typed', value: '9' },
+    { label: '침대 구성2 · 개수', kind: 'typed', value: '9' },
+    { label: '침대 구성 2 ・ 개수', kind: 'typed', value: '9' }
+  ]);
+  ok(rep.every((r) => r.status !== 'ok'), 'fill: 정본이 아닌 반복 행 이름은 받지 않는다', rep);
+  ok([].slice.call(win.document.querySelectorAll('[name=bed_qty]')).every((i) => i.value !== '9'),
+    'fill: 정본이 아닌 이름이 엉뚱한 침대 행에 값을 넣지 않는다',
+    [].slice.call(win.document.querySelectorAll('[name=bed_qty]')).map((i) => i.value));
+
   // 실제 DOM 값 확인
   const q = (sel) => win.document.querySelector(sel);
   ok(q('[name=title]').value === 'Single', 'DOM: 룸 이름', q('[name=title]').value);
