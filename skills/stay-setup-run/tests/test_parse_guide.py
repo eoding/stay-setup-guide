@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """parse_guide.py 검증 — 예시(우에노 토우가네야) manual.md · HTML 을 함께 본다.
 
+실행 입력은 **검사 도장이 찍힌 HTML 하나뿐**이다(문지기: `TestGuideGate`). manual.md 는 CLI 가
+받지 않으므로, md 와 HTML 이 같은 steps 를 내는지 보는 시험은 내부 파서를 직접 부른다.
+
     python3 -m pytest skills/stay-setup-run/tests/test_parse_guide.py
     python3 skills/stay-setup-run/tests/test_parse_guide.py
 """
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -16,23 +20,47 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE.parent / "scripts" / "parse_guide.py"
 REPO = HERE.parents[2]
-EXAMPLE = REPO / "skills" / "stay-setup-guide" / "examples" / "우에노_토우가네야"
+GUIDE_SKILL = REPO / "skills" / "stay-setup-guide"
+RENDER = GUIDE_SKILL / "scripts" / "render_card.py"
+EXAMPLE = GUIDE_SKILL / "examples" / "우에노_토우가네야"
 MANUAL = EXAMPLE / "manual.md"
 GUIDE_HTML = EXAMPLE / "우에노_토우가네야_입력지시서.html"
 
 sys.path.insert(0, str(SCRIPT.parent))
+sys.path.insert(0, str(RENDER.parent))
 import parse_guide  # noqa: E402
+import render_card  # noqa: E402
 
 
 def parse(path, **kw):
-    src, source = parse_guide.resolve_input(str(path))
-    title, raws = (parse_guide.parse_markdown(src.read_text(encoding="utf-8"))
-                   if source == "manual.md"
-                   else parse_guide.parse_html(src.read_text(encoding="utf-8")))
+    """파일 하나를 읽어 (제목, steps) — 확장자로 파서를 고른다.
+
+    CLI 는 HTML 만 받지만, 여기서는 md 와 HTML 이 같은 steps 를 내는지 봐야 하므로 둘 다 읽는다.
+    """
+    src = Path(path)
+    text = src.read_text(encoding="utf-8")
+    title, raws = (parse_guide.parse_markdown(text) if src.suffix.lower() == ".md"
+                   else parse_guide.parse_html(text))
     steps = [parse_guide.build_step(r) for r in raws]
     if kw.get("prefix"):
         parse_guide.apply_title_prefix(steps, kw["prefix"])
     return title, steps
+
+
+def render_guide(dirpath, md_text, name="시험_입력지시서.html", check="ok", sha=None, stamp=True):
+    """작은 manual 본문을 HTML 지시서로 렌더해 `dirpath` 에 둔다. 만든 경로를 돌려준다.
+
+    도장은 **여기서 손으로 박는다** — 검사기(`check_manual.py`)를 돌리지 않는다. 이 시험들이
+    보는 것은 문지기 뒤의 파서·훑기이고, 문지기 자체는 `TestGuideGate` 가 진짜 렌더로 본다.
+    `check="fail"`, `stamp=False`, `sha=...` 로 거부되는 지시서도 만들 수 있다.
+    """
+    digest = sha or hashlib.sha256(md_text.encode("utf-8")).hexdigest()
+    mark = render_card.build_stamp(digest, check == "ok") if stamp else None
+    html_text, _ = render_card.render_card(md_text, "manual.md", None, None, None, mark)
+    out = Path(dirpath) / name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html_text, encoding="utf-8")
+    return out
 
 
 def step_by_no(steps, no):
@@ -214,14 +242,20 @@ class TestHtmlMatchesManual(unittest.TestCase):
         for a, b in zip(from_md, from_html):
             self.assertEqual(comparable(a), comparable(b), "%d단계가 다릅니다" % a["no"])
 
-    def test_html_next_to_manual_prefers_manual(self):
+    def test_html_input_stays_html(self):
+        """옆에 manual.md 가 있어도 읽는 것은 HTML 이다 — 검사를 통과한 쪽이 실행 입력이다."""
         src, source = parse_guide.resolve_input(str(GUIDE_HTML))
-        self.assertEqual(source, "manual.md")
-        self.assertEqual(src, MANUAL)
+        self.assertEqual((src, source), (GUIDE_HTML, "html"))
 
     def test_directory_input(self):
         src, source = parse_guide.resolve_input(str(EXAMPLE))
-        self.assertEqual((src, source), (MANUAL, "manual.md"))
+        self.assertEqual((src, source), (GUIDE_HTML, "html"))
+
+    def test_example_stamp_matches_manual(self):
+        """예시 HTML 의 도장은 옆 manual.md 와 맞고 검사도 통과한 것이다(다시 렌더하면 갱신된다)."""
+        stamp = parse_guide.verify_stamp(GUIDE_HTML, GUIDE_HTML.read_text(encoding="utf-8"))
+        self.assertEqual(stamp["check"], "ok")
+        self.assertEqual(stamp["sha256"], parse_guide.file_sha256(MANUAL))
 
 
 class TestTitlePrefix(unittest.TestCase):
@@ -242,11 +276,13 @@ class TestTitlePrefix(unittest.TestCase):
     def test_prefix_recorded_in_guide(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "steps.json"
-            run(str(MANUAL), "--title-prefix", "__skills__", "-o", str(out))
+            r = run(str(GUIDE_HTML), "--title-prefix", "__skills__", "-o", str(out))
+            self.assertEqual(r.returncode, 0, r.stderr)
             doc = json.loads(out.read_text(encoding="utf-8"))
         self.assertEqual(doc["guide"]["title_prefix"], "__skills__")
-        self.assertEqual(doc["guide"]["source"], "manual.md")
+        self.assertEqual(doc["guide"]["source"], "html")
         self.assertEqual(doc["guide"]["share_folder"], "우에노_토우가네야")
+        self.assertEqual(doc["guide"]["stamp"]["check"], "ok")
         self.assertTrue(Path(doc["guide"]["photos_dir"]).is_absolute())
 
 
@@ -273,7 +309,7 @@ class TestCheckMode(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.dir = Path(self.tmp) / "시험"
         (self.dir / "사진").mkdir(parents=True)
-        (self.dir / "manual.md").write_text(MINI, encoding="utf-8")
+        render_guide(self.dir, MINI)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -515,13 +551,13 @@ class TestCheckModeStale(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_check_fails_on_stale_guide(self):
-        (self.dir / "manual.md").write_text(STALE, encoding="utf-8")
+        render_guide(self.dir, STALE)
         r = run(str(self.dir), "--check")
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertIn("러너가 거부하는 단계: 1", r.stdout)
 
     def test_check_passes_on_new_screen_guide(self):
-        (self.dir / "manual.md").write_text(AGE_BAND, encoding="utf-8")
+        render_guide(self.dir, AGE_BAND)
         r = run(str(self.dir), "--check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("러너가 거부하는 단계: 0", r.stdout)
@@ -530,7 +566,7 @@ class TestCheckModeStale(unittest.TestCase):
 
     def test_check_fails_on_warn_skip_step(self):
         """`경고 넘어가기` 는 금지된 갈래다 — 브라우저를 열기 전에 막는다(🟡 0 이 합격선)."""
-        (self.dir / "manual.md").write_text(WARN_SKIP, encoding="utf-8")
+        render_guide(self.dir, WARN_SKIP)
         r = run(str(self.dir), "--check")
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertIn("러너가 거부하는 단계: 1", r.stdout)
@@ -538,19 +574,139 @@ class TestCheckModeStale(unittest.TestCase):
         self.assertNotIn("러너가 모르는 단계 갈래", r.stdout)
 
     def test_check_fails_on_overlapping_bands(self):
-        (self.dir / "manual.md").write_text(
-            bands_manual(("유아", "0", "5.99"), ("초등학생", "0", "11.99")), encoding="utf-8")
+        render_guide(self.dir, bands_manual(("유아", "0", "5.99"), ("초등학생", "0", "11.99")))
         r = run(str(self.dir), "--check")
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertIn("나이 범위가 겹치는 단계: 1", r.stdout)
 
     def test_preflight_lands_in_json(self):
-        (self.dir / "manual.md").write_text(AGE_BAND, encoding="utf-8")
+        render_guide(self.dir, AGE_BAND)
         out = Path(self.tmp) / "steps.json"
         r = run(str(self.dir), "-o", str(out))
         self.assertEqual(r.returncode, 0, r.stderr)
         doc = json.loads(out.read_text(encoding="utf-8"))
         self.assertEqual(doc["guide"]["preflight"]["stale"], [])
+
+
+#: 검사기(`check_manual.py`)를 그대로 통과하는 가장 작은 지시서 — 0단계 세 줄만 있다.
+ZERO_OK = """# 시험 호텔 — 입력 지시서
+
+## 1. 환율 확인
+화면: 왼쪽 메뉴 `자유여행` → `상품관리` → 목록 위 [호텔 만들기]
+주의: 목록에 뜨는지만 보고 [목록] 으로 나온다
+
+| 칸 | 값 |
+|---|---|
+| 공급 통화 | 선택: USD |
+
+→ [목록]
+
+## 2. 거래처 확인
+화면: 왼쪽 메뉴 `자유여행` → `상품관리` → 목록 위 [호텔 만들기]
+블록: `거래처정보`
+
+| 칸 | 값 |
+|---|---|
+| 거래처 | 선택: 자사 |
+
+→ [목록]
+
+## 3. 도시 확인
+화면: 왼쪽 메뉴 `자유여행` → `상품관리` → 목록 위 [호텔 만들기]
+
+| 칸 | 값 |
+|---|---|
+| 도시 | 선택: 도쿄(TYO) |
+
+→ [목록]
+"""
+
+
+class TestGuideGate(unittest.TestCase):
+    """실행 입력은 **검사를 통과한 HTML 지시서** 하나뿐이다.
+
+    manual.md 를 직접 받으면 사람이 검토한 HTML 을 건너뛸 수 있으므로, CLI 는 md 를 받지 않고
+    HTML 의 도장(`stay-guide-stamp`)을 본다. 여기서는 `render_card.py` 를 진짜로 돌려
+    도장이 찍힌 지시서를 만든다.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.dir = Path(self.tmp) / "시험"
+        (self.dir / "사진").mkdir(parents=True)
+        self.md = self.dir / "manual.md"
+        self.md.write_text(ZERO_OK, encoding="utf-8")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def render(self, *extra):
+        """render_card.py 를 그대로 돌려 도장 찍힌 HTML 을 만든다 (검사기도 함께 돈다)."""
+        out = self.dir / "시험_입력지시서.html"
+        r = subprocess.run([sys.executable, str(RENDER), str(self.md), "-o", str(out), *extra],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return out, r
+
+    def test_markdown_input_is_refused(self):
+        r = run(str(self.md), "--check")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("manual.md 는 실행 입력이 아니다", r.stderr)
+
+    def test_missing_stamp_is_refused(self):
+        out = render_guide(self.dir, ZERO_OK, stamp=False)
+        r = run(str(out), "--check")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("지시서에 검사 도장이 없다", r.stderr)
+
+    def test_failed_check_stamp_is_refused(self):
+        """검사기를 통과하지 못한 지시서(`check=fail`)는 브라우저를 열기 전에 막는다."""
+        self.md.write_text(STALE, encoding="utf-8")
+        out, r = self.render()
+        self.assertIn("check=fail", out.read_text(encoding="utf-8")[:2000])
+        self.assertIn("검사기를 통과하지 못했다", r.stderr)
+        got = run(str(out), "--check")
+        self.assertEqual(got.returncode, 2, got.stdout + got.stderr)
+        self.assertIn("검사기를 통과하지 못한 지시서다", got.stderr)
+
+    def test_stale_manual_is_refused(self):
+        """HTML 을 만든 뒤 manual.md 를 고쳤으면 그 HTML 은 옛 계획이다 — 다시 렌더해야 한다."""
+        out, _ = self.render()
+        self.md.write_text(ZERO_OK + "\n<!-- 나중에 고친 자국 -->\n", encoding="utf-8")
+        r = run(str(out), "--check")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("manual.md 가 HTML 보다 새롭다", r.stderr)
+
+    def test_good_html_is_accepted(self):
+        out, _ = self.render()
+        r = run(str(out), "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("검사 도장: ok", r.stdout)
+        self.assertIn("단계 3개", r.stdout)
+
+    def test_folder_input_picks_the_one_html(self):
+        self.render()
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("검사 도장: ok", r.stdout)
+
+    def test_folder_with_two_guides_is_refused(self):
+        self.render()
+        shutil.copy(self.dir / "시험_입력지시서.html", self.dir / "다른_입력지시서.html")
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("2개", r.stderr)
+
+    def test_stamp_lands_in_json(self):
+        out, _ = self.render()
+        target = Path(self.tmp) / "steps.json"
+        r = run(str(out), "-o", str(target))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        doc = json.loads(target.read_text(encoding="utf-8"))
+        stamp = doc["guide"]["stamp"]
+        self.assertEqual(stamp["check"], "ok")
+        self.assertEqual(stamp["version"], "v1")
+        self.assertEqual(stamp["sha256"], parse_guide.file_sha256(self.md))
 
 
 if __name__ == "__main__":

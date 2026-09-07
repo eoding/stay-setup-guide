@@ -1,7 +1,7 @@
 # stay-setup-run — run the input guide in the browser
 
 An agent skill that takes the **input guide** produced by `stay-setup-guide`
-(`<name>_입력지시서.html` or `manual.md`) and fills the ERP Stay screens step by step,
+(`<name>_입력지시서.html`) and fills the ERP Stay screens step by step,
 in the Chrome tab the user is already logged into. In coding terms: `stay-setup-guide` is the plan,
 this skill is the execution. The guide and the screens are Korean, so the skill docs are Korean too.
 
@@ -26,6 +26,14 @@ the standard `SKILL.md` format **and can drive a browser**.
 > `경고 넘어가기` step, which used to dismiss a yellow item with a written reason, is forbidden: the
 > runner refuses it and `parse_guide.py --check` blocks it before a browser is opened. A yellow item
 > that remains is a defect in the guide and is fixed there.
+
+> **Only a checked HTML guide runs.** `render_card.py` stamps the page it renders with
+> `<meta name="stay-guide-stamp" content="v1;sha256=<sha256 of manual.md>;check=ok|fail;rendered=<date>">`,
+> where `check` is the verdict of `check_manual.py` on the same manual. `parse_guide.py` reads that stamp
+> and exits **2** without opening a browser when the input is a `.md` file, when the stamp is missing,
+> when it says `check=fail`, or when a `manual.md` sitting next to the HTML no longer hashes to the stamp.
+> Each refusal names the fix, and the fix is always on the guide side: re-render it with `render_card.py`
+> and get the checker to pass. Editing `manual.md` after the render therefore invalidates the guide by design.
 
 ## Requirements
 
@@ -86,7 +94,7 @@ a supervisor pressed).
 | Path | Contents |
 |---|---|
 | `SKILL.md` | Entry point: inputs → parse → inject helper → step loop → failure handling → rules → report |
-| `scripts/parse_guide.py` | Guide (HTML or `manual.md`) → `steps.json`, checking photo files and value kinds |
+| `scripts/parse_guide.py` | Stamped guide HTML → `steps.json`, checking the stamp, photo files and value kinds |
 | `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input |
 | `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runCellStep`, `runCheckStep` |
 | `references/screen-mechanics.md` | Step kind → screen map, how each screen opens and saves, traps |

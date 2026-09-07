@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
-description: "입력 지시서(`<이름>_입력지시서.html` 또는 manual.md)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.4.0
+description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
+version: 0.5.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -22,7 +22,16 @@ metadata:
 
 ## 입력
 
-1. 공유 폴더: `<이름>_입력지시서.html`(필수) + `사진/`. 같은 폴더에 `manual.md` 가 있으면 그것을 먼저 읽는다.
+1. 공유 폴더: `<이름>_입력지시서.html`(필수) + `사진/`.
+   **실행 입력은 렌더된 HTML 하나뿐이다.** `render_card.py` 가 `<head>` 에 박은 검사 도장
+   (`<meta name="stay-guide-stamp" content="v1;sha256=…;check=ok;rendered=…">`)을 보고
+   실행 여부를 정한다 — 도장의 `sha256` 은 그 HTML 을 만든 `manual.md` 바이트의 해시이고,
+   `check` 는 `check_manual.py` 를 통과했는지다. `parse_guide.py` 는 셋을 거부한다(끝 코드 2):
+   - `manual.md 는 실행 입력이 아니다 — render_card.py 로 HTML 지시서를 만들고 검사를 통과시킨 뒤 그 HTML 을 준다`
+     — `.md` 를 준 경우. 사람이 검토한 HTML 을 건너뛰는 길을 막는다.
+   - `지시서에 검사 도장이 없다 — render_card.py 로 다시 만든다` · `검사기를 통과하지 못한 지시서다 — check_manual.py 의 오류를 고치고 다시 렌더한다`
+   - `manual.md 가 HTML 보다 새롭다 — 다시 렌더한다` — 옆의 `manual.md` 해시가 도장과 다를 때.
+   거부되면 **고치는 것은 지시서 쪽**이다(`stay-setup-guide` 에서 다시 렌더한다). 여기서 우회하지 않는다.
 2. 사용자가 로그인해 둔 크롬 탭. 호텔 목록 화면에서 시작하거나, 이미 만든 호텔의 편집 화면에서 이어서 한다. **주소는 사용자에게 받는다 — 이 스킬은 주소를 모른다.**
 3. 옵션: `--title-prefix`(호텔명·상품명 앞에 붙일 접두, 시험용), `--photos`(사진 폴더), 모드(연속/검토).
 
@@ -31,13 +40,15 @@ metadata:
 ## 준비
 
 ```bash
-python3 scripts/parse_guide.py <지시서 또는 공유 폴더> --photos <사진 폴더> --check   # 브라우저를 열기 전에 훑는다
-python3 scripts/parse_guide.py <지시서 또는 공유 폴더> --photos <사진 폴더> --title-prefix <접두> -o <실행 폴더>/steps.json
+python3 scripts/parse_guide.py <지시서 HTML 또는 공유 폴더> --photos <사진 폴더> --check   # 브라우저를 열기 전에 훑는다
+python3 scripts/parse_guide.py <지시서 HTML 또는 공유 폴더> --photos <사진 폴더> --title-prefix <접두> -o <실행 폴더>/steps.json
 npx esbuild scripts/stay_helper.js --minify --outfile=<실행 폴더>/stay_helper.min.js
 npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/stay_boot.min.js
 ```
 
-- **`--check` 를 먼저 돌린다.** 0 이 아니면 브라우저를 열지 않는다. 걸리는 것은 넷이다:
+- **`--check` 를 먼저 돌린다.** 0 이 아니면 브라우저를 열지 않는다. **2 는 문지기가 막은 것**이다 —
+  위 §입력의 도장 규칙에 걸렸으니 지시서를 다시 만들어 받는다(`--check` 는 통과한 도장을
+  `검사 도장: ok · sha256 … · 렌더 …` 한 줄로 먼저 찍는다). 1 로 걸리는 것은 넷이다:
   `알 수 없는 값` · `없는 사진 파일` · **`러너가 거부하는 단계`**(옛 화면 기준 단계와 금지된
   `경고 넘어가기` — 페이지 안 `checkGuide()` 와 같은 판정) ·
   **`줄 차례가 어긋난 단계`**(부과금의 `연령별 단가` 가 게이트 칸보다 앞에 있는 꼴) ·
