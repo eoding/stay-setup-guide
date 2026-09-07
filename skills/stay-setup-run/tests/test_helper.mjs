@@ -92,10 +92,14 @@ const run = async () => {
   //     빈칸이나 가운뎃점이 어긋난 이름은 반복 행이 아니라 그냥 칸 이름으로 찾다가 못 찾는다 —
   //     파서의 `ROW_LABEL_RE` 와 같은 판정이라야 한다. 한쪽만 반복 행으로 읽으면 N번째 행이
   //     아니라 첫 행에 값이 들어간다.
+  //     눈으로 가릴 수 없는 글자(가운뎃점 종류·붙임 빈칸)는 **코드포인트로 적는다** — 글자 그대로
+  //     적으면 편집·복사 과정에서 정본 꼴로 바뀌어 시험이 조용히 무력해진다.
+  const SP = '\u0020', DOT = '\u00b7', NBSP = '\u00a0', FULL_DOT = '\u30fb';
   const rep = await R.fill([
-    { label: '침대 구성 2 ·개수', kind: 'typed', value: '9' },
-    { label: '침대 구성2 · 개수', kind: 'typed', value: '9' },
-    { label: '침대 구성 2 ・ 개수', kind: 'typed', value: '9' }
+    { label: '침대 구성' + SP + '2' + SP + DOT + '개수', kind: 'typed', value: '9' },        // 가운뎃점 뒤 빈칸 없음
+    { label: '침대 구성' + '2' + SP + DOT + SP + '개수', kind: 'typed', value: '9' },        // 숫자 앞 빈칸 없음
+    { label: '침대 구성' + SP + '2' + SP + FULL_DOT + SP + '개수', kind: 'typed', value: '9' }, // 전각 가운뎃점(U+30FB)
+    { label: '침대 구성' + NBSP + '2' + SP + DOT + SP + '개수', kind: 'typed', value: '9' }  // 붙임 빈칸(NBSP)
   ]);
   ok(rep.every((r) => r.status !== 'ok'), 'fill: 정본이 아닌 반복 행 이름은 받지 않는다', rep);
   ok([].slice.call(win.document.querySelectorAll('[name=bed_qty]')).every((i) => i.value !== '9'),
