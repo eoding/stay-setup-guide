@@ -2,6 +2,14 @@
 
 An agent skill for travel-agency staff: from a hotel contract (rate sheet) file alone, it produces a step-by-step **input guide (HTML)** for the ERP Stay screens plus a photo folder. The guide is written in Korean because the ERP screens are Korean.
 
+**Three files, three roles.** They have similar names and used to sit in one folder, so the layout keeps them apart:
+
+| File | What it is | Who reads it | Where it lives |
+|---|---|---|---|
+| `<name>_입력지시서.html` | **지시서** — the guide, the one deliverable, carrying the check stamp | the person doing the setup, and the runner skill | `<name>/` (top level of the share folder) |
+| `manual.md` | **원고** — the draft the guide is rendered from, with `rules.md`, `facts.json`, `contract.md` | the guide skill only; never handed out | `<name>/_원고/` |
+| `steps.json` | **실행 계획** — the run plan extracted from the guide, generated, never hand-edited | the runner skill only | `<name>_실행/` |
+
 Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any other agent that reads the standard `SKILL.md` skill format.
 
 The screen dictionary and the step order follow the ERP screens in production on 2026-09-04 — **운영 2026-09-04 배포판 화면 기준**, 27 screens. A newly created hotel starts empty: no offer, no room and no sale link are created for you, and the room-link drawer stays blocked until the first offer exists. The 2026-09-04 release also added per-offer **age bands** (연령 구간) and the per-band price table inside the charge drawer, so the guide can now write child pricing as one charge instead of an adult charge plus a child add-on.
@@ -10,7 +18,7 @@ The screen dictionary and the step order follow the ERP screens in production on
 
 | Path | Contents |
 |---|---|
-| [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |
+| [`skills/stay-setup-guide`](skills/stay-setup-guide) | The skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a fictional example, converter/checker/renderer scripts |
 | [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: takes that guide and fills the ERP Stay screens in the browser tab the user is logged into, step by step, writing a run log. It never presses [판매 시작] (start selling) |
 
 ## Requirements
@@ -102,7 +110,7 @@ Hermes one-shot form:
 hermes -z "<the prompt above>" --skills stay-setup-guide
 ```
 
-Outputs: `<share_folder>_입력지시서.html` (the guide, with copy buttons), `사진/` (photos), `manual.md`, `rules.md`, `facts.json`, and `changes.md` (every value the agent decided differently from the contract, for review).
+Outputs, in one share folder `<share_folder>/`: `<share_folder>_입력지시서.html` (the guide, with copy buttons — the file you hand over), `사진/` (photos), `changes.md` (every value the agent decided differently from the contract, plus the fields left blank for a person to fill in), and `_원고/` holding the working files `manual.md`, `rules.md`, `facts.json` and `contract.md`.
 
 On first run, `scripts/convert_contract.py` installs three Python packages into the current Python environment (`firecrawl-anydoc`, `rhwp-python`, `openpyxl`) and prints a notice before doing so.
 
@@ -122,7 +130,7 @@ Chrome tab: the hotel list page that is open now (already logged in)
 Mode: 검토 (screenshot each step and ask before continuing)
 ```
 
-It writes `<share_folder>_실행/` next to the guide folder, holding `steps.json` and `run-log.md` (one line per step).
+It writes `<share_folder>_실행/` next to the share folder, holding `steps.json` (the run plan), `parse.txt`, `run-log.md` (one line per step) and `_inject/`.
 **The agent never presses [판매 시작]** — check the validation banner and start the sale yourself.
 
 ## Disclaimer

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""parse_guide.py — 렌더된 입력 지시서 HTML → steps.json.
+"""parse_guide.py — 지시서(`<이름>_입력지시서.html`) → 실행 계획(`steps.json`).
+
+지시서는 담당자가 읽고 따라 치는 산출물이고, 실행 계획은 그 지시서에서 뽑아낸 **러너 내부 파일**이다
+(자동 생성 · 사람이 손대지 않는다 · `<이름>_실행/` 에 산다). 러너는 지시서 HTML 만 읽는다 —
+원고(`_원고/manual.md`)는 실행 입력이 아니다.
 
 한 단계(`## N. 제목`) = 저장 버튼 한 번. 단계 안에는:
 
@@ -9,17 +13,18 @@
     파일 선택 → 아래 파일  +  `- a.jpg`       사진 목록
     → [저장]                                  저장 버튼
 
-manual.md 와 render_card.py 가 만든 HTML 은 같은 steps 를 낸다. 그래도 **실행 입력은 HTML 하나뿐**이다:
-`render_card.py` 가 `<head>` 에 박은 검사 도장
+원고(manual.md)와 render_card.py 가 만든 지시서 HTML 은 같은 steps 를 낸다. 그래도 **실행 입력은
+지시서 HTML 하나뿐**이다: `render_card.py` 가 `<head>` 에 박은 검사 도장
 
-    <meta name="stay-guide-stamp" content="v1;sha256=<manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<날짜>">
+    <meta name="stay-guide-stamp" content="v1;sha256=<원고 바이트의 sha256>;check=<ok|fail>;rendered=<날짜>">
 
-이 없거나, `check=fail` 이거나, 옆에 있는 `manual.md` 의 sha256 이 도장과 다르면 **거부하고 2 로 끝낸다**.
-사람이 검토한 HTML 만 실행에 들어가게 하려는 것이다 — manual.md 를 직접 주면 검사기를 건너뛸 수 있다.
+이 없거나, `check=fail` 이거나, 같은 공유 폴더의 원고(`_원고/manual.md`, 옛 자리면 `manual.md`)의
+sha256 이 도장과 다르면 **거부하고 2 로 끝낸다**. 사람이 검토한 지시서만 실행에 들어가게 하려는
+것이다 — 원고를 직접 주면 검사기를 건너뛸 수 있다.
 
 사용법:
-    python3 parse_guide.py <guide.html | 폴더>
-        [--photos DIR] [--title-prefix STR] [-o steps.json] [--check]
+    python3 parse_guide.py <<이름>_입력지시서.html | 공유 폴더>
+        [--photos DIR] [--title-prefix STR] [-o <이름>_실행/steps.json] [--check]
 """
 
 import argparse
@@ -57,7 +62,7 @@ AUTO_MARKERS = ("자동 입력됨", "자동입력됨")
 
 
 # ---------------------------------------------------------------------------
-# 값·라벨·버튼 해석 (manual.md 와 HTML 이 함께 쓴다)
+# 값·라벨·버튼 해석 (원고 manual.md 와 지시서 HTML 이 함께 쓴다)
 # ---------------------------------------------------------------------------
 
 def split_options(body):
@@ -153,7 +158,7 @@ def title_kind(title):
 
 
 # ---------------------------------------------------------------------------
-# manual.md 읽기
+# 원고(manual.md) 읽기 — 시험용. 실행 입력은 지시서 HTML 이다
 # ---------------------------------------------------------------------------
 
 def new_raw(no, title):
@@ -314,7 +319,7 @@ def md_of(node, skip=()):
 
 
 def html_value_cell(td):
-    """`값` 칸 마크업을 manual.md 의 값 표기로 되돌린다."""
+    """`값` 칸 마크업을 원고(manual.md)의 값 표기로 되돌린다."""
     cell = find(td, by_class("cell-text")) or td
     if find(cell, by_class("v-select-mark")):
         strong = find(cell, by_tag("strong"))
@@ -631,18 +636,21 @@ def apply_title_prefix(steps, prefix):
 # ---------------------------------------------------------------------------
 
 #: `render_card.py` 가 `<head>` 에 박는 도장. 값은
-#: `v1;sha256=<manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<YYYY-MM-DD>` 다.
+#: `v1;sha256=<원고 manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<YYYY-MM-DD>` 다.
 STAMP_META_NAME = "stay-guide-stamp"
 STAMP_RE = re.compile(
     r"""<meta[^>]*\bname\s*=\s*["']%s["'][^>]*>""" % STAMP_META_NAME, re.IGNORECASE)
 STAMP_CONTENT_RE = re.compile(r"""\bcontent\s*=\s*["']([^"']*)["']""", re.IGNORECASE)
 
 #: 거부 문구 — 사람이 다음에 무엇을 할지가 문장 안에 들어 있어야 한다.
-MSG_MD_INPUT = ("manual.md 는 실행 입력이 아니다 — render_card.py 로 HTML 지시서를 만들고 "
-                "검사를 통과시킨 뒤 그 HTML 을 준다")
+MSG_MD_INPUT = ("manual.md 는 원고다 — 실행 입력이 아니다. render_card.py 로 지시서 HTML 을 만들고 "
+                "검사를 통과시킨 뒤 그 지시서를 준다")
 MSG_NO_STAMP = "지시서에 검사 도장이 없다 — render_card.py 로 다시 만든다"
 MSG_CHECK_FAIL = "검사기를 통과하지 못한 지시서다 — check_manual.py 의 오류를 고치고 다시 렌더한다"
-MSG_STALE_MD = "manual.md 가 HTML 보다 새롭다 — 다시 렌더한다"
+MSG_STALE_MD = "원고(manual.md)가 지시서보다 새롭다 — 다시 렌더한다"
+
+#: 원고 폴더 이름 — 공유 폴더 안에서 원고와 그 부속(rules.md·facts.json·contract.md)이 사는 곳.
+DRAFT_DIR = "_원고"
 
 
 class GuideRefused(Exception):
@@ -677,10 +685,11 @@ def file_sha256(path):
 
 
 def resolve_input(path):
-    """입력 경로 → (읽을 HTML 파일, "html").
+    """입력 경로 → (읽을 지시서 HTML 파일, "html").
 
-    **HTML 지시서만 받는다.** manual.md 를 주면 거부한다 — 검사를 건너뛴 채로 실행되는 길을 막는다.
-    폴더를 주면 그 안의 `*_입력지시서.html` 이 **하나일 때만** 그것을 쓴다.
+    **지시서 HTML 만 받는다.** 원고(manual.md)를 주면 거부한다 — 검사를 건너뛴 채로 실행되는 길을
+    막는다. 공유 폴더를 주면 그 **맨 위**의 `*_입력지시서.html` 이 하나일 때만 그것을 쓴다
+    (`_원고/` 안은 보지 않는다).
     """
     p = Path(path)
     if p.is_dir():
@@ -704,17 +713,26 @@ def resolve_input(path):
 def verify_stamp(html_path, text):
     """도장을 확인한다. 통과하면 도장 dict, 아니면 GuideRefused.
 
-    셋을 본다: 도장이 있는가 · `check=ok` 인가 · 옆의 manual.md 가 그 뒤로 바뀌지 않았는가.
+    셋을 본다: 도장이 있는가 · `check=ok` 인가 · 같은 공유 폴더의 원고가 그 뒤로 바뀌지 않았는가.
+    원고는 `_원고/manual.md` 를 먼저 보고, 없으면 옛 자리인 `manual.md` 를 본다.
     """
     stamp = parse_stamp(text)
     if not stamp or not stamp.get("sha256"):
         raise GuideRefused(MSG_NO_STAMP)
     if stamp.get("check") != "ok":
         raise GuideRefused(MSG_CHECK_FAIL)
-    md = Path(html_path).parent / "manual.md"
-    if md.exists() and file_sha256(md) != stamp["sha256"]:
+    md = find_manual(Path(html_path).parent)
+    if md and file_sha256(md) != stamp["sha256"]:
         raise GuideRefused(MSG_STALE_MD)
     return stamp
+
+
+def find_manual(share_dir):
+    """공유 폴더에서 원고를 찾는다 — `_원고/manual.md` 먼저, 없으면 옛 자리 `manual.md`. 없으면 None."""
+    for cand in (Path(share_dir) / DRAFT_DIR / "manual.md", Path(share_dir) / "manual.md"):
+        if cand.exists():
+            return cand
+    return None
 
 
 def stamp_line(stamp):
@@ -756,12 +774,13 @@ def summarize(doc):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="검사를 통과한 입력 지시서 HTML 을 steps.json 으로 바꾼다 "
-                    "(manual.md 는 받지 않는다 — render_card.py 로 렌더한 HTML 을 준다)")
-    ap.add_argument("input", help="<이름>_입력지시서.html · 그 HTML 하나가 든 공유 폴더")
-    ap.add_argument("--photos", default=None, help="사진 폴더 (기본: 지시서 폴더의 `사진`)")
+        description="검사를 통과한 지시서(<이름>_입력지시서.html)를 실행 계획(steps.json)으로 바꾼다 "
+                    "(원고 manual.md 는 받지 않는다 — render_card.py 로 렌더한 지시서를 준다)")
+    ap.add_argument("input", help="<이름>_입력지시서.html · 그 지시서 하나가 든 공유 폴더")
+    ap.add_argument("--photos", default=None, help="사진 폴더 (기본: 공유 폴더의 `사진`)")
     ap.add_argument("--title-prefix", default=None, help="호텔명·상품명 앞에 붙일 접두")
-    ap.add_argument("-o", "--output", default=None, help="steps.json 경로")
+    ap.add_argument("-o", "--output", default=None,
+                    help="실행 계획 경로 (기본: 공유 폴더의 steps.json — 보통 `<이름>_실행/steps.json` 을 준다)")
     ap.add_argument("--check", action="store_true",
                     help="도장과 요약만 내고, 알 수 없는 값이나 없는 사진이 있으면 1 로 끝낸다")
     args = ap.parse_args(argv)
@@ -803,7 +822,7 @@ def main(argv=None):
     out = Path(args.output) if args.output else guide_dir / "steps.json"
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(text_summary, file=sys.stderr)
-    print("steps.json: %s" % out, file=sys.stderr)
+    print("실행 계획(steps.json): %s" % out, file=sys.stderr)
     if doc["guide"]["preflight"]["stale"]:
         # 러너도 이 단계를 거부한다(`stay_boot.js` `staleStep`) — 여기서 먼저 말해 준다
         print("⚠ 옛 화면 기준 단계가 있습니다 — 실행하지 말고 지시서를 다시 만드세요.", file=sys.stderr)

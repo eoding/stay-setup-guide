@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""parse_guide.py 검증 — 예시(우에노 토우가네야) manual.md · HTML 을 함께 본다.
+"""parse_guide.py 검증 — 예시(우에노 토우가네야)의 원고(`_원고/manual.md`)와 지시서 HTML 을 함께 본다.
 
-실행 입력은 **검사 도장이 찍힌 HTML 하나뿐**이다(문지기: `TestGuideGate`). manual.md 는 CLI 가
-받지 않으므로, md 와 HTML 이 같은 steps 를 내는지 보는 시험은 내부 파서를 직접 부른다.
+실행 입력은 **검사 도장이 찍힌 지시서 HTML 하나뿐**이다(문지기: `TestGuideGate`). 원고는 CLI 가
+받지 않으므로, 원고와 지시서가 같은 steps 를 내는지 보는 시험은 내부 파서를 직접 부른다.
 
     python3 -m pytest skills/stay-setup-run/tests/test_parse_guide.py
     python3 skills/stay-setup-run/tests/test_parse_guide.py
@@ -23,7 +23,7 @@ REPO = HERE.parents[2]
 GUIDE_SKILL = REPO / "skills" / "stay-setup-guide"
 RENDER = GUIDE_SKILL / "scripts" / "render_card.py"
 EXAMPLE = GUIDE_SKILL / "examples" / "우에노_토우가네야"
-MANUAL = EXAMPLE / "manual.md"
+MANUAL = EXAMPLE / "_원고" / "manual.md"
 GUIDE_HTML = EXAMPLE / "우에노_토우가네야_입력지시서.html"
 
 sys.path.insert(0, str(SCRIPT.parent))
@@ -56,7 +56,7 @@ def render_guide(dirpath, md_text, name="시험_입력지시서.html", check="ok
     """
     digest = sha or hashlib.sha256(md_text.encode("utf-8")).hexdigest()
     mark = render_card.build_stamp(digest, check == "ok") if stamp else None
-    html_text, _ = render_card.render_card(md_text, "manual.md", None, None, None, mark)
+    html_text, _ = render_card.render_card(md_text, "manual.md", None, None, None, mark)  # 원고 파일 이름
     out = Path(dirpath) / name
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_text, encoding="utf-8")
@@ -233,7 +233,7 @@ class TestManual(unittest.TestCase):
 class TestHtmlMatchesManual(unittest.TestCase):
     def test_same_steps(self):
         with tempfile.TemporaryDirectory() as tmp:
-            # manual.md 가 옆에 있으면 파서가 그것을 먼저 읽으므로 HTML 만 따로 둔다
+            # 원고가 같은 폴더에 있으면 파서가 그것을 먼저 읽으므로 지시서만 따로 둔다
             copy = Path(tmp) / GUIDE_HTML.name
             shutil.copy(GUIDE_HTML, copy)
             _, from_html = parse(copy)
@@ -243,7 +243,7 @@ class TestHtmlMatchesManual(unittest.TestCase):
             self.assertEqual(comparable(a), comparable(b), "%d단계가 다릅니다" % a["no"])
 
     def test_html_input_stays_html(self):
-        """옆에 manual.md 가 있어도 읽는 것은 HTML 이다 — 검사를 통과한 쪽이 실행 입력이다."""
+        """`_원고/manual.md` 가 있어도 읽는 것은 지시서 HTML 이다 — 검사를 통과한 쪽이 실행 입력이다."""
         src, source = parse_guide.resolve_input(str(GUIDE_HTML))
         self.assertEqual((src, source), (GUIDE_HTML, "html"))
 
@@ -252,7 +252,7 @@ class TestHtmlMatchesManual(unittest.TestCase):
         self.assertEqual((src, source), (GUIDE_HTML, "html"))
 
     def test_example_stamp_matches_manual(self):
-        """예시 HTML 의 도장은 옆 manual.md 와 맞고 검사도 통과한 것이다(다시 렌더하면 갱신된다)."""
+        """예시 지시서의 도장은 `_원고/manual.md` 와 맞고 검사도 통과한 것이다(다시 렌더하면 갱신된다)."""
         stamp = parse_guide.verify_stamp(GUIDE_HTML, GUIDE_HTML.read_text(encoding="utf-8"))
         self.assertEqual(stamp["check"], "ok")
         self.assertEqual(stamp["sha256"], parse_guide.file_sha256(MANUAL))
@@ -625,8 +625,8 @@ ZERO_OK = """# 시험 호텔 — 입력 지시서
 class TestGuideGate(unittest.TestCase):
     """실행 입력은 **검사를 통과한 HTML 지시서** 하나뿐이다.
 
-    manual.md 를 직접 받으면 사람이 검토한 HTML 을 건너뛸 수 있으므로, CLI 는 md 를 받지 않고
-    HTML 의 도장(`stay-guide-stamp`)을 본다. 여기서는 `render_card.py` 를 진짜로 돌려
+    원고를 직접 받으면 사람이 검토한 지시서를 건너뛸 수 있으므로, CLI 는 원고를 받지 않고
+    지시서의 도장(`stay-guide-stamp`)을 본다. 여기서는 `render_card.py` 를 진짜로 돌려
     도장이 찍힌 지시서를 만든다.
     """
 
@@ -651,7 +651,7 @@ class TestGuideGate(unittest.TestCase):
     def test_markdown_input_is_refused(self):
         r = run(str(self.md), "--check")
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-        self.assertIn("manual.md 는 실행 입력이 아니다", r.stderr)
+        self.assertIn("manual.md 는 원고다 — 실행 입력이 아니다", r.stderr)
 
     def test_missing_stamp_is_refused(self):
         out = render_guide(self.dir, ZERO_OK, stamp=False)
@@ -670,12 +670,12 @@ class TestGuideGate(unittest.TestCase):
         self.assertIn("검사기를 통과하지 못한 지시서다", got.stderr)
 
     def test_stale_manual_is_refused(self):
-        """HTML 을 만든 뒤 manual.md 를 고쳤으면 그 HTML 은 옛 계획이다 — 다시 렌더해야 한다."""
+        """지시서를 만든 뒤 원고를 고쳤으면 그 지시서는 옛 계획이다 — 다시 렌더해야 한다."""
         out, _ = self.render()
         self.md.write_text(ZERO_OK + "\n<!-- 나중에 고친 자국 -->\n", encoding="utf-8")
         r = run(str(out), "--check")
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-        self.assertIn("manual.md 가 HTML 보다 새롭다", r.stderr)
+        self.assertIn("원고(manual.md)가 지시서보다 새롭다", r.stderr)
 
     def test_good_html_is_accepted(self):
         out, _ = self.render()
@@ -707,6 +707,64 @@ class TestGuideGate(unittest.TestCase):
         self.assertEqual(stamp["check"], "ok")
         self.assertEqual(stamp["version"], "v1")
         self.assertEqual(stamp["sha256"], parse_guide.file_sha256(self.md))
+
+
+class TestDraftLayoutGate(unittest.TestCase):
+    """새 공유 폴더 배치 — 원고는 `_원고/manual.md`, 지시서는 맨 위 `<이름>_입력지시서.html`.
+
+    도장의 신선도 검사는 `_원고/manual.md` 를 먼저 보고, 없으면 옛 자리 `manual.md` 를 본다.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.dir = Path(self.tmp) / "시험"
+        (self.dir / "사진").mkdir(parents=True)
+        (self.dir / "_원고").mkdir()
+        self.md = self.dir / "_원고" / "manual.md"
+        self.md.write_text(ZERO_OK, encoding="utf-8")
+        self.guide = self.dir / "시험_입력지시서.html"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def render(self):
+        """`-o` 없이 렌더하면 지시서가 공유 폴더 맨 위에 놓인다."""
+        r = subprocess.run([sys.executable, str(RENDER), str(self.md)],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(self.guide.is_file(), r.stdout)
+        return r
+
+    def test_find_manual_prefers_the_draft_folder(self):
+        (self.dir / "manual.md").write_text("옛 자리", encoding="utf-8")
+        self.assertEqual(parse_guide.find_manual(self.dir), self.md)
+
+    def test_find_manual_falls_back_to_the_old_flat_place(self):
+        self.md.unlink()
+        legacy = self.dir / "manual.md"
+        legacy.write_text(ZERO_OK, encoding="utf-8")
+        self.assertEqual(parse_guide.find_manual(self.dir), legacy)
+
+    def test_good_guide_is_accepted(self):
+        self.render()
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("검사 도장: ok", r.stdout)
+
+    def test_stale_draft_is_refused(self):
+        """지시서를 만든 뒤 `_원고/manual.md` 를 고치면 그 지시서는 옛 계획이다."""
+        self.render()
+        self.md.write_text(ZERO_OK + "\n<!-- 나중에 고친 자국 -->\n", encoding="utf-8")
+        r = run(str(self.guide), "--check")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("원고(manual.md)가 지시서보다 새롭다", r.stderr)
+
+    def test_draft_folder_is_not_mistaken_for_a_guide(self):
+        """폴더 입력은 맨 위의 `*_입력지시서.html` 만 본다 — `_원고/` 안은 보지 않는다."""
+        self.render()
+        shutil.copy(self.guide, self.dir / "_원고" / "옛_입력지시서.html")
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

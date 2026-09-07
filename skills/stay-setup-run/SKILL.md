@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.5.0
+version: 0.6.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -10,6 +10,11 @@ metadata:
 ---
 
 # 입력 지시서 실행하기
+
+> **세 파일의 구분** — 이름이 비슷해도 셋은 다른 물건이다.
+> - **지시서** `<이름>/<이름>_입력지시서.html` — **이 스킬이 읽는 유일한 입력**. 검사 도장을 진 산출물이고, 담당자도 이것을 보고 따라 친다.
+> - **원고** `<이름>/_원고/manual.md` — 지시서를 만든 작업 파일. `stay-setup-guide` 것이다. **러너는 읽지 않는다**(도장의 신선도를 볼 때 해시만 대조한다).
+> - **실행 계획** `<이름>_실행/steps.json` — `parse_guide.py` 가 지시서에서 뽑아내는 **러너 내부 파일**. 자동 생성이고 사람이 손대지 않는다.
 
 `stay-setup-guide` 가 만든 지시서가 계획이고, 이 스킬이 실행이다. **지시서에 적힌 값만** 화면에 넣는다.
 지시서에 없는 값은 판단하지 않고 사용자에게 묻는다. **[판매 시작] 은 사용자가 누른다.**
@@ -22,16 +27,17 @@ metadata:
 
 ## 입력
 
-1. 공유 폴더: `<이름>_입력지시서.html`(필수) + `사진/`.
-   **실행 입력은 렌더된 HTML 하나뿐이다.** `render_card.py` 가 `<head>` 에 박은 검사 도장
+1. 공유 폴더 `<이름>/`: 맨 위의 지시서 `<이름>_입력지시서.html`(필수) + `사진/`. 그 폴더의 `_원고/`
+   (원고 `manual.md` 와 그 부속)와 `changes.md` 는 이 스킬이 읽지 않는다.
+   **실행 입력은 렌더된 지시서 HTML 하나뿐이다.** `render_card.py` 가 `<head>` 에 박은 검사 도장
    (`<meta name="stay-guide-stamp" content="v1;sha256=…;check=ok;rendered=…">`)을 보고
-   실행 여부를 정한다 — 도장의 `sha256` 은 그 HTML 을 만든 `manual.md` 바이트의 해시이고,
+   실행 여부를 정한다 — 도장의 `sha256` 은 그 지시서를 만든 원고 바이트의 해시이고,
    `check` 는 `check_manual.py` 를 통과했는지다. `parse_guide.py` 는 셋을 거부한다(끝 코드 2):
-   - `manual.md 는 실행 입력이 아니다 — render_card.py 로 HTML 지시서를 만들고 검사를 통과시킨 뒤 그 HTML 을 준다`
-     — `.md` 를 준 경우. 사람이 검토한 HTML 을 건너뛰는 길을 막는다.
+   - `manual.md 는 원고다 — 실행 입력이 아니다. render_card.py 로 지시서 HTML 을 만들고 검사를 통과시킨 뒤 그 지시서를 준다`
+     — `.md` 를 준 경우. 사람이 검토한 지시서를 건너뛰는 길을 막는다.
    - `지시서에 검사 도장이 없다 — render_card.py 로 다시 만든다` · `검사기를 통과하지 못한 지시서다 — check_manual.py 의 오류를 고치고 다시 렌더한다`
-   - `manual.md 가 HTML 보다 새롭다 — 다시 렌더한다` — 옆의 `manual.md` 해시가 도장과 다를 때.
-   거부되면 **고치는 것은 지시서 쪽**이다(`stay-setup-guide` 에서 다시 렌더한다). 여기서 우회하지 않는다.
+   - `원고(manual.md)가 지시서보다 새롭다 — 다시 렌더한다` — 같은 공유 폴더의 원고(`_원고/manual.md`, 옛 자리면 `manual.md`) 해시가 도장과 다를 때.
+   거부되면 **고치는 것은 지시서 쪽**이다(`stay-setup-guide` 에서 원고를 고쳐 다시 렌더한다). 여기서 우회하지 않는다.
 2. 사용자가 로그인해 둔 크롬 탭. 호텔 목록 화면에서 시작하거나, 이미 만든 호텔의 편집 화면에서 이어서 한다. **주소는 사용자에게 받는다 — 이 스킬은 주소를 모른다.**
 3. 옵션: `--title-prefix`(호텔명·상품명 앞에 붙일 접두, 시험용), `--photos`(사진 폴더), 모드(연속/검토).
 
@@ -39,11 +45,15 @@ metadata:
 
 ## 준비
 
+실행 폴더는 공유 폴더 옆 `<이름>_실행/` 이다.
+
 ```bash
-python3 scripts/parse_guide.py <지시서 HTML 또는 공유 폴더> --photos <사진 폴더> --check   # 브라우저를 열기 전에 훑는다
-python3 scripts/parse_guide.py <지시서 HTML 또는 공유 폴더> --photos <사진 폴더> --title-prefix <접두> -o <실행 폴더>/steps.json
-npx esbuild scripts/stay_helper.js --minify --outfile=<실행 폴더>/stay_helper.min.js
-npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/stay_boot.min.js
+python3 scripts/parse_guide.py <지시서 HTML 또는 공유 폴더> --photos <사진 폴더> --check \
+    | tee <실행 폴더>/parse.txt                                  # 브라우저를 열기 전에 훑는다
+python3 scripts/parse_guide.py <지시서 HTML 또는 공유 폴더> --photos <사진 폴더> --title-prefix <접두> \
+    -o <실행 폴더>/steps.json                                    # 실행 계획 — 러너 내부 파일
+npx esbuild scripts/stay_helper.js --minify --outfile=<실행 폴더>/_inject/stay_helper.min.js
+npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/_inject/stay_boot.min.js
 ```
 
 - **`--check` 를 먼저 돌린다.** 0 이 아니면 브라우저를 열지 않는다. **2 는 문지기가 막은 것**이다 —
@@ -55,7 +65,7 @@ npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/stay_boot.
   **`나이 범위가 겹치는 단계`**(같은 오퍼의 연령 구간이 겹침 — 서버와 같은 양끝 포함 판정).
   `러너가 모르는 단계 갈래` 는 **막지 않고 알리기만** 한다 — 지시서가 새 화면을 먼저 낼 수 있다.
 - 요약에 `알 수 없는 값`·`없는 사진` 이 있으면 그 목록을 **먼저 사용자에게 보여 주고** 시작한다. 사진이 없는 단계는 건너뛰고 로그에 남긴다.
-- 산출물은 공유 폴더 옆 `<공유 폴더명>_실행/` 에 둔다(`steps.json`, `stay_helper.min.js`, `stay_boot.min.js`, `run-log.md`).
+- 실행 폴더 `<공유 폴더명>_실행/` 에는 넷이 있다 — `steps.json`(실행 계획 · 자동 생성 · 사람이 손대지 않는다) · `parse.txt`(훑은 요약) · `run-log.md`(실행 로그) · `_inject/`(페이지에 올리는 도우미 파일). **담당자에게 건네는 것은 공유 폴더 쪽 지시서이지 이 폴더가 아니다.**
 - minify 는 브라우저 JS 도구의 한 번 호출 크기를 줄이려는 것이다. esbuild 가 없으면 원본 파일을 그대로 올려도 된다.
 - 탭이 편집 화면이면 `호텔 만들기` 단계는 `건너뜀 · 이미 있음` 으로 두고 이어서 한다.
 
@@ -65,7 +75,7 @@ npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/stay_boot.
 
 1. `scripts/stay_helper.js` 내용을 **그대로 한 번 실행**한다 → `window.stayRun` 이 생긴다(두 번 넣어도 안전).
 2. `stayRun.bridge()` 로 파일 다리를 만든다 — 숨은 `input#stay_file_bridge`(aria-label `stay file bridge`).
-3. 브라우저 업로드 도구로 `stay_helper.min.js` · `stay_boot.min.js` · `steps.json` 을 그 다리에 올린다.
+3. 브라우저 업로드 도구로 `_inject/stay_helper.min.js` · `_inject/stay_boot.min.js` · `steps.json`(실행 계획)을 그 다리에 올린다.
 4. 페이지 안에서 `FileReader` 로 읽어 `localStorage` 에 `stayHelperSrc` · `stayBoot` · `staySteps` 로 저장하고 `stayRun.clearBridge()`.
 5. 부트:
 
@@ -97,7 +107,7 @@ stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFo
 **한 단계도 실행하지 말고** 걸린 단계 번호와 이유를 사용자에게 보고한다 — 지시서를 다시 만들어야
 한다(옛 화면이면 러너 v0.2.x). 그냥 `runStep` 을 불러도 그 단계는 `refused: true · fatal: true` 로 되돌아온다.
 
-`steps.json` 의 단계를 **번호 순서대로** 돈다. 한 번의 JS 호출에 **3~10 단계**, 단계마다 시간 제한을 걸고 누적 **30초** 예산에서 끊는다.
+실행 계획(`steps.json`)의 단계를 **번호 순서대로** 돈다. 한 번의 JS 호출에 **3~10 단계**, 단계마다 시간 제한을 걸고 누적 **30초** 예산에서 끊는다.
 
 ```js
 (async () => {
@@ -154,11 +164,11 @@ stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFo
 1. `runStep(n, {dry:true})` 로 열기만 해 보고 `stayRun.fields()` · `stayRun.buttons()` · `stayRun.state()` 로 화면에 뭐가 있는지 본다.
 2. 스크린샷을 찍어 사용자에게 보인다.
 3. 화면과 지시서가 다르면 **페이지 안 단계 값만** 고쳐 다시 돌린다(`localStorage.staySteps` 수정 → 부트 다시 eval). 고친 이유를 **로그 비고에 반드시 남긴다**.
-4. **저장소의 `steps.json` 과 지시서는 고치지 않는다.** 지시서 결함은 아래 `지시서 쪽에 요청할 것` 으로 모아 보고한다.
+4. **파일로 있는 실행 계획(`steps.json`)과 지시서는 고치지 않는다.** 실행 계획은 지시서에서 다시 뽑아내는 내부 파일이고, 지시서 결함은 원고 쪽에서 고쳐야 한다 — 아래 `지시서 쪽에 요청할 것` 으로 모아 보고한다.
 5. 두 번 실패하면 멈추고 사용자에게 묻는다.
 
 ## 반드시 지킬 것
-- **판매 시작 전 배너 🔴 0 · 🟡 0 이 합격선이다.** `경고 넘어가기` 는 **금지된 단계**라 러너가 거부한다 — 🟡 가 남으면 지시서 결함이므로 사유를 적어 넘기지 말고 원인을 지시서에서 고쳐 다시 깐다.
+- **판매 시작 전 배너 🔴 0 · 🟡 0 이 합격선이다.** `경고 넘어가기` 는 **금지된 단계**라 러너가 거부한다 — 🟡 가 남으면 지시서 결함이므로 사유를 적어 넘기지 말고 원인을 원고에서 고쳐 다시 렌더해 깐다.
 - **호텔 만들기 전에 지시서의 `공급 통화` 를 본다.** USD 가 아니면 호텔을 만들지 말고 사용자에게 그 통화가 맞는지 확인받는다. 러너는 통화도 금액도 바꾸지 않는다 — 지시서에 적힌 대로만 넣는다.
 
 - **[판매 시작] 은 누르지 않는다.** 도우미가 거부하고 `force` 로도 안 된다. 검증 배너를 확인하고 판매를 시작하는 것은 사용자다.

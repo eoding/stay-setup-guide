@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""render_card.py — 호텔 세팅 카드 마크다운을 복사-친화적 단일 HTML로 변환.
+"""render_card.py — 지시서 원고(manual.md) → 지시서 HTML(`<이름>_입력지시서.html`).
+
+담당자에게 건네는 산출물은 이 HTML **하나**다. 원고와 그 부속(rules.md·facts.json·contract.md)은
+공유 폴더 안 `_원고/` 에 남고, 러너가 만드는 실행 계획(`steps.json`)은 `<이름>_실행/` 에 따로 산다.
 
 md 는 표 안의 값을 복사하기 어렵다. 이 스크립트는 카드 md 파일을 읽어
 표 셀·코드 스팬마다 [복사] 텍스트 버튼을 붙이고, 체크박스 진행 상태를 localStorage 에
@@ -20,7 +23,10 @@ HTML `<head>` 에는 **검사 도장**을 하나 박는다:
 `check=fail` 이거나 옆의 `manual.md` 해시가 다르면 실행을 거부한다.
 
 사용법:
-    python3 render_card.py <card.md> -o <out.html> [--photos <dir>] [--share-name <이름>] [--title "..."]
+    python3 render_card.py <_원고/manual.md> [-o <out.html>] [--photos <dir>] [--share-name <이름>] [--title "..."]
+
+원고가 `<이름>/_원고/manual.md` 자리에 있으면 `-o` 와 `--share-name` 을 생략해도 된다 —
+출력은 `<이름>/<이름>_입력지시서.html`, 공유 폴더명은 `<이름>` 으로 잡는다.
 """
 
 import argparse
@@ -130,6 +136,26 @@ def build_stamp(sha, check_ok, rendered=None):
 def stamp_meta_html(stamp):
     attr = html.escape(stamp, quote=True)
     return f'<meta name="{STAMP_META_NAME}" content="{attr}">'
+
+
+#: 원고 폴더 이름 — 공유 폴더 `<이름>/` 안에서 원고와 그 부속이 사는 곳.
+DRAFT_DIR = '_원고'
+
+
+def derive_share_name(md_path):
+    """원고가 `<이름>/_원고/manual.md` 자리면 공유 폴더명 `<이름>`, 아니면 None."""
+    draft = Path(md_path).expanduser().resolve().parent
+    if draft.name != DRAFT_DIR:
+        return None
+    return draft.parent.name or None
+
+
+def default_output(md_path):
+    """원고가 `<이름>/_원고/manual.md` 자리면 `<이름>/<이름>_입력지시서.html`, 아니면 None."""
+    name = derive_share_name(md_path)
+    if not name:
+        return None
+    return Path(md_path).expanduser().resolve().parent.parent / f'{name}_입력지시서.html'
 
 
 def run_checker(md_path, photos_dir=None, share_name=None):
@@ -1346,10 +1372,13 @@ def main(argv=None):
         description='호텔 세팅 카드 md를 복사-친화적 단일 HTML로 변환한다.',
     )
     ap.add_argument('input', help='입력 마크다운 카드 파일')
-    ap.add_argument('-o', '--output', required=True, help='출력 HTML 파일 경로')
+    ap.add_argument('-o', '--output', default=None,
+                    help='출력 HTML 파일 경로 (생략하면 원고가 `<이름>/_원고/manual.md` 자리일 때 '
+                         '`<이름>/<이름>_입력지시서.html`)')
     ap.add_argument('--photos', default=None, help='사진 폴더 (선택)')
     ap.add_argument('--share-name', default=None,
-                    help='공유 폴더명 (선택 — 검사기의 `폴더:` 줄 형식 확인에 그대로 넘긴다)')
+                    help='공유 폴더명 (선택 — 검사기의 `폴더:` 줄 형식 확인에 그대로 넘긴다. '
+                         '생략해도 원고가 `<이름>/_원고/manual.md` 자리면 경로에서 알아낸다)')
     ap.add_argument('--title', default=None, help='HTML <title> (기본: 문서 첫 # 제목)')
     ap.add_argument('--font', default=None, help='Pretendard 가변 woff2 폰트 파일 경로 (base64 로 임베드)')
     args = ap.parse_args(argv)
@@ -1360,6 +1389,21 @@ def main(argv=None):
         return 1
     md_bytes = src_path.read_bytes()
     md_text = md_bytes.decode('utf-8')
+
+    share_name = args.share_name
+    derived_share = None
+    if not share_name:
+        derived_share = derive_share_name(src_path)
+        share_name = derived_share
+
+    if args.output:
+        out_path = Path(args.output)
+    else:
+        out_path = default_output(src_path)
+        if out_path is None:
+            print('출력 경로를 정할 수 없다 — 원고를 `<이름>/_원고/manual.md` 자리에 두거나 '
+                  '-o 로 출력 경로를 준다', file=sys.stderr)
+            return 1
 
     photos_dir = Path(args.photos) if args.photos else None
 
@@ -1375,12 +1419,11 @@ def main(argv=None):
             print(f'경고: 폰트 파일을 찾을 수 없다: {font_path} (시스템 폰트로 대체)', file=sys.stderr)
 
     # 검사 도장 — 렌더와 같은 입력(같은 --photos/--share-name)으로 검사기를 돌린 결과를 박는다.
-    check_ok, check_out = run_checker(src_path, args.photos, args.share_name)
+    check_ok, check_out = run_checker(src_path, args.photos, share_name)
     stamp = build_stamp(manual_sha256(md_bytes), check_ok)
 
     html_out, stats = render_card(md_text, src_path.name, photos_dir, args.title, font_b64, stamp)
 
-    out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html_out, encoding='utf-8')
 
@@ -1388,6 +1431,8 @@ def main(argv=None):
     total_copy_btns = stats['copy_code'] + stats['copy_cell'] + stats['copy_photo'] + stats['copy_block']
 
     print(f'OK: {out_path}')
+    if derived_share:
+        print(f'  공유 폴더명: {derived_share} (원고 경로에서 알아냄)')
     print(f'  크기: {size / 1024:.1f} KB ({size:,} bytes)' + (' ⚠ 16MB 초과' if size > 16 * 1024 * 1024 else ''))
     print(f'  표: {stats["tables"]}개')
     print(

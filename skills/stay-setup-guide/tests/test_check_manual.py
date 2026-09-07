@@ -16,7 +16,9 @@ sys.path.insert(0, os.path.join(SKILL, "scripts"))
 
 import check_manual as cm  # noqa: E402
 
-EXAMPLE = os.path.join(SKILL, "examples", "우에노_토우가네야", "manual.md")
+#: 예시 공유 폴더와 그 안의 원고. 원고는 `_원고/` 에 살고, 담당자에게 가는 지시서 HTML 은 맨 위에 있다.
+EXAMPLE_SHARE = os.path.join(SKILL, "examples", "우에노_토우가네야")
+EXAMPLE = os.path.join(EXAMPLE_SHARE, "_원고", "manual.md")
 DICTIONARY = os.path.join(SKILL, "references", "screen-dictionary.json")
 
 HEAD = """# 시험 호텔 — 입력 지시서
@@ -814,6 +816,51 @@ class EndToEndTest(unittest.TestCase):
         self.assertTrue(r["seq_ok"])
         self.assertEqual(r["steps"], r["saves"])
         self.assertEqual(cm.main([EXAMPLE, "--share-name", "우에노_토우가네야"]), 0)
+
+    def test_example_manual_share_name_comes_from_the_path(self):
+        """예시 원고는 `<이름>/_원고/manual.md` 자리라 `--share-name` 없이도 `폴더:` 줄까지 본다."""
+        self.assertEqual(cm.derive_share_name(EXAMPLE), "우에노_토우가네야")
+        self.assertEqual(cm.main([EXAMPLE]), 0)
+
+
+class TestShareNameFromPath(unittest.TestCase):
+    """원고가 `<이름>/_원고/manual.md` 자리면 공유 폴더명을 경로에서 알아낸다."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.share = os.path.join(self.tmp.name, "시험호텔")
+        self.draft = os.path.join(self.share, "_원고")
+        os.makedirs(self.draft)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, folder, text):
+        path = os.path.join(folder, "manual.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+
+    def test_derive_from_draft_folder(self):
+        self.assertEqual(cm.derive_share_name(os.path.join(self.draft, "manual.md")), "시험호텔")
+
+    def test_no_derive_from_the_old_flat_place(self):
+        self.assertIsNone(cm.derive_share_name(os.path.join(self.share, "manual.md")))
+
+    def test_derived_name_catches_a_wrong_folder_line(self):
+        """`폴더:` 줄이 공유 폴더명과 어긋나면 `--share-name` 없이도 걸린다."""
+        md = self.write(self.draft, HEAD + room_photo_step(4, "사진 추가").replace(
+            "시험호텔/사진", "다른이름/사진"))
+        self.assertEqual(cm.main([md, "--dictionary", DICTIONARY]), 1)
+        good = self.write(self.draft, HEAD + room_photo_step(4, "사진 추가"))
+        self.assertEqual(cm.main([good, "--dictionary", DICTIONARY]), 0)
+
+    def test_old_flat_place_still_skips_the_folder_check(self):
+        """옛 자리(`<이름>/manual.md`)면 예전처럼 건너뛴다 — `--share-name` 을 주면 그대로 본다."""
+        md = self.write(self.share, HEAD + room_photo_step(4, "사진 추가").replace(
+            "시험호텔/사진", "다른이름/사진"))
+        self.assertEqual(cm.main([md, "--dictionary", DICTIONARY]), 0)
+        self.assertEqual(cm.main([md, "--dictionary", DICTIONARY, "--share-name", "시험호텔"]), 1)
 
 
 if __name__ == "__main__":
