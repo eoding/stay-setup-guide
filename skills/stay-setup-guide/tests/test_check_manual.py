@@ -1604,3 +1604,204 @@ class AgeRateFieldStrictTest(unittest.TestCase):
         self.assertEqual(cm.check(path, dictionary_path=DICTIONARY)["unknown_fields"],
                          ["연령별 요금 · 소아"])
         self.assertEqual(cm.main([path, "--dictionary", DICTIONARY, "--strict"]), 1)
+
+
+def gala_addon_step(num, name="갈라디너 (12/24)", rule="선택: 의무 아님 (고객이 원할 때만 선택)"):
+    """갈라디너를 `부가옵션 만들기` 로 넣은 단계 — 고객이 뺄 수 있어 그 돈이 청구되지 않는다."""
+    return f"""
+## {num}. 부가옵션 만들기 (1개, {name})
+탭: `부가옵션`
+버튼: [부가옵션 추가]
+
+| 칸 | 값 |
+|---|---|
+| 오퍼 | 선택: 2026 시즌 요금 |
+| 이름 | {name} |
+| 적용 방식 | 선택: 1회 적용 (박수·날짜와 무관) |
+| 화면 섹션 | 선택: 식사 |
+| 의무 규칙 | {rule} |
+
+→ [추가]
+"""
+
+
+def gala_charge_step(num, name="갈라디너 (12/24)", unit="선택: 인당", rows=(),
+                     card="`2026 시즌 요금`"):
+    """갈라디너를 부과금으로 넣은 단계 — 기본형은 연령별 단가 줄 없이 성인 단가만 있는 모습."""
+    body = "".join(f"| {k} | {v} |\n" for k, v in rows)
+    return f"""
+## {num}. 부과금 추가 (1개, {name})
+탭: `부과금`
+카드: {card}
+버튼: [부과금 추가]
+
+| 칸 | 값 |
+|---|---|
+| 종류 | 선택: 기타 |
+| 이름 | {name} |
+| 부과 방식 | 선택: 정액 |
+| 부과 단위 | {unit} |
+| 정액 금액 (USD) | 선택: 지정 (0 포함) |
+| 정액 금액 (USD) 값 | 120.00 |
+| 부과 유형 | 선택: 의무 — 고객 선택 없이 자동으로 붙습니다 |
+| 적용 날짜 (선택) | 2026-12-24 |
+| 적용 룸 scope | 비움 |
+{body}
+→ [추가]
+"""
+
+
+class GalaDinnerAddonTest(unittest.TestCase):
+    """갈라디너·컴펄서리 디너는 의무 부과금 하나다 — 부가옵션으로 넣으면 오류."""
+
+    def problems(self, md):
+        return cm.find_gala_addons(steps_of(md))
+
+    def test_gala_addon_is_error(self):
+        problems = self.problems(HEAD + gala_addon_step(4))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("갈라디너는 의무 부과금", problems[0])
+        self.assertIn("(선택) 을 붙인다", problems[0])
+
+    def test_spaced_gala_name_is_error(self):
+        self.assertEqual(len(self.problems(HEAD + gala_addon_step(4, "갈라 디너 (12/31)"))), 1)
+
+    def test_english_gala_name_is_error(self):
+        self.assertEqual(len(self.problems(HEAD + gala_addon_step(4, "Gala Dinner (12/24)"))), 1)
+
+    def test_compulsory_dinner_name_is_error(self):
+        self.assertEqual(len(self.problems(HEAD + gala_addon_step(4, "컴펄서리 디너 (12/31)"))), 1)
+        self.assertEqual(len(self.problems(HEAD + gala_addon_step(4, "Compulsory Dinner"))), 1)
+
+    def test_optional_mark_allows_the_addon(self):
+        """계약서가 선택이라고 못 박은 디너만 부가옵션이다 — 이름 끝의 `(선택)` 이 그 표시다."""
+        self.assertEqual(self.problems(HEAD + gala_addon_step(4, "갈라디너 (선택)")), [])
+
+    def test_ordinary_addon_is_untouched(self):
+        self.assertEqual(self.problems(HEAD + gala_addon_step(4, "엑스트라베드 (1대)")), [])
+
+    def test_the_surcharge_route_is_not_flagged(self):
+        md = HEAD + gala_charge_step(4, rows=(("연령별 단가 · 소아", "60.00"),))
+        self.assertEqual(self.problems(md), [])
+
+    def test_it_is_an_error_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + gala_addon_step(4))
+            self.assertEqual(len(cm.check(path)["gala_addons"]), 1)
+            self.assertEqual(cm.main([path]), 1)
+
+
+class GalaDinnerSurchargeTest(unittest.TestCase):
+    """갈라디너 부과금은 `인당` 이고, 오퍼에 연령 구간이 있으면 `연령별 단가` 줄을 지닌다."""
+
+    def problems(self, md):
+        return cm.find_gala_surcharge_gaps(steps_of(md))
+
+    def with_band(self, charge):
+        return HEAD + offer_step(4) + age_band_step(5, name="소아", code="CHILD") + charge
+
+    def test_missing_age_rate_row_is_error(self):
+        problems = self.problems(self.with_band(gala_charge_step(6)))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("6단계", problems[0])
+        self.assertIn("연령별 단가 줄이 없다", problems[0])
+        self.assertIn("성인만이면 유아·소아 0", problems[0])
+
+    def test_age_rate_row_passes(self):
+        md = self.with_band(gala_charge_step(6, rows=(("연령별 단가 · 소아", "60.00"),)))
+        self.assertEqual(self.problems(md), [])
+
+    def test_zero_for_adults_only_event_passes(self):
+        md = self.with_band(gala_charge_step(6, rows=(("연령별 단가 · 소아", "0"),)))
+        self.assertEqual(self.problems(md), [])
+
+    def test_wrong_unit_is_error(self):
+        md = self.with_band(gala_charge_step(6, unit="선택: 체류당 1회",
+                                             rows=(("연령별 단가 · 소아", "60.00"),)))
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("6단계", problems[0])
+        self.assertIn("`부과 단위`", problems[0])
+        self.assertIn("인당", problems[0])
+
+    def test_no_age_band_means_no_age_rate_row_needed(self):
+        """연령 구간이 없는 오퍼에는 그 칸이 화면에 서지 않는다 — 없다고 나무라지 않는다."""
+        self.assertEqual(self.problems(HEAD + offer_step(4) + gala_charge_step(5)), [])
+
+    def test_bands_on_another_offer_do_not_count(self):
+        md = (HEAD + offer_step(4) + age_band_step(5, name="소아", code="CHILD", card="`오퍼B`")
+              + gala_charge_step(6))
+        self.assertEqual(self.problems(md), [])
+
+    def test_ordinary_surcharge_is_untouched(self):
+        md = self.with_band(gala_charge_step(6, name="리조트피", unit="선택: 박당"))
+        self.assertEqual(self.problems(md), [])
+
+    def test_it_is_an_error_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.with_band(gala_charge_step(6)))
+            self.assertEqual(len(cm.check(path)["gala_surcharge_gaps"]), 1)
+            self.assertEqual(cm.main([path]), 1)
+
+
+class AdultOnlyChargeNameTest(unittest.TestCase):
+    """부과금 이름이 `(성인)` 으로 끝나면 경고 — 아이 몫이 다른 곳에 남아 있다는 뜻이다."""
+
+    def problems(self, md):
+        return cm.find_adult_only_charge_names(steps_of(md))
+
+    def test_adult_suffix_is_warning(self):
+        problems = self.problems(HEAD + gala_charge_step(4, name="갈라디너 (성인)"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("성인·소아를 부과금 하나의 연령별 단가로 합친다", problems[0])
+
+    def test_spaced_suffix_is_warning(self):
+        self.assertEqual(len(self.problems(HEAD + gala_charge_step(4, name="갈라디너 ( 성인 )"))), 1)
+
+    def test_adult_in_the_middle_is_ok(self):
+        md = HEAD + gala_charge_step(4, name="갈라디너 (12/24)",
+                                     rows=(("연령별 단가 · 소아", "60.00"),))
+        self.assertEqual(self.problems(md), [])
+
+    def test_it_is_a_warning_not_an_error(self):
+        md = (HEAD + offer_step(4) + age_band_step(5, name="소아", code="CHILD")
+              + gala_charge_step(6, name="갈라디너 (성인)",
+                                 rows=(("연령별 단가 · 소아", "60.00"),)))
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+        self.assertEqual(len(r["adult_only_names"]), 1)
+        self.assertEqual(r["gala_addons"], [])
+        self.assertEqual(r["gala_surcharge_gaps"], [])
+
+
+class GalaDinnerCleanManualTest(unittest.TestCase):
+    """규칙서 §갈라디너·행사 요금 대로 적은 원고는 세 검사를 모두 지난다."""
+
+    def manual(self):
+        return (HEAD + offer_step(4)
+                + age_band_step(5, name="소아", code="CHILD")
+                + gala_charge_step(6, rows=(("연령별 단가 · 소아", "60.00"),
+                                            ("연령별 단가 · 유아", "0"))))
+
+    def test_all_three_checks_pass(self):
+        steps = steps_of(self.manual())
+        self.assertEqual(cm.find_gala_addons(steps), [])
+        self.assertEqual(cm.find_gala_surcharge_gaps(steps), [])
+        self.assertEqual(cm.find_adult_only_charge_names(steps), [])
+
+    def test_the_example_manual_is_clean(self):
+        """예시 원고에는 갈라디너가 없다 — 세 검사가 아무것도 잡지 않아야 한다."""
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_gala_addons(steps), [])
+        self.assertEqual(cm.find_gala_surcharge_gaps(steps), [])
+        self.assertEqual(cm.find_adult_only_charge_names(steps), [])
