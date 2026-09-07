@@ -2066,3 +2066,107 @@ class BenefitFrequencyWithoutQuantityTest(unittest.TestCase):
         with open(EXAMPLE, encoding="utf-8") as handle:
             steps = cm.parse_steps(handle.read().splitlines())
         self.assertEqual(cm.find_benefit_frequency_without_quantity(steps), [])
+
+
+class HangulRoomNameTest(unittest.TestCase):
+    """`룸 만들기` 의 `룸 이름` 에 한글이 있으면 경고 — 룸 이름은 계약서 원어 그대로다."""
+
+    def problems(self, md):
+        return cm.find_hangul_room_names(steps_of(md))
+
+    def test_hangul_room_name_is_warning(self):
+        problems = self.problems(HEAD + room_step(4, name="슈페리어 오션뷰"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("룸 이름 슈페리어 오션뷰 에 한글이 있다", problems[0])
+        self.assertIn("룸 이름은 계약서 원어, 한글은 오퍼별 표시명에", problems[0])
+
+    def test_contract_name_passes(self):
+        self.assertEqual(self.problems(HEAD + room_step(4, name="Superior Ocean View")), [])
+        self.assertEqual(self.problems(HEAD + room_step(4, name="Deluxe Bungalow")), [])
+
+    def test_mixed_name_is_warning(self):
+        """원어 한 낱말만 남기고 옮겨 적은 이름도 같은 경고다."""
+        self.assertEqual(len(self.problems(HEAD + room_step(4, name="디럭스 Bungalow"))), 1)
+
+    def test_offer_display_name_is_not_checked(self):
+        """`오퍼별 표시명` 은 한글이 정답이다 — 판매 연결 단계는 이 검사가 보지 않는다."""
+        md = HEAD + room_link_step(4, rooms="Superior Ocean View", display="슈페리어 오션뷰")
+        self.assertEqual(self.problems(md), [])
+
+    def test_it_is_a_warning_not_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + offer_step(4) + room_step(5, name="슈페리어 오션뷰"))
+            self.assertEqual(len(cm.check(path)["hangul_room_names"]), 1)
+            self.assertEqual(cm.main([path]), 0)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_hangul_room_names(steps), [])
+
+
+def extra_bed_step(num, name="엑스트라베드 (1대)",
+                   rule="선택: 기준 성인 초과 시 의무 (엑스트라베드)"):
+    """엑스트라베드 부가옵션 단계 — `의무 규칙` 만 바꿔 가며 쓴다."""
+    return f"""
+## {num}. 부가옵션 만들기 (1번째, {name})
+탭: `부가옵션`
+버튼: [부가옵션 추가]
+
+| 칸 | 값 |
+|---|---|
+| 오퍼 | 선택: 2026 시즌 요금 |
+| 이름 | {name} |
+| 적용 방식 | 선택: 날짜연동 (박수 따라감 — 엑스트라베드) |
+| 화면 섹션 | 선택: 침대 추가 |
+| 의무 규칙 | {rule} |
+| 수량 상한 | 1 |
+
+→ [추가]
+"""
+
+
+class ExtraBedMandatoryRuleTest(unittest.TestCase):
+    """엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 이면 경고."""
+
+    def problems(self, md):
+        return cm.find_extra_bed_optional_rules(steps_of(md))
+
+    def test_optional_rule_is_warning(self):
+        md = HEAD + extra_bed_step(4, rule="선택: 의무 아님 (고객이 원할 때만 선택)")
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("엑스트라베드 의무 규칙이 `의무 아님`", problems[0])
+        self.assertIn("`기준 성인 초과 시 의무`", problems[0])
+
+    def test_over_adult_rule_passes(self):
+        self.assertEqual(self.problems(HEAD + extra_bed_step(4)), [])
+
+    def test_name_with_trailing_words_is_checked(self):
+        """이름은 상품으로 시작하기만 하면 된다 — 뒤에 무엇이 붙어도 같은 검사다."""
+        md = HEAD + extra_bed_step(4, name="엑스트라베드 성인 (조식 포함)",
+                                   rule="선택: 의무 아님 (고객이 원할 때만 선택)")
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_other_addons_are_not_checked(self):
+        """침대가 아닌 부가옵션은 `의무 아님` 이 정상이다."""
+        md = HEAD + extra_bed_step(4, name="풀보드 (중식+석식)",
+                                   rule="선택: 의무 아님 (고객이 원할 때만 선택)")
+        self.assertEqual(self.problems(md), [])
+
+    def test_it_is_a_warning_not_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + extra_bed_step(4, rule="선택: 의무 아님 (고객이 원할 때만 선택)"))
+            self.assertEqual(len(cm.check(path)["extra_bed_rules"]), 1)
+            self.assertEqual(cm.main([path]), 0)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_extra_bed_optional_rules(steps), [])

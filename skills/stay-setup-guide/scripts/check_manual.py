@@ -29,6 +29,8 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
 - 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
+- `룸 만들기` 의 `룸 이름` 에 한글이 있는지(경고 — 룸 이름은 계약서 원어, 한글은 `오퍼별 표시명`)
+- 엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 인지(경고 — 계약서가 필수라고 하면 `기준 성인 초과 시 의무`)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 - `취소정책 만들기` 단계가 `→ [추가]` 로 끝나는지(새 정책은 [추가], [저장] 은 이미 있는 정책을 고칠 때다)
@@ -159,6 +161,22 @@ AFTER_OFFER_TITLES = ("룸 만들기", "판매 연결")
 # `오퍼별 표시명 · <룸 카테고리명>` 처럼 뒤에 행 이름이 붙는 칸 — 사전과는 앞부분으로 대조한다.
 # `연령별 단가 · <노출명>` 도 같다: 부과금 드로어의 그 표는 이 오퍼의 연령 구간마다 칸이 하나씩 늘어난다.
 ROW_SUFFIX_FIELDS = ("오퍼별 표시명", "연령별 단가")
+
+# 룸 이름은 계약서·요금표가 부르는 **원어 그대로**다 — ERP 객실 목록과 계약서 요금표를 이름으로
+# 맞춰야 어느 줄이 어느 룸인지 대조된다. 고객이 보는 한글 이름은 판매 연결 일괄 드로어의
+# `오퍼별 표시명` 이 따로 가진다. 실제 사례(2026-09-07): 같은 계약서로 만든 두 지시서가
+# `Superior Ocean View` 와 `슈페리어 오션뷰` 로 갈렸다.
+ROOM_CREATE_TITLE = "룸 만들기"
+ROOM_NAME_FIELD = "룸 이름"
+HANGUL_RE = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]")
+
+# 엑스트라베드 부가옵션의 `의무 규칙` — 계약서가 "기준 인원 외 성인 추가 시 엑스트라베드 필수"
+# 라고 하면 `기준 성인 초과 시 의무 (엑스트라베드)` 다. `의무 아님` 으로 두면 고객이 세 번째 성인을
+# 침대 없이 넣을 수 있다. 계약서가 정말 선택이라고 하는 경우도 있어 경고로만 알린다.
+EXTRA_BED_NAME_RE = re.compile(r"엑스트라\s*베드")
+ADDON_RULE_FIELD = "의무 규칙"
+ADDON_RULE_OPTIONAL = "의무 아님"
+ADDON_RULE_OVER_ADULT = "기준 성인 초과 시 의무"
 
 # 연령 구간 — 계약서에 아동 정책이 있을 때만 넣는 선택 단계.
 # 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표는
@@ -615,6 +633,27 @@ def find_rooms_before_offer(steps):
     ]
 
 
+def find_hangul_room_names(steps):
+    """`룸 만들기` 의 `룸 이름` 에 한글이 있으면 경고 — 룸 이름은 계약서 원어 그대로다.
+
+    ERP 객실 목록과 계약서 요금표는 이름으로 맞춘다. 한글로 옮겨 적으면 요금표의 어느 줄이
+    어느 룸인지 대조가 끊긴다. 고객이 보는 한글 이름은 판매 연결 일괄 드로어의
+    `오퍼별 표시명` 이 따로 가진다. 계약서 자체가 한글이면 그 원어가 한글이니 그대로 두고
+    `changes.md` 에 적는다 — 그래서 오류가 아니라 경고다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ROOM_CREATE_TITLE):
+            continue
+        name = (step["fields"].get(ROOM_NAME_FIELD) or "").strip()
+        if name and HANGUL_RE.search(name):
+            problems.append(
+                f"{step['num']}단계: 룸 이름 {name} 에 한글이 있다 — "
+                "룸 이름은 계약서 원어, 한글은 오퍼별 표시명에"
+            )
+    return problems
+
+
 def _age_value(step, name):
     """`최소 연령` · `최대 연령` 칸의 숫자. 비었거나 숫자가 아니면 None."""
     raw = (step["fields"].get(name) or "").strip()
@@ -707,6 +746,29 @@ def find_audience_only_names(steps):
             problems.append(
                 f"{step['num']}단계: 부가옵션 이름이 대상만 적혀 있다({name}) — "
                 "무엇을 파는지 앞에 적는다(예: 하프보드 소아)"
+            )
+    return problems
+
+
+def find_extra_bed_optional_rules(steps):
+    """엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 이면 경고.
+
+    계약서가 "기준 인원 외 성인 추가 시 엑스트라베드 추가 필수" 라고 하면 그 침대는 고객이
+    뺄 수 없다 — `기준 성인 초과 시 의무 (엑스트라베드)` 로 둬야 세 번째 성인이 침대 없이
+    들어가지 않는다. 계약서가 정말 선택으로 파는 침대도 있으므로 경고로만 알린다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ADDON_CREATE_TITLE):
+            continue
+        name = (step["fields"].get("이름") or "").strip()
+        if not EXTRA_BED_NAME_RE.search(name):
+            continue
+        rule = strip_select(step["fields"].get(ADDON_RULE_FIELD) or "")
+        if rule.startswith(ADDON_RULE_OPTIONAL):
+            problems.append(
+                f"{step['num']}단계: 엑스트라베드 의무 규칙이 `{ADDON_RULE_OPTIONAL}` — "
+                f'계약서에 "추가 시 필수" 문장이 있으면 `{ADDON_RULE_OVER_ADULT}`'
             )
     return problems
 
@@ -1326,6 +1388,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     age_band_order = find_age_band_order(parsed)
     age_band_overlaps = find_age_band_overlaps(parsed)
     audience_only_names = find_audience_only_names(parsed)
+    hangul_room_names = find_hangul_room_names(parsed)
+    extra_bed_rules = find_extra_bed_optional_rules(parsed)
     child_policy_gaps = find_child_policy_without_age_band(parsed)
     gala_addons = find_gala_addons(parsed)
     gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
@@ -1418,6 +1482,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "age_band_order": age_band_order,
         "age_band_overlaps": age_band_overlaps,
         "audience_only_names": audience_only_names,
+        "hangul_room_names": hangul_room_names,
+        "extra_bed_rules": extra_bed_rules,
         "child_policy_gaps": child_policy_gaps,
         "gala_addons": gala_addons,
         "gala_surcharge_gaps": gala_surcharge_gaps,
@@ -1518,6 +1584,10 @@ def main(argv=None):
     for w in r["child_policy_gaps"]:
         warnings.append(w)
     for w in r["adult_only_names"]:
+        warnings.append(w)
+    for w in r["hangul_room_names"]:
+        warnings.append(w)
+    for w in r["extra_bed_rules"]:
         warnings.append(w)
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]
