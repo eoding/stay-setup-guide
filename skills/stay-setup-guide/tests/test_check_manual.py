@@ -1805,3 +1805,87 @@ class GalaDinnerCleanManualTest(unittest.TestCase):
         self.assertEqual(cm.find_gala_addons(steps), [])
         self.assertEqual(cm.find_gala_surcharge_gaps(steps), [])
         self.assertEqual(cm.find_adult_only_charge_names(steps), [])
+
+
+def benefit_step(num, title="혜택 추가", name="웰컴 드링크 제공", quantity="비움",
+                  frequency_field="제공 주기", frequency="해제", extra=()):
+    body = "\n".join(f"| {k} | {v} |" for k, v in extra)
+    return f"""
+## {num}. {title} (1번째, {name})
+탭: `혜택`
+버튼: [혜택 추가]
+
+| 칸 | 값 |
+|---|---|
+| 소속 택1 그룹 | 선택: (그룹 없음 — 상시 포함되는 단독 혜택) |
+| 혜택 이름 | {name} |
+| 수량 | {quantity} |
+| {frequency_field} | {frequency} |
+{body}
+
+→ [추가]
+"""
+
+
+class BenefitFrequencyWithoutQuantityTest(unittest.TestCase):
+    """`수량` 이 비었는데 `제공 주기` 를 체크했으면 오류 — 그 칸은 수량이 있어야 화면에 선다."""
+
+    def problems(self, md):
+        return cm.find_benefit_frequency_without_quantity(steps_of(md))
+
+    def test_checked_frequency_without_quantity_is_error(self):
+        problems = self.problems(HEAD + benefit_step(4, quantity="비움", frequency="체크"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("수량이 비어 있는데 `제공 주기` 를 체크했다", problems[0])
+        self.assertIn("수량을 채우거나 제공 주기를 해제한다", problems[0])
+
+    def test_missing_quantity_row_with_checked_frequency_is_error(self):
+        """`수량` 줄 자체가 없어도(반려된 행 등) 같은 오류다."""
+        md = f"""
+## 4. 혜택 추가 (1번째, 웰컴 드링크 제공)
+탭: `혜택`
+버튼: [혜택 추가]
+
+| 칸 | 값 |
+|---|---|
+| 혜택 이름 | 웰컴 드링크 제공 |
+| 제공 주기 | 체크 |
+
+→ [추가]
+"""
+        problems = self.problems(HEAD + md)
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_checked_frequency_with_quantity_passes(self):
+        self.assertEqual(self.problems(HEAD + benefit_step(4, quantity="1", frequency="체크")), [])
+
+    def test_unchecked_frequency_without_quantity_passes(self):
+        self.assertEqual(self.problems(HEAD + benefit_step(4, quantity="비움", frequency="해제")), [])
+
+    def test_checkbox_text_suffix_field_name_is_detected(self):
+        """원고가 `제공 주기 · 1박당 제공 (비우면 체류당)` 처럼 체크박스 문구를 붙여 써도 잡는다."""
+        md = benefit_step(4, quantity="비움",
+                           frequency_field="제공 주기 · 1박당 제공 (비우면 체류당)", frequency="체크")
+        problems = self.problems(HEAD + md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+
+    def test_candidate_title_is_checked_too(self):
+        """택1 그룹 후보(`[이 그룹에 혜택 추가]`)도 같은 드로어다."""
+        md = benefit_step(4, title="택1 그룹 후보 추가", quantity="비움", frequency="체크")
+        problems = self.problems(HEAD + md)
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_it_is_an_error_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + benefit_step(4, quantity="비움", frequency="체크"))
+            self.assertEqual(len(cm.check(path)["benefit_frequency_gaps"]), 1)
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            steps = cm.parse_steps(handle.read().splitlines())
+        self.assertEqual(cm.find_benefit_frequency_without_quantity(steps), [])

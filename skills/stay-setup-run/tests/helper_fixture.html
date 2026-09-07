@@ -304,6 +304,9 @@ var DRAWER_HTML = [
   '  <button type="button" onclick="addBed()">침대 행 추가</button>',
   '</td></tr>',
   '<tr><th>어메니티</th><td>',
+  // 실제 화면 그대로다: 체크박스와 나란히 **이름 없는** 셀렉트가 하나 있고 첫 옵션이
+  // `다른 룸에서 복사…` 다(다른 룸의 어메니티를 베껴 오는 칸). 지시서의 칸이 아니다.
+  '  <select><option>다른 룸에서 복사…</option><option>슈페리어 룸</option><option>디럭스 룸</option></select>',
   '  <label><input type="checkbox" name="amenities_code" value="bath"> 욕조</label>',
   '  <label><input type="checkbox" name="amenities_code" value="shower"> 샤워실</label>',
   '  <label><input type="checkbox" name="amenities_code" value="wifi"> 무료 Wi-Fi</label>',

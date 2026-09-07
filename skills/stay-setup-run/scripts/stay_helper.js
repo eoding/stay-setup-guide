@@ -554,6 +554,45 @@
     return true; // empty 등은 아무거나
   }
 
+  /* ────────────────── 어메니티 카드의 `다른 룸에서 복사…` 셀렉트 ────────────────── */
+  // 룸 만들기 드로어의 어메니티 카드에는 체크박스와 **나란히** 이름 없는 셀렉트가 하나 있다.
+  // 첫 옵션이 `다른 룸에서 복사…` 이고 그 뒤로 다른 룸 이름이 늘어선다 — 다른 룸의 어메니티를
+  // 통째로 베껴 오는 칸이지 지시서의 칸이 아니다. 걷어내지 않으면 `어메니티 | 선택: 욕조` 가
+  // 이 셀렉트로 가서 "`욕조` 옵션이 없습니다 · 화면 옵션: 다른 룸에서 복사… / …" 로 끝나고
+  // 어메니티는 한 칸도 켜지지 않는다 (2026-09-07 운영 실행에서 확인).
+  function boxesNear(el) {
+    var node = el.parentElement;
+    for (var d = 0; node && d < 4; d++, node = node.parentElement) {
+      var found = [].slice.call(node.querySelectorAll('input[type=checkbox]')).filter(usable);
+      if (found.length) return found;
+    }
+    return [];
+  }
+  function isCopySelect(el) {
+    if (!el || el.tagName !== 'SELECT') return false;
+    var o0 = el.options && el.options[0];
+    if (o0 && /복사/.test(clean(o0.textContent || ''))) return true;
+    // 이름 없는 셀렉트가 체크 묶음과 한 상자에 있으면 제출되지 않는 보조 칸이다
+    return !el.name && boxesNear(el).length > 0;
+  }
+  // 체크 묶음 칸에서 복사 셀렉트를 걷어낸다. 걷어낸 뒤 체크박스가 남지 않으면 제목으로 묶음을 다시 찾는다.
+  function dropCopySelect(scope, cands, kind, name) {
+    if (!cands.length || !/^(select|multi|check|uncheck|empty)$/.test(kind)) return cands;
+    var kept = cands.filter(function (c) { return !isCopySelect(c.el); });
+    if (kept.length === cands.length) return cands;
+    if (kept.some(function (c) { return /^(checkbox|radio)$/.test(c.el.type); })) return kept;
+    var gb = groupBoxes(scope, name);
+    return gb.length ? gb : kept;
+  }
+  // 체크·라디오 묶음으로 다룰 칸인가. `선택: 욕조` 처럼 값이 하나여도 셀렉트가 없으면 묶음이다 —
+  // 그러지 않으면 값 하나짜리 어메니티가 순서로 골라져 엉뚱한 칸이 켜진다.
+  function groupable(cands, boxes, kind) {
+    if (!boxes.length) return false;
+    if (boxes.length === cands.length) return true;
+    if (/^(multi|check|uncheck)$/.test(kind)) return true;
+    return kind === 'select' && !cands.some(function (c) { return c.el.tagName === 'SELECT'; });
+  }
+
   /* ─────────────────────────── 반복 행 ─────────────────────────── */
 
   var ADD_BUTTONS = [
@@ -1244,6 +1283,7 @@
       if (cands.length) name = tailName;
     }
     if (cands.length && /^(multi|check|uncheck)$/.test(f.kind) && !cands.some(function (c) { return /^(checkbox|radio)$/.test(c.el.type); })) { var gb = groupBoxes(scope, name); if (gb.length) cands = gb; }
+    cands = dropCopySelect(scope, cands, f.kind, name);
     if (!cands.length && (f.kind === 'empty' || f.kind === 'uncheck')) { out.status = 'skipped'; out.detail = '화면에 없는 칸 — 비워 둘 것이 없습니다'; return out; }
     if (!cands.length) {
       out.detail = '`' + name + '` 칸을 찾지 못했습니다 · 화면 칸: ' +
@@ -1255,7 +1295,7 @@
     var values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
 
     // 체크·라디오 묶음
-    if (boxes.length && (boxes.length === cands.length || f.kind === 'multi' || f.kind === 'check' || f.kind === 'uncheck')) {
+    if (groupable(cands, boxes, f.kind)) {
       var g = setGroup(boxes, f.kind, f.kind === 'multi' || f.kind === 'select' ? values : (f.kind === 'check' && values.length ? values : []));
       out.status = g.status; out.detail = g.detail; out.matched = cands[0].matched;
       return out;
@@ -1498,11 +1538,12 @@
       if (tc.length && /^(typed|file)$/.test(f.kind) && tc.every(function (c) { return /^(checkbox|radio)$/.test(c.el.type); })) tc = [];
       if (tc.length) { cands = tc; name = tailName; }
     }
+    cands = dropCopySelect(scope, cands, f.kind, name);   // `다른 룸에서 복사…` 는 되읽기에서도 칸이 아니다
     if (!cands.length) { out.actual = '(칸 없음)'; out.same = false; return out; }
     var boxes = cands.filter(function (c) { return /^(checkbox|radio)$/.test(c.el.type); }).map(function (c) { return c.el; });
     var values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
 
-    if (boxes.length && (boxes.length === cands.length || f.kind === 'multi' || f.kind === 'check' || f.kind === 'uncheck')) {
+    if (groupable(cands, boxes, f.kind)) {
       var on = boxes.filter(function (b) { return b.checked; }).map(boxLabel);
       out.actual = on;
       if (f.kind === 'uncheck' || f.kind === 'empty') out.same = on.length === 0;

@@ -32,6 +32,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 반복 행 이름이 정본 형식(`<칸 이름> <N> · <하위 칸>`)인지 — 홑 빈칸, 가운뎃점은 빈칸으로 감싼 ` · `
 - `체크`/`해제` 를 체크박스가 아닌 칸(다중 체크·선택·라디오)에 썼는지(고른 것은 `선택: …`, 안 고르면 `비움`)
 - `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
+- 혜택의 `수량` 이 비었는데 `제공 주기` 를 체크했는지(오류 — 그 칸은 수량이 있어야 화면에 선다)
 
 사용법:
     python3 check_manual.py <_원고/manual.md> [--photos DIR] [--share-name NAME]
@@ -188,6 +189,14 @@ SURCHARGE_TITLE = "부과금 추가"
 PER_PERSON_UNIT = "인당"
 # 성인·소아를 부과금 둘로 쪼갠 흔적 — 이름 끝의 `(성인)`.
 ADULT_ONLY_SUFFIX_RE = re.compile(r"\(\s*성인\s*\)\s*$")
+
+# 혜택 드로어(화면 사전 §24) — `제공 주기` 체크박스는 `수량` 에 값이 있어야만 화면에 그려진다.
+# 실제 사례(2026-09-04): `수량` 을 비운 채 `제공 주기 | 체크` 만 남긴 원고를 러너가 실행하다
+# "화면에 없는 칸" 으로 막혔다. 택1 그룹 안에 넣는 후보(`[이 그룹에 혜택 추가]`)도 같은 드로어다.
+BENEFIT_CREATE_TITLE = "혜택 추가"
+BENEFIT_CANDIDATE_TITLE = "택1 그룹 후보 추가"
+QUANTITY_FIELD = "수량"
+PROVISION_FREQUENCY_FIELD = "제공 주기"
 
 # 만들기 드로어에만 있는 칸 — `{칸 이름: 그 드로어의 저장 버튼}`.
 # 요금제 정본은 만들 때와 고칠 때가 **다른 드로어**다(운영 화면 실측 — 만들기 드로어에만 그려지는 칸이 있다):
@@ -713,6 +722,42 @@ def find_adult_only_charge_names(steps):
     return problems
 
 
+def _field_value(step, base):
+    """`<base>` 또는 `<base> · <체크박스 문구>` 로 적힌 값을 하나 찾는다(없으면 None).
+
+    체크박스 칸은 지시서에서 `제공 주기 · 1박당 제공 (비우면 체류당)` 처럼 사전의
+    `checkbox_text` 를 붙여 쓸 수 있다(§load_dictionary) — 둘 다 같은 칸으로 본다.
+    """
+    for name, value in step["fields"].items():
+        if name == base or name.startswith(f"{base} · "):
+            return value
+    return None
+
+
+def find_benefit_frequency_without_quantity(steps):
+    """혜택의 `수량` 이 비었는데 `제공 주기` 를 체크했으면 오류.
+
+    화면 사전 §24 대로 `제공 주기` 체크박스는 `수량` 에 값이 있어야만 화면에 그려진다 —
+    수량을 비운 채 체크만 원고에 남기면 담당자(또는 러너)가 화면에서 그 칸을 찾지 못한다.
+    """
+    problems = []
+    for step in steps:
+        if not (step["title"].startswith(BENEFIT_CREATE_TITLE)
+                or step["title"].startswith(BENEFIT_CANDIDATE_TITLE)):
+            continue
+        frequency = _field_value(step, PROVISION_FREQUENCY_FIELD)
+        if (frequency or "").strip() != "체크":
+            continue
+        quantity = (_field_value(step, QUANTITY_FIELD) or "").strip()
+        if quantity and quantity != "비움":
+            continue
+        problems.append(
+            f"{step['num']}단계: 수량이 비어 있는데 `제공 주기` 를 체크했다 — "
+            "수량을 채우거나 제공 주기를 해제한다"
+        )
+    return problems
+
+
 def find_photo_count_gaps(steps):
     """사진 단계 제목의 `(N장)` 과 그 단계의 파일 줄 수가 다르면 오류.
 
@@ -1188,6 +1233,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     gala_addons = find_gala_addons(parsed)
     gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
     adult_only_names = find_adult_only_charge_names(parsed)
+    benefit_frequency_gaps = find_benefit_frequency_without_quantity(parsed)
     create_only_fields = find_create_only_fields(parsed)
     room_photo_saves = find_room_photo_saves(parsed)
     photo_count_gaps = find_photo_count_gaps(parsed)
@@ -1275,6 +1321,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "gala_addons": gala_addons,
         "gala_surcharge_gaps": gala_surcharge_gaps,
         "adult_only_names": adult_only_names,
+        "benefit_frequency_gaps": benefit_frequency_gaps,
         "create_only_fields": create_only_fields,
         "room_photo_saves": room_photo_saves,
         "photo_count_gaps": photo_count_gaps,
@@ -1348,7 +1395,8 @@ def main(argv=None):
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["promo_common"] + r["season_saves"] + r["cancel_policy_saves"]
-              + r["repeat_row_formats"] + r["check_value_classes"]):
+              + r["repeat_row_formats"] + r["check_value_classes"]
+              + r["benefit_frequency_gaps"]):
         problems.append(p)
     if r["dict_error"]:
         problems.append(f"화면 사전 읽기 실패 {r['dict_error']}")

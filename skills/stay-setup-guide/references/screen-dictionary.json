@@ -962,7 +962,7 @@
        "required": false,
        "options": null,
        "options_note": null,
-       "format": "",
+       "format": "아래 「어메니티」 체크 목록의 글자를 그대로 씁니다 — 같은 카드의 `다른 룸에서 복사…` 셀렉트는 다른 룸의 체크 상태를 베껴 오는 보조 칸이라 지시서 칸이 아닙니다.",
        "help": "",
        "checkbox_text": null,
        "_note": null,
@@ -4135,7 +4135,7 @@
        "help": "체크하면 “1박당”, 비우면 “체류당”입니다. 위 [수량]을 채워야 고객 화면에 나옵니다",
        "checkbox_text": "1박당 제공 (비우면 체류당)",
        "_note": null,
-       "visible_when": "",
+       "visible_when": "「수량」에 값이 있을 때",
        "same_row_as": null,
        "aliases": [],
        "reject": []

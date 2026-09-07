@@ -120,6 +120,33 @@ const run = async () => {
   ok(rb.mismatch.length === 0, 'readback: 어긋난 칸이 없다', rb.mismatch);
   ok(rb.ok === rb.total && rb.total >= 13, 'readback: 대조 개수', { ok: rb.ok, total: rb.total });
 
+  // 4b. 어메니티 카드의 `다른 룸에서 복사…` 셀렉트 (2026-09-07 운영 실행에서 드러났다)
+  //     체크박스와 한 칸에 선 이름 없는 셀렉트다. 지시서의 칸이 아니므로 값은 늘 체크박스로 가야 한다.
+  const amBoxes = () => [...win.document.querySelectorAll('[name=amenities_code]')];
+  const amCopy = [...win.document.querySelectorAll('select')]
+    .find((s) => s.options.length && /복사/.test(s.options[0].textContent));
+  ok(!!amCopy, 'fixture: 어메니티 카드에 `다른 룸에서 복사…` 셀렉트가 있다');
+  amBoxes().forEach((b) => { b.checked = false; });
+  amCopy.selectedIndex = 0;
+  const r4b = await R.fill([{ label: '어메니티', kind: 'multi', values: ['욕조'] }]);
+  ok(r4b[0].status === 'ok', 'fill: 어메니티(선택 목록)가 ok', r4b[0]);
+  const on4b = amBoxes().filter((b) => b.checked).map((b) => b.value);
+  ok(on4b.length === 1 && on4b[0] === 'bath', 'fill: 욕조 한 칸만 켠다 — 복사 셀렉트로 가지 않는다', on4b);
+  ok(amCopy.selectedIndex === 0, 'fill: `다른 룸에서 복사…` 셀렉트는 그대로 둔다', amCopy.value);
+  const rb4b = R.readback([{ label: '어메니티', kind: 'multi', values: ['욕조'] }]);
+  ok(rb4b.mismatch.length === 0, 'readback: 어메니티를 체크 묶음으로 되읽는다', rb4b.mismatch);
+
+  //     값이 하나인 `선택: 샤워실` 은 파서가 kind=select 로 준다 — 운영에서 깨진 것이 바로 이 꼴이다
+  //     (`어메니티` 가 복사 셀렉트로 풀려 "`욕조` 옵션이 없습니다" 로 끝났다).
+  amBoxes().forEach((b) => { b.checked = false; });
+  const r4c = await R.fill([{ label: '어메니티', kind: 'select', value: '샤워실' }]);
+  ok(r4c[0].status === 'ok', 'fill: 값이 하나인 어메니티도 체크 묶음으로 간다', r4c[0]);
+  const on4c = amBoxes().filter((b) => b.checked).map((b) => b.value);
+  ok(on4c.length === 1 && on4c[0] === 'shower', 'fill: 샤워실만 켜졌다 — 첫 칸(욕조)이 아니다', on4c);
+  ok(amCopy.selectedIndex === 0, 'fill: 값이 하나여도 복사 셀렉트를 건드리지 않는다', amCopy.value);
+  const rb4c = R.readback([{ label: '어메니티', kind: 'select', value: '샤워실' }]);
+  ok(rb4c.mismatch.length === 0, 'readback: 값 하나짜리 어메니티도 체크 묶음으로 되읽는다', rb4c.mismatch);
+
   // 5. 위험한 버튼은 거부
   const del = await R.submit('삭제');
   ok(del.status === 'refused' && del.reason === 'dangerous', 'submit: [삭제] 거부', del);
