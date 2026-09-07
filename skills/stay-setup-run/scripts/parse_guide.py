@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""parse_guide.py — 입력 지시서(manual.md 또는 렌더된 HTML) → steps.json.
+"""parse_guide.py — 렌더된 입력 지시서 HTML → steps.json.
 
 한 단계(`## N. 제목`) = 저장 버튼 한 번. 단계 안에는:
 
@@ -9,14 +9,21 @@
     파일 선택 → 아래 파일  +  `- a.jpg`       사진 목록
     → [저장]                                  저장 버튼
 
-manual.md 와 render_card.py 가 만든 HTML 은 같은 steps 를 낸다.
+manual.md 와 render_card.py 가 만든 HTML 은 같은 steps 를 낸다. 그래도 **실행 입력은 HTML 하나뿐**이다:
+`render_card.py` 가 `<head>` 에 박은 검사 도장
+
+    <meta name="stay-guide-stamp" content="v1;sha256=<manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<날짜>">
+
+이 없거나, `check=fail` 이거나, 옆에 있는 `manual.md` 의 sha256 이 도장과 다르면 **거부하고 2 로 끝낸다**.
+사람이 검토한 HTML 만 실행에 들어가게 하려는 것이다 — manual.md 를 직접 주면 검사기를 건너뛸 수 있다.
 
 사용법:
-    python3 parse_guide.py <guide.html | manual.md | 폴더>
+    python3 parse_guide.py <guide.html | 폴더>
         [--photos DIR] [--title-prefix STR] [-o steps.json] [--check]
 """
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -619,26 +626,100 @@ def apply_title_prefix(steps, prefix):
                 f["prefixed"] = True
 
 
+# ---------------------------------------------------------------------------
+# 실행 입력 문지기 — 검사를 통과한 HTML 지시서만 받는다
+# ---------------------------------------------------------------------------
+
+#: `render_card.py` 가 `<head>` 에 박는 도장. 값은
+#: `v1;sha256=<manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<YYYY-MM-DD>` 다.
+STAMP_META_NAME = "stay-guide-stamp"
+STAMP_RE = re.compile(
+    r"""<meta[^>]*\bname\s*=\s*["']%s["'][^>]*>""" % STAMP_META_NAME, re.IGNORECASE)
+STAMP_CONTENT_RE = re.compile(r"""\bcontent\s*=\s*["']([^"']*)["']""", re.IGNORECASE)
+
+#: 거부 문구 — 사람이 다음에 무엇을 할지가 문장 안에 들어 있어야 한다.
+MSG_MD_INPUT = ("manual.md 는 실행 입력이 아니다 — render_card.py 로 HTML 지시서를 만들고 "
+                "검사를 통과시킨 뒤 그 HTML 을 준다")
+MSG_NO_STAMP = "지시서에 검사 도장이 없다 — render_card.py 로 다시 만든다"
+MSG_CHECK_FAIL = "검사기를 통과하지 못한 지시서다 — check_manual.py 의 오류를 고치고 다시 렌더한다"
+MSG_STALE_MD = "manual.md 가 HTML 보다 새롭다 — 다시 렌더한다"
+
+
+class GuideRefused(Exception):
+    """실행 입력으로 받을 수 없는 지시서. main 이 2 로 끝낸다."""
+
+
+def parse_stamp(text):
+    """HTML 글에서 도장을 읽어 {raw, version, sha256, check, rendered} 로. 없으면 None."""
+    m = STAMP_RE.search(text)
+    if not m:
+        return None
+    mc = STAMP_CONTENT_RE.search(m.group(0))
+    if not mc:
+        return None
+    raw = mc.group(1).strip()
+    stamp = {"raw": raw, "version": None, "sha256": None, "check": None, "rendered": None}
+    for i, part in enumerate(piece.strip() for piece in raw.split(";")):
+        if not part:
+            continue
+        if i == 0 and "=" not in part:
+            stamp["version"] = part
+            continue
+        key, _, value = part.partition("=")
+        key = key.strip()
+        if key in stamp:
+            stamp[key] = value.strip()
+    return stamp
+
+
+def file_sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
 def resolve_input(path):
-    """입력 경로 → (읽을 파일, 'manual.md'|'html'). 같은 폴더의 manual.md 를 먼저 쓴다."""
+    """입력 경로 → (읽을 HTML 파일, "html").
+
+    **HTML 지시서만 받는다.** manual.md 를 주면 거부한다 — 검사를 건너뛴 채로 실행되는 길을 막는다.
+    폴더를 주면 그 안의 `*_입력지시서.html` 이 **하나일 때만** 그것을 쓴다.
+    """
     p = Path(path)
     if p.is_dir():
-        md = p / "manual.md"
-        if md.exists():
-            return md, "manual.md"
-        htmls = sorted(p.glob("*_입력지시서.html")) or sorted(p.glob("*.html"))
-        if htmls:
-            return htmls[0], "html"
-        raise SystemExit("입력 지시서를 찾지 못했습니다: %s" % p)
+        htmls = sorted(p.glob("*_입력지시서.html"))
+        if not htmls:
+            raise GuideRefused("폴더에 `*_입력지시서.html` 이 없다: %s — %s" % (p, MSG_MD_INPUT))
+        if len(htmls) > 1:
+            raise GuideRefused(
+                "폴더에 `*_입력지시서.html` 이 %d개다: %s — 실행할 하나를 파일로 지정한다"
+                % (len(htmls), ", ".join(h.name for h in htmls)))
+        return htmls[0], "html"
     if not p.exists():
-        raise SystemExit("파일이 없습니다: %s" % p)
-    if p.suffix.lower() in (".html", ".htm"):
-        md = p.parent / "manual.md"
-        if md.exists():
-            print("manual.md 가 옆에 있어 그것을 읽습니다: %s" % md, file=sys.stderr)
-            return md, "manual.md"
-        return p, "html"
-    return p, "manual.md"
+        raise GuideRefused("파일이 없습니다: %s" % p)
+    if p.suffix.lower() == ".md":
+        raise GuideRefused(MSG_MD_INPUT)
+    if p.suffix.lower() not in (".html", ".htm"):
+        raise GuideRefused("HTML 지시서가 아니다: %s — %s" % (p, MSG_MD_INPUT))
+    return p, "html"
+
+
+def verify_stamp(html_path, text):
+    """도장을 확인한다. 통과하면 도장 dict, 아니면 GuideRefused.
+
+    셋을 본다: 도장이 있는가 · `check=ok` 인가 · 옆의 manual.md 가 그 뒤로 바뀌지 않았는가.
+    """
+    stamp = parse_stamp(text)
+    if not stamp or not stamp.get("sha256"):
+        raise GuideRefused(MSG_NO_STAMP)
+    if stamp.get("check") != "ok":
+        raise GuideRefused(MSG_CHECK_FAIL)
+    md = Path(html_path).parent / "manual.md"
+    if md.exists() and file_sha256(md) != stamp["sha256"]:
+        raise GuideRefused(MSG_STALE_MD)
+    return stamp
+
+
+def stamp_line(stamp):
+    return "검사 도장: %s · sha256 %s… · 렌더 %s" % (
+        stamp.get("check") or "?", (stamp.get("sha256") or "")[:12], stamp.get("rendered") or "?")
 
 
 def summarize(doc):
@@ -674,18 +755,25 @@ def summarize(doc):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="입력 지시서를 steps.json 으로 바꾼다")
-    ap.add_argument("input", help="manual.md · <이름>_입력지시서.html · 공유 폴더")
+    ap = argparse.ArgumentParser(
+        description="검사를 통과한 입력 지시서 HTML 을 steps.json 으로 바꾼다 "
+                    "(manual.md 는 받지 않는다 — render_card.py 로 렌더한 HTML 을 준다)")
+    ap.add_argument("input", help="<이름>_입력지시서.html · 그 HTML 하나가 든 공유 폴더")
     ap.add_argument("--photos", default=None, help="사진 폴더 (기본: 지시서 폴더의 `사진`)")
     ap.add_argument("--title-prefix", default=None, help="호텔명·상품명 앞에 붙일 접두")
     ap.add_argument("-o", "--output", default=None, help="steps.json 경로")
     ap.add_argument("--check", action="store_true",
-                    help="요약만 내고, 알 수 없는 값이나 없는 사진이 있으면 1 로 끝낸다")
+                    help="도장과 요약만 내고, 알 수 없는 값이나 없는 사진이 있으면 1 로 끝낸다")
     args = ap.parse_args(argv)
 
-    src, source = resolve_input(args.input)
-    text = src.read_text(encoding="utf-8")
-    title, raws = (parse_markdown(text) if source == "manual.md" else parse_html(text))
+    try:
+        src, source = resolve_input(args.input)
+        text = src.read_text(encoding="utf-8")
+        stamp = verify_stamp(src, text)
+    except GuideRefused as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    title, raws = parse_html(text)
     steps = [build_step(r) for r in raws]
     if args.title_prefix:
         apply_title_prefix(steps, args.title_prefix)
@@ -700,13 +788,15 @@ def main(argv=None):
             if ph["file"] not in missing:
                 missing.append(ph["file"])
 
-    doc = {"guide": {"title": title, "source": source, "share_folder": guide_dir.name,
+    doc = {"guide": {"title": title, "source": source, "guide_file": str(src),
+                     "share_folder": guide_dir.name,
                      "photos_dir": str(photos_dir), "title_prefix": args.title_prefix,
-                     "photo_missing": missing, "preflight": preflight(steps)},
+                     "stamp": stamp, "photo_missing": missing, "preflight": preflight(steps)},
            "steps": steps}
 
     text_summary, _n_unknown, _n_missing, blocking = summarize(doc)
     if args.check:
+        print(stamp_line(stamp))
         print(text_summary)
         return 1 if blocking else 0
 

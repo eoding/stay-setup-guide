@@ -11,12 +11,21 @@ md 는 표 안의 값을 복사하기 어렵다. 이 스크립트는 카드 md �
 표준 라이브러리만으로 동작한다. Pillow(PIL) 가 있으면 사진 썸네일을 축소해
 용량을 줄인다(없으면 300KB 이하 원본만 임베드, 넘으면 파일명만 표시).
 
+HTML `<head>` 에는 **검사 도장**을 하나 박는다:
+
+    <meta name="stay-guide-stamp" content="v1;sha256=<manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<YYYY-MM-DD>">
+
+`check` 는 같은 프로세스에서 `check_manual.py` 를 돌린 결과다(✗ 오류 0 이면 `ok`, ⚠ 경고는 통과).
+`stay-setup-run` 의 `parse_guide.py` 는 이 도장을 보고 실행 여부를 정한다 — 도장이 없거나
+`check=fail` 이거나 옆의 `manual.md` 해시가 다르면 실행을 거부한다.
+
 사용법:
-    python3 render_card.py <card.md> -o <out.html> [--photos <dir>] [--title "..."]
+    python3 render_card.py <card.md> -o <out.html> [--photos <dir>] [--share-name <이름>] [--title "..."]
 """
 
 import argparse
 import base64
+import datetime
 import hashlib
 import html
 import io
@@ -24,6 +33,7 @@ import mimetypes
 import re
 import sys
 from collections import Counter
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 try:
@@ -95,6 +105,62 @@ def step_key(text):
     """## 단계 제목 -> "완료" 체크박스/목차 체크 동기화용 안정 키."""
     payload = (_CURRENT_FILE + '::step::' + to_plain_text(text)).encode('utf-8')
     return hashlib.sha1(payload).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# 검사 도장 (stay-guide-stamp)
+# ---------------------------------------------------------------------------
+
+#: `<head>` 에 박는 도장의 이름·판. 값 형식은
+#: `v1;sha256=<manual.md 바이트의 sha256>;check=<ok|fail>;rendered=<YYYY-MM-DD>` 다.
+STAMP_META_NAME = 'stay-guide-stamp'
+STAMP_VERSION = 'v1'
+
+
+def manual_sha256(md_bytes):
+    """manual.md **바이트**의 sha256 (텍스트로 고쳐 읽지 않는다 — 줄끝까지 그대로 센다)."""
+    return hashlib.sha256(md_bytes).hexdigest()
+
+
+def build_stamp(sha, check_ok, rendered=None):
+    date = rendered or datetime.date.today().isoformat()
+    return f'{STAMP_VERSION};sha256={sha};check={"ok" if check_ok else "fail"};rendered={date}'
+
+
+def stamp_meta_html(stamp):
+    attr = html.escape(stamp, quote=True)
+    return f'<meta name="{STAMP_META_NAME}" content="{attr}">'
+
+
+def run_checker(md_path, photos_dir=None, share_name=None):
+    """옆의 `check_manual.py` 를 **같은 프로세스에서** 돌린다 (셸을 부르지 않는다).
+
+    (ok, 검사기가 찍은 글) 을 돌려준다. ok 는 ✗ 오류가 하나도 없을 때만 True 다
+    (⚠ 경고는 검사기 자체가 종료 코드 0 으로 두므로 그대로 통과한다).
+    """
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    try:
+        import check_manual
+    except Exception as exc:  # 검사기를 못 부르면 도장은 fail 이다 — ok 를 함부로 찍지 않는다
+        return False, f'검사기를 불러오지 못했다: {exc}'
+
+    argv = [str(md_path)]
+    if photos_dir:
+        argv += ['--photos', str(photos_dir)]
+    if share_name:
+        argv += ['--share-name', share_name]
+
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf), redirect_stderr(buf):
+            code = check_manual.main(argv)
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+    except Exception as exc:
+        return False, buf.getvalue() + f'검사기 실행 중 오류: {exc}'
+    return code == 0, buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -1168,13 +1234,18 @@ SCRIPT_JS = """
 """
 
 
-def assemble_page(title, filename, body_html, font_b64=None):
+def assemble_page(title, filename, body_html, font_b64=None, stamp=None):
     esc_title = html.escape(title)
     esc_filename = html.escape(filename)
     main = f'<main class="card">{body_html}</main>'
     footer = ''
     parts = [
         f'<title>{esc_title}</title>',
+    ]
+    if stamp:
+        # `<meta>` 는 본문보다 앞에 있으므로 브라우저가 `<head>` 로 올린다.
+        parts.append(stamp_meta_html(stamp))
+    parts += [
         '<style>', build_style_css(font_b64), '</style>',
         main,
         footer,
@@ -1187,7 +1258,7 @@ def assemble_page(title, filename, body_html, font_b64=None):
 # 오케스트레이션
 # ---------------------------------------------------------------------------
 
-def render_card(md_text, filename, photos_dir, title_override, font_b64=None):
+def render_card(md_text, filename, photos_dir, title_override, font_b64=None, stamp=None):
     global _CURRENT_FILE
     _CURRENT_FILE = filename
 
@@ -1266,7 +1337,7 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None):
         body_parts.insert(insert_at, toc_html)
 
     body_html = '\n'.join(p for p in body_parts if p)
-    full_html = assemble_page(page_title, filename, body_html, font_b64)
+    full_html = assemble_page(page_title, filename, body_html, font_b64, stamp)
     return full_html, stats
 
 
@@ -1277,6 +1348,8 @@ def main(argv=None):
     ap.add_argument('input', help='입력 마크다운 카드 파일')
     ap.add_argument('-o', '--output', required=True, help='출력 HTML 파일 경로')
     ap.add_argument('--photos', default=None, help='사진 폴더 (선택)')
+    ap.add_argument('--share-name', default=None,
+                    help='공유 폴더명 (선택 — 검사기의 `폴더:` 줄 형식 확인에 그대로 넘긴다)')
     ap.add_argument('--title', default=None, help='HTML <title> (기본: 문서 첫 # 제목)')
     ap.add_argument('--font', default=None, help='Pretendard 가변 woff2 폰트 파일 경로 (base64 로 임베드)')
     args = ap.parse_args(argv)
@@ -1285,7 +1358,8 @@ def main(argv=None):
     if not src_path.is_file():
         print(f'입력 파일을 찾을 수 없다: {src_path}', file=sys.stderr)
         return 1
-    md_text = src_path.read_text(encoding='utf-8')
+    md_bytes = src_path.read_bytes()
+    md_text = md_bytes.decode('utf-8')
 
     photos_dir = Path(args.photos) if args.photos else None
 
@@ -1300,7 +1374,11 @@ def main(argv=None):
         else:
             print(f'경고: 폰트 파일을 찾을 수 없다: {font_path} (시스템 폰트로 대체)', file=sys.stderr)
 
-    html_out, stats = render_card(md_text, src_path.name, photos_dir, args.title, font_b64)
+    # 검사 도장 — 렌더와 같은 입력(같은 --photos/--share-name)으로 검사기를 돌린 결과를 박는다.
+    check_ok, check_out = run_checker(src_path, args.photos, args.share_name)
+    stamp = build_stamp(manual_sha256(md_bytes), check_ok)
+
+    html_out, stats = render_card(md_text, src_path.name, photos_dir, args.title, font_b64, stamp)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1323,6 +1401,12 @@ def main(argv=None):
     if stats['photo_notices'] or stats['photo_sources']:
         print(f'  사진 저작권 고지: {stats["photo_notices"]}개 · 출처 링크: {stats["photo_sources"]}개')
     print(f'  폰트: {font_note}')
+    print(f'  검사 도장: {stamp}')
+    if not check_ok:
+        print('  ⚠ 검사기를 통과하지 못했다 — 이 HTML 로는 stay-setup-run 이 실행을 거부한다.', file=sys.stderr)
+        for line in check_out.splitlines():
+            if line.strip():
+                print(f'    {line}', file=sys.stderr)
     vk = stats['value_kinds']
     if vk:
         print(
