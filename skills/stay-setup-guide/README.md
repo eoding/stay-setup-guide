@@ -19,6 +19,9 @@
 
 - **클로드 코드(Claude Code) — 플러그인**: 저장소 최상위 안내대로 `/plugin marketplace add eoding/stay-setup-guide`
   → `/plugin install stay-setup@eoding-stay` 로 깔고 자동 업데이트를 켠다. 그러면 `/stay-setup:stay-setup-guide` 로 부른다.
+- **코덱스(Codex) — 플러그인**: `codex plugin marketplace add eoding/stay-setup-guide` →
+  `codex plugin add stay-setup@eoding-stay`. 새 판은 `codex plugin marketplace upgrade` 로 받는다. 지시서 만들기와
+  손 입력까지가 Codex 로 되는 범위다(브라우저 자동 입력은 실측 전).
 - **폴더 복사**: 이 `stay-setup-guide` 폴더를 그대로 `~/.claude/skills/`(또는 프로젝트의 `.claude/skills/`,
   `~/.codex/skills/`, `.cursor/skills/`, `~/.hermes/skills/`) 아래에 넣는다. 복사본은 스스로 업데이트되지 않는다.
 - **계약서 변환**: `scripts/convert_contract.py` 가 xlsx·pdf·docx·hwp·hwpx 등을 마크다운으로 바꾼다. 필요한
