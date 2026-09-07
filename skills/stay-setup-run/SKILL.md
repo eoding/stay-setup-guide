@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.7.1
+version: 0.7.2
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -92,6 +92,14 @@ npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/_inject/st
 
 호텔 7곳을 이 조합으로 1단계부터 끝까지 돌렸다. 확장은 **사이트마다 권한을 따로 받는다** —
 ERP 도메인을 미리 허용해 두어야 한다.
+
+- **주의 — 연결된 브라우저가 둘 이상이면(맥·리눅스 등) 실행 도중 확장이 다른 쪽으로 조용히 바뀔 수 있다.**
+  그러면 새로 여는 탭마다 ERP 주소가 `ERR_CONNECTION_REFUSED` 로 뜬다 — 같은 주소를 셸에서는
+  멀쩡히 부르는데도 그렇다. ERP 가 죽은 것이 아니니 서버를 만지지 말고, 연결된 브라우저 목록을
+  보고(`mcp__claude-in-chrome__list_connected_browsers` — 읽기만 한다) **이 컴퓨터 쪽으로 표시된
+  브라우저를 다시 고른다**(`select_browser`). 원래 탭이 그대로 돌아오고 페이지에 올려 둔
+  도우미·부트(`localStorage`)도 살아 있어 파일을 다시 올릴 필요가 없다
+  (2026-09-07 실행 중 1회 · 러너나 ERP 의 결함이 아니다).
 
 ### Codex (Codex Chrome 확장 + 개발자 모드/CDP) — **실측 전**
 
@@ -252,6 +260,11 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
 파일 대화상자를 못 다루는 브라우저 도구면 사진 단계는 `건너뜀 · 사용자 업로드 필요` 로 남기고 계속한다.
 
 ## 단계가 실패했을 때
+
+- **`submitted:false` 인데 되읽기가 다 차 있고 드로어가 그대로 열려 있으면** 값이 아니라 저장이
+  안 눌린 것이다 — `stayRun.submit('<지시서 마지막 줄의 버튼>')` 을 **한 번만 더** 부르면 대개
+  닫힌다. 그래도 안 닫히면 `bad` 로 보고 아래 차례를 밟는다. 다시 누른 사실은 로그 비고에 남긴다
+  (2026-09-07 오퍼 만들기 드로어에서 1회 · 재현되지 않았다).
 
 1. `runStep(n, {dry:true})` 로 열기만 해 보고 `stayRun.fields()` · `stayRun.buttons()` · `stayRun.state()` 로 화면에 뭐가 있는지 본다.
 2. 스크린샷을 찍어 사용자에게 보인다.
