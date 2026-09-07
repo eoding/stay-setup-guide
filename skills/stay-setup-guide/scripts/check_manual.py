@@ -23,6 +23,9 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `룸 만들기`·`판매 연결` 단계가 첫 `오퍼 만들기` 보다 앞에 있는지(있으면 오류 — 오퍼가 없으면 객실 추가가 막힌다)
 - `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
+- 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
+- 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
+- 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 - `취소정책 만들기` 단계가 `→ [추가]` 로 끝나는지(새 정책은 [추가], [저장] 은 이미 있는 정책을 고칠 때다)
@@ -169,6 +172,22 @@ AUDIENCE_ONLY_NAME_RE = re.compile(r"^(소아|유아|아동|어린이|성인)\s*
 # 아동이 방에서 잔다는 표시 — 이 말이 보이면 연령 구간이 있어야 한다.
 CHILD_STAY_RE = re.compile(r"(무료\s*투숙|무료\s*숙박|쉐어\s*베드|쉐어베드|share\s*bed|엑스트라베드\s*무료)", re.I)
 CHILD_POLICY_STEP_TITLES = ("부가옵션", "혜택")
+
+# 갈라디너·컴펄서리 디너·행사 요금 — **특정 날짜에 인당으로 붙는 의무 요금**이다.
+# 계약이 "반드시 낸다" 고 하는 돈은 고객이 뺄 수 있는 부가옵션이 아니라 **의무 부과금 하나**다:
+# `부과 방식` 정액(성인 단가) · `부과 단위` 인당 · `부과 유형` 의무 · `적용 날짜 (선택)` 그 날짜 ·
+# `연령별 단가 · <노출명>` 로 소아·유아 단가. 실제 사례(2026-09-07): 12/24·12/31 컴펄서리 디너가
+# 부가옵션으로 깔려 고객이 빼면 호텔이 물리는 돈이 한 푼도 청구되지 않았다. 성인만 부과금으로 두고
+# 소아를 부가옵션으로 나눈 것도 같은 구멍이다 — 소아분이 선택 항목이 되어 빠진다.
+GALA_NAME_RE = re.compile(r"(갈라\s*디너|갈라디너|gala|컴펄서리|compulsory)", re.I)
+# 계약서가 `선택`·`optional` 이라고 못 박은 디너만 부가옵션이다 — 그때는 이름 끝에 이 표시를 붙인다.
+GALA_OPTIONAL_MARK = "(선택)"
+ADDON_CREATE_TITLE = "부가옵션 만들기"
+SURCHARGE_TITLE = "부과금 추가"
+# `부과 단위` 가 이것이어야 사람 수만큼 곱해지고 `연령별 단가` 표가 화면에 선다.
+PER_PERSON_UNIT = "인당"
+# 성인·소아를 부과금 둘로 쪼갠 흔적 — 이름 끝의 `(성인)`.
+ADULT_ONLY_SUFFIX_RE = re.compile(r"\(\s*성인\s*\)\s*$")
 
 # 만들기 드로어에만 있는 칸 — `{칸 이름: 그 드로어의 저장 버튼}`.
 # 요금제 정본은 만들 때와 고칠 때가 **다른 드로어**다(운영 화면 실측 — 만들기 드로어에만 그려지는 칸이 있다):
@@ -608,6 +627,88 @@ def find_child_policy_without_age_band(steps):
             problems.append(
                 f"{step['num']}단계: 아동 정책이 보이는데 연령 구간 단계가 없다 — "
                 "계약서의 아동 정책은 연령 구간으로 넣는다"
+            )
+    return problems
+
+
+def _is_gala(step):
+    """단계 제목·`이름` 칸에 갈라디너·컴펄서리 디너로 읽히는 말이 있는가."""
+    name = (step["fields"].get("이름") or "").strip()
+    return bool(GALA_NAME_RE.search(f"{step['title']} {name}"))
+
+
+def find_gala_addons(steps):
+    """갈라디너를 `부가옵션 만들기` 로 넣으면 오류 — 고객이 빼 버릴 수 있다.
+
+    계약이 물리는 컴펄서리 디너는 **의무 부과금 하나**다(인당·정액·적용 날짜·연령별 단가).
+    부가옵션은 고객이 고를 때만 붙으므로 그 돈이 청구되지 않는다. 계약서가 `선택`·`optional`
+    이라고 못 박은 디너만 부가옵션이고, 그때는 이름 끝에 `(선택)` 을 붙여 그 사실을 남긴다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ADDON_CREATE_TITLE) or not _is_gala(step):
+            continue
+        name = (step["fields"].get("이름") or "").strip()
+        if GALA_OPTIONAL_MARK in name or GALA_OPTIONAL_MARK in step["title"]:
+            continue
+        problems.append(
+            f"{step['num']}단계: 갈라디너는 의무 부과금(인당·정액·적용 날짜·연령별 단가)로 넣는다 — "
+            "계약서가 선택이라고 명시한 경우만 부가옵션이며 그때는 이름에 (선택) 을 붙인다"
+        )
+    return problems
+
+
+def find_gala_surcharge_gaps(steps):
+    """갈라디너 부과금이 `인당` 이 아니거나 `연령별 단가` 줄이 없으면 오류.
+
+    행사비는 사람 수만큼 붙는 돈이라 `부과 단위` 가 `인당` 이어야 하고, 그 오퍼에 연령 구간이
+    있으면 소아·유아 단가는 **그 부과금 안의** `연령별 단가 · <노출명>` 줄로 적는다. 소아분을
+    부가옵션으로 따로 만들면 그쪽만 빠진다(성인만 내는 행사면 유아·소아 줄에 `0`).
+    """
+    problems = []
+    bands = {}
+    for step in steps:
+        if step["title"].startswith(AGE_BAND_TITLE):
+            bands[card_name(step) or ""] = bands.get(card_name(step) or "", 0) + 1
+    for step in steps:
+        if not step["title"].startswith(SURCHARGE_TITLE) or not _is_gala(step):
+            continue
+        unit = strip_select(step["fields"].get("부과 단위") or "")
+        if unit != PER_PERSON_UNIT:
+            problems.append(
+                f"{step['num']}단계: 갈라디너 부과금의 `부과 단위` 가 `{PER_PERSON_UNIT}` 이 아니다"
+                f"({unit or '비움'}) — 인당·정액·적용 날짜로 넣어야 사람 수만큼 붙고 "
+                "`연령별 단가` 칸이 화면에 선다"
+            )
+            continue
+        has_rate = any(
+            name == AGE_RATE_FIELD or name.startswith(f"{AGE_RATE_FIELD} · ") for name in step["fields"]
+        )
+        card = card_name(step) or ""
+        count = bands.get(card, 0) if card else sum(bands.values())
+        if not has_rate and count:
+            problems.append(
+                f"{step['num']}단계: 갈라디너 부과금에 연령별 단가 줄이 없다 — "
+                "소아·유아 단가를 연령별 단가로 넣는다(성인만이면 유아·소아 0)"
+            )
+    return problems
+
+
+def find_adult_only_charge_names(steps):
+    """부과금 이름이 `(성인)` 으로 끝나면 경고 — 성인·소아를 둘로 쪼갠 흔적이다.
+
+    한 부과금의 `정액 금액` 이 성인가이고 `연령별 단가 · <노출명>` 이 아이 단가다. 이름으로
+    성인을 한정하면 아이 몫이 다른 곳(대개 부가옵션)에 남아 고객이 뺄 수 있게 된다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(SURCHARGE_TITLE):
+            continue
+        name = (step["fields"].get("이름") or "").strip()
+        if name and ADULT_ONLY_SUFFIX_RE.search(name):
+            problems.append(
+                f"{step['num']}단계: 부과금 이름이 `(성인)` 으로 끝난다({name}) — "
+                "성인·소아를 부과금 하나의 연령별 단가로 합친다"
             )
     return problems
 
@@ -1084,6 +1185,9 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     age_band_overlaps = find_age_band_overlaps(parsed)
     audience_only_names = find_audience_only_names(parsed)
     child_policy_gaps = find_child_policy_without_age_band(parsed)
+    gala_addons = find_gala_addons(parsed)
+    gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
+    adult_only_names = find_adult_only_charge_names(parsed)
     create_only_fields = find_create_only_fields(parsed)
     room_photo_saves = find_room_photo_saves(parsed)
     photo_count_gaps = find_photo_count_gaps(parsed)
@@ -1168,6 +1272,9 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "age_band_overlaps": age_band_overlaps,
         "audience_only_names": audience_only_names,
         "child_policy_gaps": child_policy_gaps,
+        "gala_addons": gala_addons,
+        "gala_surcharge_gaps": gala_surcharge_gaps,
+        "adult_only_names": adult_only_names,
         "create_only_fields": create_only_fields,
         "room_photo_saves": room_photo_saves,
         "photo_count_gaps": photo_count_gaps,
@@ -1237,7 +1344,8 @@ def main(argv=None):
     for p in (r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
-              + r["audience_only_names"] + r["create_only_fields"]
+              + r["audience_only_names"] + r["gala_addons"]
+              + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["promo_common"] + r["season_saves"] + r["cancel_policy_saves"]
               + r["repeat_row_formats"] + r["check_value_classes"]):
@@ -1256,6 +1364,8 @@ def main(argv=None):
     for w in r["needless_overwrite"]:
         warnings.append(w)
     for w in r["child_policy_gaps"]:
+        warnings.append(w)
+    for w in r["adult_only_names"]:
         warnings.append(w)
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]
