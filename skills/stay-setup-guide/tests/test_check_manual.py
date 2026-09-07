@@ -1565,3 +1565,42 @@ class ChildPolicyAgeBandTest(unittest.TestCase):
         with open(EXAMPLE, encoding="utf-8") as handle:
             steps = cm.parse_steps(handle.read().splitlines())
         self.assertEqual(cm.find_child_policy_without_age_band(steps), [])
+
+
+class AgeRateFieldStrictTest(unittest.TestCase):
+    """자리표시 라벨(`연령별 단가 · 〈연령 구간 노출명〉`)로만 사전에 있는 칸도 `--strict` 를 지나야 한다.
+
+    사전은 부과금 드로어의 연령별 단가 표를 한 줄로 담는데, 지시서는 그 자리에 실제 구간
+    이름을 넣어 쓴다 — 사전 대조가 bare 이름(`연령별 단가`)도 받아야 통과한다.
+    """
+
+    #: HEAD 의 `통화` 는 사전에 없는 이름이라 그것만으로 `--strict` 가 걸린다 — 사전 이름으로 바꾼다.
+    CLEAN_HEAD = HEAD.replace("| 통화 |", "| 공급 통화 |")
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+
+    def write(self, md):
+        path = os.path.join(self.dir.name, "manual.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(md)
+        return path
+
+    def manual(self, field="연령별 단가"):
+        md = (self.CLEAN_HEAD + offer_step(4)
+              + age_band_step(5, name="소아", code="CHILD")
+              + charge_with_age_rate(6, band="소아"))
+        return md.replace("연령별 단가 · 소아", f"{field} · 소아")
+
+    def test_age_rate_row_passes_strict(self):
+        path = self.write(self.manual())
+        self.assertEqual(cm.check(path, dictionary_path=DICTIONARY)["unknown_fields"], [])
+        self.assertEqual(cm.main([path, "--dictionary", DICTIONARY, "--strict"]), 0)
+
+    def test_a_wrong_field_name_is_still_caught(self):
+        """`연령별 요금` 은 사전에 없다 — 자리표시 완화가 아무 이름이나 받아 주면 안 된다."""
+        path = self.write(self.manual(field="연령별 요금"))
+        self.assertEqual(cm.check(path, dictionary_path=DICTIONARY)["unknown_fields"],
+                         ["연령별 요금 · 소아"])
+        self.assertEqual(cm.main([path, "--dictionary", DICTIONARY, "--strict"]), 1)
