@@ -1,0 +1,150 @@
+<title>레시피·요리사·손</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;700&display=swap">
+<style>
+  :root{
+    --bg:#EAF4F6; --paper:#FFFFFF; --ink:#17323D; --muted:#5F7B84; --line:#C9DDE2;
+    --accent:#FF8A3D; --teal:#2B9EB3; --teal-soft:#D5EDF2; --ok:#2E9E6B;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0F2028; --paper:#16303A; --ink:#EAF4F6; --muted:#9DB8C0; --line:#2C4954;
+      --accent:#FFA062; --teal:#5CC3D6; --teal-soft:#1E4652; --ok:#5CCB93;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0F2028; --paper:#16303A; --ink:#EAF4F6; --muted:#9DB8C0; --line:#2C4954;
+    --accent:#FFA062; --teal:#5CC3D6; --teal-soft:#1E4652; --ok:#5CCB93;
+  }
+  body{background:var(--bg);color:var(--ink);font-family:"Noto Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.5;margin:0}
+  .wrap{max-width:760px;margin:0 auto;padding:40px 20px 64px}
+  h1{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:clamp(30px,6vw,44px);line-height:1.15;margin:0 0 8px;text-wrap:balance}
+  .lead{font-size:18px;color:var(--muted);margin:0 0 36px;max-width:34em}
+  .story{display:flex;flex-direction:column;gap:0}
+  .panel{display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px}
+  .panel svg{width:100%;height:auto;display:block}
+  .panel h2{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:28px;margin:0 0 6px}
+  .panel p{margin:0;font-size:17px;max-width:24em}
+  .panel .tag{display:inline-block;font-size:12px;letter-spacing:.08em;color:var(--teal);border:1px solid var(--teal);border-radius:999px;padding:2px 10px;margin-bottom:10px;text-transform:uppercase}
+  .arrow{display:flex;justify-content:center;padding:6px 0}
+  .arrow svg{width:36px;height:36px}
+  .you{background:var(--teal-soft);border-color:transparent}
+  .flow{margin-top:40px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px}
+  .flow h2{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:24px;margin:0 0 16px}
+  .flow ol{margin:0;padding-left:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .flow li{background:var(--bg);border-radius:14px;padding:14px;font-size:15px}
+  .flow li b{display:block;font-size:22px;font-family:"Gowun Dodum",sans-serif;font-weight:400;margin-bottom:4px}
+  .flow li.human{outline:2px solid var(--accent)}
+  .foot{color:var(--muted);font-size:14px;margin-top:28px}
+  @media (max-width:560px){.panel{grid-template-columns:1fr;text-align:center}.panel p{margin:0 auto}.panel svg{max-width:180px;margin:0 auto}}
+  @media (prefers-reduced-motion:no-preference){.panel{transition:transform .2s}.panel:hover{transform:translateY(-2px)}}
+</style>
+
+<div class="wrap">
+  <h1>호텔 하나를 ERP에 깔 때, 안에서는 이런 일이 일어나요</h1>
+  <p class="lead">레시피가 있고, 레시피를 읽는 요리사가 있고, 실제로 냄비를 만지는 손이 있어요. 손님에게 내놓는 건 사장님만 해요.</p>
+
+  <div class="story">
+
+    <section class="panel">
+      <svg viewBox="0 0 200 200" role="img" aria-label="레시피 종이">
+        <rect x="40" y="18" width="120" height="164" rx="10" fill="#FFF6EC" stroke="var(--accent)" stroke-width="4"/>
+        <rect x="60" y="8" width="80" height="22" rx="6" fill="var(--accent)"/>
+        <g stroke="var(--teal)" stroke-width="6" stroke-linecap="round">
+          <line x1="62" y1="58" x2="138" y2="58"/><line x1="62" y1="82" x2="120" y2="82"/>
+          <line x1="62" y1="106" x2="132" y2="106"/><line x1="62" y1="130" x2="110" y2="130"/>
+        </g>
+        <circle cx="62" cy="156" r="6" fill="var(--ok)"/><line x1="76" y1="156" x2="126" y2="156" stroke="var(--ok)" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <span class="tag">steps.json</span>
+        <h2>레시피</h2>
+        <p>계약서로 만든 지시서예요. "객실 탭 → 룸 추가 → 이름 '디럭스' → 면적 35 → 저장" 같은 줄이 70~130개. 값은 전부 계약서에서 온 것이고, 없는 값은 안 지어내요.</p>
+      </div>
+    </section>
+
+    <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+    <section class="panel">
+      <svg viewBox="0 0 200 200" role="img" aria-label="요리사">
+        <path d="M55 70c-14 0-24-11-24-24 0-14 11-24 25-23 4-14 18-23 32-21 8-10 22-13 34-7 14-8 32-1 36 15 12 2 20 12 20 24 0 13-10 24-24 24z" fill="#FFFFFF" stroke="var(--ink)" stroke-width="4"/>
+        <rect x="52" y="66" width="96" height="16" fill="var(--ink)"/>
+        <circle cx="100" cy="126" r="40" fill="#F6D8C2" stroke="var(--ink)" stroke-width="4"/>
+        <circle cx="86" cy="120" r="4" fill="var(--ink)"/><circle cx="114" cy="120" r="4" fill="var(--ink)"/>
+        <path d="M84 140c8 8 24 8 32 0" fill="none" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
+        <rect x="128" y="88" width="46" height="60" rx="6" fill="#FFF6EC" stroke="var(--accent)" stroke-width="3" transform="rotate(12 151 118)"/>
+      </svg>
+      <div>
+        <span class="tag">stay_boot.js</span>
+        <h2>요리사</h2>
+        <p>레시피를 한 줄씩 읽고 "이건 룸 만들기구나" 하고 알아본 뒤 손에게 시켜요. 끝나면 화면 값을 다시 읽어 레시피와 맞는지 대조하고, 옛날 레시피면 시작도 안 하고 멈춰요.</p>
+      </div>
+    </section>
+
+    <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+    <section class="panel">
+      <svg viewBox="0 0 200 200" role="img" aria-label="손이 화면을 누름">
+        <rect x="20" y="30" width="160" height="120" rx="10" fill="#FFFFFF" stroke="var(--teal)" stroke-width="4"/>
+        <rect x="20" y="30" width="160" height="22" rx="10" fill="var(--teal)"/>
+        <rect x="36" y="70" width="90" height="14" rx="4" fill="var(--teal-soft)" stroke="var(--line)"/>
+        <rect x="36" y="94" width="90" height="14" rx="4" fill="var(--teal-soft)" stroke="var(--line)"/>
+        <rect x="120" y="118" width="46" height="20" rx="6" fill="var(--accent)"/>
+        <path d="M110 190c0-30 10-46 22-48l4-22c1-6 10-6 10 0v24l16 6c6 2 8 8 6 14l-6 26z" fill="#F6D8C2" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <span class="tag">stay_helper.js</span>
+        <h2>손</h2>
+        <p>탭을 열고, "면적(㎡)" 같은 글자로 칸을 찾고, 글자를 치고, 고르고, 사진을 넣고, 저장을 눌러요. ERP 화면 생김새를 아는 건 이 손뿐이라 화면이 바뀌면 손을 고쳐요.</p>
+      </div>
+    </section>
+
+    <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+    <section class="panel">
+      <svg viewBox="0 0 200 200" role="img" aria-label="크롬 창과 열린 문">
+        <rect x="16" y="24" width="168" height="140" rx="12" fill="#FFFFFF" stroke="var(--ink)" stroke-width="4"/>
+        <rect x="16" y="24" width="168" height="26" rx="12" fill="var(--line)"/>
+        <circle cx="34" cy="37" r="5" fill="var(--accent)"/><circle cx="50" cy="37" r="5" fill="var(--ok)"/><circle cx="66" cy="37" r="5" fill="var(--teal)"/>
+        <rect x="76" y="70" width="48" height="80" rx="4" fill="var(--teal-soft)" stroke="var(--ink)" stroke-width="4"/>
+        <path d="M124 70l30-12v104l-30-12z" fill="var(--accent)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+        <circle cx="132" cy="112" r="4" fill="var(--ink)"/>
+      </svg>
+      <div>
+        <span class="tag">Claude Code + Chrome 확장</span>
+        <h2>주방 문</h2>
+        <p>로그인해 둔 ERP 탭 안으로 요리사와 손을 들여보내요. 큰 파일은 숨은 파일 칸으로 올리고, 한 번에 45초만 움직일 수 있어서 3~10단계씩 끊어서 해요.</p>
+      </div>
+    </section>
+
+    <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+    <section class="panel you">
+      <svg viewBox="0 0 200 200" role="img" aria-label="사장님이 판매 시작 버튼을 누름">
+        <circle cx="70" cy="70" r="30" fill="#F6D8C2" stroke="var(--ink)" stroke-width="4"/>
+        <path d="M30 150c0-26 18-44 40-44s40 18 40 44z" fill="var(--teal)" stroke="var(--ink)" stroke-width="4"/>
+        <path d="M52 44l10 10 8-16 8 16 10-10-4 22H56z" fill="var(--accent)" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
+        <rect x="112" y="96" width="70" height="36" rx="10" fill="var(--ok)"/>
+        <text x="147" y="120" text-anchor="middle" font-size="16" font-family="Noto Sans KR, sans-serif" font-weight="700" fill="#FFFFFF">판매 시작</text>
+        <path d="M120 176c0-18 6-28 14-30l2-14c1-5 8-5 8 0v16l10 4c5 2 6 6 5 10l-4 16z" fill="#F6D8C2" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <span class="tag">사람</span>
+        <h2>사장님</h2>
+        <p>계약서와 사진을 폴더에 넣고, ERP에 로그인하고, 다 깔린 뒤 배너에 🔴 0 · 🟡 0 인지 보고 [판매 시작]을 눌러요. 이 버튼은 로봇이 절대 못 눌러요.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="flow">
+    <h2>순서로 보면</h2>
+    <ol>
+      <li class="human"><b>1</b>계약서·사진 폴더에 넣기 <small>(사람)</small></li>
+      <li><b>2</b>지시서 만들기 → 검사 ALL OK</li>
+      <li class="human"><b>3</b>Chrome 에서 ERP 로그인 <small>(사람)</small></li>
+      <li><b>4</b>요리사+손이 70~130단계 자동 입력 (13~19분)</li>
+      <li class="human"><b>5</b>배너 🔴 0 · 🟡 0 확인 → [판매 시작] <small>(사람)</small></li>
+    </ol>
+    <p class="foot">주황 테두리가 사람이 하는 일이에요. 지시서 검사를 통과 못 하면 4번은 아예 시작하지 않아요.</p>
+  </div>
+</div>

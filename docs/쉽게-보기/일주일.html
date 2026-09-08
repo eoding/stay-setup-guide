@@ -1,0 +1,183 @@
+<title>호텔 깔기 로봇 일주일</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;700&display=swap">
+<style>
+  :root{
+    --bg:#EAF4F6; --paper:#FFFFFF; --ink:#17323D; --muted:#5F7B84; --line:#C9DDE2;
+    --accent:#FF8A3D; --teal:#2B9EB3; --teal-soft:#D5EDF2; --ok:#2E9E6B; --warn:#E8B400;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0F2028; --paper:#16303A; --ink:#EAF4F6; --muted:#9DB8C0; --line:#2C4954;
+      --accent:#FFA062; --teal:#5CC3D6; --teal-soft:#1E4652; --ok:#5CCB93; --warn:#F2CB4A;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0F2028; --paper:#16303A; --ink:#EAF4F6; --muted:#9DB8C0; --line:#2C4954;
+    --accent:#FFA062; --teal:#5CC3D6; --teal-soft:#1E4652; --ok:#5CCB93; --warn:#F2CB4A;
+  }
+  body{background:var(--bg);color:var(--ink);font-family:"Noto Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.5;margin:0}
+  .wrap{max-width:780px;margin:0 auto;padding:40px 20px 64px}
+  h1{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:clamp(30px,6vw,44px);line-height:1.15;margin:0 0 8px;text-wrap:balance}
+  .lead{font-size:18px;color:var(--muted);margin:0 0 32px;max-width:34em}
+  .big{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 36px}
+  .big div{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px 14px}
+  .big b{display:block;font-family:"Gowun Dodum",sans-serif;font-weight:400;font-size:38px;line-height:1;font-variant-numeric:tabular-nums;color:var(--teal)}
+  .big span{font-size:14px;color:var(--muted)}
+  .panel{display:grid;grid-template-columns:180px 1fr;gap:24px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:22px 24px}
+  .panel svg{width:100%;height:auto;display:block}
+  .panel h2{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:27px;margin:0 0 6px}
+  .panel p{margin:0;font-size:17px;max-width:26em}
+  .panel .tag{display:inline-block;font-size:12px;letter-spacing:.08em;color:var(--teal);border:1px solid var(--teal);border-radius:999px;padding:2px 10px;margin-bottom:10px}
+  .arrow{display:flex;justify-content:center;padding:6px 0}
+  .arrow svg{width:36px;height:36px}
+  .you{background:var(--teal-soft);border-color:transparent}
+  .today{outline:3px solid var(--accent)}
+  .rules{margin-top:36px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px}
+  .rules h2{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:24px;margin:0 0 6px}
+  .rules p.sub{margin:0 0 16px;color:var(--muted);font-size:15px}
+  .rules ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+  .rules li{background:var(--bg);border-radius:14px;padding:12px 14px;font-size:15px;display:flex;gap:10px;align-items:flex-start}
+  .rules li::before{content:"";flex:none;width:12px;height:12px;border-radius:50%;background:var(--ok);margin-top:6px}
+  .foot{color:var(--muted);font-size:14px;margin-top:28px;max-width:40em}
+  @media (max-width:560px){.panel{grid-template-columns:1fr;text-align:center}.panel p{margin:0 auto}.panel svg{max-width:160px;margin:0 auto}}
+</style>
+
+<div class="wrap">
+  <h1>호텔 하나를 ERP에 깔던 일, 일주일 만에 로봇 일이 됐어요</h1>
+  <p class="lead">9월 3일부터 오늘 아침까지. 계약서를 넣으면 레시피가 나오고, 로봇 손이 ERP를 채우고, 사장님은 [판매 시작]만 누르면 됩니다.</p>
+
+  <div class="big">
+    <div><b>7</b><span>시험 호텔 (A~G), 여러 번 다시 깖</span></div>
+    <div><b>3</b><span>운영에 실제 판매중 (노보텔·씨센스·소나가)</span></div>
+    <div><b>19분</b><span>로봇이 호텔 하나 까는 시간 (사진 18장 포함)</span></div>
+    <div><b>🟡 0</b><span>합격선 — 경고 하나도 없어야 판매 시작</span></div>
+  </div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="두꺼운 계약서와 지친 사람">
+      <rect x="30" y="30" width="110" height="140" rx="8" fill="#FFF6EC" stroke="var(--ink)" stroke-width="4"/>
+      <rect x="42" y="42" width="110" height="140" rx="8" fill="#FFFFFF" stroke="var(--ink)" stroke-width="4"/>
+      <g stroke="var(--muted)" stroke-width="5" stroke-linecap="round">
+        <line x1="60" y1="70" x2="130" y2="70"/><line x1="60" y1="92" x2="120" y2="92"/><line x1="60" y1="114" x2="135" y2="114"/><line x1="60" y1="136" x2="110" y2="136"/><line x1="60" y1="158" x2="128" y2="158"/>
+      </g>
+      <text x="165" y="60" font-size="34" fill="var(--accent)" font-family="Noto Sans KR" font-weight="700">?</text>
+    </svg>
+    <div>
+      <span class="tag">문제</span>
+      <h2>계약서 → 손으로 100칸</h2>
+      <p>호텔 계약서는 수십 장. 직원이 ERP 화면 20개 탭에 룸·시즌·가격·취소정책을 100칸 넘게 손으로 넣었어요. 오래 걸리고, 틀리고, 사람마다 달랐어요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="레시피 종이와 합격 도장">
+      <rect x="40" y="18" width="120" height="164" rx="10" fill="#FFF6EC" stroke="var(--accent)" stroke-width="4"/>
+      <g stroke="var(--teal)" stroke-width="6" stroke-linecap="round">
+        <line x1="62" y1="52" x2="138" y2="52"/><line x1="62" y1="76" x2="120" y2="76"/><line x1="62" y1="100" x2="132" y2="100"/><line x1="62" y1="124" x2="110" y2="124"/>
+      </g>
+      <circle cx="130" cy="150" r="26" fill="none" stroke="var(--ok)" stroke-width="5" transform="rotate(-12 130 150)"/>
+      <text x="130" y="156" text-anchor="middle" font-size="14" fill="var(--ok)" font-family="Noto Sans KR" font-weight="700" transform="rotate(-12 130 150)">ALL OK</text>
+    </svg>
+    <div>
+      <span class="tag">만든 것 ①</span>
+      <h2>레시피 만드는 스킬</h2>
+      <p>계약서를 넣으면 "객실 탭 → 룸 추가 → 이름 → 면적 → 저장" 같은 줄이 60~130개 적힌 지시서가 나와요. 검사기가 도장(ALL OK)을 찍어야 다음으로 갈 수 있어요. 도장 없으면 로봇은 시작도 안 해요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="로봇 손이 화면을 누름">
+      <rect x="20" y="30" width="160" height="120" rx="10" fill="#FFFFFF" stroke="var(--teal)" stroke-width="4"/>
+      <rect x="20" y="30" width="160" height="22" rx="10" fill="var(--teal)"/>
+      <rect x="36" y="70" width="90" height="14" rx="4" fill="var(--teal-soft)" stroke="var(--line)"/>
+      <rect x="36" y="94" width="90" height="14" rx="4" fill="var(--teal-soft)" stroke="var(--line)"/>
+      <rect x="120" y="118" width="46" height="20" rx="6" fill="var(--accent)"/>
+      <path d="M110 190c0-30 10-46 22-48l4-22c1-6 10-6 10 0v24l16 6c6 2 8 8 6 14l-6 26z" fill="#F6D8C2" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <span class="tag">만든 것 ②</span>
+      <h2>자동으로 채우는 스킬</h2>
+      <p>크롬 안 ERP 탭에 로봇 손을 들여보내요. 탭 열고, 칸 찾고, 글자 치고, 사진 올리고, 저장. 호텔 하나에 13~19분. 끝나면 화면 값을 다시 읽어 레시피와 맞는지 대조해요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="호텔 일곱 개와 체크 표시">
+      <g fill="#FFFFFF" stroke="var(--ink)" stroke-width="3">
+        <rect x="18" y="80" width="34" height="90" rx="4"/><rect x="60" y="60" width="34" height="110" rx="4"/><rect x="102" y="90" width="34" height="80" rx="4"/><rect x="144" y="50" width="40" height="120" rx="4"/>
+      </g>
+      <g fill="var(--teal-soft)">
+        <rect x="24" y="90" width="8" height="8"/><rect x="38" y="90" width="8" height="8"/><rect x="24" y="106" width="8" height="8"/><rect x="38" y="106" width="8" height="8"/>
+        <rect x="66" y="70" width="8" height="8"/><rect x="80" y="70" width="8" height="8"/><rect x="66" y="86" width="8" height="8"/><rect x="80" y="86" width="8" height="8"/>
+        <rect x="108" y="100" width="8" height="8"/><rect x="122" y="100" width="8" height="8"/>
+        <rect x="152" y="60" width="8" height="8"/><rect x="168" y="60" width="8" height="8"/><rect x="152" y="76" width="8" height="8"/><rect x="168" y="76" width="8" height="8"/>
+      </g>
+      <circle cx="160" cy="34" r="22" fill="var(--ok)"/>
+      <path d="M149 34l8 8 14-16" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <span class="tag">시험</span>
+      <h2>일곱 번, 또 일곱 번</h2>
+      <p>시험 호텔 7개(A~G)를 깔고, 틀린 걸 고치고, 다시 깔았어요. 운영 ERP에 씨센스·소나가가 경고 0으로 완주했고, 다른 AI(Sonnet)가 문서만 보고 혼자 해도 같은 결과가 나왔어요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="상자에 담긴 플러그">
+      <rect x="30" y="70" width="140" height="100" rx="10" fill="#FFF6EC" stroke="var(--ink)" stroke-width="4"/>
+      <path d="M30 100h140" stroke="var(--ink)" stroke-width="4"/>
+      <rect x="80" y="30" width="40" height="50" rx="8" fill="var(--teal)" stroke="var(--ink)" stroke-width="4"/>
+      <rect x="88" y="14" width="8" height="22" fill="var(--ink)"/><rect x="104" y="14" width="8" height="22" fill="var(--ink)"/>
+      <text x="100" y="146" text-anchor="middle" font-size="16" fill="var(--ink)" font-family="Noto Sans KR" font-weight="700">/plugin install</text>
+    </svg>
+    <div>
+      <span class="tag">배포</span>
+      <h2>설치 한 줄로 받는 꾸러미</h2>
+      <p>GitHub 플러그인 가게에 올렸어요. Claude Code에서도, Codex에서도 한 줄로 설치돼요. 윈도우·맥 설치 안내와 파트너용 사용 허가서(라이선스)도 같이 넣었어요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel you today">
+    <svg viewBox="0 0 200 200" role="img" aria-label="휴대폰 화면의 호텔 사진과 가격">
+      <rect x="55" y="14" width="90" height="172" rx="14" fill="#FFFFFF" stroke="var(--ink)" stroke-width="4"/>
+      <rect x="66" y="34" width="68" height="46" rx="6" fill="var(--teal)"/>
+      <circle cx="120" cy="50" r="7" fill="#FFF6EC"/>
+      <path d="M66 80l20-18 14 12 12-8 22 14z" fill="var(--ok)"/>
+      <rect x="66" y="90" width="48" height="8" rx="3" fill="var(--line)"/>
+      <rect x="66" y="104" width="68" height="8" rx="3" fill="var(--line)"/>
+      <rect x="66" y="126" width="68" height="22" rx="6" fill="var(--accent)"/>
+      <text x="100" y="142" text-anchor="middle" font-size="12" fill="#FFFFFF" font-family="Noto Sans KR" font-weight="700">87,258원</text>
+    </svg>
+    <div>
+      <span class="tag">오늘 아침</span>
+      <h2>대표님께 보낼 링크</h2>
+      <p>씨센스·소나가를 판매중으로 바꾸고 호텔 사진을 올려서, 날짜를 찍으면 사진·객실·가격·프로모션이 다 보이는 예약 페이지 링크 6개를 만들었어요. 노보텔까지 세 호텔이 실제로 팔리는 중이에요.</p>
+    </div>
+  </section>
+
+  <div class="rules">
+    <h2>일주일 동안 배워서 규칙이 된 것</h2>
+    <p class="sub">전부 실제로 틀려 보고 나서 문서와 검사기에 박아 넣은 것들이에요.</p>
+    <ul>
+      <li>경고(🟡)가 하나라도 있으면 매뉴얼이 잘못된 것</li>
+      <li>공급 통화는 USD가 기본, 다른 통화는 물어보기</li>
+      <li>같은 오퍼의 시즌은 하루도 겹치면 안 됨</li>
+      <li>오퍼마다 취소정책 필수, 없으면 사람에게 묻기</li>
+      <li>아이 요금은 한 곳에만 — 두 번 받으면 안 됨</li>
+      <li>갈라디너는 의무 부과금 하나로</li>
+      <li>판매 기간은 지시서 만든 날부터</li>
+      <li>룸 이름은 계약서 원어 그대로</li>
+    </ul>
+    <p class="foot">사람만 하는 일은 셋뿐이에요: 계약서와 사진을 폴더에 넣기, ERP에 로그인하기, 배너에 🔴 0 · 🟡 0 을 보고 [판매 시작] 누르기. 남은 숙제는 취소 규정이 없는 호텔 4개(C·D·E·F)에 공용 취소정책을 정하는 것과 옛 시험 호텔 정리예요.</p>
+  </div>
+</div>
