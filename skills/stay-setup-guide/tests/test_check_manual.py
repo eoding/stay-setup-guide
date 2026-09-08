@@ -2828,3 +2828,71 @@ class CellStepCoordinateTest(unittest.TestCase):
         with open(EXAMPLE, encoding="utf-8") as handle:
             self.assertEqual(
                 cm.find_cell_step_without_filled_coordinate(steps_of(handle.read())), [])
+
+
+class CellOccupancySelectTest(unittest.TestCase):
+    """가격 셀 모달의 `인원 조합` 은 **셀렉트**다 — 정본 표기는 `선택: <옵션 글자 그대로>` 다.
+
+    옵션 글자는 키가 앞이라(`A2C1_CHD · 성인 2 · 소아 1`) 좌표를 읽는 자리는 모두 같은 문
+    (`_occupancy_key_of_value`)을 지난다. `시즌 가격 채우기` 의 `인원 조합(선택)` 은 텍스트라
+    `A2,A3` 쉼표 목록 그대로이고 ` · ` 로 자르지 않는다.
+    """
+
+    def cell(self, occupancy, card=None):
+        md = HEAD + cell_step(4, card or CARD_NEW_ROW, occupancy=occupancy,
+                              title="가격 셀 만들기 (1번째, 2026-12-24)", save="추가")
+        return cm.find_occupancy_key_legacy(steps_of(md))
+
+    def test_the_gate_reads_the_key_from_the_option_text(self):
+        self.assertEqual(cm._occupancy_key_of_value("선택: A2C1_CHD · 성인 2 · 소아 1"), "A2C1_CHD")
+        self.assertEqual(cm._occupancy_key_of_value("선택:A2 · 성인 2"), "A2")
+        self.assertEqual(cm._occupancy_key_of_value("선택: 인원 무관 단일가"), "")
+        self.assertEqual(cm._occupancy_key_of_value("A2"), "A2")
+        self.assertEqual(cm._occupancy_key_of_value("비움"), "")
+
+    def test_canonical_select_text_passes(self):
+        self.assertEqual(self.cell("선택: A2C1_CHD · 성인 2 · 소아 1"), [])
+        self.assertEqual(self.cell("선택: A2 · 성인 2"), [])
+
+    def test_single_price_option_is_a_blank_key(self):
+        self.assertEqual(self.cell("선택: 인원 무관 단일가"), [])
+
+    def test_bare_key_still_passes(self):
+        """옛 원고가 키만 적어 둔 것도 받는다."""
+        self.assertEqual(self.cell("A2"), [])
+
+    def test_legacy_numeric_option_is_error(self):
+        problems = self.cell("선택: 3 · 3인")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("옛 숫자 표기", problems[0])
+        self.assertIn("선택: A2 · 성인 2", problems[0])
+
+    def test_season_fill_text_is_not_split_by_the_middle_dot(self):
+        fill = HEAD + price_fill_step(4, rows=[("인원 조합(선택)", "A2,A3")])
+        self.assertEqual(cm.find_occupancy_key_legacy(steps_of(fill)), [])
+        legacy = HEAD + price_fill_step(4, rows=[("인원 조합(선택)", "2,3")])
+        self.assertEqual(len(cm.find_occupancy_key_legacy(steps_of(legacy))), 1)
+
+    def test_the_same_gate_feeds_the_card_comparison(self):
+        """카드 줄 좌표와 셀렉트 항목 글자를 같은 키로 견준다."""
+        card = "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 조합 `A2C1_CHD` 행"
+        md = HEAD + cell_step(4, card, occupancy="선택: A2C1_CHD · 성인 2 · 소아 1")
+        self.assertEqual(cm.find_cell_step_occupancy_mismatch(steps_of(md)), [])
+        md = HEAD + cell_step(4, card, occupancy="선택: A2 · 성인 2")
+        self.assertEqual(len(cm.find_cell_step_occupancy_mismatch(steps_of(md))), 1)
+
+    def test_it_passes_the_whole_run(self):
+        md = (HEAD + offer_step(4)
+              + season_step(5, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(6, season="Regular", room="Single",
+                                rows=[("인원 조합(선택)", "A2")])
+              + cell_step(7, "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 조합 `A2` 행",
+                          occupancy="선택: A2 · 성인 2"))
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+        self.assertEqual(r["occupancy_key_legacy"], [])
+        self.assertEqual(r["cell_occupancy_mismatch"], [])
+        self.assertEqual(r["cell_coordinate_gaps"], [])

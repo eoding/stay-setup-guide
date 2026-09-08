@@ -1019,9 +1019,16 @@ def find_occupancy_key_legacy(steps):
     옛 숫자 키(`2,3` · `3:+14`)도 서버가 받아 `A2,A3` 로 저장하지만, 같은 좌표가 화면·요금표·
     엔진 로그에서 A-형으로 다시 나온다 — 지시서와 화면이 다른 글자를 쓰면 대조가 끊긴다.
     아동을 더한 좌표는 밴드 코드까지 적는다(`A2C1_CHD` · 둘째 구간부터 `_C1_TEEN`). `비움` 은 통과.
+
+    칸이 두 갈래라 값의 꼴도 두 갈래다:
+    - `시즌 가격 채우기` 의 `인원 조합(선택)` 은 **텍스트** — `A2,A3` 쉼표 목록 그대로 본다.
+    - 가격 셀 편집 모달의 `인원 조합` 은 **셀렉트** — `선택: A2C1_CHD · 성인 2 · 소아 1` 처럼
+      옵션 글자를 그대로 적는 것이 정본이라(§표기 규칙) `_occupancy_key_of_value` 로 키만 뽑고,
+      `선택: 인원 무관 단일가`(빈 키)는 통과시킨다.
     """
     problems = []
     for step in steps:
+        select = any(step["title"].startswith(t) for t in CELL_STEP_TITLES)
         for names, what, example, with_amount in (
             (OCCUPANCY_KEYS_FIELDS, "인원 조합", "A2,A3", False),
             (OCCUPANCY_ADJUST_FIELDS, "인원 조합별 조정", "A3:+14,A4:+26", True),
@@ -1030,25 +1037,28 @@ def find_occupancy_key_legacy(steps):
             if value is None or _blank(value):
                 continue
             text = str(value).strip()
-            numeric, unread = [], []
-            for part in text.split(","):
-                part = part.strip()
-                if not part:
-                    continue
-                key = part.split(":", 1)[0].strip() if with_amount else part
-                if BARE_NUMBER_RE.match(key):
-                    numeric.append(key)
-                elif not OCCUPANCY_KEY_RE.match(key):
-                    unread.append(key)
+            if select:
+                # 셀렉트 항목 글자 하나 — 문(門)으로 키만 뽑는다(`인원 무관 단일가` 는 빈 키)
+                keys = [key for key in [_occupancy_key_of_value(text)] if key]
+                shape = "선택: A2 · 성인 2"
+            else:
+                keys = [
+                    (part.split(":", 1)[0].strip() if with_amount else part.strip())
+                    for part in text.split(",") if part.strip()
+                ]
+                shape = example
+            numeric = [key for key in keys if BARE_NUMBER_RE.match(key)]
+            unread = [key for key in keys
+                      if not BARE_NUMBER_RE.match(key) and not OCCUPANCY_KEY_RE.match(key)]
             if numeric:
                 problems.append(
                     f"{step['num']}단계: {what} `{text}` 은 옛 숫자 표기다 — "
-                    f"{example} 처럼 A-형 좌표로 적는다(아이를 더하면 A2C1_CHD)"
+                    f"{shape} 처럼 A-형 좌표로 적는다(아이를 더하면 A2C1_CHD)"
                 )
             elif unread:
                 problems.append(
                     f"{step['num']}단계: {what} 의 좌표 `{', '.join(unread)}` 를 읽지 못한다 — "
-                    f"{example} 처럼 A-형으로 적는다(성인 수 A2 뒤에 아동 조각 C1_CHD)"
+                    f"{shape} 처럼 A-형으로 적는다(성인 수 A2 뒤에 아동 조각 C1_CHD)"
                 )
     return problems
 
@@ -1099,9 +1109,19 @@ def find_los_prices_format(steps):
 
 
 def _occupancy_key_of_value(value):
-    """`선택: A2C1_CHD · 성인 2 · 소아 1` · `A2` · `비움` → 좌표 키(`""` = 인원 무관 단일가).
+    """**셀렉트 칸**의 값에서 좌표 키 하나를 뽑는 유일한 문(門).
 
-    가격 셀 모달의 `인원 조합` 은 셀렉트라 항목 글자가 `키 · 사람 수` 꼴이다 — 키가 앞이다.
+    `선택: A2C1_CHD · 성인 2 · 소아 1` → `A2C1_CHD` · `A2 · 성인 2` → `A2` ·
+    `선택: 인원 무관 단일가` → `""` · `비움` → `""` · 맨 `A2` → `A2`(옛 원고 호환).
+
+    가격 셀 편집 모달의 `인원 조합` 은 텍스트가 아니라 `<select>` 라(`_calendar_cell_edit.html`)
+    지시서는 표기 규칙대로 `선택: <옵션 글자 그대로>` 로 적고, 옵션 글자는 **키가 앞**이다
+    (화면 사전 §18). 좌표를 읽는 자리는 모두 이 함수를 지나야 서로 어긋나지 않는다 —
+    `find_occupancy_key_legacy` · `find_cell_step_occupancy_mismatch` ·
+    `find_cell_step_without_filled_coordinate` 가 이것 하나를 쓴다.
+
+    `시즌 가격 채우기` 의 `인원 조합(선택)` 은 **텍스트**라 `A2,A3` 쉼표 목록 그대로다 —
+    거기서 ` · ` 로 자르면 안 되므로 그 값은 이 문을 지나지 않는다.
     """
     if _blank(value):
         return ""
