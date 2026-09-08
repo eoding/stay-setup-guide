@@ -35,6 +35,8 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `밴드 코드` 가 영대문자·숫자 2~8자인지(오류 — 그 코드가 가격 셀 좌표에 그대로 실린다)
 - `인원 조합(선택)`·`인원 조합별 조정(선택)` 의 키가 A-형(`A2`·`A2C1_CHD`)인지(오류 — 옛 숫자 키 `2,3`·`3:+14`)
 - `박수별 단가(선택)` 가 `박수:1박 단가` 목록인지(오류 — 부호 없음 · 박수 2 이상 · 같은 박수 한 번)
+- 가격 셀 단계의 `카드:` 줄과 `인원 조합` 칸이 같은 좌표를 부르는지(오류 — 러너는 카드 줄을 읽는다)
+- 가격 셀 단계의 좌표가 그 룸의 `시즌 가격 채우기` 가 깐 좌표인지(오류 — 없는 행을 고치거나 안 파는 좌표를 만든다)
 - 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
 - `룸 만들기` 의 `룸 이름` 에 한글이 있는지(경고 — 룸 이름은 계약서 원어, 한글은 `오퍼별 표시명`)
 - 엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 인지(경고 — 계약서가 필수라고 하면 `기준 성인 초과 시 의무`)
@@ -230,6 +232,19 @@ BARE_NUMBER_RE = re.compile(r"^\d+$")
 # 차액이 아니라 **단가**라 부호를 붙이지 않고, 1박 단가는 위 `판매 단가(공급 통화)` 칸이라
 # 박수는 2 이상이다. 층 하나가 셀 수를 통째로 곱하므로 같은 박수를 두 번 적지 않는다.
 LOS_PRICES_FIELDS = ("박수별 단가(선택)", "박수별 단가")
+
+# 가격 셀 손입력 — 러너는 `인원 조합` **칸이 아니라 `카드:` 줄**에서 좌표를 읽는다
+# (`stay_boot.js`). 그래서 카드 줄과 칸이 서로 다른 행을 부르면 없는 행을 고치러 간다.
+# 카드 줄 꼴: `` `<오퍼> · <룸>` × `<요금제>` 의 인원 조합 `A2` 행 `` ·
+# `… 의 인원 무관 단일가 행` · `… 의 인원 조합 빈 행` · `… 행`(좌표 절 없음 = 무관) ·
+# `… 의 `인원별 · 박수별 가격 추가``(새 행 표 — 좌표는 그 표의 셀렉트가 정한다).
+CELL_STEP_TITLES = ("가격 셀 손으로 고치기", "가격 셀 만들기")
+CELL_OCCUPANCY_FIELD = "인원 조합"
+#: 새 행을 만드는 표 — 카드에 좌표 절이 없는 것이 정본이라 카드↔칸 대조에서 뺀다.
+CELL_NEW_ROW_CARDS = ("인원별 · 박수별 가격 추가", "인원별 가격 추가")
+CELL_CARD_KEY_RE = re.compile(r"의\s*인원\s*조합\s*`(?P<key>[^`]+)`\s*행\s*$")
+#: 좌표가 없다는 말 — 이 낱말들은 `인원 무관 단일가`(빈 키)로 읽는다.
+BLANK_KEY_WORDS = {"인원무관단일가", "인원무관", "단일가", "무관", "빈행", "빈"}
 LOS_ENTRY_RE = re.compile(r"^(?P<nights>\d+)\s*:\s*(?P<price>[\d,]+(?:\.\d+)?)$")
 
 # 계약서가 아동을 말하면(나이대·정원 내 무료 투숙·성인 요금의 %·쉐어베드) 그것은 **인원**이다 —
@@ -1083,6 +1098,152 @@ def find_los_prices_format(steps):
     return problems
 
 
+def _occupancy_key_of_value(value):
+    """`선택: A2C1_CHD · 성인 2 · 소아 1` · `A2` · `비움` → 좌표 키(`""` = 인원 무관 단일가).
+
+    가격 셀 모달의 `인원 조합` 은 셀렉트라 항목 글자가 `키 · 사람 수` 꼴이다 — 키가 앞이다.
+    """
+    if _blank(value):
+        return ""
+    token = strip_select(str(value)).split("\u00b7")[0].strip()
+    if _blank(token) or _fold(token) in BLANK_KEY_WORDS:
+        return ""
+    return token
+
+
+def _key_text(key):
+    """좌표 키를 사람 말로 — 빈 키는 `인원 무관 단일가 행`."""
+    return "인원 무관 단일가 행" if not key else f"인원 조합 `{key}` 행"
+
+
+def _cell_new_row_card(step):
+    """그 단계의 카드가 새 행을 만드는 `인원별 · 박수별 가격 추가` 표인가."""
+    line = head(step, "카드") or ""
+    return any(name in line for name in CELL_NEW_ROW_CARDS)
+
+
+def _cell_card_key(step):
+    """가격 셀 단계의 **카드 줄**이 부르는 좌표(`""` = 인원 무관 단일가 · 좌표 절이 없어도 무관)."""
+    line = head(step, "카드") or ""
+    m = CELL_CARD_KEY_RE.search(line.strip())
+    return _occupancy_key_of_value(m.group("key")) if m else ""
+
+
+def _cell_step_key(step):
+    """가격 셀 단계가 실제로 가리키는 좌표 — 새 행 표는 칸(셀렉트)이, 나머지는 카드 줄이 정한다."""
+    if _cell_new_row_card(step):
+        return _occupancy_key_of_value(_field_value(step, CELL_OCCUPANCY_FIELD))
+    return _cell_card_key(step)
+
+
+def _cell_card_room(step):
+    """가격 셀 단계 카드의 `<오퍼> · <룸>` 에서 (오퍼, 룸). 못 읽으면 ("", "")."""
+    card = card_name(step) or ""
+    if "\u00b7" not in card:
+        return "", card.strip()
+    offer, room = card.rsplit("\u00b7", 1)
+    return offer.strip(), room.strip()
+
+
+def _fill_rooms(step):
+    """`시즌 가격 채우기` 단계가 덮는 룸 이름들(비교용 꼴) — `대상 룸` 과 제목의 `× <룸>` 둘 다 본다."""
+    rooms = set()
+    for raw in target_rooms(step):
+        name = raw.split("\u00b7")[-1].strip()  # `<오퍼> · <룸>` 이면 뒤 조각이 룸이다
+        if name:
+            rooms.add(_fold(name))
+    subject = step_subject(step["title"]) or ""
+    if "\u00d7" in subject:
+        rooms.add(_fold(subject.split("\u00d7")[-1]))
+    return rooms
+
+
+def find_cell_step_occupancy_mismatch(steps):
+    """가격 셀 단계의 `카드:` 줄과 `인원 조합` 칸이 다른 행을 부르면 오류.
+
+    러너는 칸이 아니라 **카드 줄**에서 좌표를 읽는다(`stay_boot.js`) — 좌표 절을 빼고
+    `` × `조식 포함` 행 `` 으로만 적으면 칸에 `A2` 를 적어 두어도 러너는 `인원 무관 단일가`
+    행을 연다. 사람이 읽는 칸과 러너가 읽는 카드 줄이 같은 키를 불러야 한다.
+
+    새 행을 만드는 `인원별 · 박수별 가격 추가` 표는 카드에 좌표 절이 없는 것이 정본이라
+    건너뛴다(그 좌표는 표 안의 셀렉트가 정한다).
+    """
+    problems = []
+    for step in steps:
+        if not any(step["title"].startswith(t) for t in CELL_STEP_TITLES):
+            continue
+        if _cell_new_row_card(step):
+            continue
+        value = _field_value(step, CELL_OCCUPANCY_FIELD)
+        if value is None:
+            continue
+        card_key = _cell_card_key(step)
+        field_key = _occupancy_key_of_value(value)
+        if _fold(card_key) == _fold(field_key):
+            continue
+        shown = "비었다" if not field_key else f"`{field_key}` 다"
+        problems.append(
+            f"{step['num']}단계: 카드 줄은 {_key_text(card_key)}을 가리키는데 "
+            f"`{CELL_OCCUPANCY_FIELD}` 은 {shown} — "
+            "러너는 카드 줄에서 좌표를 읽으므로 둘이 같은 키를 불러야 한다"
+        )
+    return problems
+
+
+def find_cell_step_without_filled_coordinate(steps):
+    """가격 셀 단계의 좌표가 그 룸의 `시즌 가격 채우기` 가 깐 좌표와 어긋나면 오류.
+
+    채우기가 `인원 조합(선택)` 에 `A2` 를 적으면 그 룸의 셀은 `A2` 에 깔리고 **인원 무관 단일가
+    행은 만들어지지 않는다** — 그런데도 셀 단계가 빈 좌표를 가리키면 없는 행을 고치라는 단계가
+    되고, 새로 만들면 아무도 팔지 않는 좌표가 하나 더 생긴다(견적은 `A2` 를 먼저 집는다).
+    반대로 채우기가 전부 비었는데 셀 단계가 `A2` 를 부르면 그 좌표가 아예 깔리지 않는다.
+
+    룸은 셀 단계 카드의 `<오퍼> · <룸>` 과 채우기의 `대상 룸`·제목(`× <룸>`)으로 잇고, 오퍼를
+    읽을 수 있으면 오퍼까지 맞춘다. 한 룸의 채우기가 **전부 같은 쪽**일 때만 말한다 — 섞여
+    있으면 근거가 모자라 건너뛴다.
+    """
+    fills = _season_fill_steps(steps)
+    if not fills:
+        return []
+    problems = []
+    for step in steps:
+        if not any(step["title"].startswith(t) for t in CELL_STEP_TITLES):
+            continue
+        offer, room = _cell_card_room(step)
+        if not room:
+            continue
+        folded = _fold(room)
+        mates = [
+            fill for fill, own in fills
+            if folded in _fill_rooms(fill)
+            and (not offer or own is None or _fold(own) == _fold(offer))
+        ]
+        if not mates:
+            continue
+        modes = {
+            bool(_occupancy_key_of_value(_labeled_value(fill, OCCUPANCY_KEYS_FIELDS)))
+            for fill in mates
+        }
+        if len(modes) != 1:
+            continue
+        keyed = modes.pop()
+        key = _cell_step_key(step)
+        if keyed == bool(key):
+            continue
+        if keyed:
+            laid = str(_labeled_value(mates[0], OCCUPANCY_KEYS_FIELDS) or "").strip()
+            problems.append(
+                f"{step['num']}단계: {_key_text(key)}을 가리키는데 그 룸(`{room}`)의 "
+                f"`{SEASON_FILL_TITLE}` 는 `{laid}` 로 깐다 — 그 행은 만들어지지 않는다"
+            )
+        else:
+            problems.append(
+                f"{step['num']}단계: {_key_text(key)}을 가리키는데 그 룸(`{room}`)의 "
+                f"`{SEASON_FILL_TITLE}` 는 인원 조합을 비웠다 — 그 좌표는 깔리지 않는다"
+            )
+    return problems
+
+
 def find_audience_only_names(steps):
     """`부가옵션 만들기` · `부과금 추가` 의 `이름` 이 **대상만** 적혀 있으면 오류.
 
@@ -1779,6 +1940,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     child_lodging_addons = find_child_lodging_addon(parsed)
     occupancy_key_legacy = find_occupancy_key_legacy(parsed)
     los_prices_formats = find_los_prices_format(parsed)
+    cell_occupancy_mismatch = find_cell_step_occupancy_mismatch(parsed)
+    cell_coordinate_gaps = find_cell_step_without_filled_coordinate(parsed)
     audience_only_names = find_audience_only_names(parsed)
     hangul_room_names = find_hangul_room_names(parsed)
     extra_bed_rules = find_extra_bed_optional_rules(parsed)
@@ -1879,6 +2042,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "child_lodging_addons": child_lodging_addons,
         "occupancy_key_legacy": occupancy_key_legacy,
         "los_prices_formats": los_prices_formats,
+        "cell_occupancy_mismatch": cell_occupancy_mismatch,
+        "cell_coordinate_gaps": cell_coordinate_gaps,
         "audience_only_names": audience_only_names,
         "hangul_room_names": hangul_room_names,
         "extra_bed_rules": extra_bed_rules,
@@ -1961,6 +2126,7 @@ def main(argv=None):
               + r["child_extra_no_occupancy"]
               + r["child_lodging_addons"] + r["occupancy_key_legacy"]
               + r["los_prices_formats"]
+              + r["cell_occupancy_mismatch"] + r["cell_coordinate_gaps"]
               + r["audience_only_names"] + r["gala_addons"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]

@@ -2675,3 +2675,156 @@ class ChildExtraWithoutOccupancyTest(unittest.TestCase):
     def test_the_example_manual_is_clean(self):
         with open(EXAMPLE, encoding="utf-8") as handle:
             self.assertEqual(cm.find_child_extra_without_occupancy(steps_of(handle.read())), [])
+
+
+def cell_step(num, card, occupancy="비움", title="가격 셀 손으로 고치기 (1번째, 2026-12-24)",
+              save="저장"):
+    """`가격 캘린더` 의 날짜 칸을 열어 고치는(또는 만드는) 단계."""
+    return f"""
+## {num}. {title}
+탭: `가격 캘린더`
+버튼: 달력의 `2026-12-24` 칸 클릭
+카드: {card}
+
+| 칸 | 값 |
+|---|---|
+| 인원 조합 | {occupancy} |
+| 판매가 | 2173000 |
+| 정가 | 비움 |
+| 공급 원가 | 비움 |
+| 상태 | 선택: 판매 가능 |
+
+→ [{save}]
+"""
+
+
+#: 카드 줄 꼴 — 러너가 좌표를 읽는 곳이다.
+CARD_KEYED = "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 조합 `A2` 행"
+CARD_SINGLE = "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 무관 단일가 행"
+CARD_EMPTY_ROW = "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 조합 빈 행"
+CARD_NO_CLAUSE = "`2026 시즌 요금 · Single` × `조식 포함` 행"
+CARD_NEW_ROW = "`2026 시즌 요금 · Single` × `조식 포함` 의 `인원별 · 박수별 가격 추가`"
+
+
+class CellStepOccupancyMismatchTest(unittest.TestCase):
+    """가격 셀 단계는 `카드:` 줄과 `인원 조합` 칸이 같은 좌표를 불러야 한다(러너는 카드 줄을 읽는다)."""
+
+    def problems(self, card, occupancy="비움", **kw):
+        md = HEAD + cell_step(4, card, occupancy=occupancy, **kw)
+        return cm.find_cell_step_occupancy_mismatch(steps_of(md))
+
+    def test_both_sides_keyed_is_ok(self):
+        self.assertEqual(self.problems(CARD_KEYED, "A2"), [])
+
+    def test_both_sides_blank_is_ok(self):
+        self.assertEqual(self.problems(CARD_SINGLE, "비움"), [])
+        self.assertEqual(self.problems(CARD_EMPTY_ROW, "비움"), [])
+        self.assertEqual(self.problems(CARD_NO_CLAUSE, "비움"), [])
+
+    def test_card_without_clause_but_keyed_field_is_error(self):
+        """좌표 절을 빼면 러너는 `인원 무관 단일가` 를 연다 — 칸에 `A2` 를 적어도 다른 행이다."""
+        problems = self.problems(CARD_NO_CLAUSE, "A2")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("인원 무관 단일가 행", problems[0])
+        self.assertIn("`A2` 다", problems[0])
+        self.assertIn("카드 줄에서 좌표를 읽으므로", problems[0])
+
+    def test_keyed_card_with_blank_field_is_error(self):
+        problems = self.problems(CARD_KEYED, "비움")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("인원 조합 `A2` 행", problems[0])
+        self.assertIn("비었다", problems[0])
+
+    def test_different_keys_are_error(self):
+        self.assertEqual(len(self.problems(CARD_KEYED, "A3")), 1)
+
+    def test_select_item_label_is_read_by_its_key(self):
+        """셀렉트 항목 글자는 `키 · 사람 수` 다 — 앞의 키로 견준다."""
+        card = "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 조합 `A2C1_CHD` 행"
+        self.assertEqual(self.problems(card, "선택: A2C1_CHD · 성인 2 · 소아 1"), [])
+
+    def test_new_row_card_is_skipped(self):
+        """새 행 표는 카드에 좌표 절이 없는 것이 정본이다 — 좌표는 표 안의 셀렉트가 정한다."""
+        self.assertEqual(self.problems(CARD_NEW_ROW, "선택: A2 · 성인 2",
+                                       title="가격 셀 만들기 (1번째, 2026-12-24)", save="추가"), [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_cell_step_occupancy_mismatch(steps_of(handle.read())), [])
+
+
+class CellStepCoordinateTest(unittest.TestCase):
+    """가격 셀 단계의 좌표는 그 룸의 `시즌 가격 채우기` 가 실제로 깐 좌표여야 한다."""
+
+    def manual(self, card, fill_keys="A2", occupancy="비움", extra_fill=None, **kw):
+        rows = [("인원 조합(선택)", fill_keys)]
+        md = (HEAD + offer_step(4)
+              + season_step(5, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(6, season="Regular", room="Single", rows=rows))
+        if extra_fill is not None:
+            md += price_fill_step(7, season="Regular", room="Single",
+                                  rows=[("인원 조합(선택)", extra_fill)])
+        return md + cell_step(8, card, occupancy=occupancy, **kw)
+
+    def problems(self, *args, **kw):
+        return cm.find_cell_step_without_filled_coordinate(steps_of(self.manual(*args, **kw)))
+
+    def test_keyed_fill_with_keyed_cell_is_ok(self):
+        self.assertEqual(self.problems(CARD_KEYED, fill_keys="A2", occupancy="A2"), [])
+
+    def test_blank_fill_with_blank_cell_is_ok(self):
+        """G-chicland 꼴 — 채우기도 비움, 셀 단계도 인원 무관 단일가 행이면 맞는 짝이다."""
+        self.assertEqual(self.problems(CARD_SINGLE, fill_keys="비움", occupancy="비움"), [])
+
+    def test_blank_cell_with_keyed_fill_is_error(self):
+        problems = self.problems(CARD_SINGLE, fill_keys="A2", occupancy="비움")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("8단계", problems[0])
+        self.assertIn("인원 무관 단일가 행", problems[0])
+        self.assertIn("`A2` 로 깐다", problems[0])
+        self.assertIn("그 행은 만들어지지 않는다", problems[0])
+
+    def test_keyed_cell_with_blank_fill_is_error(self):
+        problems = self.problems(CARD_KEYED, fill_keys="비움", occupancy="A2")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("인원 조합 `A2` 행", problems[0])
+        self.assertIn("그 좌표는 깔리지 않는다", problems[0])
+
+    def test_new_row_card_uses_its_select(self):
+        """새 행 표는 카드에 좌표가 없다 — 셀렉트가 비면 아무도 팔지 않는 좌표가 하나 더 생긴다."""
+        problems = self.problems(CARD_NEW_ROW, fill_keys="A2", occupancy="비움",
+                                 title="가격 셀 만들기 (1번째, 2026-12-24)", save="추가")
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_mixed_fills_are_skipped(self):
+        """한 룸의 채우기가 섞여 있으면 근거가 모자라 말하지 않는다."""
+        self.assertEqual(self.problems(CARD_SINGLE, fill_keys="A2", occupancy="비움",
+                                       extra_fill="비움"), [])
+
+    def test_another_rooms_fill_does_not_decide(self):
+        md = (HEAD + offer_step(4)
+              + season_step(5, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(6, season="Regular", room="Twin",
+                                rows=[("인원 조합(선택)", "A2")])
+              + cell_step(7, CARD_SINGLE))
+        self.assertEqual(cm.find_cell_step_without_filled_coordinate(steps_of(md)), [])
+
+    def test_manual_without_fill_steps_is_skipped(self):
+        md = HEAD + offer_step(4) + cell_step(5, CARD_SINGLE)
+        self.assertEqual(cm.find_cell_step_without_filled_coordinate(steps_of(md)), [])
+
+    def test_it_is_an_error_not_a_warning(self):
+        md = self.manual(CARD_SINGLE, fill_keys="A2", occupancy="비움")
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+            self.assertEqual(len(r["cell_coordinate_gaps"]), 1, r["cell_coordinate_gaps"])
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(
+                cm.find_cell_step_without_filled_coordinate(steps_of(handle.read())), [])
