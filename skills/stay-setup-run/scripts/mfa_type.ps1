@@ -5,7 +5,7 @@
 #
 # Claude Code / Codex 입력창에서 `!` 로 시작하면 세션 셸에서 실행된다 — 에이전트는 이 스크립트를 실행하지도,
 # 코드를 대신 넣지도 않는다(SKILL.md "로그인 넘김"). 인증 화면 주소는 둘째 인자 또는 환경변수
-# STAY_ERP_MFA_URL 로 준다. 둘 다 없으면 운영 ERP(https://basecamp.team/accounts/login/mfa/)다.
+# STAY_ERP_MFA_URL 로 준다(저장소에는 주소를 적지 않는다).
 #
 # 실행 정책: 서명 없는 스크립트는 기본 정책에서 막히므로 위처럼 `-ExecutionPolicy Bypass -File` 을 붙여 부른다
 # (정책 자체를 바꾸지 않는다). 리눅스·맥은 같은 규약의 mfa_type.sh 를 쓴다.
@@ -21,7 +21,6 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Url)) { $Url = $env:STAY_ERP_MFA_URL }
-if ([string]::IsNullOrWhiteSpace($Url)) { $Url = "https://basecamp.team/accounts/login/mfa/" }
 
 if ($Code -notmatch '^[0-9]{6}$') {
   Write-Error "사용법: mfa_type.ps1 <6자리 숫자> [인증 화면 주소]"
