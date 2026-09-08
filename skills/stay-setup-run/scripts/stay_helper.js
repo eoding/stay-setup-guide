@@ -206,8 +206,35 @@
   // Stay 자체의 2층 모달(`.stay-modal`, 가격 캘린더의 셀 편집 `#stay_cell_edit`).
   // 뒤엣것은 열려 있을 때만 DOM 에 있다(닫으면 조각째 사라진다) — 그래서 `shown` 만으로 갈린다.
   function modalRoot() {
-    var list = [].slice.call(document.querySelectorAll('.modal.open, .stay-modal')).filter(shown);
+    var list = [].slice.call(document.querySelectorAll('.modal.open, .stay-modal')).filter(function (el) {
+      // 확인창(`#stay_confirm`)은 모달로 세지 않는다 — 따로 `confirmRoot()` 가 다룬다.
+      return shown(el) && el.id !== CONFIRM_ID && !el.closest('#' + CONFIRM_ID);
+    });
     return list.length ? list[list.length - 1] : null;
+  }
+
+  /* ─────────────────────── 페이지 안 확인창(hx-confirm) ───────────────────────
+     ERP 2026-09-08 이후 `hx-confirm` 은 브라우저 네이티브 confirm 대신 페이지 안 확인창을
+     띄운다. 열려 있는 동안 `document.documentElement` 에 `data-stay-confirm-open="1"` 이
+     붙고, 루트는 `#stay_confirm`(role=dialog), 문구는 `#stay_confirm_text`,
+     버튼은 `[data-stay-confirm="ok"]` / `[data-stay-confirm="cancel"]` 이다.
+     네이티브 다이얼로그가 아니므로 탭이 멈추지 않는다 — 도구가 직접 눌러도 된다. */
+  var CONFIRM_ID = 'stay_confirm';
+  function confirmRoot() {
+    var el = document.getElementById(CONFIRM_ID);
+    if (!el) return null;
+    if (document.documentElement.getAttribute('data-stay-confirm-open') === '1') return el;
+    return shown(el) ? el : null;
+  }
+  function confirmState() {
+    var el = confirmRoot();
+    if (!el) return null;
+    var t = el.querySelector('#stay_confirm_text');
+    return { open: true, text: trunc(textOf(t) || textOf(el), 300) };
+  }
+  function confirmButton(kind) {
+    var el = confirmRoot();
+    return el ? el.querySelector('button[data-stay-confirm="' + kind + '"]') : null;
   }
   function currentTabLink() {
     return document.querySelector('ul.tab-container li a.active') ||
@@ -1082,6 +1109,8 @@
       logoutWarning: !!(lw && shown(lw)),
       drawer: { open: !!d, title: d ? textOf(d.querySelector('.stay-drawer__title')) : '' },
       modal: { open: !!m, id: m ? (m.id || '') : '', title: m ? trunc(textOf(m.querySelector('.stay-modal__title,.modal-header,h4,h5,.modal-title')) || textOf(m).slice(0, 60), 80) : '' },
+      // 페이지 안 확인창이 떠 있으면 {open:true, text} — 아니면 null.
+      confirm: confirmState(),
       activeTab: link ? textOf(link) : '',
       banner: bannerLines(),
       toast: toastText(),
@@ -1479,9 +1508,33 @@
     var before = { drawer: !!drawerRoot(), modal: !!modalRoot(), url: location.href, path: location.pathname, settles: hx.settles, swaps: hx.swaps };
     hx.error = null;
     var origConfirm = null;
+    // 옛 ERP(2026-09-08 이전)는 `hx-confirm` 을 브라우저 네이티브 confirm 으로 띄운다 —
+    // 그때는 이 교체가 대신 [확인] 을 누른다. 새 ERP 는 페이지 안 확인창(`#stay_confirm`)을
+    // 띄우므로 **이 교체는 쓰이지 않고** 아래 확인창 처리가 [확인] 을 누른다.
+    // 두 판 모두에서 force 가 통하도록 둘 다 남겨 둔다.
     if (o.force) { origConfirm = window.confirm; window.confirm = function () { return true; }; }
     try { btn.click(); } finally {
       if (origConfirm) { window.confirm = origConfirm; }
+    }
+
+    var confirmText = null;
+    if (o.force) {
+      // 페이지 안 확인창이 뜨는지 최대 2초 지켜본다. 옛 ERP 처럼 확인창 없이 곧장 요청이
+      // 나갔으면 기다리지 않고 빠져나온다.
+      var tc = Date.now(), cOpen = false;
+      while (Date.now() - tc < 2000) {
+        if (confirmRoot()) { cOpen = true; break; }
+        if (hx.pending > 0 || hx.settles > before.settles || hx.swaps > before.swaps ||
+          hx.unloading || location.pathname !== before.path) break;
+        await sleep(TICK);
+      }
+      if (cOpen) {
+        var cs = confirmState();
+        confirmText = cs ? cs.text : '';
+        var okBtn = confirmButton('ok');
+        if (okBtn) okBtn.click();
+        await waitFor(function () { return !confirmRoot(); }, 3000);
+      }
     }
 
     var status = 'timeout', t0 = Date.now();
@@ -1501,6 +1554,9 @@
     if (failToast(st.toast) && errors.indexOf(clean(st.toast)) < 0) errors.push(trunc(clean(st.toast), 200));
     if (hx.error) errors.unshift(hx.error);
     var out = { status: status, errors: errors, toast: st.toast, url: st.url, banner: st.banner };
+    // 페이지 안 확인창이 떠서 러너가 [확인] 을 대신 눌렀으면 그 문구를 돌려준다.
+    if (confirmText !== null) out.confirmText = confirmText;
+    if (st.confirm) out.confirm = st.confirm;
     if (st.loginPage) out.status = 'login';
     else if (status === 'settled') {
       var closed = (before.drawer && !st.drawer.open) || (before.modal && !st.modal.open);
@@ -1607,6 +1663,12 @@
   }
 
   async function close() {
+    // 페이지 안 확인창이 떠 있으면 먼저 [취소] 로 닫는다 — 그 위에서는 모달/드로어를 못 닫는다.
+    if (confirmRoot()) {
+      var cx = confirmButton('cancel');
+      if (cx) cx.click(); else pressEsc();
+      await waitFor(function () { return !confirmRoot(); }, 3000);
+    }
     var m = modalRoot();
     if (m) {
       var b = findButton(m, '닫기') || m.querySelector('.modal-close,[data-dismiss],.close');
@@ -1618,7 +1680,7 @@
       try { window.dispatchEvent(new CustomEvent('stay-drawer-close')); } catch (e) { /* 무시 */ }
       await waitFor(function () { return !drawerRoot(); }, 3000);
     }
-    return remember({ drawer: !!drawerRoot(), modal: !!modalRoot() });
+    return remember({ drawer: !!drawerRoot(), modal: !!modalRoot(), confirm: confirmState() });
   }
 
   // 파일 다리: 페이지에 고정된 숨은 파일 입력. 브라우저 도구가 여기에 파일을 올리면

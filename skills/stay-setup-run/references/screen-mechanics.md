@@ -94,6 +94,16 @@
 글자와 별개로 **`hx-confirm` 이 붙은 버튼은 전부** 거부한다 — 운영 화면에서 확인창이 붙는 버튼은
 이 목록보다 넓다(부가옵션·부과금·프로모션·시즌·요금제·룸 사진의 [삭제] 등).
 
+**확인창** — ERP 2026-09-08 이후 `hx-confirm` 은 브라우저 네이티브 confirm 이 아니라 **페이지 안
+확인창**을 띄운다: 열려 있는 동안 `<html>` 에 `data-stay-confirm-open="1"` 이 붙고, 루트는
+`#stay_confirm`(role=dialog), 문구는 `#stay_confirm_text`, 버튼은
+`#stay_confirm button[data-stay-confirm="ok"]` 와 `…="cancel"` 이다. 템플릿의 `hx-confirm` 속성은
+그대로 남아 러너의 위험 버튼 거부는 계속 동작한다. `stayRun.submit(글자, {force:true})` 로 누르면
+러너가 [확인] 을 대신 누르고 문구를 `confirmText` 로 돌려주며, `stayRun.state().confirm` 이
+`{open:true, text}` 로 알려 주고 `stayRun.close()` 는 [취소] 로 먼저 닫는다. 러너 없이 도구가
+직접 누를 때는 `[data-stay-confirm="ok"]` 를 클릭한다 — 네이티브 다이얼로그가 아니므로 탭이 멈추지
+않는다. 그전 판(네이티브 confirm)에서는 러너가 `window.confirm` 을 대신 답한다.
+
 **편집 화면 머리의 링크** — 오른쪽 위에 [상세보기]·[이력]·[목록으로]·[저장] 이 있다.
 [상세보기] 는 여행사 도메인의 **고객 화면**을 새 탭으로 열고, [목록으로] 는 호텔 목록으로 **떠난다**.
 러너는 둘 다 누르지 않는다 — 화면을 떠나면 드로어의 안 저장한 값이 사라지고 부트를 다시 올려야 한다.
