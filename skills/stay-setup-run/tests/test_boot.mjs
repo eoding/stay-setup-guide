@@ -63,6 +63,20 @@ const STEPS = {
       head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원별 · 박수별 가격 추가', buttons: [], buttons_parsed: [] },
       fields: [{ label: '판매가', kind: 'typed', value: '130' }],
       longtexts: [], photos: [], submit: '추가'
+    },
+    {
+      // 규칙서가 새 행 단계의 카드 줄을 `… 의 인원별 · 박수별 가격 추가` 로 쓰라고 한다 — 그 꼴은
+      // 카드에 좌표가 없으므로 `인원 조합` 칸이 좌표를 정해야 한다. 종전에는 무조건 `무관` 으로
+      // 굳어, 칸에 `A2` 를 적어도 아무도 팔지 않는 좌표가 생겼다.
+      no: 4,
+      title: '가격 셀 만들기 (2026-01-02)',
+      kind: '가격 셀 만들기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원별 · 박수별 가격 추가', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '인원 조합', kind: 'select', value: '선택: A2 · 성인 2' },
+        { label: '판매가', kind: 'typed', value: '140' }
+      ],
+      longtexts: [], photos: [], submit: '추가'
     }
   ]
 };
@@ -226,6 +240,14 @@ const run = async () => {
   ok(r2b.newRow === true, 'runCellStep: 새 카드 이름도 새 행으로 잡는다', r2b);
   ok(r2b.want && r2b.want.ratePlan === '기본 요금제',
      'runCellStep: 새 카드 이름에서 요금제를 그대로 읽는다', r2b.want);
+  ok(r2b.want.occ === '무관',
+     'runCellStep: 좌표를 안 부르는 카드 + 인원 조합 칸 없음 → 무관', r2b.want);
+
+  // 2-c) 같은 카드 꼴이지만 `인원 조합` 칸이 좌표를 준다 — 칸이 이겨야 한다.
+  const r2c = await win.runCellStep(4, { dry: true });
+  ok(!r2c.error, 'runCellStep: 새 행 카드 + 인원 조합 칸도 읽는다', r2c.error);
+  ok(r2c.want && r2c.want.occ === 'A2',
+     'runCellStep: 카드가 좌표를 안 부르면 `인원 조합` 칸(`선택: A2 · 성인 2`)에서 읽는다', r2c.want);
 
   // 3) 룸 사진 올리기 — 지시서가 `→ [사진 추가]` 로 끝나는 단계(2026-09-04 합의).
   //    그 버튼은 파일 고르개이고 이 화면에는 저장 버튼이 없다. 러너가 대안(`저장`…)을 훑으면

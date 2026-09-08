@@ -128,6 +128,21 @@
     if (m3) m = [m3[0], m3[1], m3[2], null];
     if (!date || !m) { out.error = '제목의 날짜나 카드의 `오퍼 · 룸 × 요금제 의 인원 조합 N 행` 꼴을 읽지 못했습니다'; return out; }
     var linkName = clean(m[1]), ratePlan = clean(m[2]), occ = m[3] ? clean(m[3]) : '무관'; // `인원 무관 단일가 행` 이면 무관
+    // 카드 줄이 좌표를 안 부르는 꼴(새 행 표 이름 · `… × 요금제 행`)이면 **`인원 조합` 칸으로 되돌아본다.**
+    // 규칙서(§가격 셀)가 새 행 단계의 카드 줄을 `… 의 인원별 · 박수별 가격 추가` 로 쓰라고 하는데,
+    // 그 꼴은 위 m3 가지에서 `m[3]=null` 이라 종전에는 무조건 `무관` 으로 굳었다 — 칸에 `A2` 를
+    // 적어 두어도 새 행 셀렉트가 `인원 무관 단일가` 로 맞춰져, 그 룸이 `A2` 로 깔리는 계약에서는
+    // **아무도 팔지 않는 좌표**가 하나 생긴다(2026-09-08 C-voco 에서 실제로 났다).
+    // 칸 값은 셀렉트 항목 글자(`선택: A2 · 성인 2`)로 오므로 접두·꼬리를 벗겨 키만 남긴다 —
+    // 검사기 `_occupancy_key_of_value` 와 **같은 판정**이다(두 벌이 되면 또 어긋난다).
+    if (!m[3]) {
+      var occField = (s.fields || []).filter(function (f) {
+        return /^인원\s*조합$/.test(clean(f.label || '').replace(/\(선택\)$/, ''));
+      })[0];
+      var occRaw = occField ? clean(occField.value || occField.raw_value || '') : '';
+      occRaw = occRaw.replace(/^선택\s*:\s*/, '').split(/\s+[·・‧∙]\s+/)[0];
+      if (occRaw && !/^(비움|인원\s*무관\s*단일가)$/.test(occRaw)) occ = occRaw;
+    }
     if (/^(빈|없음|-)$/.test(occ)) occ = '무관'; // `인원 조합 빈 행` = 인원 무관 행
     var parts = linkName.split(/\s+[·・‧∙]\s+/); var offerName = parts.slice(0, -1).join(' · '), roomName = parts[parts.length - 1];
     out.want = { date: date, offer: offerName, room: roomName, ratePlan: ratePlan, occ: occ };
