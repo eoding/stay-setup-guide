@@ -218,6 +218,13 @@
 
 <div id="toast-container"></div>
 
+<!-- 페이지 안 확인창 — ERP 2026-09-08 이후 `hx-confirm` 이 이것을 띄운다 -->
+<div id="stay_confirm" role="dialog" aria-modal="true" style="display:none">
+  <p id="stay_confirm_text"></p>
+  <button type="button" data-stay-confirm="ok" onclick="closeStayConfirm('ok')">확인</button>
+  <button type="button" data-stay-confirm="cancel" onclick="closeStayConfirm('cancel')">취소</button>
+</div>
+
 <script>
 /* ── 앞 칸이 뒤 칸을 세운다 (Alpine x-show 흉내) ──────────────
    실제 화면은 Alpine 이 다음 틱에 세우는데, 여기서는 일부러 200ms 늦춘다 —
@@ -339,7 +346,8 @@ var DRAWER_HTML = [
   '<button type="button" onclick="fakeSave()">저장</button>',
   // 실패 띠를 내는 버튼 — 실패로 읽히는 글자는 그대로 errors 에 들어가야 한다
   '<button type="button" onclick="fakeSave(\'저장에 실패했습니다\')">등록</button>',
-  '<button type="button" hx-confirm="정말 삭제할까요?">삭제</button>'
+  // ERP 2026-09-08 이후 `hx-confirm` 은 네이티브 confirm 이 아니라 페이지 안 확인창을 띄운다.
+  '<button type="button" hx-confirm="정말 삭제할까요?" onclick="openStayConfirm(this)">삭제</button>'
 ].join('');
 
 /* ── Materialize 셀렉트 흉내 ─────────────────────────────────── */
@@ -392,6 +400,32 @@ document.addEventListener('mousedown', function (e) {
     }, 200);
   });
 });
+
+/* ── 페이지 안 확인창(ERP 2026-09-08~) 흉내 ──────────────────────
+   `hx-confirm` 이 붙은 버튼을 누르면 `#stay_confirm` 이 열리고 `<html>` 에
+   `data-stay-confirm-open="1"` 이 붙는다. [확인]/[취소] 는 `data-stay-confirm` 로 가른다. */
+window.stayConfirmResult = null;
+function openStayConfirm(btn) {
+  var el = document.getElementById('stay_confirm');
+  el.querySelector('#stay_confirm_text').textContent = btn.getAttribute('hx-confirm') || '';
+  el.style.display = 'block';
+  document.documentElement.setAttribute('data-stay-confirm-open', '1');
+  window.stayConfirmResult = null;
+}
+function closeStayConfirm(answer) {
+  var el = document.getElementById('stay_confirm');
+  el.style.display = 'none';
+  document.documentElement.removeAttribute('data-stay-confirm-open');
+  window.stayConfirmResult = answer;
+  // [확인] 이면 실제 화면처럼 htmx 요청이 나간다 — 드로어는 그대로 둔다.
+  if (answer !== 'ok') return;
+  document.body.dispatchEvent(new CustomEvent('htmx:beforeRequest', { bubbles: true }));
+  setTimeout(function () {
+    document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSwap', { bubbles: true }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSettle', { bubbles: true }));
+  }, 100);
+}
 
 /* ── 저장 흉내: htmx 요청처럼 이벤트를 내고 드로어를 닫는다 ────── */
 function fakeSave(toastText) {

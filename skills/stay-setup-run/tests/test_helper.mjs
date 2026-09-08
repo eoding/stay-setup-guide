@@ -153,6 +153,25 @@ const run = async () => {
   const sale = await R.submit('판매 시작', { force: true });
   ok(sale.status === 'refused' && sale.reason === 'sale-start', 'submit: [판매 시작] 은 force 로도 거부', sale);
 
+  // 5a. force 로 누르면 페이지 안 확인창(ERP 2026-09-08~)의 [확인] 을 러너가 대신 누른다.
+  win.stayConfirmResult = null;
+  const delF = await R.submit('삭제', { force: true });
+  ok(delF.status !== 'refused', 'submit: force 면 [삭제] 를 실제로 누른다', delF.status);
+  ok(delF.confirmText === '정말 삭제할까요?', 'submit: 확인창 문구를 confirmText 로 돌려준다', delF.confirmText);
+  ok(win.stayConfirmResult === 'ok', 'submit: 확인창의 [확인] 을 눌렀다', win.stayConfirmResult);
+  ok(R.state().confirm === null, 'state: 확인창이 닫히면 confirm 은 null', R.state().confirm);
+
+  // 5a-2. 확인창이 떠 있으면 state() 가 알려 주고 close() 는 [취소] 로 닫는다.
+  win.stayConfirmResult = null;
+  win.document.querySelector('button[hx-confirm]').click();
+  const cs = R.state().confirm;
+  ok(cs && cs.open === true && cs.text === '정말 삭제할까요?', 'state: 열린 확인창을 confirm 으로 알려 준다', cs);
+  ok(R.state().modal.open === false, 'state: 확인창을 모달로 세지 않는다', R.state().modal);
+  await R.close();
+  ok(win.stayConfirmResult === 'cancel', 'close: 확인창은 [취소] 로 닫는다', win.stayConfirmResult);
+  ok(R.state().confirm === null, 'close: 확인창이 닫혔다', R.state().confirm);
+  win.openRoomDrawer('스탠다드');
+
   // 5b. 룸 사진의 [사진 추가] 는 저장 버튼이 아니라 파일 고르개다.
   //     `not-found` 로 돌려주면 부르는 쪽이 대안을 훑다가 드로어의 [저장] 을 눌러
   //     사진이 붙기 전에 드로어가 닫힌다 — 그래서 따로 알려 준다.

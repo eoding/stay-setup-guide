@@ -137,10 +137,12 @@ checkGuide();                                      // [] 면 진행. 비어 있�
 자주 쓰는 도우미:
 
 ```js
-stayRun.state()                    // {url, hotelId, loginPage, logoutWarning, drawer, modal, activeTab, banner, toast}
+stayRun.state()                    // {url, hotelId, loginPage, logoutWarning, drawer, modal, confirm, activeTab, banner, toast}
+                                   // confirm 은 페이지 안 확인창 — 떠 있으면 {open:true, text}, 아니면 null
 stayRun.tab("객실") · stayRun.open({button, row, card, block}) · stayRun.fill(fields)
 stayRun.submit("저장")             // {status:"closed|stayed|navigated|login|timeout|refused|not-found|upload-label", errors, toast}
                                    // errors 는 진짜 오류만이다 — 성공 안내 띠는 toast 로만 온다
+                                   // force 로 확인창 버튼을 누르면 그 문구가 confirmText 로 온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
 stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFor(fn, ms) · stayRun.findButton(scope, "저장")
 stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progressState() · stayRun.progressHide()
@@ -279,7 +281,8 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
 - **호텔 만들기 전에 지시서의 `공급 통화` 를 본다.** USD 가 아니면 호텔을 만들지 말고 사용자에게 그 통화가 맞는지 확인받는다. 러너는 통화도 금액도 바꾸지 않는다 — 지시서에 적힌 대로만 넣는다.
 
 - **[판매 시작] 은 누르지 않는다.** 도우미가 거부하고 `force` 로도 안 된다. 검증 배너를 확인하고 판매를 시작하는 것은 사용자다.
-- **위험 버튼**([삭제]·[그룹 삭제]·[보관]·[보관 해제]·[판매 종료]·[판매 재개]·[공용으로]·[전용으로 분리]·[세후가로 확정]·[N월 닫기])은 러너가 거부한다(`refused`). 글자와 별개로 **확인창(`hx-confirm`)이 붙은 버튼은 전부** 거부한다. 지시서가 요구하면 **감독하는 에이전트나 사람이 대상 행을 눈으로 확인한 뒤** 직접 누른다. 확인창(hx-confirm)은 페이지 안에서 대체한 뒤 누르고, 무엇을 왜 눌렀는지 로그 `마무리` 에 적는다.
+- **위험 버튼**([삭제]·[그룹 삭제]·[보관]·[보관 해제]·[판매 종료]·[판매 재개]·[공용으로]·[전용으로 분리]·[세후가로 확정]·[N월 닫기])은 러너가 거부한다(`refused`). 글자와 별개로 **확인창(`hx-confirm`)이 붙은 버튼은 전부** 거부한다. 지시서가 요구하면 **감독하는 에이전트나 사람이 대상 행을 눈으로 확인한 뒤** 직접 누른다. 무엇을 왜 눌렀는지 로그 `마무리` 에 적는다.
+  - 확인창 — **ERP 2026-09-08 이후 `hx-confirm` 은 페이지 안 `#stay_confirm`** 을 띄운다(네이티브 다이얼로그가 아니라 탭이 멈추지 않는다). `stayRun.submit(글자, {force:true})` 로 누르면 러너가 [확인] 을 대신 누르고 문구를 `confirmText` 로 돌려준다. 러너 없이 도구가 직접 누를 때는 `#stay_confirm button[data-stay-confirm="ok"]` 를 클릭한다(취소는 `…="cancel"`). 그전 판은 네이티브 confirm 이라 러너가 `window.confirm` 을 대신 답한다 — 양쪽 다 `force` 로 동작한다.
 - **만들기 단계는 같은 이름이 목록에 이미 있으면 건너뛴다**(`existsInList`). 오퍼별 카드가 있는 화면은 그 카드 안에서만 본다.
 - **새 호텔은 오퍼 0 · 룸 0 이다**(2026-09-04). 첫 오퍼도 [오퍼 추가], 1번째 룸도 [룸 추가] 로 만든다 — 미리 만들어져 고쳐 쓸 오퍼·룸은 없다. 눈에 보이지 않는 필수 레코드와 `기본 요금제` **정본** 은 그대로 생기므로, 요금제는 여전히 새로 만들지 말고 정본을 고쳐 쓴다.
 - **판매 연결은 1번째 룸부터 전부** 만든다. 룸 추가 드로어는 룸 타입만 만들 뿐 연결행을 만들지 않는다 — 자동으로 생기는 연결행은 없다.
