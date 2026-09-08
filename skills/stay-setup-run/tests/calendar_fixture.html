@@ -78,7 +78,11 @@ var CELL_EDIT = [
   '<th>인원 조합</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th><th>액션</th>',
   '</tr></thead><tbody><tr>',
   '<td><select name="occupancy_key" class="browser-default">',
-  '<option value="">인원 무관 단일가</option><option value="2">2인</option><option value="4">4인</option>',
+  // 항목 글자는 **키가 앞**이다(`forms.occupancy_select_label`, 2026-09-08) — `A2 · 성인 2`.
+  // 맨 숫자(`2인`·`4인`)는 이사 전 DB 에만 남는 옛 형식이라 읽기 폴백으로 함께 세워 둔다.
+  '<option value="">인원 무관 단일가</option>',
+  '<option value="A2">A2 · 성인 2</option><option value="A2C1_CHD">A2C1_CHD · 성인 2 · 소아 1</option>',
+  '<option value="2">2인</option><option value="4">4인</option>',
   '</select><input type="hidden" name="los_nights" value="1"></td>',
   '<td><input type="number" name="amount"></td>',
   '<td><input type="number" name="original_amount"></td>',
