@@ -1711,6 +1711,37 @@ class OccupancyKeyIsNotASheetCellTest(unittest.TestCase):
 """
         self.assertEqual(self.cells(body), ["B47"])
 
+    def test_head_lines_that_name_an_occupancy_key_are_clean(self):
+        """`카드:`·`주의:` 줄도 A-형을 부른다 — 표 행만 걸러서는 모자라다."""
+        body = """
+## 4. 가격 셀 손으로 고치기 (1번째, 2026-09-15)
+탭: `가격 캘린더`
+카드: `기본 · Deluxe` × `조식 포함` 의 인원 조합 `A2` 행
+주의: 이 룸만 인원 조합이 `A2` 하나다. 인원 조합별 조정은 비운다
+
+| 칸 | 값 |
+|---|---|
+| 판매가 | 120.00 |
+
+→ [저장]
+"""
+        self.assertEqual(self.cells(body), [])
+
+    def test_a_real_coordinate_on_an_occupancy_line_is_still_caught(self):
+        """줄만 보고 통째로 건너뛰면 안 된다 — 그 줄의 `B47` 은 여전히 시트 좌표다."""
+        body = """
+## 4. 호텔 정보 입력
+탭: `호텔 정보`
+주의: 인원 조합은 요금표 B47 참고
+
+| 칸 | 값 |
+|---|---|
+| 소개 | 바다 앞 |
+
+→ [저장]
+"""
+        self.assertEqual(self.cells(body), ["B47"])
+
 
 def child_addon_step(num, name, title="부가옵션 만들기", extra=()):
     body = "\n".join(f"| {k} | {v} |" for k, v in extra)

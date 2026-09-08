@@ -529,6 +529,18 @@ class TestGroupCandidateKind(unittest.TestCase):
         pre = parse_guide.preflight(self.steps)
         self.assertEqual(pre["unknown_kinds"], [])
 
+    def test_the_third_spelling_is_known_too(self):
+        """C-voco 지시서(2026-09-08)의 `택1 후보 혜택 추가` — 같은 화면의 또 다른 제목.
+
+        표기가 셋으로 갈렸어도 러너가 하는 일은 같다(그룹 카드 [이 그룹에 혜택 추가]) —
+        막으면 사람이 고칠 것이 없는 자리에서 멈춘다. 표기를 하나로 고르는 것은 사전의 몫이다.
+        """
+        md = GROUP_CANDIDATE.replace("택1 그룹 후보 추가", "택1 후보 혜택 추가")
+        _, raws = parse_guide.parse_markdown(md)
+        steps = [parse_guide.build_step(r) for r in raws]
+        self.assertIn("택1 후보 혜택 추가", parse_guide.KNOWN_KINDS)
+        self.assertEqual(parse_guide.preflight(steps)["unknown_kinds"], [])
+
 
 def age_band_step(no, name, lo, hi, card="2026 계약"):
     """연령 구간 단계 한 개 — 겹침 시험용."""
