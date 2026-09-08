@@ -1712,25 +1712,30 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         m = ROW.match(l)
         return bool(m and "주소" in m.group(1))
 
-    #: 인원 조합 계열 행(`인원 조합(선택)` · `인원 조합별 조정(선택)` · 가격 셀의 `인원 조합`)의
-    #: 값은 **A-형 좌표**다(`A2,A3` · `A3:+14` · `A2C1_CHD`) — 시트 좌표가 아니라 화면이
-    #: 요구하는 정본 표기다(2026-09-08 `services/occupancy_key`).
+    #: 인원 조합의 값은 **A-형 좌표**다(`A2,A3` · `A3:+14` · `A2C1_CHD`) — 시트 좌표가 아니라
+    #: 화면이 요구하는 정본 표기다(2026-09-08 `services/occupancy_key`). 표 행뿐 아니라
+    #: `카드: … 의 인원 조합 \`A2\` 행` · `주의: 이 룸만 인원 조합이 \`A2\` 하나다` 처럼
+    #: 머리 줄에도 나온다.
     #:
-    #: **행으로 거르지 토큰으로 거르지 않는다.** `CELL_EXCLUDE` 에 `^A\d{1,2}$` 를 더하면
-    #: `A2` 는 통과하지만 **진짜 시트 A열 좌표 `A70` 까지 함께 눈감는다** — 금지어 검사가
-    #: 잡아야 할 것을 조용히 놓치는 쪽이라, 오탐을 없애려다 미탐을 만든 것이 된다.
-    #: 자리(행)로 거르면 `인원 조합` 줄의 `A2` 만 빠지고 다른 줄의 `A70` 은 그대로 잡힌다.
-    #: `_address_row` 와 같은 방식이다.
-    def _occupancy_row(l):
-        m = ROW.match(l)
-        return bool(m and m.group(1).strip().startswith("인원 조합"))
+    #: 거르는 축이 **둘**인 이유 — 어느 한쪽만으로는 구멍이 난다:
+    #:  ① 자리(줄): `인원 조합` 이 적힌 줄에서만 눈감는다. 전역으로 `^A\d{1,2}$` 를
+    #:     `CELL_EXCLUDE` 에 더하면 `A2` 는 통과하지만 **진짜 시트 A열 좌표 `A70` 까지
+    #:     함께 눈감아**, 오탐을 없애려다 미탐을 만든다.
+    #:  ② 모양(토큰): 그 줄에서도 A-형(`A2`)만 빼고 `B47` 은 그대로 잡는다. 줄만 보고
+    #:     통째로 건너뛰면 `주의: 인원 조합은 요금표 B47 참고` 같은 줄이 통과한다.
+    #: `_address_row`(주소 칸의 `Lot TT13`)와 같은 결이되 축이 하나 더 있다.
+    A_FORM = re.compile(r"^A\d+$")
+
+    def _occupancy_line(l):
+        return "인원 조합" in l
 
     cells = [
         m.group(0)
         for l in lines
-        if not l.startswith("```") and not _address_row(l) and not _occupancy_row(l)
+        if not l.startswith("```") and not _address_row(l)
         for m in CELL.finditer(l)
         if not CELL_EXCLUDE.match(m.group(0))
+        and not (_occupancy_line(l) and A_FORM.match(m.group(0)))
     ]
 
     folders = [l for l in lines if l.startswith("폴더:")]
