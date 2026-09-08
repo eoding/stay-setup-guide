@@ -299,6 +299,40 @@ const run = async () => {
   const rbIncl2 = R.readback(inclFields);
   ok(rbIncl2.mismatch.length === 0, 'readback: 범위를 주지 않아도 같다', rbIncl2.mismatch);
 
+  // 10d. 시즌 [가격] 드로어의 2026-09-08 신설 칸 둘.
+  //      ① `아동 추가 금액 — 소아` 는 구분자가 EM DASH(U+2014) 앞뒤 공백이다 — `norm()` 이
+  //         가운뎃점·대시를 지우므로 화면 라벨과 tier 4 로 맞아야 한다(눈으로 못 가리는 글자라
+  //         **코드포인트로 적는다**: 편집·복사 과정에서 하이픈으로 바뀌면 시험이 조용히 무력해진다).
+  //      ② `성인 요금의 %` 구간의 칸은 `disabled`+`readonly` 다 — 지시서가 적는
+  //         `자동 입력됨 · 그대로 둠`(kind `auto`)을 만나면 **건드리지 않고 지나가야** 한다.
+  const EMDASH = '—';
+  win.openFragment('stay_season_fill_form', '가격 채우기 — Low');
+  const seasonScope = { card: '가격 채우기' };
+  const autoBefore = q('[name=child_extra_INF]').value;
+  const r13 = await R.fill([
+    { label: '판매 단가(공급 통화)', kind: 'typed', value: '92.00' },
+    { label: '인원 조합(선택)', kind: 'typed', value: 'A2,A3' },
+    { label: '인원 조합별 조정(선택)', kind: 'typed', value: 'A3:+30' },
+    { label: '박수별 단가(선택)', kind: 'typed', value: '3:100,5:90' },
+    { label: '아동 추가 금액 ' + EMDASH + ' 소아', kind: 'typed', value: '23.18' },
+    { label: '아동 추가 금액 ' + EMDASH + ' 유아', kind: 'auto' },
+    { label: '이미 값이 있는 날도 덮기', kind: 'uncheck' }
+  ], seasonScope);
+  const bad13 = r13.filter((x) => x.status !== 'ok' && x.status !== 'skipped');
+  ok(bad13.length === 0, 'fill: 시즌 가격 채우기 칸이 모두 ok', bad13);
+  ok(q('[name=los_prices]').value === '3:100,5:90', 'DOM: 박수별 단가(선택)', q('[name=los_prices]').value);
+  ok(q('[name=occupancy_keys]').value === 'A2,A3', 'DOM: 인원 조합(선택)', q('[name=occupancy_keys]').value);
+  ok(q('[name=occupancy_adjust]').value === 'A3:+30', 'DOM: 인원 조합별 조정(선택)', q('[name=occupancy_adjust]').value);
+  ok(q('[name=child_extra_CHD]').value === '23.18',
+    'fill: `아동 추가 금액 — 소아` 를 EM DASH 라벨로 찾는다', q('[name=child_extra_CHD]').value);
+  ok(r13[4].tier === undefined || r13[4].status === 'ok', 'fill: 소아 칸이 ok', r13[4]);
+  ok(r13[5].status === 'skipped', 'fill: `자동 입력됨` 칸은 건너뛴다', r13[5]);
+  ok(q('[name=child_extra_INF]').value === autoBefore,
+    'fill: 읽기 전용(`성인 요금의 %`) 아동 금액 칸을 건드리지 않았다', q('[name=child_extra_INF]').value);
+  const rb13 = R.readback([{ label: '아동 추가 금액 ' + EMDASH + ' 소아', kind: 'typed', value: '23.18' },
+                           { label: '박수별 단가(선택)', kind: 'typed', value: '3:100,5:90' }], seasonScope);
+  ok(rb13.mismatch.length === 0, 'readback: 신설 칸 둘을 되읽는다', rb13.mismatch);
+
   // 11. 2026-09-04 화면의 위험 버튼 — 이름만으로도 거부한다
   win.closeDrawer();
   const danger = { card: '위험 버튼' };
@@ -314,6 +348,27 @@ const run = async () => {
   const sm = R.state().modal;
   ok(sm.open === true && sm.id === 'stay_cell_edit' && /싱글룸/.test(sm.title),
     'state: 열린 `.stay-modal` 을 알아본다', sm);
+
+  // 12b. 그 모달의 `인원 조합` 이 텍스트 → **셀렉트**로 바뀌었다(2026-09-08).
+  //      항목 글자는 키가 앞이다: `A2C1_CHD · 성인 2 · 소아 1`. 원고는 좌표만 적으므로
+  //      `A2` 는 `A2C1_CHD` 의 앞글자이기도 해서 글자 전체로는 둘 다에 걸린다 —
+  //      앞 조각이 **완전히 같은** 항목을 골라야 한다.
+  const occSel = () => q('[name=occupancy_key]');
+  const cell = { card: '인원별 · 박수별 가격 추가' };
+  for (const [want, value, why] of [
+    ['A2C1_CHD', 'A2C1_CHD', '키만 적어도 `A2C1_CHD · 성인 2 · 소아 1` 을 고른다'],
+    ['A2', 'A2', '`A2` 는 `A2C1_CHD` 가 아니라 `A2 · 성인 2` 다'],
+    ['인원 무관 단일가', '', '`인원 무관 단일가` 는 빈 값이다']
+  ]) {
+    occSel().selectedIndex = 1;
+    const r = await R.fill([{ label: '인원 조합', kind: 'select', value: want }], cell);
+    ok(r[0].status === 'ok', 'fill: [인원 조합] `' + want + '` — ' + why, r[0]);
+    ok(occSel().value === value, 'DOM: [인원 조합] = `' + value + '`', occSel().value);
+  }
+  // 목록에 없는 좌표는 지어내지 않는다 — 그 계약에 없는 조합을 조용히 만들면 안 된다
+  const noOcc = await R.fill([{ label: '인원 조합', kind: 'select', value: 'A9C9_ZZZ' }], cell);
+  ok(noOcc[0].status !== 'ok', 'fill: 목록에 없는 좌표는 고르지 않는다', noOcc[0]);
+
   win.document.getElementById('stay_cell_edit').style.display = 'none';
 
   // 13. 진행 표시 띠 — 화면 오른쪽 위에 늘 떠 있는 한 줄. 지켜보는 사람이 콘솔 없이도 읽는다.

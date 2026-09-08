@@ -28,6 +28,13 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
+- 유료 연령 구간마다 `시즌 가격 채우기` 에 `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 아이 1박 요금의 자리는 그 칸 하나다)
+- `아동 추가 금액` 을 적었는데 `인원 조합(선택)` 이 비었는지(오류 — 아동 금액은 성인 좌표 위에 얹혀 화면이 저장을 막는다)
+- `연령 구간 만들기` 가 그 오퍼의 첫 `시즌 가격 채우기` 보다 앞인지(오류 — 유료 구간이 없으면 그 드로어에 아동 금액 칸이 서지 않는다)
+- 부가옵션이 아이의 잠자리(쉐어베드·소파베드·아동 1박)를 파는지(오류 — 식사·픽업·엑스트라베드는 따로 사는 것이라 부가옵션이 맞다)
+- `밴드 코드` 가 영대문자·숫자 2~8자인지(오류 — 그 코드가 가격 셀 좌표에 그대로 실린다)
+- `인원 조합(선택)`·`인원 조합별 조정(선택)` 의 키가 A-형(`A2`·`A2C1_CHD`)인지(오류 — 옛 숫자 키 `2,3`·`3:+14`)
+- `박수별 단가(선택)` 가 `박수:1박 단가` 목록인지(오류 — 부호 없음 · 박수 2 이상 · 같은 박수 한 번)
 - 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
 - `룸 만들기` 의 `룸 이름` 에 한글이 있는지(경고 — 룸 이름은 계약서 원어, 한글은 `오퍼별 표시명`)
 - 엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 인지(경고 — 계약서가 필수라고 하면 `기준 성인 초과 시 의무`)
@@ -160,7 +167,11 @@ AFTER_OFFER_TITLES = ("룸 만들기", "판매 연결")
 
 # `오퍼별 표시명 · <룸 카테고리명>` 처럼 뒤에 행 이름이 붙는 칸 — 사전과는 앞부분으로 대조한다.
 # `연령별 단가 · <노출명>` 도 같다: 부과금 드로어의 그 표는 이 오퍼의 연령 구간마다 칸이 하나씩 늘어난다.
-ROW_SUFFIX_FIELDS = ("오퍼별 표시명", "연령별 단가")
+# `아동 추가 금액 — <노출명>` 은 시즌 가격 채우기 드로어에서 **유료** 연령 구간마다 늘어난다 —
+# 구분자가 가운뎃점이 아니라 EM DASH 라 붙는 말을 뗄 때 그 구분자도 함께 본다.
+ROW_SUFFIX_FIELDS = ("오퍼별 표시명", "연령별 단가", "아동 추가 금액")
+#: 뒤에 붙는 행 이름을 가르는 구분자 — 정본은 ` · ` 와 ` — ` 다(원고 오타로 EN DASH·하이픈도 받는다).
+ROW_SUFFIX_SEPARATORS = (" \u00b7 ", " \u2014 ", " \u2013 ", " - ")
 
 # 룸 이름은 계약서·요금표가 부르는 **원어 그대로**다 — ERP 객실 목록과 계약서 요금표를 이름으로
 # 맞춰야 어느 줄이 어느 룸인지 대조된다. 고객이 보는 한글 이름은 판매 연결 일괄 드로어의
@@ -179,15 +190,55 @@ ADDON_RULE_OPTIONAL = "의무 아님"
 ADDON_RULE_OVER_ADULT = "기준 성인 초과 시 의무"
 
 # 연령 구간 — 계약서에 아동 정책이 있을 때만 넣는 선택 단계.
-# 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표는
-# 이미 만들어 둔 구간만 보여 주므로 부과금보다 앞이다.
+# 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표와
+# 시즌 가격 채우기 드로어의 `아동 추가 금액` 칸은 **이미 만들어 둔 구간만** 보여 주므로
+# 둘보다 앞이다 — 2026-09-08 부로 자리가 `가격 셀 손입력` 뒤에서 `객실(룸)` 앞으로 올라왔다.
 AGE_BAND_TITLE = "연령 구간 만들기"
 AGE_RATE_FIELD = "연령별 단가"
+
+# 연령 구간의 `요금 기준 유형` — `무료` · `정액` · `성인 요금의 %` · `타 밴드 요금과 동일`.
+# `무료` 가 **아닌** 구간(= 유료)마다 `시즌 가격 채우기` 드로어에 `아동 추가 금액 — <노출명>`
+# 칸이 하나씩 선다(2026-09-08 ERP 실측). 그 칸이 성인 좌표 옆에 아동 좌표를 함께 깔므로
+# (`A2` → `A2C1_CHD` = A2 + 그 금액), 아이가 방에서 자는 1박 요금은 **그 칸 한 곳**에만 둔다.
+AGE_BAND_TYPE_FIELD = "요금 기준 유형"
+AGE_BAND_FREE_TYPE = "무료"
+AGE_BAND_NAME_FIELD = "노출명"
+AGE_BAND_CODE_FIELD = "밴드 코드"
+SEASON_FILL_TITLE = "시즌 가격 채우기"
+CHILD_EXTRA_FIELD = "아동 추가 금액"
+#: `아동 추가 금액 — 소아` — 구분자는 EM DASH(U+2014)를 빈칸으로 감싼 것이 정본이다.
+#: 원고 오타 하나로 검사가 헛돌면 안 되므로 EN DASH·하이픈·가운뎃점도 같은 칸으로 읽는다.
+CHILD_EXTRA_LABEL_RE = re.compile(
+    r"^아동\s*추가\s*금액(?:\s*[\u2014\u2013\-\u00b7\u30fb]\s*(?P<name>.+))?$"
+)
+
+# 밴드 코드 — 정본은 `occupancy_key.BAND_CODE_RE`(`^[A-Z0-9]{2,8}$`)다. 소문자로 쳐도 서버가
+# 대문자로 굳히므로 검사기는 소문자를 받아 주고, 밑줄·한글·공백·기호·1자·9자 이상만 막는다
+# (밑줄은 좌표 조각 구분자다 — `A2C1_CHD`). 정본 표기는 `CHD`·`INF`·`TEEN`.
+BAND_CODE_RE = re.compile(r"^[A-Za-z0-9]{2,8}$")
+
+# 인원 조합 좌표 — `stay.services.occupancy_key` 의 A-형 정규형이다: 성인 수 `A2` 뒤에 아동
+# 조각이 붙고(첫 조각은 붙여 `A2C1_CHD`, 둘째부터 `_C1_TEEN` 이 더 붙는다). 옛 숫자 키
+# (`2,3` · `3:+14`)도 서버가 받아 A-형으로 저장하지만, 같은 좌표가 화면·요금표·엔진 로그에서
+# A-형으로 다시 나오므로 지시서는 A-형만 쓴다.
+OCCUPANCY_KEYS_FIELDS = ("인원 조합(선택)", "인원 조합")
+OCCUPANCY_ADJUST_FIELDS = ("인원 조합별 조정(선택)", "인원 조합별 조정")
+OCCUPANCY_KEY_RE = re.compile(r"^A\d+(?:C\d+_[A-Z0-9]{2,8})?(?:_C\d+_[A-Z0-9]{2,8})*$")
+BARE_NUMBER_RE = re.compile(r"^\d+$")
+
+# 박수별 단가 — `박수:1박 단가` 를 쉼표로 잇는다(`3:100,5:90` = 3박부터 1박 100, 5박부터 90).
+# 차액이 아니라 **단가**라 부호를 붙이지 않고, 1박 단가는 위 `판매 단가(공급 통화)` 칸이라
+# 박수는 2 이상이다. 층 하나가 셀 수를 통째로 곱하므로 같은 박수를 두 번 적지 않는다.
+LOS_PRICES_FIELDS = ("박수별 단가(선택)", "박수별 단가")
+LOS_ENTRY_RE = re.compile(r"^(?P<nights>\d+)\s*:\s*(?P<price>[\d,]+(?:\.\d+)?)$")
 
 # 계약서가 아동을 말하면(나이대·정원 내 무료 투숙·성인 요금의 %·쉐어베드) 그것은 **인원**이다 —
 # 방에서 자는 아이는 `연령 구간` 으로 넣어야 고객 화면 인원 선택기에 소아·유아가 선다.
 # 부가옵션으로 만들면 "아이를 추가로 산다" 로 읽히고 인원 선택기에는 성인만 남는다.
 # 실제 사례(2026-09-07): 정원 내 소아·유아 무료 투숙 계약이 연령 구간 0개로 깔렸다.
+# 그 아이의 **1박 요금**은 2026-09-08 부로 자리가 하나다 — `시즌 가격 채우기` 의
+# `아동 추가 금액 — <노출명>` 칸(§B-4). 부가옵션은 **따로 사는 것**(식사 업그레이드·픽업·
+# 엑스트라베드)만 판다.
 ADDON_STEP_TITLES = ("부가옵션 만들기", "부과금 추가")
 CHILD_AUDIENCE_RE = re.compile(r"(소아|유아|아동|어린이)")
 # 이름이 **대상만** 말하는 꼴 — `소아` · `소아 (만6~11세)`. 무엇을 파는지가 없다.
@@ -195,6 +246,26 @@ AUDIENCE_ONLY_NAME_RE = re.compile(r"^(소아|유아|아동|어린이|성인)\s*
 # 아동이 방에서 잔다는 표시 — 이 말이 보이면 연령 구간이 있어야 한다.
 CHILD_STAY_RE = re.compile(r"(무료\s*투숙|무료\s*숙박|쉐어\s*베드|쉐어베드|share\s*bed|엑스트라베드\s*무료)", re.I)
 CHILD_POLICY_STEP_TITLES = ("부가옵션", "혜택")
+
+# 부가옵션이 팔면 안 되는 것 — **아이가 방에서 자는 1박**이다(§D-1, 2026-09-08).
+# 이름의 아동 대상어 + 숙박 성격 낱말로 잡는다.
+CHILD_ADDON_AUDIENCE_RE = re.compile(r"(소아|아동|유아|초등학생|미취학|어린이|child|infant)", re.I)
+# 잠자리 **자체**를 파는 말 — 조식이 묶여 있어도(`쉐어베드 소아 (조식 포함)`) 그 값은 아이의
+# 1박 요금이라 `아동 추가 금액` 으로 간다.
+CHILD_LODGING_RE = re.compile(
+    r"(쉐어\s*베드|쉐어베드|share\s*bed|sharebed|베드\s*셰어|베드셰어|bed\s*share|"
+    r"소파\s*베드|소파베드|sofa\s*bed|보트\s*베드|보트베드|"
+    r"무료\s*투숙|동반\s*투숙|무료\s*숙박|추가\s*침대\s*없이)", re.I
+)
+# 잠자리로도, 물건 값의 **단위**로도 읽히는 약한 말 — `조식 소아 (만 6~11세) 1박 1인` 처럼
+# 따로 사는 것의 단위면 부가옵션이 맞다. 그래서 이 말만 걸렸을 때는 아래 예외를 먼저 본다.
+CHILD_STAY_UNIT_RE = re.compile(r"(1\s*박|숙박)", re.I)
+# 따로 사는 것 — 식사 업그레이드·픽업·엑스트라베드는 이름에 아이가 들어가도 부가옵션이다.
+ADDON_SEPARATE_GOODS_RE = re.compile(
+    r"(조식|중식|석식|점심|저녁|식사|breakfast|meal|"
+    r"하프\s*보드|하프보드|half\s*board|풀\s*보드|풀보드|full\s*board|디너|dinner|"
+    r"픽업|pick\s*-?\s*up|셔틀|shuttle|엑스트라\s*베드|엑스트라베드|extra\s*bed)", re.I
+)
 
 # 갈라디너·컴펄서리 디너·행사 요금 — **특정 날짜에 인당으로 붙는 의무 요금**이다.
 # 계약이 "반드시 낸다" 고 하는 돈은 고객이 뺄 수 있는 부가옵션이 아니라 **의무 부과금 하나**다:
@@ -654,13 +725,27 @@ def find_hangul_room_names(steps):
     return problems
 
 
-def _age_value(step, name):
-    """`최소 연령` · `최대 연령` 칸의 숫자. 비었거나 숫자가 아니면 None."""
-    raw = (step["fields"].get(name) or "").strip()
-    try:
-        return decimal.Decimal(raw.replace(",", ""))
-    except (decimal.InvalidOperation, ValueError):
-        return None
+#: 나이 칸의 이름은 2026-09-08 에 `최소 연령` → `최소 연령 (만 나이)` 로 바뀌었다
+#: (`OfferAgeBandForm.__init__` — 세는 나이로 받아 적으면 한 밴드 위로 저장되고 그 한 칸이
+#: 소아가와 성인가를 가른다). **두 표기를 다 읽는다** — 옛 원고를 이사시키지 않으면서 새 원고를
+#: 받으려면 여기가 유일한 문이다. 이름 하나만 보던 동안에는 새 라벨을 쓴 원고에서 나이 겹침
+#: 검사가 **조용히 건너뛰었다**(검출 0건). 화면이 거부하는 원고가 검사를 통과하는 것이라,
+#: 담당자는 그 단계에 가서야 막힌다.
+AGE_MIN_LABELS = ("최소 연령 (만 나이)", "최소 연령", "최소연령")
+AGE_MAX_LABELS = ("최대 연령 (만 나이)", "최대 연령", "최대연령")
+
+
+def _age_value(step, names):
+    """`최소 연령 (만 나이)` · `최대 연령 (만 나이)` 칸의 숫자. 비었거나 숫자가 아니면 None."""
+    for name in names:
+        raw = (step["fields"].get(name) or "").strip()
+        if not raw:
+            continue
+        try:
+            return decimal.Decimal(raw.replace(",", ""))
+        except (decimal.InvalidOperation, ValueError):
+            return None
+    return None
 
 
 def find_age_band_overlaps(steps):
@@ -675,7 +760,7 @@ def find_age_band_overlaps(steps):
     for step in steps:
         if not step["title"].startswith(AGE_BAND_TITLE):
             continue
-        low, high = _age_value(step, "최소 연령"), _age_value(step, "최대 연령")
+        low, high = _age_value(step, AGE_MIN_LABELS), _age_value(step, AGE_MAX_LABELS)
         if low is None or high is None:
             continue
         by_card.setdefault(card_name(step) or "", []).append((step, low, high))
@@ -693,11 +778,14 @@ def find_age_band_overlaps(steps):
 
 
 def find_age_band_order(steps):
-    """`연령 구간 만들기` 는 첫 `오퍼 만들기` 뒤에 오고, `연령별 단가` 를 쓰는 단계보다 앞이어야 한다.
+    """`연령 구간 만들기` 는 첫 `오퍼 만들기` 뒤 · `연령별 단가` 와 `시즌 가격 채우기` 보다 앞이다.
 
     구간은 오퍼의 자식이라(오퍼 카드에서 [연령 구간 추가]) 오퍼가 없으면 만들 자리가 없고,
     부과금 드로어의 `연령별 단가` 표는 **이미 만들어 둔 구간만** 칸으로 보여 준다 — 순서가
     뒤집히면 담당자가 그 칸을 찾지 못한다.
+
+    2026-09-08 부로 `시즌 가격 채우기` 보다도 앞이다 — 유료 구간이 하나도 없으면 그 드로어에
+    `아동 추가 금액 — <노출명>` 칸이 아예 서지 않아, 아이 1박 요금을 적을 자리가 사라진다(§D-2).
     """
     problems = []
     first_offer = next(
@@ -727,6 +815,271 @@ def find_age_band_order(steps):
                 f"{step['num']}단계: `{AGE_RATE_FIELD}` 줄이 `{AGE_BAND_TITLE}` 단계보다 앞이다 — "
                 "연령 구간을 먼저 만들어야 그 칸이 화면에 생긴다"
             )
+    fills = _season_fill_steps(steps)
+    for step in band_steps:
+        earlier = [
+            fill for fill in _fills_of_offer(fills, card_name(step) or "")
+            if fill["num"] < step["num"]
+        ]
+        if not earlier:
+            continue
+        problems.append(
+            f"{step['num']}단계: `{AGE_BAND_TITLE}` 가 {earlier[0]['num']}단계 "
+            f"`{SEASON_FILL_TITLE}` 보다 뒤다 — 연령 구간을 먼저 만들어야 그 드로어에 "
+            f"`{CHILD_EXTRA_FIELD}` 칸이 선다"
+        )
+    return problems
+
+
+def _fold(text):
+    """칸 이름·노출명 비교용 꼴 — 빈칸을 접고 대소문자를 무시한다."""
+    return re.sub(r"\s+", "", text or "").casefold()
+
+
+def _blank(value):
+    """`비움` · `—` · 빈 칸처럼 값이 없다고 보는 표기인가."""
+    text = (value or "").strip()
+    return not text or text in BLANK_VALUES or text.startswith("비움")
+
+
+def _labeled_value(step, names):
+    """`인원 조합(선택)` 처럼 `(선택)` 이 붙거나 안 붙거나 하는 칸의 값(없으면 None)."""
+    for name in names:
+        if name in step["fields"]:
+            return step["fields"][name]
+    return None
+
+
+def _season_fill_steps(steps):
+    """`시즌 가격 채우기` 단계를 `(단계, 오퍼 카드 or None)` 로 모은다.
+
+    가격 채우기 단계의 `카드:` 는 **시즌 이름**이라(`카드: Regular`) 오퍼는 `시즌 만들기`
+    단계를 거쳐 찾는다. 시즌 이름이 겹치거나 그 단계가 없으면 오퍼를 알 수 없어 None 이다.
+    """
+    seasons = season_index(steps)
+    fills = []
+    for step in steps:
+        if not step["title"].startswith(SEASON_FILL_TITLE):
+            continue
+        key = fill_season(step, seasons)
+        fills.append((step, key[0] if key else None))
+    return fills
+
+
+def _fills_of_offer(fills, offer):
+    """그 오퍼의 가격 채우기 단계 — 오퍼를 못 읽은 단계도 함께 본다(어느 오퍼인지 모른다)."""
+    return [step for step, own in fills if own is None or own == offer]
+
+
+def _child_extra_names(step):
+    """그 단계의 `아동 추가 금액 — <노출명>` 줄에서 노출명(비교용 꼴)을 모은다."""
+    names = set()
+    for name, _ in step["rows"]:
+        m = CHILD_EXTRA_LABEL_RE.match(name.strip())
+        if m and m.group("name"):
+            names.add(_fold(m.group("name")))
+    return names
+
+
+def find_child_extra_missing(steps):
+    """유료 연령 구간마다 `시즌 가격 채우기` 에 `아동 추가 금액 — <노출명>` 줄이 있어야 한다.
+
+    `요금 기준 유형` 이 `무료` 가 **아닌** 구간(정액 · 성인 요금의 % · 타 밴드 요금과 동일)은
+    시즌 채우기 드로어에 아동 금액 칸을 하나 세우고, 그 칸이 성인 좌표 옆에 아동 좌표를 함께
+    깐다(`A2` → `A2C1_CHD`). 줄이 빠지면 아이 1박 요금이 어디에도 실리지 않는다 — 그 돈을
+    부가옵션으로 옮겨 적는 길은 2026-09-08 부로 막혔다(§D-1).
+
+    가격을 셀로 손입력하는 원고(=`시즌 가격 채우기` 단계가 아예 없다)와 `요금 기준 유형` 줄이
+    없어 유료인지 알 수 없는 구간은 건너뛴다.
+    """
+    fills = _season_fill_steps(steps)
+    if not fills:
+        return []
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(AGE_BAND_TITLE):
+            continue
+        kind = strip_select(step["fields"].get(AGE_BAND_TYPE_FIELD) or "")
+        if _blank(kind) or kind.startswith(AGE_BAND_FREE_TYPE):
+            continue
+        label = (step["fields"].get(AGE_BAND_NAME_FIELD)
+                 or step["fields"].get(AGE_BAND_CODE_FIELD) or "")
+        if _blank(label):
+            continue
+        label = label.strip()
+        mine = _fills_of_offer(fills, card_name(step) or "")
+        if not mine:
+            continue
+        if any(_fold(label) in _child_extra_names(fill) for fill in mine):
+            continue
+        problems.append(
+            f"{step['num']}단계: 유료 연령 구간 `{label}` 의 "
+            f"`{CHILD_EXTRA_FIELD} \u2014 {label}` 줄이 `{SEASON_FILL_TITLE}` 에 없다 — "
+            "아이 1박 요금은 그 칸 한 곳에만 둔다"
+        )
+    return problems
+
+
+def find_child_extra_without_occupancy(steps):
+    """`아동 추가 금액` 에 값을 적었는데 `인원 조합(선택)` 이 비었으면 오류 — 화면이 저장을 막는다.
+
+    아동 금액은 **성인 좌표 위에 얹히는** 값이라(`A2` → `A2C1_CHD` = A2 + 그 금액) 좌표가
+    인원 무관 단일가 한 곳(`""`)이면 얹힐 데가 없다. `SeasonPriceFillForm.clean` 이 그 조합을
+    거부한다(ERP 실측): "아동 추가 금액은 성인 좌표를 적은 전개에서만 쓰입니다 — A2 처럼 성인
+    수를 적거나 금액을 비워주세요". `인원 조합별 조정` · `기준 요금제 대비 조정` 이 막히는 것과
+    같은 판단이다.
+
+    `성인 요금의 %` 구간의 `자동 입력됨 · 그대로 둠` 줄도 그 목록에 실리므로 예외가 아니다 —
+    그 줄만 있어도 인원 조합을 적어야 저장된다. 값을 `비움` 으로 둔 아동 줄은 그 구간의 셀을
+    아예 만들지 않으므로(§B-4) 걸리지 않는다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(SEASON_FILL_TITLE):
+            continue
+        filled = any(
+            CHILD_EXTRA_LABEL_RE.match(name.strip()) and not _blank(value)
+            for name, value in step["rows"]
+        )
+        if not filled or not _blank(_labeled_value(step, OCCUPANCY_KEYS_FIELDS)):
+            continue
+        problems.append(
+            f"{step['num']}단계: {CHILD_EXTRA_FIELD}을 적었는데 인원 조합이 비어 있다 — "
+            "아동 금액은 성인 좌표 위에 얹히므로 A2 처럼 성인 수를 적어야 저장된다"
+        )
+    return problems
+
+
+def find_child_lodging_addon(steps):
+    """`부가옵션 만들기` 이름이 아이의 **잠자리**를 팔면 오류(§D-1, 2026-09-08).
+
+    아이가 방에서 자는 1박 요금은 `시즌 가격 채우기` 의 `아동 추가 금액 — <노출명>` 한 곳에만
+    둔다 — 부가옵션으로 만들면 고객이 빼 버릴 수 있고, 인원 선택기에도 그 아이가 서지 않는다.
+    식사 업그레이드·픽업·엑스트라베드는 **따로 사는 것**이라 이름에 아이가 들어가도 부가옵션이
+    맞다(`하프보드 소아` · `조식 소아 (만 6~11세) 1박 1인`) — 그 예외를 먼저 본다. 다만
+    쉐어베드·소파베드처럼 **잠자리 자체**를 파는 이름은 조식이 묶여 있어도(`쉐어베드 소아
+    (조식 포함)`) 파는 것이 아이의 1박이라 예외가 아니다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ADDON_CREATE_TITLE):
+            continue
+        name = (step["fields"].get("이름") or "").strip()
+        if not name or not CHILD_ADDON_AUDIENCE_RE.search(name):
+            continue
+        lodging = bool(CHILD_LODGING_RE.search(name))
+        unit_only = bool(CHILD_STAY_UNIT_RE.search(name)) and not ADDON_SEPARATE_GOODS_RE.search(name)
+        if not (lodging or unit_only):
+            continue
+        problems.append(
+            f"{step['num']}단계: 부가옵션 `{name}` 은 아이의 1박 요금이다 — "
+            f"부가옵션이 아니라 `{SEASON_FILL_TITLE}` 의 `{CHILD_EXTRA_FIELD}` 칸이다"
+        )
+    return problems
+
+
+def find_band_code_format(steps):
+    """`밴드 코드` 가 영대문자·숫자 2~8자가 아니면 오류 — 그 코드가 좌표에 그대로 실린다.
+
+    소문자로 쳐도 서버가 대문자로 굳히므로 소문자는 받아 준다. 밑줄은 좌표 조각 구분자라
+    (`A2C1_CHD`) 코드 안에 들어가면 좌표가 갈라지고, 한글·공백·기호·1자·9자 이상도 막힌다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(AGE_BAND_TITLE):
+            continue
+        code = (step["fields"].get(AGE_BAND_CODE_FIELD) or "").strip()
+        if _blank(code) or BAND_CODE_RE.match(code):
+            continue
+        problems.append(
+            f"{step['num']}단계: 밴드 코드 `{code}` 는 쓸 수 없다 — "
+            "영대문자·숫자 2~8자다(CHD·INF·TEEN · 밑줄은 좌표 조각 구분자라 못 쓴다)"
+        )
+    return problems
+
+
+def find_occupancy_key_legacy(steps):
+    """`인원 조합(선택)`·`인원 조합별 조정(선택)` 의 좌표가 A-형이 아니면 오류.
+
+    옛 숫자 키(`2,3` · `3:+14`)도 서버가 받아 `A2,A3` 로 저장하지만, 같은 좌표가 화면·요금표·
+    엔진 로그에서 A-형으로 다시 나온다 — 지시서와 화면이 다른 글자를 쓰면 대조가 끊긴다.
+    아동을 더한 좌표는 밴드 코드까지 적는다(`A2C1_CHD` · 둘째 구간부터 `_C1_TEEN`). `비움` 은 통과.
+    """
+    problems = []
+    for step in steps:
+        for names, what, example, with_amount in (
+            (OCCUPANCY_KEYS_FIELDS, "인원 조합", "A2,A3", False),
+            (OCCUPANCY_ADJUST_FIELDS, "인원 조합별 조정", "A3:+14,A4:+26", True),
+        ):
+            value = _labeled_value(step, names)
+            if value is None or _blank(value):
+                continue
+            text = str(value).strip()
+            numeric, unread = [], []
+            for part in text.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                key = part.split(":", 1)[0].strip() if with_amount else part
+                if BARE_NUMBER_RE.match(key):
+                    numeric.append(key)
+                elif not OCCUPANCY_KEY_RE.match(key):
+                    unread.append(key)
+            if numeric:
+                problems.append(
+                    f"{step['num']}단계: {what} `{text}` 은 옛 숫자 표기다 — "
+                    f"{example} 처럼 A-형 좌표로 적는다(아이를 더하면 A2C1_CHD)"
+                )
+            elif unread:
+                problems.append(
+                    f"{step['num']}단계: {what} 의 좌표 `{', '.join(unread)}` 를 읽지 못한다 — "
+                    f"{example} 처럼 A-형으로 적는다(성인 수 A2 뒤에 아동 조각 C1_CHD)"
+                )
+    return problems
+
+
+def find_los_prices_format(steps):
+    """`박수별 단가(선택)` 는 `박수:1박 단가` 쉼표 목록이다 — 부호·1박 이하·중복은 오류.
+
+    차액이 아니라 **단가**라 부호를 붙이지 않고(`3:+100` 은 화면이 거부한다), 1박 단가는 위
+    `판매 단가(공급 통화)` 칸이라 박수는 2 이상이다. 층 하나가 셀 수를 통째로 곱하므로 같은
+    박수를 두 번 적지 않는다. `비움` 은 통과.
+    """
+    problems = []
+    for step in steps:
+        value = _labeled_value(step, LOS_PRICES_FIELDS)
+        if value is None or _blank(value):
+            continue
+        text = str(value).strip()
+        seen, message = set(), None
+        for part in text.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            m = LOS_ENTRY_RE.match(part)
+            if not m:
+                message = (
+                    f"{step['num']}단계: 박수별 단가 `{text}` 를 읽지 못한다 — "
+                    "3:100,5:90 처럼 `박수:1박 단가` 로 적는다"
+                    "(차액이 아니라 단가라 부호를 붙이지 않는다)"
+                )
+                break
+            nights = int(m.group("nights"))
+            if nights <= 1:
+                message = (
+                    f"{step['num']}단계: 박수별 단가 `{text}` 의 박수가 {nights} 다 — "
+                    "박수는 2 이상이다(1박 단가는 위 `판매 단가(공급 통화)` 칸이다)"
+                )
+                break
+            if nights in seen:
+                message = (
+                    f"{step['num']}단계: 박수별 단가 `{text}` 에 {nights}박이 두 번 있다 — "
+                    "박수마다 한 번만 적는다"
+                )
+                break
+            seen.add(nights)
+        if message:
+            problems.append(message)
     return problems
 
 
@@ -735,7 +1088,8 @@ def find_audience_only_names(steps):
 
     `소아 (만6~11세)` 처럼 파는 물건이 빠진 이름은 고객 화면에서 "아이를 따로 산다" 로 읽힌다.
     하프보드 소아 식사면 `하프보드 소아 (만6~11세)` 처럼 **무엇을 파는지**를 앞에 적는다.
-    (방에서 자는 아이 자체는 부가옵션이 아니라 `연령 구간` 이다 — 아래 검사.)
+    (방에서 자는 아이 자체는 부가옵션이 아니라 `연령 구간` 이고, 그 아이의 1박 요금은
+    `시즌 가격 채우기` 의 `아동 추가 금액 — <노출명>` 이다 — `find_child_lodging_addon`.)
     """
     problems = []
     for step in steps:
@@ -774,10 +1128,15 @@ def find_extra_bed_optional_rules(steps):
 
 
 def find_child_policy_without_age_band(steps):
-    """아동이 방에서 잔다는 말이 보이는데 `연령 구간 만들기` 단계가 없으면 경고.
+    """아이가 보이는데 `연령 구간 만들기` 단계가 하나도 없으면 경고. 두 가지를 함께 본다.
 
-    계약서의 "정원 내 소아·유아 무료 투숙(쉐어베드)" 은 **인원**이다 — 연령 구간으로 넣어야
-    고객 화면 인원 선택기에 소아·유아가 선다. 부가옵션·혜택 글에만 적어 두면 인원은 성인뿐이다.
+    - 부가옵션·혜택 글에 "정원 내 소아·유아 무료 투숙(쉐어베드)" 처럼 **방에서 잔다**는 말이 있다
+    - 부가옵션 `이름` 이 아이를 대상으로 한다(`하프보드 소아`) — 파는 것이 식사라도 그 아이를
+      인원으로 고를 수 없으면 아무도 그 부가옵션을 살 수 없다
+
+    아이는 `연령 구간` 으로 넣어야 고객 화면 인원 선택기에 소아·유아가 서고, 방에서 자는 아이의
+    1박 요금은 그 다음 `시즌 가격 채우기` 의 `아동 추가 금액 — <노출명>` 이 정한다(§D-1).
+    한 단계에서 둘 다 걸려도 한 번만 알린다.
     """
     if any(step["title"].startswith(AGE_BAND_TITLE) for step in steps):
         return []
@@ -786,11 +1145,17 @@ def find_child_policy_without_age_band(steps):
         if not any(kind in step["title"] for kind in CHILD_POLICY_STEP_TITLES):
             continue
         text = " ".join([step["title"]] + [str(v) for v in step["fields"].values()])
-        if CHILD_AUDIENCE_RE.search(text) and CHILD_STAY_RE.search(text):
-            problems.append(
-                f"{step['num']}단계: 아동 정책이 보이는데 연령 구간 단계가 없다 — "
-                "계약서의 아동 정책은 연령 구간으로 넣는다"
-            )
+        name = (step["fields"].get("이름") or "").strip()
+        sleeps = bool(CHILD_AUDIENCE_RE.search(text) and CHILD_STAY_RE.search(text))
+        child_named = bool(
+            step["title"].startswith(ADDON_CREATE_TITLE) and CHILD_AUDIENCE_RE.search(name)
+        )
+        if not (sleeps or child_named):
+            continue
+        problems.append(
+            f"{step['num']}단계: 아동 정책이 보이는데 연령 구간 단계가 없다 — "
+            "계약서의 아동 정책은 연령 구간으로 넣는다"
+        )
     return problems
 
 
@@ -1119,7 +1484,7 @@ REPEAT_LOOSE_RE = re.compile(r"^.+?\s*\d+\s*[\u00b7\u30fb\u2027\u2219]\s*.+$")
 # 사전은 행마다 늘어나는 칸을 자리표시 라벨 한 줄로 담는다(`연령별 단가 · 〈연령 구간 노출명〉`).
 # 지시서는 그 자리에 실제 이름을 넣어 쓰므로(`연령별 단가 · 소아`) 허용 집합에는 자리표시를
 # 뗀 bare 이름(`연령별 단가`)도 함께 넣어 둔다 — `strip_row_suffix()` 가 줄인 형태와 만난다.
-PLACEHOLDER_SUFFIX_RE = re.compile(r"\s*\u00b7\s*\u3008[^\u3009]*\u3009\s*$")
+PLACEHOLDER_SUFFIX_RE = re.compile(r"\s*[\u00b7\u2014\u2013]\s*\u3008[^\u3009]*\u3009\s*$")
 
 # 상품 공통 화면의 칸이라 화면 사전이 일부러 담지 않는 이름 — 대조에서 통과시킨다
 DICT_EXEMPT = {"상품명"}
@@ -1150,14 +1515,15 @@ def strip_repeat_prefix(name):
 
 
 def strip_row_suffix(name):
-    """`오퍼별 표시명 · Single` → `오퍼별 표시명`. 그 칸 이름이 아니면 그대로.
+    """`오퍼별 표시명 · Single` → `오퍼별 표시명` · `아동 추가 금액 — 소아` → `아동 추가 금액`.
 
     판매 연결 일괄 드로어의 표시명은 체크한 룸마다 칸이 하나씩 늘어난다 — 사전에는 한 줄
     (`오퍼별 표시명 · 〈룸 카테고리명〉`)로 있고 지시서는 룸 이름을 넣어 쓴다.
     """
     for base in ROW_SUFFIX_FIELDS:
-        if name.startswith(f"{base} · "):
-            return base
+        for sep in ROW_SUFFIX_SEPARATORS:
+            if name.startswith(f"{base}{sep}"):
+                return base
     return name
 
 
@@ -1345,9 +1711,24 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     def _address_row(l):
         m = ROW.match(l)
         return bool(m and "주소" in m.group(1))
+
+    #: 인원 조합 계열 행(`인원 조합(선택)` · `인원 조합별 조정(선택)` · 가격 셀의 `인원 조합`)의
+    #: 값은 **A-형 좌표**다(`A2,A3` · `A3:+14` · `A2C1_CHD`) — 시트 좌표가 아니라 화면이
+    #: 요구하는 정본 표기다(2026-09-08 `services/occupancy_key`).
+    #:
+    #: **행으로 거르지 토큰으로 거르지 않는다.** `CELL_EXCLUDE` 에 `^A\d{1,2}$` 를 더하면
+    #: `A2` 는 통과하지만 **진짜 시트 A열 좌표 `A70` 까지 함께 눈감는다** — 금지어 검사가
+    #: 잡아야 할 것을 조용히 놓치는 쪽이라, 오탐을 없애려다 미탐을 만든 것이 된다.
+    #: 자리(행)로 거르면 `인원 조합` 줄의 `A2` 만 빠지고 다른 줄의 `A70` 은 그대로 잡힌다.
+    #: `_address_row` 와 같은 방식이다.
+    def _occupancy_row(l):
+        m = ROW.match(l)
+        return bool(m and m.group(1).strip().startswith("인원 조합"))
+
     cells = [
         m.group(0)
-        for l in lines if not l.startswith("```") and not _address_row(l)
+        for l in lines
+        if not l.startswith("```") and not _address_row(l) and not _occupancy_row(l)
         for m in CELL.finditer(l)
         if not CELL_EXCLUDE.match(m.group(0))
     ]
@@ -1387,6 +1768,12 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     campaign_uses = find_campaign_uses(parsed)
     age_band_order = find_age_band_order(parsed)
     age_band_overlaps = find_age_band_overlaps(parsed)
+    band_code_formats = find_band_code_format(parsed)
+    child_extra_missing = find_child_extra_missing(parsed)
+    child_extra_no_occupancy = find_child_extra_without_occupancy(parsed)
+    child_lodging_addons = find_child_lodging_addon(parsed)
+    occupancy_key_legacy = find_occupancy_key_legacy(parsed)
+    los_prices_formats = find_los_prices_format(parsed)
     audience_only_names = find_audience_only_names(parsed)
     hangul_room_names = find_hangul_room_names(parsed)
     extra_bed_rules = find_extra_bed_optional_rules(parsed)
@@ -1481,6 +1868,12 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "campaign_uses": campaign_uses,
         "age_band_order": age_band_order,
         "age_band_overlaps": age_band_overlaps,
+        "band_code_formats": band_code_formats,
+        "child_extra_missing": child_extra_missing,
+        "child_extra_no_occupancy": child_extra_no_occupancy,
+        "child_lodging_addons": child_lodging_addons,
+        "occupancy_key_legacy": occupancy_key_legacy,
+        "los_prices_formats": los_prices_formats,
         "audience_only_names": audience_only_names,
         "hangul_room_names": hangul_room_names,
         "extra_bed_rules": extra_bed_rules,
@@ -1559,6 +1952,10 @@ def main(argv=None):
               + r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
+              + r["band_code_formats"] + r["child_extra_missing"]
+              + r["child_extra_no_occupancy"]
+              + r["child_lodging_addons"] + r["occupancy_key_legacy"]
+              + r["los_prices_formats"]
               + r["audience_only_names"] + r["gala_addons"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]

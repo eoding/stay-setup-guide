@@ -514,6 +514,31 @@ CHARGE_UNIT_LABELS = ("부과 단위", "부과단위")
 CHARGE_ROOM_SCOPE_LABELS = ("적용 룸 scope", "적용 룸", "적용룸 scope")
 TIER_ROW_LABEL_RE = re.compile(r"^(시간대별\s*요율|요율)\s+\d+\s*[·・]")
 
+# --- 2026-09-08 신설 칸 — 시즌 가격 채우기의 `박수별 단가(선택)`·`아동 추가 금액 — <노출명>` ---
+#
+# **러너는 화면 라벨로 칸을 찾는다.** 서버 폼 필드 이름(`child_extra_<코드>` · `los_prices` ·
+# `occupancy_keys`)은 쓰지 않는다 — 그 이름은 HTML `name` 속성일 뿐이고, 지시서에 적히는 것도
+# 사람이 화면에서 읽는 글자다. 그래서 아래 상수는 전부 **화면 글자**다.
+
+#: `아동 추가 금액 — 소아`. 구분자는 EM DASH(U+2014) 앞뒤 공백이 정본이지만
+#: (`forms.SeasonPriceFillForm._build_child_extra_fields`), 원고 오타로 러너가 멈추면 안 되므로
+#: EN DASH·하이픈·가운뎃점도 받는다. 노출명 없는 `아동 추가 금액` 한 줄도 이 칸으로 본다.
+CHILD_EXTRA_LABEL_RE = re.compile(r"^아동\s*추가\s*금액(?:\s*[—–·-]\s*(?P<name>.+))?$")
+#: 화면 라벨과 `(선택)` 을 뗀 별칭 — 지시서가 어느 쪽으로 적어도 같은 칸이다.
+LOS_PRICES_LABELS = ("박수별 단가(선택)", "박수별 단가")
+OCCUPANCY_KEYS_LABELS = ("인원 조합(선택)", "인원 조합")
+OCCUPANCY_ADJUST_LABELS = ("인원 조합별 조정(선택)", "인원 조합별 조정")
+#: 밴드 코드. 서버 정규식은 `^[A-Z0-9]{2,8}$`(`occupancy_key.BAND_CODE_RE`)지만 소문자로 쳐도
+#: 대문자로 굳으므로 여기서는 소문자도 받는다. 밑줄은 좌표 조각 구분자라 안 된다(`A2C1_CHD`).
+BAND_CODE_RE = re.compile(r"^[A-Za-z0-9]{2,8}$")
+BAND_CODE_LABELS = ("밴드 코드", "밴드코드")
+#: `박수별 단가` 한 조각 — `3:100`. **부호를 일부러 안 받는다**(차액이 아니라 단가다).
+LOS_ITEM_RE = re.compile(r"^(\d+)\s*[:：]\s*(\d+(?:\.\d+)?)$")
+#: `인원 조합별 조정` 한 조각 — `A3:+14` 의 키와 차액.
+ADJUST_ITEM_RE = re.compile(r"^([^:：]+)[:：]\s*(.*)$")
+#: 옛 숫자 좌표(`2` · `3`) — 서버가 받아 `A2` 로 저장하지만 지시서는 A-형만 쓴다.
+BARE_NUMBER_RE = re.compile(r"^\d+$")
+
 
 def stale_reason(step):
     """러너가 실행을 거부하는 단계인가 — 이유 한 줄, 아니면 None.
@@ -553,9 +578,125 @@ def charge_order_problem(step):
     return None
 
 
-#: 연령 구간 단계에서 나이를 읽는 칸.
-AGE_MIN_LABELS = ("최소 연령", "최소연령")
-AGE_MAX_LABELS = ("최대 연령", "최대연령")
+def _typed_value(step, labels):
+    """그 라벨의 typed 값 한 줄 — 없거나 비움(`비움`·`자동 입력됨`)이면 None."""
+    for f in step["fields"]:
+        if (f.get("label_base") or f["label"]) in labels and f.get("kind") == "typed":
+            value = (f.get("value") or "").strip()
+            if value:
+                return value
+    return None
+
+
+def _split_items(raw):
+    """쉼표로 나눈 조각들 — 전각 쉼표도 쉼표로 본다."""
+    return [p.strip() for p in re.split(r"[,，]", raw) if p.strip()]
+
+
+def los_prices_problem(step):
+    """`박수별 단가(선택)` 값이 화면이 받는 꼴인가 — 이유 한 줄, 아니면 None.
+
+    서버(`services.season.parse_los_prices`)가 거부하면 그 시즌은 한 층도 안 깔린다. 값이
+    글자 그대로 정해져 있어 **파일 단계에서 다 보인다** — 브라우저를 열 이유가 없다.
+    """
+    raw = _typed_value(step, LOS_PRICES_LABELS)
+    if raw is None:
+        return None
+    seen = []
+    for item in _split_items(raw):
+        m = LOS_ITEM_RE.match(item)
+        if not m:
+            return ("[박수별 단가] `%s` 를 읽지 못합니다 — `3:100,5:90` 처럼 `박수:1박 단가` 입니다"
+                    "(차액이 아니라 단가라 부호를 붙이지 않습니다)" % item)
+        nights = int(m.group(1))
+        if nights < 2:
+            return ("[박수별 단가] `%s` 의 박수는 2 이상이어야 합니다 — 1박 단가는 위 "
+                    "[판매 단가(공급 통화)] 칸입니다" % item)
+        if nights in seen:
+            return ("[박수별 단가] 에 %d박이 두 번 있습니다 — 한 박수에 한 단가입니다 (`%s`)"
+                    % (nights, raw))
+        seen.append(nights)
+    return None
+
+
+def occupancy_key_problem(step):
+    """`인원 조합`·`인원 조합별 조정` 에 옛 숫자 키가 있는가 — 이유 한 줄, 아니면 None.
+
+    서버는 `2,3` 도 받아 `A2,A3` 로 **저장**하지만, 같은 좌표가 화면·요금표·엔진 로그에서는
+    A-형으로 다시 나온다. 지시서가 숫자로 적으면 담당자가 그 두 자리를 같은 것으로 잇지 못한다.
+
+    **시즌 채우기 단계에서만 본다.** 가격 셀 쪽에는 옛 숫자 키(`3 · 3인`)가 화면에 남아 있고
+    그것을 가리키는 것은 잘못이 아니다 — 여기서 막을 것은 새로 까는 좌표다.
+    """
+    if step.get("kind") != "시즌 가격 채우기":
+        return None
+    raw = _typed_value(step, OCCUPANCY_KEYS_LABELS)
+    if raw:
+        bad = [k for k in _split_items(raw) if BARE_NUMBER_RE.match(k)]
+        if bad:
+            return ("[인원 조합] `%s` 은 옛 숫자 표기입니다 — 성인 수 앞에 A 를 붙여 `A2,A3` 로 "
+                    "적습니다" % ",".join(bad))
+    raw = _typed_value(step, OCCUPANCY_ADJUST_LABELS)
+    if raw:
+        bad = []
+        for item in _split_items(raw):
+            m = ADJUST_ITEM_RE.match(item)
+            if BARE_NUMBER_RE.match(m.group(1).strip() if m else item):
+                bad.append(item)
+        if bad:
+            return ("[인원 조합별 조정] `%s` 의 키가 옛 숫자 표기입니다 — `A3:+14` 처럼 A-형 "
+                    "좌표로 적습니다" % ",".join(bad))
+    return None
+
+
+def band_code_problem(step):
+    """`밴드 코드` 가 서버 정규식에 맞는가 — 이유 한 줄, 아니면 None.
+
+    이 코드는 가격 셀 좌표에 그대로 실린다(`A2C1_CHD`). 밑줄은 그 좌표의 조각 구분자라
+    코드에 쓰면 좌표가 갈라진다. `참조 밴드 코드` 는 이 칸이 아니라 다른 구간을 가리키는
+    칸이므로 보지 않는다(라벨이 정확히 `밴드 코드` 일 때만 본다).
+    """
+    code = _typed_value(step, BAND_CODE_LABELS)
+    if code is None or BAND_CODE_RE.match(code):
+        return None
+    return ("[밴드 코드] `%s` 는 쓸 수 없습니다 — 영문자·숫자 2~8자입니다(CHD·INF·TEEN). "
+            "밑줄·한글·공백은 가격 셀 좌표(`A2C1_CHD`)를 갈라 놓습니다" % code)
+
+
+def child_extra_order(steps):
+    """`아동 추가 금액` 줄이 있는 시즌 채우기가 `연령 구간 만들기` 보다 **앞**인가.
+
+    유료 연령 구간이 하나도 없으면 시즌 채우기 드로어에 그 칸이 **서지 않는다**
+    (`SeasonPriceFillForm._build_child_extra_fields`). 지시서 차례가 거꾸로면 러너는 없는 칸을
+    찾다가 아이 요금을 통째로 빠뜨린 채 시즌을 깔고, 그 뒤 아동 좌표는 손으로 열어야 한다.
+    """
+    first_band = next((s["no"] for s in steps if s.get("kind") == "연령 구간 만들기"), None)
+    out = []
+    for s in steps:
+        if s.get("kind") != "시즌 가격 채우기":
+            continue
+        names = [m.group("name") or ""
+                 for f in s["fields"]
+                 for m in [CHILD_EXTRA_LABEL_RE.match(f.get("label_base") or f["label"])] if m]
+        if not names:
+            continue
+        tail = " — %s" % names[0] if names[0] else ""
+        if first_band is None:
+            why = ("[아동 추가 금액%s] 줄이 있는데 `연령 구간 만들기` 단계가 없습니다 — "
+                   "유료 연령 구간이 있어야 그 칸이 화면에 섭니다" % tail)
+        elif first_band > s["no"]:
+            why = ("[아동 추가 금액%s] 줄이 있는데 `연령 구간 만들기`(%d단계)가 뒤에 있습니다 — "
+                   "연령 구간을 먼저 만들어야 그 칸이 화면에 섭니다" % (tail, first_band))
+        else:
+            continue
+        out.append({"no": s["no"], "title": s["title"], "why": why})
+    return out
+
+
+#: 연령 구간 단계에서 나이를 읽는 칸. 2026-09-08 에 화면 라벨이 `(만 나이)` 를 달았다 —
+#: 옛 표기도 함께 받는다(지시서가 아직 안 고쳐졌어도 겹침 판정은 돌아야 한다).
+AGE_MIN_LABELS = ("최소 연령", "최소연령", "최소 연령 (만 나이)", "최소연령(만 나이)")
+AGE_MAX_LABELS = ("최대 연령", "최대연령", "최대 연령 (만 나이)", "최대연령(만 나이)")
 
 
 def _age_of(step, labels):
@@ -606,9 +747,15 @@ def age_band_overlaps(steps):
 
 
 def preflight(steps):
-    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order, age_overlap}.
+    """실행 전 훑기 결과 — {stale, unknown_kinds, charge_order, age_overlap, value_format, step_order}.
 
-    `stale` 은 러너가 **거부하는** 단계다(옛 화면 기준 · 금지된 갈래).
+    `unknown_kinds` 말고는 전부 **막는** 판정이다: 그대로 실행하면 그 단계에서 반드시 실패하고,
+    그때는 앞 단계들이 이미 화면에 만들어져 있다. `unknown_kinds` 만 알리고 지나간다 —
+    지시서 쪽이 새 화면을 먼저 낼 수 있고, 그때 러너가 못 하는 것은 사람이 판단할 일이다.
+
+    `value_format` 은 값 글자만으로 갈리는 셋(박수별 단가 꼴 · 인원 조합의 옛 숫자 키 ·
+    밴드 코드 꼴)이고, `step_order` 는 단계 차례가 화면을 못 세우는 것(아동 추가 금액 줄이
+    연령 구간보다 앞)이다.
     """
     stale = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [stale_reason(s)] if w]
@@ -619,8 +766,13 @@ def preflight(steps):
                if s["kind"] and s["kind"] not in KNOWN_KINDS and s["no"] not in refused_nos]
     order = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [charge_order_problem(s)] if w]
+    fmt = [{"no": s["no"], "title": s["title"], "why": w}
+           for s in steps
+           for w in [los_prices_problem(s) or occupancy_key_problem(s) or band_code_problem(s)]
+           if w]
     return {"stale": stale, "unknown_kinds": unknown, "charge_order": order,
-            "age_overlap": age_band_overlaps(steps)}
+            "age_overlap": age_band_overlaps(steps), "value_format": fmt,
+            "step_order": child_extra_order(steps)}
 
 
 def apply_title_prefix(steps, prefix):
@@ -751,7 +903,8 @@ def summarize(doc):
                for s in steps for f in s["fields"] if f.get("unknown")]
     missing = doc["guide"].get("photo_missing", [])
     pre = doc["guide"].get("preflight") or {"stale": [], "unknown_kinds": [], "charge_order": [], "age_overlap": []}
-    pre.setdefault("age_overlap", [])
+    for key in ("age_overlap", "value_format", "step_order"):
+        pre.setdefault(key, [])  # 옛 steps.json 도 읽을 수 있게
     lines = ["단계 %d개 · 값 %d행 · 사진 %d장"
              % (len(steps), sum(len(s["fields"]) for s in steps),
                 sum(len(s["photos"]) for s in steps)),
@@ -767,12 +920,17 @@ def summarize(doc):
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["charge_order"][:20]]
     lines.append("나이 범위가 겹치는 단계: %d" % len(pre["age_overlap"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["age_overlap"][:20]]
+    lines.append("값 형식이 어긋난 단계: %d" % len(pre["value_format"]))
+    lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["value_format"][:20]]
+    lines.append("단계 차례가 어긋난 단계: %d" % len(pre["step_order"]))
+    lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["step_order"][:20]]
     if pre["unknown_kinds"]:
         # 막지 않는다 — 알리기만 한다(`KNOWN_KINDS` 주석)
         lines.append("러너가 모르는 단계 갈래: %d" % len(pre["unknown_kinds"]))
         lines += ["  %d단계 · %s" % (x["no"], x["kind"]) for x in pre["unknown_kinds"][:20]]
     blocking = (len(unknown) + len(missing) + len(pre["stale"])
-                + len(pre["charge_order"]) + len(pre["age_overlap"]))
+                + len(pre["charge_order"]) + len(pre["age_overlap"])
+                + len(pre["value_format"]) + len(pre["step_order"]))
     return "\n".join(lines), len(unknown), len(missing), blocking
 
 

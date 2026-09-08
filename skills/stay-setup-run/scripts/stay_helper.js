@@ -87,6 +87,10 @@
   }
   // `오퍼 · 룸` 의 뒤쪽 조각 — 화면 항목이 룸 이름만 보여 줄 때 그 조각으로 맞춘다
   function tailPart(t) { var p = nfc(t).split(/\s+[·・‧∙]\s+/).map(clean).filter(Boolean); return p.length >= 2 ? p[p.length - 1] : ''; }
+  // `A2C1_CHD · 성인 2 · 소아 1` 의 **앞쪽 조각** — 키가 앞에 서는 목록(가격 셀 편집 모달의
+  // [인원 조합] 셀렉트, `forms.occupancy_select_label`)에서 그 키만으로 항목을 고를 때 쓴다.
+  // 가운뎃점이 없는 항목(`인원 무관 단일가`)은 빈 글자를 돌려준다 — 조각이 아니라 이름 전부다.
+  function leadPart(t) { var p = nfc(t).split(/\s+[·・‧∙]\s+/).map(clean).filter(Boolean); return p.length >= 2 ? p[0] : ''; }
   // 전체 글자로 못 찾으면 머리 부분끼리, 그다음 가운뎃점 조각 묶음끼리 견주는 2·3차 선택
   function pickLoose(list, getText, want, minTier) {
     var r = pick(list, getText, want, minTier);
@@ -777,8 +781,17 @@
     var o = sel.options[sel.selectedIndex];
     return o ? clean(o.textContent) : '';
   }
+  // 2026-09-08: 가격 셀 편집 모달의 [인원 조합] 이 텍스트 → 셀렉트로 바뀌었고, 항목 글자는
+  // **키가 앞**이다 (`A2 · 성인 2` · `A2C1_CHD · 성인 2 · 소아 1`). 원고는 좌표만 적으므로
+  // (`A2`) 글자 전체로는 앞부분 일치(2)가 둘 다에 걸려 `모호` 로 끝난다 — `A2` 는 `A2C1_CHD`
+  // 의 앞글자이기도 하기 때문이다. 그래서 전체 글자로 하나가 안 나오면 **앞 조각끼리 완전히
+  // 같은** 항목을 한 번 더 찾는다. 하나일 때만 쓰므로 종전에 잘 골라지던 목록은 그대로다.
   function pickOption(sel, text) {
-    return pick([].slice.call(sel.options), function (o) { return o.textContent; }, text, 1);
+    var opts = [].slice.call(sel.options);
+    var r = pick(opts, function (o) { return o.textContent; }, text, 1);
+    if (r.status === 'ok') return r;
+    var lead = pick(opts, function (o) { return leadPart(o.textContent); }, text, 4);
+    return lead.status === 'ok' ? lead : r;
   }
   function setSelectValue(sel, value) {
     var d = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');

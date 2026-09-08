@@ -52,6 +52,17 @@ const STEPS = {
       head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 2 행', buttons: [], buttons_parsed: [] },
       fields: [{ label: '판매가', kind: 'typed', value: '200' }],
       longtexts: [], photos: [], submit: '추가'
+    },
+    {
+      // 2026-09-08 에 화면의 카드 이름이 `인원별 가격 추가` → `인원별 · 박수별 가격 추가` 로
+      // 바뀌었다(박수 축이 돌아오면서 제목이 두 축을 함께 부른다). 지시서는 사전의 글자를
+      // 그대로 쓰므로 새 원고는 긴 이름으로 온다 — 옛 이름만 읽으면 그 단계가 통째로 멈춘다.
+      no: 3,
+      title: '가격 셀 만들기 (2026-01-01)',
+      kind: '가격 셀 만들기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원별 · 박수별 가격 추가', buttons: [], buttons_parsed: [] },
+      fields: [{ label: '판매가', kind: 'typed', value: '130' }],
+      longtexts: [], photos: [], submit: '추가'
     }
   ]
 };
@@ -208,6 +219,13 @@ const run = async () => {
   ok(!r2.error, 'runCellStep: 인원 조합 카드도 새 행으로 잡는다', r2.error);
   ok(r2.want.occ === '2', 'runCellStep: 카드에서 인원 조합을 읽는다', r2.want);
   ok(r2.occSet === '2', 'runCellStep: 새 행의 인원 셀렉트를 그 조합으로 맞춘다', r2.occSet);
+
+  // 2-b) 새 카드 이름(`인원별 · 박수별 가격 추가`) — 2026-09-08 화면 변경. 두 표기를 다 받는다.
+  const r2b = await win.runCellStep(3, { dry: true });
+  ok(!r2b.error, 'runCellStep: 새 카드 이름 `인원별 · 박수별 가격 추가` 도 읽는다', r2b.error);
+  ok(r2b.newRow === true, 'runCellStep: 새 카드 이름도 새 행으로 잡는다', r2b);
+  ok(r2b.want && r2b.want.ratePlan === '기본 요금제',
+     'runCellStep: 새 카드 이름에서 요금제를 그대로 읽는다', r2b.want);
 
   // 3) 룸 사진 올리기 — 지시서가 `→ [사진 추가]` 로 끝나는 단계(2026-09-04 합의).
   //    그 버튼은 파일 고르개이고 이 화면에는 저장 버튼이 없다. 러너가 대안(`저장`…)을 훑으면

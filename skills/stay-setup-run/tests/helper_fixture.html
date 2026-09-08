@@ -167,6 +167,30 @@
   </div>
 </section>
 
+<!-- 시즌 [가격] 드로어 — 가격 채우기 (2026-09-08 신설 칸 둘).
+     ① `박수별 단가(선택)` — `3:100,5:90` 은 "3박부터 1박 100, 5박부터 1박 90" 이다.
+     ② `아동 추가 금액 — <노출명>` 은 **유료 연령 구간마다 한 칸**이고, 구분자는
+        EM DASH(U+2014) 앞뒤 공백이다(`forms.SeasonPriceFillForm._build_child_extra_fields`).
+        `성인 요금의 %` 구간의 칸은 `disabled`+`readonly` 라 값을 넣으면 실패한다 —
+        지시서는 그 줄을 `자동 입력됨 · 그대로 둠` 으로 적고 러너는 **건드리지 않고 지나가야** 한다.
+     칸 차례도 화면 그대로다: 인원 축 → 박수 → 아동 금액 → 덮기 스위치(`order_fields`). -->
+<section id="stay_season_fill_form" class="card"><h3 class="card-title">가격 채우기</h3>
+  <table class="bs-table"><tbody>
+    <tr><th>판매 단가(공급 통화)</th><td><input type="number" name="price"></td></tr>
+    <tr><th>인원 조합(선택)</th><td><input type="text" name="occupancy_keys" placeholder="A2,A3"></td></tr>
+    <tr><th>인원 조합별 조정(선택)</th><td><input type="text" name="occupancy_adjust" placeholder="A3:+14,A4:+26"></td></tr>
+    <tr><th>박수별 단가(선택)</th><td><input type="text" name="los_prices" placeholder="3:100,5:90"></td></tr>
+    <tr><th>아동 추가 금액 — 소아</th><td><input type="number" name="child_extra_CHD" placeholder="23.18"></td></tr>
+    <tr><th>아동 추가 금액 — 유아</th><td>
+      <input type="text" name="child_extra_INF" value="성인 1인 추가분의 75% 로 계산됨" readonly disabled>
+    </td></tr>
+    <tr><th>이미 값이 있는 날도 덮기</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="overwrite"><span>이미 값이 있는 날도 덮기</span></label>
+    </td></tr>
+  </tbody></table>
+  <button type="button">이 단가로 깔기</button>
+</section>
+
 <!-- 요금제 정본 드로어.
      ① `지금 모든 객실에 배포` 는 **[정본 만들기] 드로어에만** 있다 —
         [편집] 로 연 정본에는 그 체크도 `배포` 머리도 없다. 그래서 여기에는 두지 않는다.
@@ -196,11 +220,85 @@
   <button type="button">세후가로 확정</button>
 </section>
 
-<!-- 가격 캘린더의 2층 모달 — `.modal.open` 이 아니라 `.stay-modal` 이다 -->
+<!-- 가격 캘린더의 2층 모달 — `.modal.open` 이 아니라 `.stay-modal` 이다.
+     2026-09-08 화면(`_calendar_cell_edit.html`) 그대로다:
+     ① 위 표(이미 있는 행)의 열은 `인원 조합 · 박수~ · 판매가 · 정가 · 공급 원가 · 상태 · 액션`
+        이고 **`출처` 열은 없어졌다**. 행은 좌표 묶음으로 그려 `인원 조합` 칸이 그룹 머리에
+        **한 번만**(글자, 입력칸 아님) 선다 — 그래서 그 열에는 채울 칸이 없다.
+     ② 아래 카드 이름이 `인원별 가격 추가` → **`인원별 · 박수별 가격 추가`** 로 바뀌었고,
+        그 카드의 `인원 조합` 은 텍스트가 아니라 **셀렉트**다. 항목 글자는 **키가 앞**이다
+        (`forms.occupancy_select_label`) — 원고가 `A2C1_CHD` 만 적어도 그 항목이 골라져야 한다.
+     ③ 새 행 표에는 `<th>` 가 없다 — 열 제목은 `<thead>` 에만 있고 행은 `<td>` 뿐이다. -->
 <div id="stay_cell_edit" class="stay-modal stay-modal--page" style="display:none">
   <div class="stay-modal__mask">
     <div class="stay-modal__panel">
       <div class="stay-modal__head"><h4 class="stay-modal__title">2026-01-01 · 싱글룸</h4></div>
+
+      <div class="table1">
+        <table class="bs-table stay-table">
+          <thead><tr>
+            <th>인원 조합</th><th>박수~</th><th>판매가</th><th>정가</th>
+            <th>공급 원가</th><th>상태</th><th>액션</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td rowspan="2" class="stay-cell-group">A2 · 성인 2</td>
+              <td><input type="number" name="los_nights" value="1"></td>
+              <td><input type="number" name="price" value="92"></td>
+              <td><input type="number" name="original_price"></td>
+              <td><input type="number" name="net_amount"></td>
+              <td>열림</td>
+              <td><button type="button">저장</button></td>
+            </tr>
+            <tr>
+              <td class="stay-cell-tier"><input type="number" name="los_nights" value="3">
+                <span class="stay-badge">3박~</span></td>
+              <td><input type="number" name="price" value="82"></td>
+              <td><input type="number" name="original_price"></td>
+              <td><input type="number" name="net_amount"></td>
+              <td>열림</td>
+              <td><button type="button">저장</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 class="stay-section-title">인원별 · 박수별 가격 추가
+        <span class="stay-info" tabindex="0" aria-label="보통은 인원 무관 단일가 1박 한 행이면 충분합니다.">?</span>
+      </h4>
+      <div id="stay_cell_add_1" class="table1">
+        <table class="bs-table stay-table">
+          <thead><tr>
+            <th>인원 조합</th><th>박수~</th><th>판매가</th><th>정가</th>
+            <th>공급 원가</th><th>상태</th><th>액션</th>
+          </tr></thead>
+          <tbody><tr>
+            <td><select class="browser-default" name="occupancy_key">
+              <option value="">인원 무관 단일가</option>
+              <option value="A2">A2 · 성인 2</option>
+              <option value="A2C1_CHD">A2C1_CHD · 성인 2 · 소아 1</option>
+            </select></td>
+            <td><input type="number" name="los_nights" value="1" list="stay_los_options"></td>
+            <td><input type="number" name="price"></td>
+            <td><input type="number" name="original_price"></td>
+            <td><input type="number" name="net_amount"></td>
+            <td><select class="browser-default" name="availability_status">
+              <option value="0">열림</option><option value="1">닫힘</option>
+            </select></td>
+            <td>
+              <input type="hidden" name="option" value="9">
+              <input type="hidden" name="date" value="2026-01-01">
+              <button type="button">추가</button>
+            </td>
+          </tr></tbody>
+        </table>
+      </div>
+
+      <datalist id="stay_los_options">
+        <option value="1">박수 무관</option><option value="2"></option><option value="3"></option>
+        <option value="4"></option><option value="5"></option><option value="7"></option>
+      </datalist>
+
       <button type="button">닫기</button>
     </div>
   </div>
