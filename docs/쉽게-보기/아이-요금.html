@@ -1,0 +1,130 @@
+<title>아이 요금, 어디에 적나</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;700&display=swap">
+<style>
+  :root{
+    --bg:#EAF4F6; --paper:#FFFFFF; --ink:#17323D; --muted:#5F7B84; --line:#C9DDE2;
+    --accent:#FF8A3D; --teal:#2B9EB3; --teal-soft:#D5EDF2; --ok:#2E9E6B; --bad:#D9534F;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0F2028; --paper:#16303A; --ink:#EAF4F6; --muted:#9DB8C0; --line:#2C4954;
+      --accent:#FFA062; --teal:#5CC3D6; --teal-soft:#1E4652; --ok:#5CCB93; --bad:#F07C78;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0F2028; --paper:#16303A; --ink:#EAF4F6; --muted:#9DB8C0; --line:#2C4954;
+    --accent:#FFA062; --teal:#5CC3D6; --teal-soft:#1E4652; --ok:#5CCB93; --bad:#F07C78;
+  }
+  body{background:var(--bg);color:var(--ink);font-family:"Noto Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.5;margin:0}
+  .wrap{max-width:780px;margin:0 auto;padding:40px 20px 64px}
+  h1{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:clamp(30px,6vw,44px);line-height:1.15;margin:0 0 8px;text-wrap:balance}
+  .lead{font-size:18px;color:var(--muted);margin:0 0 32px;max-width:34em}
+  .panel{display:grid;grid-template-columns:180px 1fr;gap:24px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:22px 24px}
+  .panel svg{width:100%;height:auto;display:block}
+  .panel h2{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:27px;margin:0 0 6px}
+  .panel p{margin:0;font-size:17px;max-width:26em}
+  .panel .tag{display:inline-block;font-size:12px;letter-spacing:.08em;color:var(--teal);border:1px solid var(--teal);border-radius:999px;padding:2px 10px;margin-bottom:10px}
+  .bad .tag{color:var(--bad);border-color:var(--bad)}
+  .arrow{display:flex;justify-content:center;padding:6px 0}
+  .arrow svg{width:36px;height:36px}
+  .three{margin-top:36px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px}
+  .three h2{font-family:"Gowun Dodum","Noto Sans KR",sans-serif;font-weight:400;font-size:24px;margin:0 0 6px}
+  .three p.sub{margin:0 0 16px;color:var(--muted);font-size:15px}
+  .three ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .three li{background:var(--bg);border-radius:14px;padding:14px;font-size:15px}
+  .three li b{display:block;font-family:"Gowun Dodum",sans-serif;font-weight:400;font-size:20px;margin-bottom:6px;color:var(--teal)}
+  .three li small{display:block;color:var(--muted);margin-top:6px}
+  .foot{color:var(--muted);font-size:14px;margin-top:24px;max-width:42em}
+  @media (max-width:560px){.panel{grid-template-columns:1fr;text-align:center}.panel p{margin:0 auto}.panel svg{max-width:160px;margin:0 auto}}
+</style>
+
+<div class="wrap">
+  <h1>아이 요금은 세 군데 중 한 곳에만 적어요</h1>
+  <p class="lead">어제(9월 7일) 고친 것. 계약서의 "소아·유아" 한 줄이 ERP에서 어느 칸으로 가야 하는지 정했고, 틀리면 검사기가 막아요.</p>
+
+  <section class="panel bad">
+    <svg viewBox="0 0 200 200" role="img" aria-label="아이 위에 가격표 두 장">
+      <circle cx="100" cy="78" r="26" fill="#F6D8C2" stroke="var(--ink)" stroke-width="4"/>
+      <path d="M62 150c0-22 17-38 38-38s38 16 38 38z" fill="var(--teal)" stroke="var(--ink)" stroke-width="4"/>
+      <g transform="rotate(-12 60 60)"><rect x="30" y="40" width="58" height="30" rx="6" fill="#FFF6EC" stroke="var(--bad)" stroke-width="3"/><text x="59" y="60" text-anchor="middle" font-size="12" fill="var(--bad)" font-family="Noto Sans KR" font-weight="700">성인가</text></g>
+      <g transform="rotate(10 150 60)"><rect x="118" y="40" width="58" height="30" rx="6" fill="#FFF6EC" stroke="var(--bad)" stroke-width="3"/><text x="147" y="60" text-anchor="middle" font-size="12" fill="var(--bad)" font-family="Noto Sans KR" font-weight="700">소아가</text></g>
+      <text x="100" y="185" text-anchor="middle" font-size="26" fill="var(--bad)" font-family="Noto Sans KR" font-weight="700">×2</text>
+    </svg>
+    <div>
+      <span class="tag">전에는</span>
+      <h2>아이를 상품처럼 팔았어요</h2>
+      <p>계약서의 "소아 만6~11세 무료 투숙" 을 <b>부가옵션</b> 한 줄로 넣었어요. 그러면 고객 화면에 아이가 사는 물건처럼 뜨고, 성인 요금 위에 소아 요금이 또 붙어 한 아이에게 두 번 받는 화면이 됐어요. 인원 선택기엔 아이 칸이 아예 없었고요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="어른 둘과 아이 하나가 인원으로 서 있음">
+      <g stroke="var(--ink)" stroke-width="4">
+        <circle cx="50" cy="60" r="20" fill="#F6D8C2"/><path d="M20 130c0-20 13-34 30-34s30 14 30 34z" fill="var(--teal)"/>
+        <circle cx="110" cy="60" r="20" fill="#F6D8C2"/><path d="M80 130c0-20 13-34 30-34s30 14 30 34z" fill="var(--teal)"/>
+        <circle cx="160" cy="86" r="14" fill="#F6D8C2"/><path d="M140 130c0-14 9-24 20-24s20 10 20 24z" fill="var(--accent)"/>
+      </g>
+      <rect x="20" y="146" width="160" height="34" rx="8" fill="var(--teal-soft)" stroke="var(--line)"/>
+      <text x="100" y="168" text-anchor="middle" font-size="14" fill="var(--ink)" font-family="Noto Sans KR" font-weight="700">성인 2 · 소아 1</text>
+    </svg>
+    <div>
+      <span class="tag">고침 ①</span>
+      <h2>방에서 자는 아이는 "인원"</h2>
+      <p>계약서가 아이를 한 마디라도 말하면 <b>연령 구간</b> 단계를 꼭 넣어요 — 유아 0~4.99, 소아 5~15.99처럼 계약서가 그은 경계 그대로. 그래야 고객이 "성인 2, 소아 1" 로 예약할 수 있어요. 이름을 "소아 (만6~11세)" 처럼 대상만 적으면 검사기가 오류로 잡아요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="달력에 밤마다 붙는 가격">
+      <rect x="24" y="30" width="152" height="140" rx="10" fill="#FFFFFF" stroke="var(--ink)" stroke-width="4"/>
+      <rect x="24" y="30" width="152" height="26" rx="10" fill="var(--teal)"/>
+      <g fill="var(--teal-soft)" stroke="var(--line)">
+        <rect x="38" y="70" width="36" height="28" rx="4"/><rect x="82" y="70" width="36" height="28" rx="4"/><rect x="126" y="70" width="36" height="28" rx="4"/>
+        <rect x="38" y="108" width="36" height="28" rx="4"/><rect x="82" y="108" width="36" height="28" rx="4"/><rect x="126" y="108" width="36" height="28" rx="4"/>
+      </g>
+      <g fill="var(--accent)" font-size="10" font-family="Noto Sans KR" font-weight="700" text-anchor="middle">
+        <text x="56" y="88">$15</text><text x="100" y="88">$15</text><text x="144" y="88">$20</text>
+        <text x="56" y="126">$20</text><text x="100" y="126">$15</text><text x="144" y="126">$15</text>
+      </g>
+      <text x="100" y="160" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="Noto Sans KR">1박마다 · 시즌마다</text>
+    </svg>
+    <div>
+      <span class="tag">고침 ② (밤에 정정)</span>
+      <h2>아이 1박 요금은 부가옵션 한 곳</h2>
+      <p>처음엔 연령 구간에 요금을 적자고 했는데, ERP 계산을 실제로 재 보니 <b>연령 구간의 요금 기준은 표기용</b>이라 계산에 안 쓰이고, 부과금 "인당" 은 체류당 한 번만 받아요. 그래서 밤마다 붙는 소아 요금(하프보드 소아 식사비 같은 것)은 <b>부가옵션의 시즌별 가격 행</b> 한 곳에만 적기로 정정했어요.</p>
+    </div>
+  </section>
+
+  <div class="arrow"><svg viewBox="0 0 36 36"><path d="M18 4v24M8 18l10 10 10-10" fill="none" stroke="var(--muted)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <section class="panel">
+    <svg viewBox="0 0 200 200" role="img" aria-label="12월 24일 접시 하나에 어른값 아이값">
+      <circle cx="100" cy="100" r="58" fill="#FFFFFF" stroke="var(--ink)" stroke-width="4"/>
+      <circle cx="100" cy="100" r="38" fill="var(--teal-soft)"/>
+      <rect x="66" y="18" width="68" height="22" rx="6" fill="var(--accent)"/>
+      <text x="100" y="34" text-anchor="middle" font-size="12" fill="#FFFFFF" font-family="Noto Sans KR" font-weight="700">12/24 의무</text>
+      <text x="100" y="96" text-anchor="middle" font-size="13" fill="var(--ink)" font-family="Noto Sans KR" font-weight="700">성인 $60</text>
+      <text x="100" y="114" text-anchor="middle" font-size="13" fill="var(--ink)" font-family="Noto Sans KR" font-weight="700">소아 $30</text>
+    </svg>
+    <div>
+      <span class="tag">고침 ③</span>
+      <h2>갈라디너는 부과금 하나에 어른값·아이값</h2>
+      <p>크리스마스 갈라디너처럼 특정 날 인당 한 번 받는 돈은 <b>의무 부과금 하나</b>로 넣고, 그 안의 "연령별 단가" 에 소아·유아 값을 적어요. 고객이 뺄 수 있는 부가옵션으로 쪼개지 않아요 — 호텔이 반드시 받는 돈이니까요.</p>
+    </div>
+  </section>
+
+  <div class="three">
+    <h2>확인한 것 · 남은 것</h2>
+    <p class="sub">문서만 바꾼 게 아니라 실제로 돌려 봤어요.</p>
+    <ol>
+      <li><b>운영에서 통과</b>씨센스(43886)에 연령 구간 4단계를 로봇이 넣어 저장까지 성공. 시험 호텔 7개 지시서 전부 새 규칙으로 다시 만듦.<small>검사기 오류 2·경고 1 + 테스트 37건 추가</small></li>
+      <li><b>ERP 쪽도 같이</b>연령 구간을 만드는 화면이 ERP에 아예 없어서(테이블만 있던 상태) 9/4에 오퍼 탭에 패널이 생겼고, 그게 이 규칙의 출발점이에요.<small>연령 구간 → 견적 계산 연동은 ERP 개선 요청으로 올림</small></li>
+      <li><b>아직 못 하는 것</b>갈라디너 나이 컷(만 4세)이 룸의 소아 경계(만 6세)와 다르면 정확히 못 적어요 — 부과금의 연령별 단가가 그 오퍼의 연령 구간만 보기 때문.<small>D·F 호텔 changes.md 에 기록</small></li>
+    </ol>
+    <p class="foot">한 줄로: 방에서 자는 아이 = 연령 구간(인원) · 밤마다 붙는 아이 요금 = 부가옵션 시즌별 가격 · 특정 날 한 번 받는 아이 요금 = 의무 부과금의 연령별 단가. 같은 아이에게 두 곳에서 받으면 검사기가 막아요.</p>
+  </div>
+</div>
