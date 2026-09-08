@@ -2,11 +2,11 @@
 # 다중 인증 6자리를 크롬의 ERP 인증 화면에 쳐 넣고 [인증] 을 누른다 — **사용자가 직접 실행하는 명령**이다.
 #
 #   ! bash skills/stay-setup-run/scripts/mfa_type.sh 123456
-#   ! bash skills/stay-setup-run/scripts/mfa_type.sh 123456 https://<다른 ERP 주소>/accounts/login/mfa/
+#   ! bash skills/stay-setup-run/scripts/mfa_type.sh 123456 https://<ERP 주소>/accounts/login/mfa/
 #
 # Claude Code / Codex 입력창에서 `!` 로 시작하면 세션 셸에서 실행된다 — 에이전트는 이 스크립트를 실행하지도,
 # 코드를 대신 넣지도 않는다(SKILL.md "로그인 넘김"). 인증 화면 주소는 둘째 인자 또는 환경변수
-# STAY_ERP_MFA_URL 로 준다. 둘 다 없으면 운영 ERP(https://basecamp.team/accounts/login/mfa/)다.
+# STAY_ERP_MFA_URL 로 준다(저장소에는 주소를 적지 않는다).
 #
 # 이 파일은 리눅스(X11 + xdotool)와 맥(osascript)을 함께 다룬다 — `uname` 이 Darwin 이면 맥 경로로 간다.
 # 윈도우는 같은 규약의 PowerShell 판이 옆에 있다:
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 code="${1:-}"
-url="${2:-${STAY_ERP_MFA_URL:-https://basecamp.team/accounts/login/mfa/}}"
+url="${2:-${STAY_ERP_MFA_URL:-}}"
 
 if [[ ! "$code" =~ ^[0-9]{6}$ ]]; then
   echo "사용법: mfa_type.sh <6자리 숫자> [인증 화면 주소]" >&2; exit 2
