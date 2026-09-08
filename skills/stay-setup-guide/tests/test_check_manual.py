@@ -422,10 +422,14 @@ class SaleWindowTest(unittest.TestCase):
         self.assertEqual(self.blanks(HEAD + offer_step(4)), [])
 
     def test_blank_booking_window_is_a_warning_not_an_error(self):
+        #: `작성일:` 은 **첫 단계 앞**에 있어야 "오늘" 로 읽힌다 — 뒤에 두면 검사하는 날이 오늘이
+        #: 되어 시험이 날짜에 흔들린다(2026-09-08 에 실제로 깨졌다).
+        md = "# 시험 호텔 — 입력 지시서\n\n작성일: 2026-09-07\n" + HEAD.split("\n", 1)[1] \
+            + offer_dates_step(4, book_start="비움")
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "manual.md")
             with open(path, "w", encoding="utf-8") as f:
-                f.write(HEAD + "작성일: 2026-09-07\n" + offer_dates_step(4, book_start="비움"))
+                f.write(md)
             self.assertEqual(cm.main([path]), 0)
 
     # (c) 판매 구간 밖(과거)에서 끝나는 시즌은 만들지 않는다
@@ -1125,6 +1129,23 @@ class AgeBandOverlapTest(unittest.TestCase):
         with open(EXAMPLE, encoding="utf-8") as handle:
             self.assertEqual(self.problems(handle.read()), [])
 
+    def test_the_man_nai_labels_are_read_too(self):
+        """나이 칸 이름이 `최소 연령 (만 나이)` 로 바뀌어도 겹침을 잡는다.
+
+        2026-09-08 에 화면 라벨이 바뀌었다(`OfferAgeBandForm.__init__`). 이름 하나만 보던
+        동안에는 새 라벨을 쓴 원고에서 이 검사가 **조용히 건너뛰었다** — 화면이 거부하는
+        원고가 검사를 통과해, 담당자는 그 단계에 가서야 막힌다.
+        """
+        md = (HEAD + offer_step(4)
+              + age_band_range_step(5, "유아", "INF", "0", "6")
+              + age_band_range_step(6, "소아", "CHD", "6", "11.99"))
+        md = md.replace("| 최소 연령 |", "| 최소 연령 (만 나이) |")
+        md = md.replace("| 최대 연령 |", "| 최대 연령 (만 나이) |")
+        self.assertIn("최소 연령 (만 나이)", md)
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("겹친다", problems[0])
+
 
 def charge_with_age_rate(num, band="초등학생"):
     return f"""
@@ -1630,6 +1651,67 @@ class AddressCellTest(unittest.TestCase):
             self.assertEqual(cm.check(path)["sheet_cells"], [])
 
 
+class OccupancyKeyIsNotASheetCellTest(unittest.TestCase):
+    """인원 조합 줄의 A-형 좌표(`A2,A3`)는 시트 좌표가 아니다 — **행으로** 거른다.
+
+    `CELL_EXCLUDE` 에 `^A\\d{1,2}$` 를 더하는 길도 있었지만 쓰지 않는다: `A2` 를 통과시키는
+    대신 **진짜 시트 A열 좌표 `A70` 까지 눈감아** 오탐을 미탐으로 바꾼다. 아래 두 시험이
+    그 둘을 함께 잠근다.
+    """
+
+    def cells(self, body):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + body)
+            return cm.check(path)["sheet_cells"]
+
+    FILL = """
+## 4. 시즌 가격 채우기 (1회차, Low × Deluxe)
+탭: `시즌`
+카드: `Low`
+버튼: [가격]
+
+| 칸 | 값 |
+|---|---|
+| 판매 단가(공급 통화) | 92.00 |
+| 인원 조합(선택) | A2,A3 |
+| 인원 조합별 조정(선택) | A3:+30 |
+
+→ [이 단가로 깔기]
+"""
+
+    def test_a_form_occupancy_keys_are_not_sheet_cells(self):
+        self.assertEqual(self.cells(self.FILL), [])
+
+    def test_a_column_sheet_coordinate_is_still_caught(self):
+        """`A70` 은 여전히 의심이다 — 인원 조합 줄이 아닌 자리에 있으면 시트 좌표다."""
+        body = """
+## 4. 호텔 정보 입력
+탭: `호텔 정보`
+
+| 칸 | 값 |
+|---|---|
+| 소개 | 요금표 A70 참고 |
+
+→ [저장]
+"""
+        self.assertEqual(self.cells(body), ["A70"])
+
+    def test_other_columns_are_still_caught(self):
+        body = """
+## 4. 호텔 정보 입력
+탭: `호텔 정보`
+
+| 칸 | 값 |
+|---|---|
+| 소개 | 요금표 B47 참고 |
+
+→ [저장]
+"""
+        self.assertEqual(self.cells(body), ["B47"])
+
+
 def child_addon_step(num, name, title="부가옵션 만들기", extra=()):
     body = "\n".join(f"| {k} | {v} |" for k, v in extra)
     return f"""
@@ -1724,9 +1806,17 @@ class ChildPolicyAgeBandTest(unittest.TestCase):
         md = HEAD + child_addon_step(4, "엑스트라베드 (1대)")
         self.assertEqual(cm.find_child_policy_without_age_band(steps_of(md)), [])
 
-    def test_child_word_without_stay_words_is_ok(self):
+    def test_child_named_addon_without_age_band_is_warning(self):
+        """파는 것이 식사라도 그 아이를 인원으로 고를 수 없으면 아무도 살 수 없다(§E-7)."""
         md = HEAD + child_addon_step(4, "하프보드 소아 (만6~11세)")
-        self.assertEqual(cm.find_child_policy_without_age_band(steps_of(md)), [])
+        problems = cm.find_child_policy_without_age_band(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("연령 구간 단계가 없다", problems[0])
+
+    def test_it_is_reported_once_per_step(self):
+        """이름과 글 둘 다 걸려도 한 단계는 한 번만 알린다."""
+        md = HEAD + child_addon_step(4, "쉐어베드 소아", extra=self.FREE_STAY)
+        self.assertEqual(len(cm.find_child_policy_without_age_band(steps_of(md))), 1)
 
     def test_it_is_a_warning_not_an_error(self):
         md = HEAD + child_addon_step(4, "조식 소아", extra=self.FREE_STAY)
@@ -2170,3 +2260,387 @@ class ExtraBedMandatoryRuleTest(unittest.TestCase):
         with open(EXAMPLE, encoding="utf-8") as handle:
             steps = cm.parse_steps(handle.read().splitlines())
         self.assertEqual(cm.find_extra_bed_optional_rules(steps), [])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 아동 요금 좌표·LOS·밴드 코드 (2026-09-08 정본) — 아이가 방에서 자는 1박 요금은
+# `시즌 가격 채우기` 의 `아동 추가 금액 — <노출명>` 한 곳에만 둔다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def paid_band_step(num, name="소아", code="CHD", kind="정액", card="`2026 시즌 요금`"):
+    """유료 연령 구간 — `요금 기준 유형` 이 `무료` 가 아니라 시즌 채우기에 아동 금액 칸이 선다."""
+    return f"""
+## {num}. 연령 구간 만들기 ({num}번째, {name})
+탭: `오퍼`
+카드: {card}
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | {code} |
+| 노출명 | {name} |
+| 최소 연령 (만 나이) | 5 |
+| 최대 연령 (만 나이) | 11.99 |
+| 방 인원수에 포함 | 체크 |
+| 요금 기준 유형 | 선택: {kind} |
+| 상세(자유텍스트) | 비움 |
+
+→ [추가]
+"""
+
+
+def price_fill_step(num, season="Regular", room="Single", rows=()):
+    """`시즌 가격 채우기` — 새 칸(인원 조합·박수별 단가·아동 추가 금액)을 줄로 더해 쓴다."""
+    body = "".join(f"| {k} | {v} |\n" for k, v in rows)
+    return f"""
+## {num}. 시즌 가격 채우기 ({num}회차, {season} × {room})
+탭: `시즌`
+카드: `{season}`
+버튼: [가격]
+
+| 칸 | 값 |
+|---|---|
+| 판매 단가(공급 통화) | 92.00 |
+| 대상 룸 | 선택: {room} |
+{body}| 이미 값이 있는 날도 덮기 | 해제 |
+
+→ [이 단가로 깔기]
+"""
+
+
+def child_price_manual(fill_rows=(), band_kind="정액", band_name="소아"):
+    """오퍼 → 유료 연령 구간 → 시즌 → 가격 채우기 한 벌."""
+    return (HEAD + offer_step(4)
+            + paid_band_step(5, name=band_name, kind=band_kind)
+            + season_step(6, "Regular", "2026 시즌 요금", RANGE)
+            + price_fill_step(7, rows=fill_rows))
+
+
+class ChildExtraAmountTest(unittest.TestCase):
+    """유료 연령 구간마다 `아동 추가 금액 — <노출명>` 줄이 시즌 가격 채우기에 있어야 한다."""
+
+    def problems(self, md):
+        return cm.find_child_extra_missing(steps_of(md))
+
+    def test_row_present_is_ok(self):
+        md = child_price_manual(fill_rows=[("아동 추가 금액 — 소아", "23.18")])
+        self.assertEqual(self.problems(md), [])
+
+    def test_missing_row_is_error(self):
+        md = child_price_manual(fill_rows=[("인원 조합(선택)", "A2,A3")])
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("5단계", problems[0])
+        self.assertIn("아동 추가 금액 — 소아", problems[0])
+        self.assertIn("그 칸 한 곳에만", problems[0])
+
+    def test_free_band_needs_no_row(self):
+        """`무료` 구간은 화면에 칸이 서지 않는다 — 줄을 적지 않는 것이 정본이다."""
+        md = child_price_manual(band_kind="무료")
+        self.assertEqual(self.problems(md), [])
+
+    def test_percent_band_still_needs_the_row(self):
+        """`성인 요금의 %` 구간도 칸은 선다(읽기 전용) — `자동 입력됨 · 그대로 둠` 으로 적는다."""
+        rows = [("아동 추가 금액 — 소아", "자동 입력됨 · 그대로 둠")]
+        self.assertEqual(self.problems(child_price_manual(fill_rows=rows, band_kind="성인 요금의 %")), [])
+        self.assertEqual(len(self.problems(child_price_manual(band_kind="성인 요금의 %"))), 1)
+
+    def test_typo_separators_are_accepted(self):
+        """정본은 EM DASH 지만 원고 오타(EN DASH·하이픈·가운뎃점)로 검사가 헛돌면 안 된다."""
+        for label in ("아동 추가 금액 – 소아", "아동 추가 금액 - 소아", "아동 추가 금액 · 소아"):
+            md = child_price_manual(fill_rows=[(label, "23.18")])
+            self.assertEqual(self.problems(md), [], label)
+
+    def test_a_different_band_name_does_not_count(self):
+        md = child_price_manual(fill_rows=[("아동 추가 금액 — 유아", "0")])
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_another_offers_row_does_not_count(self):
+        """구간은 오퍼의 자식이다 — 다른 오퍼의 시즌에 적힌 줄로는 채워지지 않는다."""
+        md = (HEAD + offer_step(4)
+              + paid_band_step(5, card="`2027 시즌 요금`")
+              + season_step(6, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(7, rows=[("아동 추가 금액 — 소아", "23.18")])
+              + season_step(8, "Peak", "2027 시즌 요금", OUTSIDE)
+              + price_fill_step(9, season="Peak"))
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("5단계", problems[0])
+
+    def test_manual_without_price_fill_steps_is_skipped(self):
+        """가격을 셀로 손입력하는 원고는 이 검사를 건너뛴다."""
+        md = HEAD + offer_step(4) + paid_band_step(5)
+        self.assertEqual(self.problems(md), [])
+
+    def test_it_is_an_error_not_a_warning(self):
+        md = child_price_manual()
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+            self.assertEqual(len(r["child_extra_missing"]), 1, r["child_extra_missing"])
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
+
+
+class ChildLodgingAddonTest(unittest.TestCase):
+    """부가옵션은 **따로 사는 것**만 판다 — 아이의 잠자리는 `아동 추가 금액` 이다(§D-1)."""
+
+    def problems(self, md):
+        return cm.find_child_lodging_addon(steps_of(md))
+
+    def test_share_bed_child_addon_is_error(self):
+        md = HEAD + child_addon_step(4, "쉐어베드 소아 (만 5세 이하)")
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("아이의 1박 요금이다", problems[0])
+        self.assertIn("아동 추가 금액", problems[0])
+
+    def test_breakfast_bundled_share_bed_is_still_error(self):
+        """파는 것이 잠자리면 조식이 묶여 있어도 그 값은 아이 1박 요금이다."""
+        md = HEAD + child_addon_step(4, "쉐어베드 소아 (만 6~11세 · 조식 포함)")
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_sofa_bed_and_bed_share_are_errors(self):
+        for name in ("조식 + 소파베드 소아 (만 5~12세)", "소아 베드셰어 (만 8~11세)",
+                     "child share bed (age 5-11)", "정원 내 유아 무료 투숙"):
+            md = HEAD + child_addon_step(4, name)
+            self.assertEqual(len(self.problems(md)), 1, name)
+
+    def test_child_night_without_goods_is_error(self):
+        md = HEAD + child_addon_step(4, "소아 추가 (만 5~11세) · 1박")
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_meal_and_pickup_addons_are_ok(self):
+        """식사 업그레이드·픽업은 따로 사는 것이라 이름에 아이가 들어가도 부가옵션이 맞다."""
+        for name in ("하프보드 소아 (만 6~11세)", "조식 소아 (만 6~11세) 1박 1인",
+                     "풀보드 소아 (만6~11세)", "공항 픽업 소아 · 1인",
+                     "Halfboard child 6-11.99"):
+            md = HEAD + child_addon_step(4, name)
+            self.assertEqual(self.problems(md), [], name)
+
+    def test_extra_bed_is_always_an_addon(self):
+        """엑스트라베드는 방 정원 밖에 침대를 더 놓는 물건이라 언제나 부가옵션이다."""
+        for name in ("엑스트라베드 소아 (만 6~11세) · 1박", "추가 침대 소아 (만 6세~12세 미만 · 조식 포함)"):
+            md = HEAD + child_addon_step(4, name)
+            self.assertEqual(self.problems(md), [], name)
+
+    def test_adult_addon_is_not_checked(self):
+        md = HEAD + child_addon_step(4, "성인 엑스트라베드 (만 12세 이상 · 조식 포함) · 1박")
+        self.assertEqual(self.problems(md), [])
+
+    def test_surcharge_step_is_not_checked(self):
+        """부과금은 다른 갈래다 — 여기서는 `부가옵션 만들기` 만 본다."""
+        md = HEAD + child_addon_step(4, "쉐어베드 소아", title="부과금 추가")
+        self.assertEqual(self.problems(md), [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
+
+
+class BandCodeFormatTest(unittest.TestCase):
+    """밴드 코드는 영대문자·숫자 2~8자다 — 그 코드가 가격 셀 좌표에 그대로 실린다(A2C1_CHD)."""
+
+    def problems(self, code):
+        md = HEAD + offer_step(4) + paid_band_step(5, code=code)
+        return cm.find_band_code_format(steps_of(md))
+
+    def test_canonical_codes_are_ok(self):
+        for code in ("CHD", "INF", "TEEN", "CHILD", "C2", "CHD2026"):
+            self.assertEqual(self.problems(code), [], code)
+
+    def test_lowercase_is_ok(self):
+        """소문자로 쳐도 서버가 대문자로 굳힌다 — 막지 않는다."""
+        self.assertEqual(self.problems("chd"), [])
+
+    def test_underscore_is_error(self):
+        problems = self.problems("CHILD_1")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("5단계", problems[0])
+        self.assertIn("CHILD_1", problems[0])
+        self.assertIn("2~8자", problems[0])
+
+    def test_hangul_space_and_length_are_errors(self):
+        for code in ("소아", "CH D", "C", "CHILDBAND9", "CHD-1"):
+            self.assertEqual(len(self.problems(code)), 1, code)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_band_code_format(steps_of(handle.read())), [])
+
+
+class OccupancyKeyTest(unittest.TestCase):
+    """인원 조합 좌표는 A-형이다 — 옛 숫자 키(`2,3` · `3:+14`)는 오류."""
+
+    def problems(self, rows):
+        md = HEAD + price_fill_step(4, rows=rows)
+        return cm.find_occupancy_key_legacy(steps_of(md))
+
+    def test_a_form_keys_are_ok(self):
+        rows = [("인원 조합(선택)", "A2,A3,A2C1_CHD,A2C1_CHD_C1_TEEN"),
+                ("인원 조합별 조정(선택)", "A3:+14,A4:-5%")]
+        self.assertEqual(self.problems(rows), [])
+
+    def test_blank_is_ok(self):
+        self.assertEqual(self.problems([("인원 조합(선택)", "비움"),
+                                        ("인원 조합별 조정(선택)", "비움")]), [])
+
+    def test_bare_number_keys_are_error(self):
+        problems = self.problems([("인원 조합(선택)", "2,3")])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("옛 숫자 표기", problems[0])
+        self.assertIn("A2,A3", problems[0])
+
+    def test_bare_number_adjust_keys_are_error(self):
+        problems = self.problems([("인원 조합별 조정(선택)", "3:+14,4:+26")])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("인원 조합별 조정", problems[0])
+        self.assertIn("옛 숫자 표기", problems[0])
+
+    def test_unreadable_key_is_error(self):
+        problems = self.problems([("인원 조합(선택)", "성인 2명")])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("읽지 못한다", problems[0])
+
+    def test_both_fields_are_reported(self):
+        problems = self.problems([("인원 조합(선택)", "2,3"), ("인원 조합별 조정(선택)", "3:+14")])
+        self.assertEqual(len(problems), 2, problems)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_occupancy_key_legacy(steps_of(handle.read())), [])
+
+
+class LosPricesTest(unittest.TestCase):
+    """`박수별 단가(선택)` 는 `박수:1박 단가` 목록이다 — 부호 없음 · 박수 2 이상 · 중복 없음."""
+
+    def problems(self, value):
+        md = HEAD + price_fill_step(4, rows=[("박수별 단가(선택)", value)])
+        return cm.find_los_prices_format(steps_of(md))
+
+    def test_canonical_value_is_ok(self):
+        self.assertEqual(self.problems("3:100,5:90"), [])
+        self.assertEqual(self.problems("2:120.50"), [])
+
+    def test_blank_is_ok(self):
+        self.assertEqual(self.problems("비움"), [])
+
+    def test_signed_price_is_error(self):
+        problems = self.problems("3:+100")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("부호를 붙이지 않는다", problems[0])
+
+    def test_one_night_is_error(self):
+        problems = self.problems("1:120,3:100")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("박수는 2 이상", problems[0])
+
+    def test_duplicate_nights_is_error(self):
+        problems = self.problems("3:100,3:90")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("두 번", problems[0])
+
+    def test_prose_value_is_error(self):
+        self.assertEqual(len(self.problems("3박부터 100")), 1)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_los_prices_format(steps_of(handle.read())), [])
+
+
+class AgeBandBeforeSeasonFillTest(unittest.TestCase):
+    """`연령 구간 만들기` 는 그 오퍼의 첫 `시즌 가격 채우기` 보다 앞이다(§D-2)."""
+
+    def problems(self, md):
+        return cm.find_age_band_order(steps_of(md))
+
+    def test_band_before_fill_is_ok(self):
+        self.assertEqual(self.problems(child_price_manual(
+            fill_rows=[("아동 추가 금액 — 소아", "23.18")])), [])
+
+    def test_band_after_fill_is_error(self):
+        md = (HEAD + offer_step(4)
+              + season_step(5, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(6)
+              + paid_band_step(7))
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("7단계", problems[0])
+        self.assertIn("시즌 가격 채우기", problems[0])
+        self.assertIn("아동 추가 금액", problems[0])
+
+    def test_another_offers_fill_does_not_count(self):
+        md = (HEAD + offer_step(4)
+              + season_step(5, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(6)
+              + paid_band_step(7, card="`2027 시즌 요금`"))
+        self.assertEqual(self.problems(md), [])
+
+    def test_manual_without_fill_steps_is_ok(self):
+        self.assertEqual(self.problems(HEAD + offer_step(4) + paid_band_step(5)), [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(self.problems(handle.read()), [])
+
+
+class ChildExtraWithoutOccupancyTest(unittest.TestCase):
+    """아동 금액은 성인 좌표 위에 얹힌다 — `인원 조합` 이 비면 화면이 저장을 막는다(ERP 실측)."""
+
+    def problems(self, rows):
+        md = HEAD + price_fill_step(4, rows=rows)
+        return cm.find_child_extra_without_occupancy(steps_of(md))
+
+    def test_occupancy_with_child_extra_is_ok(self):
+        rows = [("인원 조합(선택)", "A2,A3"), ("아동 추가 금액 — 소아", "23.18")]
+        self.assertEqual(self.problems(rows), [])
+
+    def test_blank_occupancy_with_child_extra_is_error(self):
+        rows = [("인원 조합(선택)", "비움"), ("아동 추가 금액 — 소아", "23.18")]
+        problems = self.problems(rows)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("인원 조합이 비어 있다", problems[0])
+        self.assertIn("A2", problems[0])
+
+    def test_no_child_extra_row_keeps_blank_occupancy_ok(self):
+        """아동 줄이 없으면 인원 무관 단일가 한 좌표가 정본이다."""
+        self.assertEqual(self.problems([("인원 조합(선택)", "비움")]), [])
+
+    def test_readonly_percent_row_is_not_an_exception(self):
+        """`성인 요금의 %` 구간의 `자동 입력됨 · 그대로 둠` 도 아동 금액 목록에 실린다."""
+        rows = [("인원 조합(선택)", "비움"), ("아동 추가 금액 — 소아", "자동 입력됨 · 그대로 둠")]
+        self.assertEqual(len(self.problems(rows)), 1)
+
+    def test_missing_occupancy_row_is_error(self):
+        self.assertEqual(len(self.problems([("아동 추가 금액 — 소아", "23.18")])), 1)
+
+    def test_blank_child_amount_does_not_trigger(self):
+        """값을 비운 아동 줄은 그 구간의 셀을 아예 만들지 않는다(§B-4)."""
+        rows = [("인원 조합(선택)", "비움"), ("아동 추가 금액 — 소아", "비움")]
+        self.assertEqual(self.problems(rows), [])
+
+    def test_it_is_an_error_not_a_warning(self):
+        md = (HEAD + offer_step(4) + paid_band_step(5)
+              + season_step(6, "Regular", "2026 시즌 요금", RANGE)
+              + price_fill_step(7, rows=[("인원 조합(선택)", "비움"),
+                                         ("아동 추가 금액 — 소아", "23.18")]))
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+            self.assertEqual(len(r["child_extra_no_occupancy"]), 1, r["child_extra_no_occupancy"])
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_child_extra_without_occupancy(steps_of(handle.read())), [])

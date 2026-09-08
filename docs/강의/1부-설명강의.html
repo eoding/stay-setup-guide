@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계약서 한 장으로 호텔 하나</title>
+
+<!-- reveal.js 5.1.0 core CSS, inlined: artifact CSP allows only Google Fonts as an external stylesheet host -->
+<style>
+/*!
+* reveal.js 5.1.0
+* https://revealjs.com
+* MIT licensed
+*
+* Copyright (C) 2011-2024 Hakim El Hattab, https://hakim.se
+*/.reveal .r-stretch,.reveal .stretch{max-width:none;max-height:none}.reveal pre.r-stretch code,.reveal pre.stretch code{height:100%;max-height:100%;box-sizing:border-box}.reveal .r-fit-text{display:inline-block;white-space:nowrap}.reveal .r-stack{display:grid;grid-template-rows:100%}.reveal .r-stack>*{grid-area:1/1;margin:auto}.reveal .r-hstack,.reveal .r-vstack{display:flex}.reveal .r-hstack img,.reveal .r-hstack video,.reveal .r-vstack img,.reveal .r-vstack video{min-width:0;min-height:0;object-fit:contain}.reveal .r-vstack{flex-direction:column;align-items:center;justify-content:center}.reveal .r-hstack{flex-direction:row;align-items:center;justify-content:center}.reveal .items-stretch{align-items:stretch}.reveal .items-start{align-items:flex-start}.reveal .items-center{align-items:center}.reveal .items-end{align-items:flex-end}.reveal .justify-between{justify-content:space-between}.reveal .justify-around{justify-content:space-around}.reveal .justify-start{justify-content:flex-start}.reveal .justify-center{justify-content:center}.reveal .justify-end{justify-content:flex-end}html.reveal-full-page{width:100%;height:100%;height:100vh;height:calc(var(--vh,1vh) * 100);height:100svh;overflow:hidden}.reveal-viewport{height:100%;overflow:hidden;position:relative;line-height:1;margin:0;background-color:#fff;color:#000;--r-controls-spacing:12px}.reveal-viewport:fullscreen{top:0!important;left:0!important;width:100%!important;height:100%!important;transform:none!important}.reveal .fragment{transition:all .2s ease}.reveal .fragment:not(.custom){opacity:0;visibility:hidden;will-change:opacity}.reveal .fragment.visible{opacity:1;visibility:inherit}.reveal .fragment.disabled{transition:none}.reveal .fragment.grow{opacity:1;visibility:inherit}.reveal .fragment.grow.visible{transform:scale(1.3)}.reveal .fragment.shrink{opacity:1;visibility:inherit}.reveal .fragment.shrink.visible{transform:scale(.7)}.reveal .fragment.zoom-in{transform:scale(.1)}.reveal .fragment.zoom-in.visible{transform:none}.reveal .fragment.fade-out{opacity:1;visibility:inherit}.reveal .fragment.fade-out.visible{opacity:0;visibility:hidden}.reveal .fragment.semi-fade-out{opacity:1;visibility:inherit}.reveal .fragment.semi-fade-out.visible{opacity:.5;visibility:inherit}.reveal .fragment.strike{opacity:1;visibility:inherit}.reveal .fragment.strike.visible{text-decoration:line-through}.reveal .fragment.fade-up{transform:translate(0,40px)}.reveal .fragment.fade-up.visible{transform:translate(0,0)}.reveal .fragment.fade-down{transform:translate(0,-40px)}.reveal .fragment.fade-down.visible{transform:translate(0,0)}.reveal .fragment.fade-right{transform:translate(-40px,0)}.reveal .fragment.fade-right.visible{transform:translate(0,0)}.reveal .fragment.fade-left{transform:translate(40px,0)}.reveal .fragment.fade-left.visible{transform:translate(0,0)}.reveal .fragment.current-visible,.reveal .fragment.fade-in-then-out{opacity:0;visibility:hidden}.reveal .fragment.current-visible.current-fragment,.reveal .fragment.fade-in-then-out.current-fragment{opacity:1;visibility:inherit}.reveal .fragment.fade-in-then-semi-out{opacity:0;visibility:hidden}.reveal .fragment.fade-in-then-semi-out.visible{opacity:.5;visibility:inherit}.reveal .fragment.fade-in-then-semi-out.current-fragment{opacity:1;visibility:inherit}.reveal .fragment.highlight-blue,.reveal .fragment.highlight-current-blue,.reveal .fragment.highlight-current-green,.reveal .fragment.highlight-current-red,.reveal .fragment.highlight-green,.reveal .fragment.highlight-red{opacity:1;visibility:inherit}.reveal .fragment.highlight-red.visible{color:#ff2c2d}.reveal .fragment.highlight-green.visible{color:#17ff2e}.reveal .fragment.highlight-blue.visible{color:#1b91ff}.reveal .fragment.highlight-current-red.current-fragment{color:#ff2c2d}.reveal .fragment.highlight-current-green.current-fragment{color:#17ff2e}.reveal .fragment.highlight-current-blue.current-fragment{color:#1b91ff}.reveal:after{content:"";font-style:italic}.reveal iframe{z-index:1}.reveal a{position:relative}@keyframes bounce-right{0%,10%,25%,40%,50%{transform:translateX(0)}20%{transform:translateX(10px)}30%{transform:translateX(-5px)}}@keyframes bounce-left{0%,10%,25%,40%,50%{transform:translateX(0)}20%{transform:translateX(-10px)}30%{transform:translateX(5px)}}@keyframes bounce-down{0%,10%,25%,40%,50%{transform:translateY(0)}20%{transform:translateY(10px)}30%{transform:translateY(-5px)}}.reveal .controls{display:none;position:absolute;top:auto;bottom:var(--r-controls-spacing);right:var(--r-controls-spacing);left:auto;z-index:11;color:#000;pointer-events:none;font-size:10px}.reveal .controls button{position:absolute;padding:0;background-color:transparent;border:0;outline:0;cursor:pointer;color:currentColor;transform:scale(.9999);transition:color .2s ease,opacity .2s ease,transform .2s ease;z-index:2;pointer-events:auto;font-size:inherit;visibility:hidden;opacity:0;-webkit-appearance:none;-webkit-tap-highlight-color:transparent}.reveal .controls .controls-arrow:after,.reveal .controls .controls-arrow:before{content:"";position:absolute;top:0;left:0;width:2.6em;height:.5em;border-radius:.25em;background-color:currentColor;transition:all .15s ease,background-color .8s ease;transform-origin:.2em 50%;will-change:transform}.reveal .controls .controls-arrow{position:relative;width:3.6em;height:3.6em}.reveal .controls .controls-arrow:before{transform:translateX(.5em) translateY(1.55em) rotate(45deg)}.reveal .controls .controls-arrow:after{transform:translateX(.5em) translateY(1.55em) rotate(-45deg)}.reveal .controls .controls-arrow:hover:before{transform:translateX(.5em) translateY(1.55em) rotate(40deg)}.reveal .controls .controls-arrow:hover:after{transform:translateX(.5em) translateY(1.55em) rotate(-40deg)}.reveal .controls .controls-arrow:active:before{transform:translateX(.5em) translateY(1.55em) rotate(36deg)}.reveal .controls .controls-arrow:active:after{transform:translateX(.5em) translateY(1.55em) rotate(-36deg)}.reveal .controls .navigate-left{right:6.4em;bottom:3.2em;transform:translateX(-10px)}.reveal .controls .navigate-left.highlight{animation:bounce-left 2s 50 both ease-out}.reveal .controls .navigate-right{right:0;bottom:3.2em;transform:translateX(10px)}.reveal .controls .navigate-right .controls-arrow{transform:rotate(180deg)}.reveal .controls .navigate-right.highlight{animation:bounce-right 2s 50 both ease-out}.reveal .controls .navigate-up{right:3.2em;bottom:6.4em;transform:translateY(-10px)}.reveal .controls .navigate-up .controls-arrow{transform:rotate(90deg)}.reveal .controls .navigate-down{right:3.2em;bottom:-1.4em;padding-bottom:1.4em;transform:translateY(10px)}.reveal .controls .navigate-down .controls-arrow{transform:rotate(-90deg)}.reveal .controls .navigate-down.highlight{animation:bounce-down 2s 50 both ease-out}.reveal .controls[data-controls-back-arrows=faded] .navigate-up.enabled{opacity:.3}.reveal .controls[data-controls-back-arrows=faded] .navigate-up.enabled:hover{opacity:1}.reveal .controls[data-controls-back-arrows=hidden] .navigate-up.enabled{opacity:0;visibility:hidden}.reveal .controls .enabled{visibility:visible;opacity:.9;cursor:pointer;transform:none}.reveal .controls .enabled.fragmented{opacity:.5}.reveal .controls .enabled.fragmented:hover,.reveal .controls .enabled:hover{opacity:1}.reveal:not(.rtl) .controls[data-controls-back-arrows=faded] .navigate-left.enabled{opacity:.3}.reveal:not(.rtl) .controls[data-controls-back-arrows=faded] .navigate-left.enabled:hover{opacity:1}.reveal:not(.rtl) .controls[data-controls-back-arrows=hidden] .navigate-left.enabled{opacity:0;visibility:hidden}.reveal.rtl .controls[data-controls-back-arrows=faded] .navigate-right.enabled{opacity:.3}.reveal.rtl .controls[data-controls-back-arrows=faded] .navigate-right.enabled:hover{opacity:1}.reveal.rtl .controls[data-controls-back-arrows=hidden] .navigate-right.enabled{opacity:0;visibility:hidden}.reveal[data-navigation-mode=linear].has-horizontal-slides .navigate-down,.reveal[data-navigation-mode=linear].has-horizontal-slides .navigate-up{display:none}.reveal:not(.has-vertical-slides) .controls .navigate-left,.reveal[data-navigation-mode=linear].has-horizontal-slides .navigate-left{bottom:1.4em;right:5.5em}.reveal:not(.has-vertical-slides) .controls .navigate-right,.reveal[data-navigation-mode=linear].has-horizontal-slides .navigate-right{bottom:1.4em;right:.5em}.reveal:not(.has-horizontal-slides) .controls .navigate-up{right:1.4em;bottom:5em}.reveal:not(.has-horizontal-slides) .controls .navigate-down{right:1.4em;bottom:.5em}.reveal.has-dark-background .controls{color:#fff}.reveal.has-light-background .controls{color:#000}.reveal.no-hover .controls .controls-arrow:active:before,.reveal.no-hover .controls .controls-arrow:hover:before{transform:translateX(.5em) translateY(1.55em) rotate(45deg)}.reveal.no-hover .controls .controls-arrow:active:after,.reveal.no-hover .controls .controls-arrow:hover:after{transform:translateX(.5em) translateY(1.55em) rotate(-45deg)}@media screen and (min-width:500px){.reveal-viewport{--r-controls-spacing:0.8em}.reveal .controls[data-controls-layout=edges]{top:0;right:0;bottom:0;left:0}.reveal .controls[data-controls-layout=edges] .navigate-down,.reveal .controls[data-controls-layout=edges] .navigate-left,.reveal .controls[data-controls-layout=edges] .navigate-right,.reveal .controls[data-controls-layout=edges] .navigate-up{bottom:auto;right:auto}.reveal .controls[data-controls-layout=edges] .navigate-left{top:50%;left:var(--r-controls-spacing);margin-top:-1.8em}.reveal .controls[data-controls-layout=edges] .navigate-right{top:50%;right:var(--r-controls-spacing);margin-top:-1.8em}.reveal .controls[data-controls-layout=edges] .navigate-up{top:var(--r-controls-spacing);left:50%;margin-left:-1.8em}.reveal .controls[data-controls-layout=edges] .navigate-down{bottom:calc(var(--r-controls-spacing) - 1.4em + .3em);left:50%;margin-left:-1.8em}}.reveal .progress{position:absolute;display:none;height:3px;width:100%;bottom:0;left:0;z-index:10;background-color:rgba(0,0,0,.2);color:#fff}.reveal .progress:after{content:"";display:block;position:absolute;height:10px;width:100%;top:-10px}.reveal .progress span{display:block;height:100%;width:100%;background-color:currentColor;transition:transform .8s cubic-bezier(.26,.86,.44,.985);transform-origin:0 0;transform:scaleX(0)}.reveal .slide-number{position:absolute;display:block;right:8px;bottom:8px;z-index:31;font-family:Helvetica,sans-serif;font-size:12px;line-height:1;color:#fff;background-color:rgba(0,0,0,.4);padding:5px}.reveal .slide-number a{color:currentColor}.reveal .slide-number-delimiter{margin:0 3px}.reveal{position:relative;width:100%;height:100%;overflow:hidden;touch-action:pinch-zoom}.reveal.embedded{touch-action:pan-y}.reveal.embedded.is-vertical-slide{touch-action:none}.reveal .slides{position:absolute;width:100%;height:100%;top:0;right:0;bottom:0;left:0;margin:auto;pointer-events:none;overflow:visible;z-index:1;text-align:center;perspective:600px;perspective-origin:50% 40%}.reveal .slides>section{perspective:600px}.reveal .slides>section,.reveal .slides>section>section{display:none;position:absolute;width:100%;pointer-events:auto;z-index:10;transform-style:flat;transition:transform-origin .8s cubic-bezier(.26,.86,.44,.985),transform .8s cubic-bezier(.26,.86,.44,.985),visibility .8s cubic-bezier(.26,.86,.44,.985),opacity .8s cubic-bezier(.26,.86,.44,.985)}.reveal[data-transition-speed=fast] .slides section{transition-duration:.4s}.reveal[data-transition-speed=slow] .slides section{transition-duration:1.2s}.reveal .slides section[data-transition-speed=fast]{transition-duration:.4s}.reveal .slides section[data-transition-speed=slow]{transition-duration:1.2s}.reveal .slides>section.stack{padding-top:0;padding-bottom:0;pointer-events:none;height:100%}.reveal .slides>section.present,.reveal .slides>section>section.present{display:block;z-index:11;opacity:1}.reveal .slides>section:empty,.reveal .slides>section>section:empty,.reveal .slides>section>section[data-background-interactive],.reveal .slides>section[data-background-interactive]{pointer-events:none}.reveal.center,.reveal.center .slides,.reveal.center .slides section{min-height:0!important}.reveal .slides>section:not(.present),.reveal .slides>section>section:not(.present){pointer-events:none}.reveal.overview .slides>section,.reveal.overview .slides>section>section{pointer-events:auto}.reveal .slides>section.future,.reveal .slides>section.future>section,.reveal .slides>section.past,.reveal .slides>section.past>section,.reveal .slides>section>section.future,.reveal .slides>section>section.past{opacity:0}.reveal .slides>section[data-transition=slide].past,.reveal .slides>section[data-transition~=slide-out].past,.reveal.slide .slides>section:not([data-transition]).past{transform:translate(-150%,0)}.reveal .slides>section[data-transition=slide].future,.reveal .slides>section[data-transition~=slide-in].future,.reveal.slide .slides>section:not([data-transition]).future{transform:translate(150%,0)}.reveal .slides>section>section[data-transition=slide].past,.reveal .slides>section>section[data-transition~=slide-out].past,.reveal.slide .slides>section>section:not([data-transition]).past{transform:translate(0,-150%)}.reveal .slides>section>section[data-transition=slide].future,.reveal .slides>section>section[data-transition~=slide-in].future,.reveal.slide .slides>section>section:not([data-transition]).future{transform:translate(0,150%)}.reveal .slides>section[data-transition=linear].past,.reveal .slides>section[data-transition~=linear-out].past,.reveal.linear .slides>section:not([data-transition]).past{transform:translate(-150%,0)}.reveal .slides>section[data-transition=linear].future,.reveal .slides>section[data-transition~=linear-in].future,.reveal.linear .slides>section:not([data-transition]).future{transform:translate(150%,0)}.reveal .slides>section>section[data-transition=linear].past,.reveal .slides>section>section[data-transition~=linear-out].past,.reveal.linear .slides>section>section:not([data-transition]).past{transform:translate(0,-150%)}.reveal .slides>section>section[data-transition=linear].future,.reveal .slides>section>section[data-transition~=linear-in].future,.reveal.linear .slides>section>section:not([data-transition]).future{transform:translate(0,150%)}.reveal .slides section[data-transition=default].stack,.reveal.default .slides section.stack{transform-style:preserve-3d}.reveal .slides>section[data-transition=default].past,.reveal .slides>section[data-transition~=default-out].past,.reveal.default .slides>section:not([data-transition]).past{transform:translate3d(-100%,0,0) rotateY(-90deg) translate3d(-100%,0,0)}.reveal .slides>section[data-transition=default].future,.reveal .slides>section[data-transition~=default-in].future,.reveal.default .slides>section:not([data-transition]).future{transform:translate3d(100%,0,0) rotateY(90deg) translate3d(100%,0,0)}.reveal .slides>section>section[data-transition=default].past,.reveal .slides>section>section[data-transition~=default-out].past,.reveal.default .slides>section>section:not([data-transition]).past{transform:translate3d(0,-300px,0) rotateX(70deg) translate3d(0,-300px,0)}.reveal .slides>section>section[data-transition=default].future,.reveal .slides>section>section[data-transition~=default-in].future,.reveal.default .slides>section>section:not([data-transition]).future{transform:translate3d(0,300px,0) rotateX(-70deg) translate3d(0,300px,0)}.reveal .slides section[data-transition=convex].stack,.reveal.convex .slides section.stack{transform-style:preserve-3d}.reveal .slides>section[data-transition=convex].past,.reveal .slides>section[data-transition~=convex-out].past,.reveal.convex .slides>section:not([data-transition]).past{transform:translate3d(-100%,0,0) rotateY(-90deg) translate3d(-100%,0,0)}.reveal .slides>section[data-transition=convex].future,.reveal .slides>section[data-transition~=convex-in].future,.reveal.convex .slides>section:not([data-transition]).future{transform:translate3d(100%,0,0) rotateY(90deg) translate3d(100%,0,0)}.reveal .slides>section>section[data-transition=convex].past,.reveal .slides>section>section[data-transition~=convex-out].past,.reveal.convex .slides>section>section:not([data-transition]).past{transform:translate3d(0,-300px,0) rotateX(70deg) translate3d(0,-300px,0)}.reveal .slides>section>section[data-transition=convex].future,.reveal .slides>section>section[data-transition~=convex-in].future,.reveal.convex .slides>section>section:not([data-transition]).future{transform:translate3d(0,300px,0) rotateX(-70deg) translate3d(0,300px,0)}.reveal .slides section[data-transition=concave].stack,.reveal.concave .slides section.stack{transform-style:preserve-3d}.reveal .slides>section[data-transition=concave].past,.reveal .slides>section[data-transition~=concave-out].past,.reveal.concave .slides>section:not([data-transition]).past{transform:translate3d(-100%,0,0) rotateY(90deg) translate3d(-100%,0,0)}.reveal .slides>section[data-transition=concave].future,.reveal .slides>section[data-transition~=concave-in].future,.reveal.concave .slides>section:not([data-transition]).future{transform:translate3d(100%,0,0) rotateY(-90deg) translate3d(100%,0,0)}.reveal .slides>section>section[data-transition=concave].past,.reveal .slides>section>section[data-transition~=concave-out].past,.reveal.concave .slides>section>section:not([data-transition]).past{transform:translate3d(0,-80%,0) rotateX(-70deg) translate3d(0,-80%,0)}.reveal .slides>section>section[data-transition=concave].future,.reveal .slides>section>section[data-transition~=concave-in].future,.reveal.concave .slides>section>section:not([data-transition]).future{transform:translate3d(0,80%,0) rotateX(70deg) translate3d(0,80%,0)}.reveal .slides section[data-transition=zoom],.reveal.zoom .slides section:not([data-transition]){transition-timing-function:ease}.reveal .slides>section[data-transition=zoom].past,.reveal .slides>section[data-transition~=zoom-out].past,.reveal.zoom .slides>section:not([data-transition]).past{visibility:hidden;transform:scale(16)}.reveal .slides>section[data-transition=zoom].future,.reveal .slides>section[data-transition~=zoom-in].future,.reveal.zoom .slides>section:not([data-transition]).future{visibility:hidden;transform:scale(.2)}.reveal .slides>section>section[data-transition=zoom].past,.reveal .slides>section>section[data-transition~=zoom-out].past,.reveal.zoom .slides>section>section:not([data-transition]).past{transform:scale(16)}.reveal .slides>section>section[data-transition=zoom].future,.reveal .slides>section>section[data-transition~=zoom-in].future,.reveal.zoom .slides>section>section:not([data-transition]).future{transform:scale(.2)}.reveal.cube .slides{perspective:1300px}.reveal.cube .slides section{padding:30px;min-height:700px;backface-visibility:hidden;box-sizing:border-box;transform-style:preserve-3d}.reveal.center.cube .slides section{min-height:0}.reveal.cube .slides section:not(.stack):before{content:"";position:absolute;display:block;width:100%;height:100%;left:0;top:0;background:rgba(0,0,0,.1);border-radius:4px;transform:translateZ(-20px)}.reveal.cube .slides section:not(.stack):after{content:"";position:absolute;display:block;width:90%;height:30px;left:5%;bottom:0;background:0 0;z-index:1;border-radius:4px;box-shadow:0 95px 25px rgba(0,0,0,.2);transform:translateZ(-90px) rotateX(65deg)}.reveal.cube .slides>section.stack{padding:0;background:0 0}.reveal.cube .slides>section.past{transform-origin:100% 0;transform:translate3d(-100%,0,0) rotateY(-90deg)}.reveal.cube .slides>section.future{transform-origin:0 0;transform:translate3d(100%,0,0) rotateY(90deg)}.reveal.cube .slides>section>section.past{transform-origin:0 100%;transform:translate3d(0,-100%,0) rotateX(90deg)}.reveal.cube .slides>section>section.future{transform-origin:0 0;transform:translate3d(0,100%,0) rotateX(-90deg)}.reveal.page .slides{perspective-origin:0 50%;perspective:3000px}.reveal.page .slides section{padding:30px;min-height:700px;box-sizing:border-box;transform-style:preserve-3d}.reveal.page .slides section.past{z-index:12}.reveal.page .slides section:not(.stack):before{content:"";position:absolute;display:block;width:100%;height:100%;left:0;top:0;background:rgba(0,0,0,.1);transform:translateZ(-20px)}.reveal.page .slides section:not(.stack):after{content:"";position:absolute;display:block;width:90%;height:30px;left:5%;bottom:0;background:0 0;z-index:1;border-radius:4px;box-shadow:0 95px 25px rgba(0,0,0,.2);-webkit-transform:translateZ(-90px) rotateX(65deg)}.reveal.page .slides>section.stack{padding:0;background:0 0}.reveal.page .slides>section.past{transform-origin:0 0;transform:translate3d(-40%,0,0) rotateY(-80deg)}.reveal.page .slides>section.future{transform-origin:100% 0;transform:translate3d(0,0,0)}.reveal.page .slides>section>section.past{transform-origin:0 0;transform:translate3d(0,-40%,0) rotateX(80deg)}.reveal.page .slides>section>section.future{transform-origin:0 100%;transform:translate3d(0,0,0)}.reveal .slides section[data-transition=fade],.reveal.fade .slides section:not([data-transition]),.reveal.fade .slides>section>section:not([data-transition]){transform:none;transition:opacity .5s}.reveal.fade.overview .slides section,.reveal.fade.overview .slides>section>section{transition:none}.reveal .slides section[data-transition=none],.reveal.none .slides section:not([data-transition]){transform:none;transition:none}.reveal .pause-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:#000;visibility:hidden;opacity:0;z-index:100;transition:all 1s ease}.reveal .pause-overlay .resume-button{position:absolute;bottom:20px;right:20px;color:#ccc;border-radius:2px;padding:6px 14px;border:2px solid #ccc;font-size:16px;background:0 0;cursor:pointer}.reveal .pause-overlay .resume-button:hover{color:#fff;border-color:#fff}.reveal.paused .pause-overlay{visibility:visible;opacity:1}.reveal .no-transition,.reveal .no-transition *,.reveal .slides.disable-slide-transitions section{transition:none!important}.reveal .slides.disable-slide-transitions section{transform:none!important}.reveal .backgrounds{position:absolute;width:100%;height:100%;top:0;left:0;perspective:600px}.reveal .slide-background{display:none;position:absolute;width:100%;height:100%;opacity:0;visibility:hidden;overflow:hidden;background-color:rgba(0,0,0,0);transition:all .8s cubic-bezier(.26,.86,.44,.985)}.reveal .slide-background-content{position:absolute;width:100%;height:100%;background-position:50% 50%;background-repeat:no-repeat;background-size:cover}.reveal .slide-background.stack{display:block}.reveal .slide-background.present{opacity:1;visibility:visible;z-index:2}.print-pdf .reveal .slide-background{opacity:1!important;visibility:visible!important}.reveal .slide-background video{position:absolute;width:100%;height:100%;max-width:none;max-height:none;top:0;left:0;object-fit:cover}.reveal .slide-background[data-background-size=contain] video{object-fit:contain}.reveal>.backgrounds .slide-background[data-background-transition=none],.reveal[data-background-transition=none]>.backgrounds .slide-background:not([data-background-transition]){transition:none}.reveal>.backgrounds .slide-background[data-background-transition=slide],.reveal[data-background-transition=slide]>.backgrounds .slide-background:not([data-background-transition]){opacity:1}.reveal>.backgrounds .slide-background.past[data-background-transition=slide],.reveal[data-background-transition=slide]>.backgrounds .slide-background.past:not([data-background-transition]){transform:translate(-100%,0)}.reveal>.backgrounds .slide-background.future[data-background-transition=slide],.reveal[data-background-transition=slide]>.backgrounds .slide-background.future:not([data-background-transition]){transform:translate(100%,0)}.reveal>.backgrounds .slide-background>.slide-background.past[data-background-transition=slide],.reveal[data-background-transition=slide]>.backgrounds .slide-background>.slide-background.past:not([data-background-transition]){transform:translate(0,-100%)}.reveal>.backgrounds .slide-background>.slide-background.future[data-background-transition=slide],.reveal[data-background-transition=slide]>.backgrounds .slide-background>.slide-background.future:not([data-background-transition]){transform:translate(0,100%)}.reveal>.backgrounds .slide-background.past[data-background-transition=convex],.reveal[data-background-transition=convex]>.backgrounds .slide-background.past:not([data-background-transition]){opacity:0;transform:translate3d(-100%,0,0) rotateY(-90deg) translate3d(-100%,0,0)}.reveal>.backgrounds .slide-background.future[data-background-transition=convex],.reveal[data-background-transition=convex]>.backgrounds .slide-background.future:not([data-background-transition]){opacity:0;transform:translate3d(100%,0,0) rotateY(90deg) translate3d(100%,0,0)}.reveal>.backgrounds .slide-background>.slide-background.past[data-background-transition=convex],.reveal[data-background-transition=convex]>.backgrounds .slide-background>.slide-background.past:not([data-background-transition]){opacity:0;transform:translate3d(0,-100%,0) rotateX(90deg) translate3d(0,-100%,0)}.reveal>.backgrounds .slide-background>.slide-background.future[data-background-transition=convex],.reveal[data-background-transition=convex]>.backgrounds .slide-background>.slide-background.future:not([data-background-transition]){opacity:0;transform:translate3d(0,100%,0) rotateX(-90deg) translate3d(0,100%,0)}.reveal>.backgrounds .slide-background.past[data-background-transition=concave],.reveal[data-background-transition=concave]>.backgrounds .slide-background.past:not([data-background-transition]){opacity:0;transform:translate3d(-100%,0,0) rotateY(90deg) translate3d(-100%,0,0)}.reveal>.backgrounds .slide-background.future[data-background-transition=concave],.reveal[data-background-transition=concave]>.backgrounds .slide-background.future:not([data-background-transition]){opacity:0;transform:translate3d(100%,0,0) rotateY(-90deg) translate3d(100%,0,0)}.reveal>.backgrounds .slide-background>.slide-background.past[data-background-transition=concave],.reveal[data-background-transition=concave]>.backgrounds .slide-background>.slide-background.past:not([data-background-transition]){opacity:0;transform:translate3d(0,-100%,0) rotateX(-90deg) translate3d(0,-100%,0)}.reveal>.backgrounds .slide-background>.slide-background.future[data-background-transition=concave],.reveal[data-background-transition=concave]>.backgrounds .slide-background>.slide-background.future:not([data-background-transition]){opacity:0;transform:translate3d(0,100%,0) rotateX(90deg) translate3d(0,100%,0)}.reveal>.backgrounds .slide-background[data-background-transition=zoom],.reveal[data-background-transition=zoom]>.backgrounds .slide-background:not([data-background-transition]){transition-timing-function:ease}.reveal>.backgrounds .slide-background.past[data-background-transition=zoom],.reveal[data-background-transition=zoom]>.backgrounds .slide-background.past:not([data-background-transition]){opacity:0;visibility:hidden;transform:scale(16)}.reveal>.backgrounds .slide-background.future[data-background-transition=zoom],.reveal[data-background-transition=zoom]>.backgrounds .slide-background.future:not([data-background-transition]){opacity:0;visibility:hidden;transform:scale(.2)}.reveal>.backgrounds .slide-background>.slide-background.past[data-background-transition=zoom],.reveal[data-background-transition=zoom]>.backgrounds .slide-background>.slide-background.past:not([data-background-transition]){opacity:0;visibility:hidden;transform:scale(16)}.reveal>.backgrounds .slide-background>.slide-background.future[data-background-transition=zoom],.reveal[data-background-transition=zoom]>.backgrounds .slide-background>.slide-background.future:not([data-background-transition]){opacity:0;visibility:hidden;transform:scale(.2)}.reveal[data-transition-speed=fast]>.backgrounds .slide-background{transition-duration:.4s}.reveal[data-transition-speed=slow]>.backgrounds .slide-background{transition-duration:1.2s}.reveal [data-auto-animate-target^=unmatched]{will-change:opacity}.reveal section[data-auto-animate]:not(.stack):not([data-auto-animate=running]) [data-auto-animate-target^=unmatched]{opacity:0}.reveal.overview{perspective-origin:50% 50%;perspective:700px}.reveal.overview .slides{-moz-transform-style:preserve-3d}.reveal.overview .slides section{height:100%;top:0!important;opacity:1!important;overflow:hidden;visibility:visible!important;cursor:pointer;box-sizing:border-box}.reveal.overview .slides section.present,.reveal.overview .slides section:hover{outline:10px solid rgba(150,150,150,.4);outline-offset:10px}.reveal.overview .slides section .fragment{opacity:1;transition:none}.reveal.overview .slides section:after,.reveal.overview .slides section:before{display:none!important}.reveal.overview .slides>section.stack{padding:0;top:0!important;background:0 0;outline:0;overflow:visible}.reveal.overview .backgrounds{perspective:inherit;-moz-transform-style:preserve-3d}.reveal.overview .backgrounds .slide-background{opacity:1;visibility:visible;outline:10px solid rgba(150,150,150,.1);outline-offset:10px}.reveal.overview .backgrounds .slide-background.stack{overflow:visible}.reveal.overview .slides section,.reveal.overview-deactivating .slides section{transition:none}.reveal.overview .backgrounds .slide-background,.reveal.overview-deactivating .backgrounds .slide-background{transition:none}.reveal.rtl .slides,.reveal.rtl .slides h1,.reveal.rtl .slides h2,.reveal.rtl .slides h3,.reveal.rtl .slides h4,.reveal.rtl .slides h5,.reveal.rtl .slides h6{direction:rtl;font-family:sans-serif}.reveal.rtl code,.reveal.rtl pre{direction:ltr}.reveal.rtl ol,.reveal.rtl ul{text-align:right}.reveal.rtl .progress span{transform-origin:100% 0}.reveal.has-parallax-background .backgrounds{transition:all .8s ease}.reveal.has-parallax-background[data-transition-speed=fast] .backgrounds{transition-duration:.4s}.reveal.has-parallax-background[data-transition-speed=slow] .backgrounds{transition-duration:1.2s}.reveal>.overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1000;background:rgba(0,0,0,.95);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:all .3s ease}.reveal>.overlay .spinner{position:absolute;display:block;top:50%;left:50%;width:32px;height:32px;margin:-16px 0 0 -16px;z-index:10;background-image:url(data:image/gif;base64,R0lGODlhIAAgAPMAAJmZmf%2F%2F%2F6%2Bvr8nJybW1tcDAwOjo6Nvb26ioqKOjo7Ozs%2FLy8vz8%2FAAAAAAAAAAAACH%2FC05FVFNDQVBFMi4wAwEAAAAh%2FhpDcmVhdGVkIHdpdGggYWpheGxvYWQuaW5mbwAh%2BQQJCgAAACwAAAAAIAAgAAAE5xDISWlhperN52JLhSSdRgwVo1ICQZRUsiwHpTJT4iowNS8vyW2icCF6k8HMMBkCEDskxTBDAZwuAkkqIfxIQyhBQBFvAQSDITM5VDW6XNE4KagNh6Bgwe60smQUB3d4Rz1ZBApnFASDd0hihh12BkE9kjAJVlycXIg7CQIFA6SlnJ87paqbSKiKoqusnbMdmDC2tXQlkUhziYtyWTxIfy6BE8WJt5YJvpJivxNaGmLHT0VnOgSYf0dZXS7APdpB309RnHOG5gDqXGLDaC457D1zZ%2FV%2FnmOM82XiHRLYKhKP1oZmADdEAAAh%2BQQJCgAAACwAAAAAIAAgAAAE6hDISWlZpOrNp1lGNRSdRpDUolIGw5RUYhhHukqFu8DsrEyqnWThGvAmhVlteBvojpTDDBUEIFwMFBRAmBkSgOrBFZogCASwBDEY%2FCZSg7GSE0gSCjQBMVG023xWBhklAnoEdhQEfyNqMIcKjhRsjEdnezB%2BA4k8gTwJhFuiW4dokXiloUepBAp5qaKpp6%2BHo7aWW54wl7obvEe0kRuoplCGepwSx2jJvqHEmGt6whJpGpfJCHmOoNHKaHx61WiSR92E4lbFoq%2BB6QDtuetcaBPnW6%2BO7wDHpIiK9SaVK5GgV543tzjgGcghAgAh%2BQQJCgAAACwAAAAAIAAgAAAE7hDISSkxpOrN5zFHNWRdhSiVoVLHspRUMoyUakyEe8PTPCATW9A14E0UvuAKMNAZKYUZCiBMuBakSQKG8G2FzUWox2AUtAQFcBKlVQoLgQReZhQlCIJesQXI5B0CBnUMOxMCenoCfTCEWBsJColTMANldx15BGs8B5wlCZ9Po6OJkwmRpnqkqnuSrayqfKmqpLajoiW5HJq7FL1Gr2mMMcKUMIiJgIemy7xZtJsTmsM4xHiKv5KMCXqfyUCJEonXPN2rAOIAmsfB3uPoAK%2B%2BG%2Bw48edZPK%2BM6hLJpQg484enXIdQFSS1u6UhksENEQAAIfkECQoAAAAsAAAAACAAIAAABOcQyEmpGKLqzWcZRVUQnZYg1aBSh2GUVEIQ2aQOE%2BG%2BcD4ntpWkZQj1JIiZIogDFFyHI0UxQwFugMSOFIPJftfVAEoZLBbcLEFhlQiqGp1Vd140AUklUN3eCA51C1EWMzMCezCBBmkxVIVHBWd3HHl9JQOIJSdSnJ0TDKChCwUJjoWMPaGqDKannasMo6WnM562R5YluZRwur0wpgqZE7NKUm%2BFNRPIhjBJxKZteWuIBMN4zRMIVIhffcgojwCF117i4nlLnY5ztRLsnOk%2BaV%2BoJY7V7m76PdkS4trKcdg0Zc0tTcKkRAAAIfkECQoAAAAsAAAAACAAIAAABO4QyEkpKqjqzScpRaVkXZWQEximw1BSCUEIlDohrft6cpKCk5xid5MNJTaAIkekKGQkWyKHkvhKsR7ARmitkAYDYRIbUQRQjWBwJRzChi9CRlBcY1UN4g0%2FVNB0AlcvcAYHRyZPdEQFYV8ccwR5HWxEJ02YmRMLnJ1xCYp0Y5idpQuhopmmC2KgojKasUQDk5BNAwwMOh2RtRq5uQuPZKGIJQIGwAwGf6I0JXMpC8C7kXWDBINFMxS4DKMAWVWAGYsAdNqW5uaRxkSKJOZKaU3tPOBZ4DuK2LATgJhkPJMgTwKCdFjyPHEnKxFCDhEAACH5BAkKAAAALAAAAAAgACAAAATzEMhJaVKp6s2nIkolIJ2WkBShpkVRWqqQrhLSEu9MZJKK9y1ZrqYK9WiClmvoUaF8gIQSNeF1Er4MNFn4SRSDARWroAIETg1iVwuHjYB1kYc1mwruwXKC9gmsJXliGxc%2BXiUCby9ydh1sOSdMkpMTBpaXBzsfhoc5l58Gm5yToAaZhaOUqjkDgCWNHAULCwOLaTmzswadEqggQwgHuQsHIoZCHQMMQgQGubVEcxOPFAcMDAYUA85eWARmfSRQCdcMe0zeP1AAygwLlJtPNAAL19DARdPzBOWSm1brJBi45soRAWQAAkrQIykShQ9wVhHCwCQCACH5BAkKAAAALAAAAAAgACAAAATrEMhJaVKp6s2nIkqFZF2VIBWhUsJaTokqUCoBq%2BE71SRQeyqUToLA7VxF0JDyIQh%2FMVVPMt1ECZlfcjZJ9mIKoaTl1MRIl5o4CUKXOwmyrCInCKqcWtvadL2SYhyASyNDJ0uIiRMDjI0Fd30%2FiI2UA5GSS5UDj2l6NoqgOgN4gksEBgYFf0FDqKgHnyZ9OX8HrgYHdHpcHQULXAS2qKpENRg7eAMLC7kTBaixUYFkKAzWAAnLC7FLVxLWDBLKCwaKTULgEwbLA4hJtOkSBNqITT3xEgfLpBtzE%2FjiuL04RGEBgwWhShRgQExHBAAh%2BQQJCgAAACwAAAAAIAAgAAAE7xDISWlSqerNpyJKhWRdlSAVoVLCWk6JKlAqAavhO9UkUHsqlE6CwO1cRdCQ8iEIfzFVTzLdRAmZX3I2SfZiCqGk5dTESJeaOAlClzsJsqwiJwiqnFrb2nS9kmIcgEsjQydLiIlHehhpejaIjzh9eomSjZR%2BipslWIRLAgMDOR2DOqKogTB9pCUJBagDBXR6XB0EBkIIsaRsGGMMAxoDBgYHTKJiUYEGDAzHC9EACcUGkIgFzgwZ0QsSBcXHiQvOwgDdEwfFs0sDzt4S6BK4xYjkDOzn0unFeBzOBijIm1Dgmg5YFQwsCMjp1oJ8LyIAACH5BAkKAAAALAAAAAAgACAAAATwEMhJaVKp6s2nIkqFZF2VIBWhUsJaTokqUCoBq%2BE71SRQeyqUToLA7VxF0JDyIQh%2FMVVPMt1ECZlfcjZJ9mIKoaTl1MRIl5o4CUKXOwmyrCInCKqcWtvadL2SYhyASyNDJ0uIiUd6GGl6NoiPOH16iZKNlH6KmyWFOggHhEEvAwwMA0N9GBsEC6amhnVcEwavDAazGwIDaH1ipaYLBUTCGgQDA8NdHz0FpqgTBwsLqAbWAAnIA4FWKdMLGdYGEgraigbT0OITBcg5QwPT4xLrROZL6AuQAPUS7bxLpoWidY0JtxLHKhwwMJBTHgPKdEQAACH5BAkKAAAALAAAAAAgACAAAATrEMhJaVKp6s2nIkqFZF2VIBWhUsJaTokqUCoBq%2BE71SRQeyqUToLA7VxF0JDyIQh%2FMVVPMt1ECZlfcjZJ9mIKoaTl1MRIl5o4CUKXOwmyrCInCKqcWtvadL2SYhyASyNDJ0uIiUd6GAULDJCRiXo1CpGXDJOUjY%2BYip9DhToJA4RBLwMLCwVDfRgbBAaqqoZ1XBMHswsHtxtFaH1iqaoGNgAIxRpbFAgfPQSqpbgGBqUD1wBXeCYp1AYZ19JJOYgH1KwA4UBvQwXUBxPqVD9L3sbp2BNk2xvvFPJd%2BMFCN6HAAIKgNggY0KtEBAAh%2BQQJCgAAACwAAAAAIAAgAAAE6BDISWlSqerNpyJKhWRdlSAVoVLCWk6JKlAqAavhO9UkUHsqlE6CwO1cRdCQ8iEIfzFVTzLdRAmZX3I2SfYIDMaAFdTESJeaEDAIMxYFqrOUaNW4E4ObYcCXaiBVEgULe0NJaxxtYksjh2NLkZISgDgJhHthkpU4mW6blRiYmZOlh4JWkDqILwUGBnE6TYEbCgevr0N1gH4At7gHiRpFaLNrrq8HNgAJA70AWxQIH1%2BvsYMDAzZQPC9VCNkDWUhGkuE5PxJNwiUK4UfLzOlD4WvzAHaoG9nxPi5d%2BjYUqfAhhykOFwJWiAAAIfkECQoAAAAsAAAAACAAIAAABPAQyElpUqnqzaciSoVkXVUMFaFSwlpOCcMYlErAavhOMnNLNo8KsZsMZItJEIDIFSkLGQoQTNhIsFehRww2CQLKF0tYGKYSg%2BygsZIuNqJksKgbfgIGepNo2cIUB3V1B3IvNiBYNQaDSTtfhhx0CwVPI0UJe0%2Bbm4g5VgcGoqOcnjmjqDSdnhgEoamcsZuXO1aWQy8KAwOAuTYYGwi7w5h%2BKr0SJ8MFihpNbx%2B4Erq7BYBuzsdiH1jCAzoSfl0rVirNbRXlBBlLX%2BBP0XJLAPGzTkAuAOqb0WT5AH7OcdCm5B8TgRwSRKIHQtaLCwg1RAAAOwAAAAAAAAAAAA%3D%3D);visibility:visible;opacity:.6;transition:all .3s ease}.reveal>.overlay header{position:absolute;left:0;top:0;width:100%;padding:5px;z-index:2;box-sizing:border-box}.reveal>.overlay header a{display:inline-block;width:40px;height:40px;line-height:36px;padding:0 10px;float:right;opacity:.6;box-sizing:border-box}.reveal>.overlay header a:hover{opacity:1}.reveal>.overlay header a .icon{display:inline-block;width:20px;height:20px;background-position:50% 50%;background-size:100%;background-repeat:no-repeat}.reveal>.overlay header a.close .icon{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABkklEQVRYR8WX4VHDMAxG6wnoJrABZQPYBCaBTWAD2g1gE5gg6OOsXuxIlr40d81dfrSJ9V4c2VLK7spHuTJ/5wpM07QXuXc5X0opX2tEJcadjHuV80li/FgxTIEK/5QBCICBD6xEhSMGHgQPgBgLiYVAB1dpSqKDawxTohFw4JSEA3clzgIBPCURwE2JucBR7rhPJJv5OpJwDX+SfDjgx1wACQeJG1aChP9K/IMmdZ8DtESV1WyP3Bt4MwM6sj4NMxMYiqUWHQu4KYA/SYkIjOsm3BXYWMKFDwU2khjCQ4ELJUJ4SmClRArOCmSXGuKma0fYD5CbzHxFpCSGAhfAVSSUGDUk2BWZaff2g6GE15BsBQ9nwmpIGDiyHQddwNTMKkbZaf9fajXQca1EX44puJZUsnY0ObGmITE3GVLCbEhQUjGVt146j6oasWN+49Vph2w1pZ5EansNZqKBm1txbU57iRRcZ86RWMDdWtBJUHBHwoQPi1GV+JCbntmvok7iTX4/Up9mgyTc/FJYDTcndgH/AA5A/CHsyEkVAAAAAElFTkSuQmCC)}.reveal>.overlay header a.external .icon{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAcElEQVRYR+2WSQoAIQwEzf8f7XiOMkUQxUPlGkM3hVmiQfQR9GYnH1SsAQlI4DiBqkCMoNb9y2e90IAEJPAcgdznU9+engMaeJ7Azh5Y1U67gAho4DqBqmB1buAf0MB1AlVBek83ZPkmJMGc1wAR+AAqod/B97TRpQAAAABJRU5ErkJggg==)}.reveal>.overlay .viewport{position:absolute;display:flex;top:50px;right:0;bottom:0;left:0}.reveal>.overlay.overlay-preview .viewport iframe{width:100%;height:100%;max-width:100%;max-height:100%;border:0;opacity:0;visibility:hidden;transition:all .3s ease}.reveal>.overlay.overlay-preview.loaded .viewport iframe{opacity:1;visibility:visible}.reveal>.overlay.overlay-preview.loaded .viewport-inner{position:absolute;z-index:-1;left:0;top:45%;width:100%;text-align:center;letter-spacing:normal}.reveal>.overlay.overlay-preview .x-frame-error{opacity:0;transition:opacity .3s ease .3s}.reveal>.overlay.overlay-preview.loaded .x-frame-error{opacity:1}.reveal>.overlay.overlay-preview.loaded .spinner{opacity:0;visibility:hidden;transform:scale(.2)}.reveal>.overlay.overlay-help .viewport{overflow:auto;color:#fff}.reveal>.overlay.overlay-help .viewport .viewport-inner{width:600px;margin:auto;padding:20px 20px 80px 20px;text-align:center;letter-spacing:normal}.reveal>.overlay.overlay-help .viewport .viewport-inner .title{font-size:20px}.reveal>.overlay.overlay-help .viewport .viewport-inner table{border:1px solid #fff;border-collapse:collapse;font-size:16px}.reveal>.overlay.overlay-help .viewport .viewport-inner table td,.reveal>.overlay.overlay-help .viewport .viewport-inner table th{width:200px;padding:14px;border:1px solid #fff;vertical-align:middle}.reveal>.overlay.overlay-help .viewport .viewport-inner table th{padding-top:20px;padding-bottom:20px}.reveal .playback{position:absolute;left:15px;bottom:20px;z-index:30;cursor:pointer;transition:all .4s ease;-webkit-tap-highlight-color:transparent}.reveal.overview .playback{opacity:0;visibility:hidden}.reveal .hljs{min-height:100%}.reveal .hljs table{margin:initial}.reveal .hljs-ln-code,.reveal .hljs-ln-numbers{padding:0;border:0}.reveal .hljs-ln-numbers{opacity:.6;padding-right:.75em;text-align:right;vertical-align:top}.reveal .hljs.has-highlights tr:not(.highlight-line){opacity:.4}.reveal .hljs.has-highlights.fragment{transition:all .2s ease}.reveal .hljs:not(:first-child).fragment{position:absolute;top:0;left:0;width:100%;box-sizing:border-box}.reveal pre[data-auto-animate-target]{overflow:hidden}.reveal pre[data-auto-animate-target] code{height:100%}.reveal .roll{display:inline-block;line-height:1.2;overflow:hidden;vertical-align:top;perspective:400px;perspective-origin:50% 50%}.reveal .roll:hover{background:0 0;text-shadow:none}.reveal .roll span{display:block;position:relative;padding:0 2px;pointer-events:none;transition:all .4s ease;transform-origin:50% 0;transform-style:preserve-3d;backface-visibility:hidden}.reveal .roll:hover span{background:rgba(0,0,0,.5);transform:translate3d(0,0,-45px) rotateX(90deg)}.reveal .roll span:after{content:attr(data-title);display:block;position:absolute;left:0;top:0;padding:0 2px;backface-visibility:hidden;transform-origin:50% 0;transform:translate3d(0,110%,0) rotateX(-90deg)}.reveal aside.notes{display:none}.reveal .speaker-notes{display:none;position:absolute;width:33.3333333333%;height:100%;top:0;left:100%;padding:14px 18px 14px 18px;z-index:1;font-size:18px;line-height:1.4;border:1px solid rgba(0,0,0,.05);color:#222;background-color:#f5f5f5;overflow:auto;box-sizing:border-box;text-align:left;font-family:Helvetica,sans-serif;-webkit-overflow-scrolling:touch}.reveal .speaker-notes .notes-placeholder{color:#ccc;font-style:italic}.reveal .speaker-notes:focus{outline:0}.reveal .speaker-notes:before{content:"Speaker notes";display:block;margin-bottom:10px;opacity:.5}.reveal.show-notes{max-width:75%;overflow:visible}.reveal.show-notes .speaker-notes{display:block}@media screen and (min-width:1600px){.reveal .speaker-notes{font-size:20px}}@media screen and (max-width:1024px){.reveal.show-notes{border-left:0;max-width:none;max-height:70%;max-height:70vh;overflow:visible}.reveal.show-notes .speaker-notes{top:100%;left:0;width:100%;height:30vh;border:0}}@media screen and (max-width:600px){.reveal.show-notes{max-height:60%;max-height:60vh}.reveal.show-notes .speaker-notes{top:100%;height:40vh}.reveal .speaker-notes{font-size:14px}}.reveal .jump-to-slide{position:absolute;top:15px;left:15px;z-index:30;font-size:32px;-webkit-tap-highlight-color:transparent}.reveal .jump-to-slide-input{background:0 0;padding:8px;font-size:inherit;color:currentColor;border:0}.reveal .jump-to-slide-input::placeholder{color:currentColor;opacity:.5}.reveal.has-dark-background .jump-to-slide-input{color:#fff}.reveal.has-light-background .jump-to-slide-input{color:#222}.reveal .jump-to-slide-input:focus{outline:0}.zoomed .reveal *,.zoomed .reveal :after,.zoomed .reveal :before{backface-visibility:visible!important}.zoomed .reveal .controls,.zoomed .reveal .progress{opacity:0}.zoomed .reveal .roll span{background:0 0}.zoomed .reveal .roll span:after{visibility:hidden}.reveal-viewport.loading-scroll-mode{visibility:hidden}.reveal-viewport.reveal-scroll{margin:0 auto;overflow:auto;overflow-x:hidden;overflow-y:auto;z-index:1;--r-scrollbar-width:7px;--r-scrollbar-trigger-size:5px;--r-controls-spacing:8px}@media screen and (max-width:500px){.reveal-viewport.reveal-scroll{--r-scrollbar-width:3px;--r-scrollbar-trigger-size:3px}}.reveal-viewport.reveal-scroll .backgrounds,.reveal-viewport.reveal-scroll .controls,.reveal-viewport.reveal-scroll .playback,.reveal-viewport.reveal-scroll .progress,.reveal-viewport.reveal-scroll .slide-number,.reveal-viewport.reveal-scroll .speaker-notes{display:none!important}.reveal-viewport.reveal-scroll .overlay,.reveal-viewport.reveal-scroll .pause-overlay{position:fixed}.reveal-viewport.reveal-scroll .reveal{overflow:visible;touch-action:manipulation}.reveal-viewport.reveal-scroll .slides{position:static;pointer-events:initial;left:auto;top:auto;width:100%!important;margin:0;padding:0;overflow:visible;display:block;perspective:none;perspective-origin:50% 50%}.reveal-viewport.reveal-scroll .scroll-page{position:relative;width:100%;height:calc(var(--page-height) + var(--page-scroll-padding));z-index:1;overflow:visible}.reveal-viewport.reveal-scroll .scroll-page-sticky{position:sticky;height:var(--page-height);top:0}.reveal-viewport.reveal-scroll .scroll-page-content{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden}.reveal-viewport.reveal-scroll .scroll-page section{visibility:visible!important;display:block!important;position:absolute!important;width:var(--slide-width)!important;height:var(--slide-height)!important;top:50%!important;left:50%!important;opacity:1!important;transform:scale(var(--slide-scale)) translate(-50%,-50%)!important;transform-style:flat!important;transform-origin:0 0!important}.reveal-viewport.reveal-scroll .slide-background{display:block!important;position:absolute;top:0;left:0;width:100%;height:100%;z-index:auto!important;visibility:visible;opacity:1;touch-action:manipulation}.reveal-viewport.reveal-scroll[data-scrollbar=auto]::-webkit-scrollbar,.reveal-viewport.reveal-scroll[data-scrollbar=true]::-webkit-scrollbar{display:none}.reveal-viewport.reveal-scroll[data-scrollbar=auto],.reveal-viewport.reveal-scroll[data-scrollbar=true]{scrollbar-width:none}.reveal-viewport.has-dark-background,.reveal.has-dark-background{--r-overlay-element-bg-color:240,240,240;--r-overlay-element-fg-color:0,0,0}.reveal-viewport.has-light-background,.reveal.has-light-background{--r-overlay-element-bg-color:0,0,0;--r-overlay-element-fg-color:240,240,240}.reveal-viewport.reveal-scroll .scrollbar{position:sticky;top:50%;z-index:20;opacity:0;transition:all .3s ease}.reveal-viewport.reveal-scroll .scrollbar.visible,.reveal-viewport.reveal-scroll .scrollbar:hover{opacity:1}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-inner{position:absolute;width:var(--r-scrollbar-width);height:calc(var(--viewport-height) - var(--r-controls-spacing) * 2);right:var(--r-controls-spacing);top:0;transform:translateY(-50%);border-radius:var(--r-scrollbar-width);z-index:10}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-playhead{position:absolute;width:var(--r-scrollbar-width);height:var(--r-scrollbar-width);top:0;left:0;border-radius:var(--r-scrollbar-width);background-color:rgba(var(--r-overlay-element-bg-color),1);z-index:11;transition:background-color .2s ease}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide{position:absolute;width:100%;background-color:rgba(var(--r-overlay-element-bg-color),.2);box-shadow:0 0 0 1px rgba(var(--r-overlay-element-fg-color),.1);border-radius:var(--r-scrollbar-width);transition:background-color .2s ease}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide:after{content:"";position:absolute;width:200%;height:100%;top:0;left:-50%;background:rgba(0,0,0,0);z-index:-1}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide.active,.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide:hover{background-color:rgba(var(--r-overlay-element-bg-color),.4)}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-trigger{position:absolute;width:100%;transition:background-color .2s ease}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide.active.has-triggers{background-color:rgba(var(--r-overlay-element-bg-color),.4);z-index:10}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide.active .scrollbar-trigger:after{content:"";position:absolute;width:var(--r-scrollbar-trigger-size);height:var(--r-scrollbar-trigger-size);border-radius:20px;top:50%;left:50%;transform:translate(-50%,-50%);background-color:rgba(var(--r-overlay-element-bg-color),1);transition:transform .2s ease,opacity .2s ease;opacity:.4}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide.active .scrollbar-trigger.active:after,.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide.active .scrollbar-trigger.active~.scrollbar-trigger:after{opacity:1}.reveal-viewport.reveal-scroll .scrollbar .scrollbar-slide.active .scrollbar-trigger~.scrollbar-trigger.active:after{transform:translate(calc(var(--r-scrollbar-width) * -2),0);background-color:rgba(var(--r-overlay-element-bg-color),1)}html.reveal-print *{-webkit-print-color-adjust:exact}html.reveal-print{width:100%;height:100%;overflow:visible}html.reveal-print body{margin:0 auto!important;border:0;padding:0;float:none!important;overflow:visible}html.reveal-print .nestedarrow,html.reveal-print .reveal .controls,html.reveal-print .reveal .playback,html.reveal-print .reveal .progress,html.reveal-print .reveal.overview,html.reveal-print .state-background{display:none!important}html.reveal-print .reveal pre code{overflow:hidden!important}html.reveal-print .reveal{width:auto!important;height:auto!important;overflow:hidden!important}html.reveal-print .reveal .slides{position:static;width:100%!important;height:auto!important;zoom:1!important;pointer-events:initial;left:auto;top:auto;margin:0!important;padding:0!important;overflow:visible;display:block;perspective:none;perspective-origin:50% 50%}html.reveal-print .reveal .slides .pdf-page{position:relative;overflow:hidden;z-index:1;page-break-after:always}html.reveal-print .reveal .slides .pdf-page:last-of-type{page-break-after:avoid}html.reveal-print .reveal .slides section{visibility:visible!important;display:block!important;position:absolute!important;margin:0!important;padding:0!important;box-sizing:border-box!important;min-height:1px;opacity:1!important;transform-style:flat!important;transform:none!important}html.reveal-print .reveal section.stack{position:relative!important;margin:0!important;padding:0!important;page-break-after:avoid!important;height:auto!important;min-height:auto!important}html.reveal-print .reveal img{box-shadow:none}html.reveal-print .reveal .backgrounds{display:none}html.reveal-print .reveal .slide-background{display:block!important;position:absolute;top:0;left:0;width:100%;height:100%;z-index:auto!important}html.reveal-print .reveal.show-notes{max-width:none;max-height:none}html.reveal-print .reveal .speaker-notes-pdf{display:block;width:100%;height:auto;max-height:none;top:auto;right:auto;bottom:auto;left:auto;z-index:100}html.reveal-print .reveal .speaker-notes-pdf[data-layout=separate-page]{position:relative;color:inherit;background-color:transparent;padding:20px;page-break-after:always;border:0}html.reveal-print .reveal .slide-number-pdf{display:block;position:absolute;font-size:14px;visibility:visible}html.reveal-print .aria-status{display:none}@media print{html:not(.print-pdf){overflow:visible;width:auto;height:auto}html:not(.print-pdf) body{margin:0;padding:0;overflow:visible}html:not(.print-pdf) .reveal{background:#fff;font-size:20pt}html:not(.print-pdf) .reveal .backgrounds,html:not(.print-pdf) .reveal .controls,html:not(.print-pdf) .reveal .progress,html:not(.print-pdf) .reveal .slide-number,html:not(.print-pdf) .reveal .state-background{display:none!important}html:not(.print-pdf) .reveal li,html:not(.print-pdf) .reveal p,html:not(.print-pdf) .reveal td{font-size:20pt!important;color:#000}html:not(.print-pdf) .reveal h1,html:not(.print-pdf) .reveal h2,html:not(.print-pdf) .reveal h3,html:not(.print-pdf) .reveal h4,html:not(.print-pdf) .reveal h5,html:not(.print-pdf) .reveal h6{color:#000!important;height:auto;line-height:normal;text-align:left;letter-spacing:normal}html:not(.print-pdf) .reveal h1{font-size:28pt!important}html:not(.print-pdf) .reveal h2{font-size:24pt!important}html:not(.print-pdf) .reveal h3{font-size:22pt!important}html:not(.print-pdf) .reveal h4{font-size:22pt!important;font-variant:small-caps}html:not(.print-pdf) .reveal h5{font-size:21pt!important}html:not(.print-pdf) .reveal h6{font-size:20pt!important;font-style:italic}html:not(.print-pdf) .reveal a:link,html:not(.print-pdf) .reveal a:visited{color:#000!important;font-weight:700;text-decoration:underline}html:not(.print-pdf) .reveal div,html:not(.print-pdf) .reveal ol,html:not(.print-pdf) .reveal p,html:not(.print-pdf) .reveal ul{visibility:visible;position:static;width:auto;height:auto;display:block;overflow:visible;margin:0;text-align:left!important}html:not(.print-pdf) .reveal pre,html:not(.print-pdf) .reveal table{margin-left:0;margin-right:0}html:not(.print-pdf) .reveal pre code{padding:20px}html:not(.print-pdf) .reveal blockquote{margin:20px 0}html:not(.print-pdf) .reveal .slides{position:static!important;width:auto!important;height:auto!important;left:0!important;top:0!important;margin-left:0!important;margin-top:0!important;padding:0!important;zoom:1!important;transform:none!important;overflow:visible!important;display:block!important;text-align:left!important;perspective:none;perspective-origin:50% 50%}html:not(.print-pdf) .reveal .slides section{visibility:visible!important;position:static!important;width:auto!important;height:auto!important;display:block!important;overflow:visible!important;left:0!important;top:0!important;margin-left:0!important;margin-top:0!important;padding:60px 20px!important;z-index:auto!important;opacity:1!important;page-break-after:always!important;transform-style:flat!important;transform:none!important;transition:none!important}html:not(.print-pdf) .reveal .slides section.stack{padding:0!important}html:not(.print-pdf) .reveal .slides section:last-of-type{page-break-after:avoid!important}html:not(.print-pdf) .reveal .slides section .fragment{opacity:1!important;visibility:visible!important;transform:none!important}html:not(.print-pdf) .reveal .r-fit-text{white-space:normal!important}html:not(.print-pdf) .reveal section img{display:block;margin:15px 0;background:#fff;border:1px solid #666;box-shadow:none}html:not(.print-pdf) .reveal section small{font-size:.8em}html:not(.print-pdf) .reveal .hljs{max-height:100%;white-space:pre-wrap;word-wrap:break-word;word-break:break-word;font-size:15pt}html:not(.print-pdf) .reveal .hljs .hljs-ln-numbers{white-space:nowrap}html:not(.print-pdf) .reveal .hljs td{font-size:inherit!important;color:inherit!important}}
+</style>
+<!-- reveal.js 5.1.0 theme 'white', inlined; @font-face rules for Source Sans Pro removed (relative font paths, not resolvable once inlined) -- falls back to Helvetica/sans-serif already in the theme's font stack -->
+<style>
+section.has-dark-background,section.has-dark-background h1,section.has-dark-background h2,section.has-dark-background h3,section.has-dark-background h4,section.has-dark-background h5,section.has-dark-background h6{color:#fff}:root{--r-background-color:#fff;--r-main-font:Source Sans Pro,Helvetica,sans-serif;--r-main-font-size:42px;--r-main-color:#222;--r-block-margin:20px;--r-heading-margin:0 0 20px 0;--r-heading-font:Source Sans Pro,Helvetica,sans-serif;--r-heading-color:#222;--r-heading-line-height:1.2;--r-heading-letter-spacing:normal;--r-heading-text-transform:uppercase;--r-heading-text-shadow:none;--r-heading-font-weight:600;--r-heading1-text-shadow:none;--r-heading1-size:2.5em;--r-heading2-size:1.6em;--r-heading3-size:1.3em;--r-heading4-size:1em;--r-code-font:monospace;--r-link-color:#2a76dd;--r-link-color-dark:#1a53a1;--r-link-color-hover:#6ca0e8;--r-selection-background-color:#98bdef;--r-selection-color:#fff;--r-overlay-element-bg-color:0,0,0;--r-overlay-element-fg-color:240,240,240}.reveal-viewport{background:#fff;background-color:var(--r-background-color)}.reveal{font-family:var(--r-main-font);font-size:var(--r-main-font-size);font-weight:400;color:var(--r-main-color)}.reveal ::selection{color:var(--r-selection-color);background:var(--r-selection-background-color);text-shadow:none}.reveal ::-moz-selection{color:var(--r-selection-color);background:var(--r-selection-background-color);text-shadow:none}.reveal .slides section,.reveal .slides section>section{line-height:1.3;font-weight:inherit}.reveal h1,.reveal h2,.reveal h3,.reveal h4,.reveal h5,.reveal h6{margin:var(--r-heading-margin);color:var(--r-heading-color);font-family:var(--r-heading-font);font-weight:var(--r-heading-font-weight);line-height:var(--r-heading-line-height);letter-spacing:var(--r-heading-letter-spacing);text-transform:var(--r-heading-text-transform);text-shadow:var(--r-heading-text-shadow);word-wrap:break-word}.reveal h1{font-size:var(--r-heading1-size)}.reveal h2{font-size:var(--r-heading2-size)}.reveal h3{font-size:var(--r-heading3-size)}.reveal h4{font-size:var(--r-heading4-size)}.reveal h1{text-shadow:var(--r-heading1-text-shadow)}.reveal p{margin:var(--r-block-margin) 0;line-height:1.3}.reveal h1:last-child,.reveal h2:last-child,.reveal h3:last-child,.reveal h4:last-child,.reveal h5:last-child,.reveal h6:last-child{margin-bottom:0}.reveal iframe,.reveal img,.reveal video{max-width:95%;max-height:95%}.reveal b,.reveal strong{font-weight:700}.reveal em{font-style:italic}.reveal dl,.reveal ol,.reveal ul{display:inline-block;text-align:left;margin:0 0 0 1em}.reveal ol{list-style-type:decimal}.reveal ul{list-style-type:disc}.reveal ul ul{list-style-type:square}.reveal ul ul ul{list-style-type:circle}.reveal ol ol,.reveal ol ul,.reveal ul ol,.reveal ul ul{display:block;margin-left:40px}.reveal dt{font-weight:700}.reveal dd{margin-left:40px}.reveal blockquote{display:block;position:relative;width:70%;margin:var(--r-block-margin) auto;padding:5px;font-style:italic;background:rgba(255,255,255,.05);box-shadow:0 0 2px rgba(0,0,0,.2)}.reveal blockquote p:first-child,.reveal blockquote p:last-child{display:inline-block}.reveal q{font-style:italic}.reveal pre{display:block;position:relative;width:90%;margin:var(--r-block-margin) auto;text-align:left;font-size:.55em;font-family:var(--r-code-font);line-height:1.2em;word-wrap:break-word;box-shadow:0 5px 15px rgba(0,0,0,.15)}.reveal code{font-family:var(--r-code-font);text-transform:none;tab-size:2}.reveal pre code{display:block;padding:5px;overflow:auto;max-height:400px;word-wrap:normal}.reveal .code-wrapper{white-space:normal}.reveal .code-wrapper code{white-space:pre}.reveal table{margin:auto;border-collapse:collapse;border-spacing:0}.reveal table th{font-weight:700}.reveal table td,.reveal table th{text-align:left;padding:.2em .5em .2em .5em;border-bottom:1px solid}.reveal table td[align=center],.reveal table th[align=center]{text-align:center}.reveal table td[align=right],.reveal table th[align=right]{text-align:right}.reveal table tbody tr:last-child td,.reveal table tbody tr:last-child th{border-bottom:none}.reveal sup{vertical-align:super;font-size:smaller}.reveal sub{vertical-align:sub;font-size:smaller}.reveal small{display:inline-block;font-size:.6em;line-height:1.2em;vertical-align:top}.reveal small *{vertical-align:top}.reveal img{margin:var(--r-block-margin) 0}.reveal a{color:var(--r-link-color);text-decoration:none;transition:color .15s ease}.reveal a:hover{color:var(--r-link-color-hover);text-shadow:none;border:none}.reveal .roll span:after{color:#fff;background:var(--r-link-color-dark)}.reveal .r-frame{border:4px solid var(--r-main-color);box-shadow:0 0 10px rgba(0,0,0,.15)}.reveal a .r-frame{transition:all .15s linear}.reveal a:hover .r-frame{border-color:var(--r-link-color);box-shadow:0 0 20px rgba(0,0,0,.55)}.reveal .controls{color:var(--r-link-color)}.reveal .progress{background:rgba(0,0,0,.2);color:var(--r-link-color)}@media print{.backgrounds{background-color:var(--r-background-color)}}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --bg:#EAF4F6; --paper:#FFFFFF; --ink:#17323D; --muted:#5F7B84; --line:#C9DDE2;
+  --accent:#FF8A3D; --teal:#2B9EB3; --teal-soft:#D5EDF2; --ok:#2E9E6B; --bad:#D9534F;
+  --head:"Gowun Dodum","Noto Sans KR",sans-serif;
+  --body:"Noto Sans KR",system-ui,-apple-system,"Malgun Gothic",sans-serif;
+}
+
+.reveal-viewport{background:var(--bg)}
+.reveal{font-family:var(--body);color:var(--ink);font-size:32px}
+.reveal .slides section{text-align:left;padding:0;height:100%}
+
+.reveal h1{font-family:var(--head);font-weight:400;font-size:54pt;line-height:1.12;color:var(--ink);text-transform:none;margin:0 0 14px;letter-spacing:-.01em}
+.reveal h2{font-family:var(--head);font-weight:400;font-size:34pt;line-height:1.2;color:var(--ink);text-transform:none;margin:0 0 6px;letter-spacing:-.01em}
+.reveal h3{font-family:var(--head);font-weight:400;font-size:20pt;color:var(--teal);text-transform:none;margin:0 0 8px}
+.reveal p,.reveal li{font-size:15pt;line-height:1.55;color:var(--ink)}
+.reveal strong{color:var(--ink);font-weight:700}
+.reveal em{font-style:normal;color:var(--accent);font-weight:700}
+.reveal code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.86em;
+  background:var(--teal-soft);color:var(--ink);border-radius:5px;padding:2px 7px;white-space:nowrap}
+
+/* ── 슬라이드 뼈대 ── */
+.pad{padding:52px 66px;height:100%;display:flex;flex-direction:column;box-sizing:border-box}
+.eyebrow{font-size:11pt;letter-spacing:.16em;color:var(--teal);font-weight:700;margin:0 0 12px}
+.sub{font-size:16pt;color:var(--muted);margin:2px 0 0;max-width:30em}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;margin-top:22px}
+.foot{font-size:11pt;color:var(--muted);margin:16px 0 0}
+
+/* ── 카드 ── */
+.card{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px 22px;box-sizing:border-box}
+.card h3{margin:0 0 6px}
+.card p{margin:0;font-size:14pt;color:var(--muted)}
+.card p.big{color:var(--ink);font-size:15pt}
+.tint{background:var(--teal-soft);border-color:transparent}
+.warm{background:#FFF3E8;border-color:transparent}
+.grid{display:grid;gap:20px}
+
+/* ── 숫자 타일 ── */
+.stat{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:18px 20px;text-align:center}
+.stat b{display:block;font-family:var(--head);font-weight:400;font-size:40pt;line-height:1;color:var(--teal)}
+.stat b.hot{color:var(--accent)}
+.stat p{margin:8px 0 0;font-size:12pt;color:var(--muted);line-height:1.35}
+
+/* ── 표 ── */
+.reveal table{width:100%;border-collapse:collapse;font-size:14pt;background:var(--paper);
+  border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.reveal th{background:var(--teal);color:#fff;font-weight:700;padding:11px 14px;text-align:left;font-size:13pt;border:none}
+.reveal td{padding:11px 14px;border-top:1px solid var(--line);color:var(--ink);vertical-align:middle}
+.reveal td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.reveal tr.hi td{background:#FFF3E8}
+.reveal tr.hi td.num{color:var(--accent)}
+
+/* ── 배지 ── */
+.pill{display:inline-block;font-size:11pt;font-weight:700;border-radius:999px;padding:3px 12px;line-height:1.5}
+.pill.now{background:#DFF3E8;color:var(--ok)}
+.pill.week{background:#FFDCBC;color:#A8530A}
+.pill.later{background:#F0E9F4;color:#7A5A8C}
+
+/* ── 사람/로봇 줄 ── */
+.who{display:flex;align-items:center;gap:12px;background:var(--paper);border:1px solid var(--line);
+  border-radius:14px;padding:14px 18px}
+.who .n{font-family:var(--head);font-size:24pt;color:var(--accent);line-height:1;min-width:34px}
+.who p{margin:0;font-size:14pt}
+.who p span{display:block;font-size:11.5pt;color:var(--muted);margin-top:2px}
+
+/* ── 진행 띠 모형 ── */
+.bar{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:13pt}
+.bar .track{height:9px;border-radius:99px;background:var(--teal-soft);margin:9px 0 7px;overflow:hidden}
+.bar .fill{height:100%;width:38%;background:var(--teal);border-radius:99px}
+.bar .meta{display:flex;justify-content:space-between;color:var(--muted);font-size:11.5pt}
+
+/* ── 스택 바(354) ── */
+.stack{display:flex;height:54px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.stack div{display:flex;align-items:center;justify-content:center;font-size:13pt;font-weight:700;color:#fff}
+.legend{display:flex;gap:22px;margin-top:12px;flex-wrap:wrap}
+.legend p{margin:0;font-size:12.5pt;color:var(--muted);display:flex;align-items:center;gap:7px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
+
+.reveal ul{margin:0;padding-left:1.1em}
+.reveal li{margin:.3em 0}
+.reveal li::marker{color:var(--teal)}
+
+.reveal .progress{color:var(--accent)}
+.reveal .slide-number{background:transparent;color:var(--muted);font-size:11pt;font-family:var(--body)}
+.reveal .controls{color:var(--teal)}
+
+svg{display:block;width:100%;height:auto}
+.link{font-size:14pt;color:var(--teal);word-break:break-all}
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ══════════ 1 · 표지 ══════════ -->
+<section id="s01">
+ <div class="pad" style="justify-content:center">
+  <p class="eyebrow">피크 × 이오딩 · 2026년 9월 11일</p>
+  <h1>계약서 한 장으로<br>호텔 하나</h1>
+  <p class="sub">호텔 계약서를 넣으면 ERP Stay가 채워집니다.<br>[판매 시작]만 사람이 누릅니다.</p>
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-top:44px">
+    <div class="stat"><b>7</b><p>시험 호텔</p></div>
+    <div class="stat"><b>3</b><p>운영에서 판매중</p></div>
+    <div class="stat"><b class="hot">19분</b><p>호텔 하나 · 사진 포함</p></div>
+    <div class="stat"><b>🟡 0</b><p>합격선</p></div>
+  </div>
+ </div>
+ <aside class="notes">
+  안녕하세요. 오늘 두 시간 잡았습니다. 앞의 20분은 이게 무슨 물건인지 말로만 설명드리고,
+  뒤의 40분은 여러분 계정으로 실제 호텔 하나를 같이 깝니다.
+  숫자 네 개만 먼저 봐 주세요. 시험 호텔 일곱 개를 깔았고, 그중 셋은 지금 실제로 팔리고 있습니다.
+  호텔 하나에 19분, 사진 올리는 것까지 포함해서요. 마지막 노란 0이 오늘 강의의 합격선입니다.
+ </aside>
+</section>
+
+<!-- ══════════ 2 · 문제 ══════════ -->
+<section id="s02">
+ <div class="pad">
+  <p class="eyebrow">① 문제</p>
+  <h2>계약서 수십 장을 손으로 옮깁니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:300px 1fr;align-items:center;gap:44px">
+    <svg viewBox="0 0 200 200" role="img" aria-label="두꺼운 계약서와 물음표">
+      <rect x="26" y="26" width="108" height="140" rx="8" fill="#FFF6EC" stroke="#17323D" stroke-width="4"/>
+      <rect x="40" y="40" width="108" height="140" rx="8" fill="#FFFFFF" stroke="#17323D" stroke-width="4"/>
+      <g stroke="#5F7B84" stroke-width="5" stroke-linecap="round">
+        <line x1="58" y1="68" x2="130" y2="68"/><line x1="58" y1="92" x2="118" y2="92"/>
+        <line x1="58" y1="116" x2="134" y2="116"/><line x1="58" y1="140" x2="108" y2="140"/>
+        <line x1="58" y1="164" x2="126" y2="164"/>
+      </g>
+      <text x="170" y="62" font-size="42" fill="#FF8A3D" font-family="Noto Sans KR" font-weight="700">?</text>
+    </svg>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:16px">
+      <div class="stat"><b>20</b><p>ERP 탭</p></div>
+      <div class="stat"><b>100+</b><p>손으로 넣는 칸</p></div>
+      <div class="stat"><b class="hot">제각각</b><p>사람마다 다른 값</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="foot">룸 · 시즌 · 가격 · 취소정책 · 부과금 · 사진 — 화면 스무 개를 오갑니다.</p>
+ </div>
+ <aside class="notes">
+  지금 여러분이 하시는 일입니다. 호텔 계약서 오면 ERP 열고, 탭 스무 개를 오가면서
+  룸 넣고 시즌 넣고 가격 넣고 사진 올리고. 칸이 백 개 넘습니다.
+  문제는 오래 걸리는 것보다도, 사람마다 값이 달라진다는 겁니다.
+  같은 계약서인데 누가 깔았느냐에 따라 화면이 다르게 나옵니다. 그걸 없애려고 만든 도구입니다.
+ </aside>
+</section>
+
+<!-- ══════════ 3 · 만든 것 셋 ══════════ -->
+<section id="s03">
+ <div class="pad">
+  <p class="eyebrow">② 만든 것</p>
+  <h2>레시피 · 검사 도장 · 로봇 손</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="card">
+      <svg viewBox="0 0 200 130" style="max-height:118px" role="img" aria-label="레시피 종이">
+        <rect x="58" y="8" width="84" height="114" rx="8" fill="#FFF6EC" stroke="#FF8A3D" stroke-width="4"/>
+        <g stroke="#2B9EB3" stroke-width="6" stroke-linecap="round">
+          <line x1="74" y1="34" x2="126" y2="34"/><line x1="74" y1="56" x2="112" y2="56"/>
+          <line x1="74" y1="78" x2="122" y2="78"/><line x1="74" y1="100" x2="104" y2="100"/>
+        </g>
+      </svg>
+      <h3>레시피</h3>
+      <p class="big">계약서로 만든 <strong>입력 지시서</strong>. 줄 하나가 칸 하나입니다.</p>
+    </div>
+    <div class="card">
+      <svg viewBox="0 0 200 130" style="max-height:118px" role="img" aria-label="ALL OK 도장">
+        <rect x="46" y="8" width="108" height="114" rx="8" fill="#FFFFFF" stroke="#C9DDE2" stroke-width="4"/>
+        <g stroke="#C9DDE2" stroke-width="6" stroke-linecap="round">
+          <line x1="62" y1="32" x2="126" y2="32"/><line x1="62" y1="52" x2="112" y2="52"/>
+        </g>
+        <circle cx="120" cy="88" r="30" fill="none" stroke="#2E9E6B" stroke-width="5" transform="rotate(-12 120 88)"/>
+        <text x="120" y="95" text-anchor="middle" font-size="15" fill="#2E9E6B"
+              font-family="Noto Sans KR" font-weight="700" transform="rotate(-12 120 88)">ALL OK</text>
+      </svg>
+      <h3>검사 도장</h3>
+      <p class="big">도장 없는 지시서는 <strong>로봇이 거부</strong>합니다.</p>
+    </div>
+    <div class="card">
+      <svg viewBox="0 0 200 130" style="max-height:118px" role="img" aria-label="손이 화면을 누름">
+        <rect x="18" y="10" width="150" height="92" rx="9" fill="#FFFFFF" stroke="#2B9EB3" stroke-width="4"/>
+        <rect x="18" y="10" width="150" height="20" rx="9" fill="#2B9EB3"/>
+        <rect x="34" y="44" width="80" height="12" rx="4" fill="#D5EDF2" stroke="#C9DDE2"/>
+        <rect x="34" y="64" width="80" height="12" rx="4" fill="#D5EDF2" stroke="#C9DDE2"/>
+        <rect x="112" y="82" width="42" height="18" rx="6" fill="#FF8A3D"/>
+        <path d="M104 130c0-24 8-37 18-39l3-18c1-5 8-5 8 0v20l13 5c5 2 7 6 5 11l-5 21z"
+              fill="#F6D8C2" stroke="#17323D" stroke-width="4" stroke-linejoin="round"/>
+      </svg>
+      <h3>로봇 손</h3>
+      <p class="big">여러분이 로그인해 둔 <strong>크롬 탭 안</strong>에서 칩니다.</p>
+    </div>
+   </div>
+  </div>
+  <p class="foot">셋은 따로 돕니다 — 레시피가 틀리면 손은 아예 움직이지 않습니다.</p>
+ </div>
+ <aside class="notes">
+  전체 그림은 이 세 개가 전부입니다.
+  첫째, 계약서를 읽어서 "어느 탭 가서 어느 칸에 뭘 넣어라" 를 줄줄이 적은 레시피를 만듭니다.
+  둘째, 그 레시피를 검사기가 훑어서 도장을 찍습니다. 빠진 값이 있으면 도장이 안 나옵니다.
+  셋째, 도장 찍힌 레시피만 로봇 손이 받아서 크롬 안에서 실제로 칩니다.
+  중요한 건 순서입니다. 레시피가 부실하면 로봇은 시작조차 안 합니다.
+ </aside>
+</section>
+
+<!-- ══════════ 4 · 레시피 ══════════ -->
+<section id="s04">
+ <div class="pad">
+  <p class="eyebrow">② 레시피</p>
+  <h2>지시서는 줄 하나가 칸 하나</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1.15fr 1fr;align-items:center;gap:36px">
+    <div>
+      <table>
+        <tr><th colspan="2">11단계 · 룸 만들기 1번째</th></tr>
+        <tr><td>룸 이름</td><td><code>Deluxe Ocean View</code></td></tr>
+        <tr><td>면적 (㎡)</td><td><code>35</code></td></tr>
+        <tr><td>기준 인원</td><td><code>2</code></td></tr>
+        <tr><td>최대 인원</td><td><code>3</code></td></tr>
+        <tr class="hi"><td>개장 연도</td><td><code>비움</code></td></tr>
+        <tr><td colspan="2" style="color:#5F7B84">→ <strong>[저장]</strong></td></tr>
+      </table>
+    </div>
+    <div class="grid" style="gap:14px">
+      <div class="card tint"><h3>60 ~ 130줄</h3><p>호텔 하나 분량</p></div>
+      <div class="card"><h3>값은 계약서에서만</h3><p>없는 값은 지어내지 않고 <code>비움</code> 으로 둡니다.</p></div>
+      <div class="card warm"><h3>changes.md</h3><p><code>비움</code> 으로 둔 칸이 여기 모입니다 — 나중에 채우실 목록.</p></div>
+    </div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  레시피가 어떻게 생겼는지 한 번만 보시면 됩니다.
+  "11단계, 룸 만들기 첫 번째, 이름은 Deluxe Ocean View, 면적 35, 기준 인원 2, 저장."
+  이런 줄이 호텔 하나에 예순에서 백서른 개 나옵니다.
+  주황색 줄 보이시죠. 개장 연도가 계약서에 없으면 비움으로 둡니다. 지어내지 않습니다.
+  그렇게 비운 칸은 changes 파일에 목록으로 모여서, 나중에 여러분이 그것만 채우시면 됩니다.
+ </aside>
+</section>
+
+<!-- ══════════ 5 · 검사 도장 ══════════ -->
+<section id="s05">
+ <div class="pad">
+  <p class="eyebrow">② 검사 도장</p>
+  <h2>도장이 없으면 시작도 안 합니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1fr 1fr;gap:26px">
+    <div class="card" style="border-color:#2E9E6B">
+      <h3 style="color:#2E9E6B">ALL OK — 넘어감</h3>
+      <ul>
+        <li>단계 번호가 이어짐</li>
+        <li>시즌 날짜가 <strong>하루도 안 겹침</strong></li>
+        <li>취소정책이 골라져 있음</li>
+        <li>지시서가 부르는 사진이 실제로 있음</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:#D9534F">
+      <h3 style="color:#D9534F">문제 있음 — 멈춤</h3>
+      <ul>
+        <li>나이 구간이 겹침 <code>0~5</code> <code>5~15</code></li>
+        <li>부가옵션 이름이 <code>소아 (만6~11세)</code></li>
+        <li>옛 화면 기준으로 쓴 단계</li>
+        <li>원고를 고치고 <strong>다시 안 만든</strong> 지시서</li>
+      </ul>
+    </div>
+   </div>
+  </div>
+  <p class="foot">틀린 지시서로 ERP를 절반쯤 채워 놓는 일이 가장 비쌉니다 — 그래서 앞에서 막습니다.</p>
+ </div>
+ <aside class="notes">
+  이게 이 도구에서 제일 중요한 장치입니다.
+  틀린 레시피로 ERP를 절반쯤 채워 놓으면, 그걸 되돌리는 게 처음부터 하는 것보다 비쌉니다.
+  그래서 브라우저를 열기 전에 검사기가 먼저 훑습니다.
+  나이 구간이 하루라도 겹치거나, 시즌 날짜가 겹치거나, 취소정책이 안 골라져 있으면 도장을 안 찍습니다.
+  도장 없는 지시서를 로봇에게 주면 로봇이 거부하고 멈춥니다. 우회로는 없습니다.
+ </aside>
+</section>
+
+<!-- ══════════ 6 · 로봇 손 ══════════ -->
+<section id="s06">
+ <div class="pad">
+  <p class="eyebrow">② 로봇 손</p>
+  <h2>여러분 크롬 탭 안에서 칩니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1fr 320px;align-items:center;gap:40px">
+    <div class="grid" style="gap:16px">
+      <div class="bar">
+        <div class="meta"><strong style="font-size:13pt">진행 현황</strong><span>완료 29 / 전체 77</span></div>
+        <div class="track"><div class="fill"></div></div>
+        <div class="meta"><span>지금: 시즌 가격 채우기 — 성수기</span><span>13:42</span></div>
+      </div>
+      <div class="card tint"><h3>13 ~ 19분</h3><p>호텔 하나 · 사진 18장 포함</p></div>
+      <div class="card"><h3>끝나면 다시 읽습니다</h3><p>화면에 들어간 값을 되읽어 레시피와 대조합니다.</p></div>
+    </div>
+    <div class="card warm" style="text-align:center">
+      <h3 style="color:#C2660F">기다리는 동안</h3>
+      <p class="big" style="text-align:left">화면을 <strong>건드리지 마세요</strong>.<br>PC가 잠들지 않게 두세요.<br>다른 탭은 봐도 됩니다.</p>
+    </div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  로봇 손은 여러분이 로그인해 둔 크롬 탭 안에서 움직입니다.
+  따로 서버가 있는 게 아니고, 여러분 화면에서 여러분 계정으로 칩니다. 그래서 권한 문제가 없습니다.
+  ERP 화면 오른쪽 위에 이런 띠가 뜹니다. 스물아홉 번째 하고 있고 전체가 일흔일곱이다.
+  호텔 하나에 13분에서 19분. 그동안 화면을 건드리지만 마세요. 커서가 엉킵니다.
+  다 끝나면 로봇이 자기가 넣은 값을 화면에서 다시 읽어서 레시피와 맞는지 대조합니다.
+ </aside>
+</section>
+
+<!-- ══════════ 7 · 사람이 하는 셋 ══════════ -->
+<section id="s07">
+ <div class="pad">
+  <p class="eyebrow">③ 역할</p>
+  <h2>사람이 하는 건 딱 셋</h2>
+  <div class="body">
+   <div class="grid" style="gap:16px">
+    <div class="who"><p class="n">1</p><p><strong>폴더 하나 만들기</strong>
+      <span>계약서 파일 + <code>사진</code> 폴더를 한 곳에 넣습니다.</span></p></div>
+    <div class="who"><p class="n">2</p><p><strong>ERP에 로그인해 두기</strong>
+      <span>인증앱 6자리는 <strong>사람만</strong> 넣습니다 — 채팅에 적어도 로봇은 안 씁니다.
+      <code>로그인 상태 유지</code> 를 꼭 체크하세요.</span></p></div>
+    <div class="who" style="border-color:var(--accent);background:#FFF3E8"><p class="n">3</p>
+      <p><strong>[판매 시작] 누르기</strong>
+      <span>로봇은 이 버튼을 <strong>절대</strong> 누르지 않습니다. 값을 훑어보고 사장님이 누릅니다.</span></p></div>
+   </div>
+  </div>
+  <p class="foot">나머지 — 계약서 읽기 · 지시서 만들기 · 100칸 채우기 · 사진 올리기 — 는 도구가 합니다.</p>
+ </div>
+ <aside class="notes">
+  그래서 사람 손이 필요한 건 세 가지뿐입니다.
+  하나, 폴더 만들어서 계약서랑 사진 넣기. 둘, ERP에 로그인해 두기.
+  로그인은 반드시 사람이 합니다. 비밀번호나 인증앱 여섯 자리를 채팅에 적어 주셔도 로봇은 안 씁니다.
+  대신 로그인 화면의 "로그인 상태 유지" 는 꼭 체크해 두세요. 안 그러면 중간에 풀립니다.
+  셋, 판매 시작 버튼. 이건 로봇이 절대 안 누릅니다. 값을 한 번 훑어보시고 직접 누르시는 겁니다.
+ </aside>
+</section>
+
+<!-- ══════════ 8 · 아이 요금 ① ══════════ -->
+<section id="s08">
+ <div class="pad">
+  <p class="eyebrow">④ 아이 요금 · 1단계</p>
+  <h2>먼저 나이 구간을 긋습니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1fr 1fr;align-items:center;gap:36px">
+    <div>
+      <table>
+        <tr><th>밴드 코드</th><th>노출명</th><th>나이 (만)</th></tr>
+        <tr><td><code>INF</code></td><td>유아</td><td class="num">0 ~ 4.99</td></tr>
+        <tr><td><code>CHD</code></td><td>소아</td><td class="num">5 ~ 15.99</td></tr>
+        <tr class="hi"><td colspan="3" style="font-size:12.5pt">
+          <strong>16 이상은 성인</strong> — 구간을 안 만듭니다</td></tr>
+      </table>
+      <p class="foot" style="margin-top:12px">오퍼 탭 → <strong>[연령 구간 추가]</strong> · 코드는 영대문자 2~8자</p>
+    </div>
+    <div class="grid" style="gap:14px">
+      <div class="card"><h3>계약서가 그은 경계 그대로</h3>
+        <p>"만 5세부터 15세" 라고 쓰여 있으면 <code>5</code> ~ <code>15.99</code>. 반올림하지 않습니다.</p></div>
+      <div class="card" style="border-color:#D9534F"><h3 style="color:#D9534F">한 살도 겹칠 수 없음</h3>
+        <p><code>0~5</code> 와 <code>5~15</code> 는 다섯 살이 겹칩니다 — 검사기가 막습니다.</p></div>
+      <div class="card tint"><h3>구간이 없으면?</h3>
+        <p>고객 화면 인원 선택기에 <strong>성인만</strong> 섭니다. 아이를 데려가는 예약이 아예 안 됩니다.</p></div>
+    </div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  여기서부터가 오늘 새로 되는 부분입니다. 아이 요금이요.
+  계약서에 "소아 만 5세에서 15세" 같은 말이 한 마디라도 있으면, 제일 먼저 나이 구간을 긋습니다.
+  오퍼 탭에 연령 구간 추가 버튼이 있습니다. 유아는 0에서 4.99, 소아는 5에서 15.99.
+  왜 4.99냐면, 5로 끝내고 5로 시작하면 다섯 살이 두 구간에 겹칩니다. 검사기가 그걸 막습니다.
+  그리고 이 구간을 안 만들면 고객 예약 화면에 성인 칸만 뜹니다. 아이를 아예 못 데려갑니다.
+ </aside>
+</section>
+
+<!-- ══════════ 9 · 아이 요금 ② ══════════ -->
+<section id="s09">
+ <div class="pad">
+  <p class="eyebrow">④ 아이 요금 · 2단계</p>
+  <h2>그러면 가격 칸이 생깁니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1fr 1fr;align-items:center;gap:36px">
+    <div style="text-align:center">
+      <div class="card tint" style="padding:30px 22px">
+        <p style="font-size:12pt;color:#5F7B84;margin:0 0 10px">인원 조합 셀 이름</p>
+        <p style="font-family:var(--head);font-size:38pt;color:var(--ink);margin:0;letter-spacing:.02em">
+          A2<span style="color:#FF8A3D">C1_CHD</span></p>
+        <p style="font-size:13pt;color:#5F7B84;margin:14px 0 0">성인 2명 · 소아 1명</p>
+      </div>
+      <p class="foot" style="text-align:center">앞의 <code>A2</code> 는 성인 수 · 뒤는 <strong>밴드 코드 그대로</strong></p>
+    </div>
+    <div class="grid" style="gap:14px">
+      <div class="card"><h3>한 곳에만 적습니다</h3>
+        <p>시즌 <strong>[가격]</strong> → <code>아동 추가 금액 — 소아</code> 칸.
+        아이 1박 요금은 여기 한 곳입니다.</p></div>
+      <div class="card warm"><h3>두 곳에 적으면</h3>
+        <p>성인가 위에 소아가가 또 붙어 <strong>한 아이에게 두 번</strong> 받습니다.</p></div>
+      <div class="card"><h3>특정 날 한 번 받는 돈</h3>
+        <p>갈라디너 같은 건 <strong>의무 부과금</strong> 하나에 <code>연령별 단가</code> 로 어른값·아이값을 같이 적습니다.</p></div>
+    </div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  나이 구간을 만들면 가격 쪽에 칸이 따라 생깁니다.
+  ERP 안에서 가격 셀 이름이 A2C1_CHD 이렇게 붙습니다. 성인 둘에 소아 하나라는 뜻이고,
+  뒤에 붙는 CHD 는 아까 여러분이 지은 밴드 코드가 그대로 실린 겁니다.
+  값을 넣는 자리는 시즌의 가격 버튼을 눌렀을 때 나오는 아동 추가 금액 칸, 딱 한 곳입니다.
+  두 군데 적으면 같은 아이한테 두 번 받는 화면이 됩니다. 그건 검사기가 잡습니다.
+  갈라디너처럼 특정 날에 한 번 받는 돈만 부과금 쪽에 어른값 아이값을 같이 적습니다.
+ </aside>
+</section>
+
+<!-- ══════════ 10 · 아이 요금 ③ 예약 페이지 ══════════ -->
+<section id="s10">
+ <div class="pad">
+  <p class="eyebrow">④ 아이 요금 · 결과</p>
+  <h2>고객 예약 페이지에서 이렇게 나옵니다</h2>
+  <div class="body">
+   <table>
+     <tr><th>고르는 인원</th><th>아이 나이</th><th style="text-align:right">1박 요금</th><th>왜</th></tr>
+     <tr><td>성인 2</td><td style="color:#5F7B84">—</td><td class="num">87,297</td>
+         <td style="color:#5F7B84;font-size:12.5pt">기준</td></tr>
+     <tr><td>성인 2 · 아동 1</td><td><strong>만 3세</strong></td><td class="num" style="color:#2E9E6B">87,297</td>
+         <td style="color:#5F7B84;font-size:12.5pt">유아 구간 — <strong>무료</strong></td></tr>
+     <tr class="hi"><td>성인 2 · 아동 1</td><td><strong>만 7세</strong></td><td class="num">87,297 + 23,182</td>
+         <td style="color:#5F7B84;font-size:12.5pt">소아 구간 — 아동 추가 금액</td></tr>
+     <tr><td>성인 2 · 아동 1</td><td><strong>만 17세</strong></td><td class="num">성인 3명 값</td>
+         <td style="color:#5F7B84;font-size:12.5pt">16세 이상 — 성인으로 셉니다</td></tr>
+   </table>
+  </div>
+  <p class="foot">씨센스 · 실제 운영 화면 · 나이를 고르는 순간 금액이 바뀝니다.</p>
+ </div>
+ <aside class="notes">
+  말로 하면 어려운데 결과를 보시면 바로 이해되실 겁니다. 실제 운영중인 씨센스 화면 숫자입니다.
+  성인 둘이면 8만 7천 2백 97원. 여기에 아이를 하나 붙이는데,
+  나이를 만 세 살로 고르면 금액이 그대로입니다. 유아 구간이라 무료로 잡힌 거죠.
+  같은 아이를 만 일곱 살로 고치면 2만 3천 백 82원이 붙습니다. 소아 구간에 들어간 겁니다.
+  만 열일곱으로 고치면 성인 세 명 값이 됩니다. 열여섯 이상은 성인이니까요.
+  나이를 고르는 순간 금액이 바뀝니다. 이게 아까 그 나이 구간이 하는 일 전부입니다.
+ </aside>
+</section>
+
+<!-- ══════════ 11 · 박수별 단가 ══════════ -->
+<section id="s11">
+ <div class="pad">
+  <p class="eyebrow">⑤ 박수별 단가</p>
+  <h2>오래 묵으면 싸게 — 도 한 칸입니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1fr 1fr;align-items:center;gap:36px">
+    <div>
+      <table>
+        <tr><th>묵는 박수</th><th style="text-align:right">1박 단가</th></tr>
+        <tr><td>1 ~ 2박</td><td class="num">$120</td></tr>
+        <tr class="hi"><td>3박부터</td><td class="num">$100</td></tr>
+        <tr class="hi"><td>5박부터</td><td class="num">$90</td></tr>
+      </table>
+      <p class="foot" style="margin-top:12px">시즌 <strong>[가격]</strong> → <code>박수별 단가(선택)</code> 칸에
+        <code>3:100,5:90</code></p>
+    </div>
+    <div class="grid" style="gap:14px">
+      <div class="card tint"><h3>계약서 문장 그대로</h3>
+        <p>"3박 이상 10% 할인" 이면 계산한 금액을 넣습니다 — 도구가 환산하지 않습니다.</p></div>
+      <div class="card"><h3>시즌마다 다르면</h3>
+        <p>시즌마다 따로 적습니다. 성수기와 비수기 할인 폭이 달라도 됩니다.</p></div>
+      <div class="card warm"><h3>안 쓰는 계약서가 더 많습니다</h3>
+        <p>계약서에 박수 이야기가 없으면 이 칸은 <strong>비웁니다</strong>.</p></div>
+    </div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  같은 자리에 박수별 단가라는 칸이 하나 더 있습니다.
+  "3박 이상 묵으면 1박에 백 달러, 5박 이상이면 아흔 달러" 같은 계약 조건이요.
+  적는 법은 간단합니다. 3에 백, 5에 아흔, 이렇게 콜론으로 적으면 됩니다.
+  주의하실 건 하나입니다. 계약서에 "10% 할인" 이라고 퍼센트로 쓰여 있어도
+  도구가 계산해 주지 않습니다. 계산한 금액을 넣으셔야 합니다.
+  그리고 계약서에 박수 이야기가 없으면 그냥 비우시면 됩니다. 대부분 비웁니다.
+ </aside>
+</section>
+
+<!-- ══════════ 12 · 피크 354시트 현황 ══════════ -->
+<section id="s12">
+ <div class="pad">
+  <p class="eyebrow">⑥ 피크 현황</p>
+  <h2>지금 있는 354시트, 어디까지 되나</h2>
+  <div class="body">
+   <div class="stack">
+     <div style="width:56.8%;background:#2B9EB3">201시트 · 57%</div>
+     <div style="width:43.2%;background:#FF8A3D">153시트 · 43%</div>
+   </div>
+   <div class="legend">
+     <p><i style="background:#2B9EB3"></i><span class="pill now">지금 됨</span>&nbsp;아이 요금이 없는 계약서</p>
+     <p><i style="background:#FF8A3D"></i><span class="pill week">이번 주</span>&nbsp;소아 1밴드 + 유아 무료</p>
+   </div>
+   <div class="grid" style="grid-template-columns:1fr 1fr;gap:20px;margin-top:26px">
+     <div class="card warm"><h3>밴드 2개 이상 · 30시트</h3>
+       <p>유아 · 소아 · 청소년처럼 구간이 셋 이상인 계약. <span class="pill week">이번 주</span></p></div>
+     <div class="card"><h3>코드형 프로모션 · 10시트</h3>
+       <p>고객이 코드를 넣어야 할인되는 방식. <span class="pill later">남는 것</span></p></div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  그래서 피크가 지금 들고 계신 354시트가 어디까지 되느냐.
+  파란 쪽 201시트, 전체의 57%는 아이 요금 이야기가 아예 없는 계약서입니다. 이건 지금 당장 됩니다.
+  주황 쪽 153시트가 소아 한 구간에 유아 무료인 계약인데, 이게 이번 주에 열립니다.
+  그중에서도 구간이 셋 이상인 게 서른 시트 있는데 그것도 같이 됩니다.
+  남는 건 열 시트입니다. 고객이 코드를 넣어야 할인되는 프로모션 방식인데,
+  이건 ERP 쪽 작업이 더 필요해서 오늘 약속드리지 않겠습니다.
+ </aside>
+</section>
+
+<!-- ══════════ 13 · 이번 주 / 남는 것 ══════════ -->
+<section id="s13">
+ <div class="pad">
+  <p class="eyebrow">⑥ 일정</p>
+  <h2>오늘 · 이번 주 · 그 다음</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="card" style="border-color:#2E9E6B">
+      <span class="pill now">오늘부터</span>
+      <h3 style="margin-top:12px">201시트</h3>
+      <p>아이 요금 없는 계약서. 오늘 실습에서 한 바퀴 돌립니다.</p>
+    </div>
+    <div class="card warm">
+      <span class="pill week">이번 주</span>
+      <h3 style="margin-top:12px">183시트</h3>
+      <p>소아 · 유아 구간이 있는 계약서 153 + 구간 셋 이상 30.</p>
+    </div>
+    <div class="card">
+      <span class="pill later">아직</span>
+      <h3 style="margin-top:12px">10시트</h3>
+      <p>코드형 프로모션. 날짜를 지금 약속드리지 않습니다.</p>
+    </div>
+   </div>
+   <div class="card tint" style="margin-top:24px">
+     <p class="big">막히는 건 대부분 <strong>계약서에 값이 없어서</strong>입니다 — 도구 문제가 아니라
+     취소정책 · 통화 · 사진이 안 정해진 경우입니다.</p>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  정리하면 이렇습니다. 오늘부터 되는 게 201시트, 이번 주에 183시트가 더 열리고, 열 시트가 남습니다.
+  그 열 시트는 언제 된다고 오늘 약속드리지 않겠습니다. 되면 말씀드리겠습니다.
+  마지막 줄이 실무적으로 제일 중요한 이야기인데요.
+  실제로 막히는 건 도구가 못해서가 아니라 계약서에 값이 없어서입니다.
+  취소정책이 안 적혀 있거나, 통화가 애매하거나, 사진이 없거나.
+  그래서 다음 장에서 역할을 나누겠습니다.
+ </aside>
+</section>
+
+<!-- ══════════ 14 · 역할 나눔 ══════════ -->
+<section id="s14">
+ <div class="pad">
+  <p class="eyebrow">⑦ 역할 나눔</p>
+  <h2>피크가 셋, 우리가 나머지</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:1fr 1fr;gap:26px">
+    <div class="card warm">
+      <h3 style="color:#C2660F">피크가 주시는 것</h3>
+      <div class="grid" style="gap:10px;margin-top:12px">
+        <div class="who" style="padding:11px 14px"><p class="n">1</p><p><strong>계약서 파일</strong>
+          <span>룸별 · 시즌별 <strong>1박 요금표</strong>가 꼭 있어야 합니다.</span></p></div>
+        <div class="who" style="padding:11px 14px"><p class="n">2</p><p><strong>호텔 사진</strong>
+          <span>대표 1 · 상세 4~8 · 룸마다 1~2장. 저작권 확인은 담당자 몫입니다.</span></p></div>
+        <div class="who" style="padding:11px 14px"><p class="n">3</p><p><strong>세 가지 답</strong>
+          <span>취소정책 이름 · 공급 통화 · 도시.</span></p></div>
+      </div>
+    </div>
+    <div class="grid" style="gap:14px">
+      <div class="card tint"><h3>우리가 하는 것</h3>
+        <p>계약서 읽기 · 지시서 만들기 · ERP 100칸 채우기 · 사진 올리기 · 화면 바뀌면 도구 고치기</p></div>
+      <div class="card"><h3>계약서에 없으면 이렇게 답하세요</h3>
+        <ul style="margin-top:6px">
+          <li>취소정책 → <strong>공용 정책 이름</strong></li>
+          <li>통화 → 기본은 <strong>USD</strong></li>
+          <li>사진 없음 → <strong>나중에</strong> 채웁니다</li>
+        </ul>
+      </div>
+    </div>
+   </div>
+  </div>
+ </div>
+ <aside class="notes">
+  피크에서 주셔야 하는 건 세 가지입니다.
+  첫째 계약서. 여기서 딱 하나 조건이 있는데, 룸별 시즌별 1박 요금표가 들어 있어야 합니다.
+  요금표가 없으면 가격 단계를 못 만듭니다. 이것만 확인해 주세요.
+  둘째 사진. 대표 한 장, 상세 네 장에서 여덟 장, 룸마다 한두 장.
+  저작권 확인은 저희가 못 합니다. 담당자분 책임입니다.
+  셋째, 도구가 시작할 때 세 가지를 묻습니다. 취소정책 이름, 공급 통화, 도시.
+  계약서에 취소 규정이 없으면 공용 정책 이름을 대시면 되고, 통화는 기본이 달러입니다.
+ </aside>
+</section>
+
+<!-- ══════════ 15 · 실습 예고 + 링크 ══════════ -->
+<section id="s15">
+ <div class="pad">
+  <p class="eyebrow">⑧ 이제 2부</p>
+  <h2>호텔 하나를 같이 깔겠습니다</h2>
+  <div class="body">
+   <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:14px">
+     <div class="stat"><b>0~2</b><p>폴더 만들고<br>지시서 뽑기</p></div>
+     <div class="stat"><b>3~4</b><p>로봇 돌리고<br>기다리기</p></div>
+     <div class="stat"><b>5</b><p>배너<br>🔴 0 · 🟡 0</p></div>
+     <div class="stat"><b class="hot">6</b><p>[판매 시작]<br>직접 누르기</p></div>
+   </div>
+   <div class="card" style="margin-top:26px">
+     <h3>더 보실 것 — 그림 설명 4장</h3>
+     <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px 26px;margin-top:10px">
+       <p>일주일 동안 무슨 일이 있었나 &nbsp;<span class="link"><a href="https://claude.ai/code/artifact/2dbd0fe0-f352-498d-ae35-cd0a3d3b3f21" target="_blank" rel="noopener">https://claude.ai/code/artifact/2dbd0fe0-f352-498d-ae35-cd0a3d3b3f21</a></span></p>
+       <p>레시피 · 요리사 · 손 &nbsp;<span class="link"><a href="https://claude.ai/code/artifact/5a481c55-5005-4078-ad09-240b29b2c8bf" target="_blank" rel="noopener">https://claude.ai/code/artifact/5a481c55-5005-4078-ad09-240b29b2c8bf</a></span></p>
+       <p>아이 요금, 어디에 적나 &nbsp;<span class="link"><a href="https://claude.ai/code/artifact/75de5ad1-38da-481b-ae7e-a0a49ecec2a4" target="_blank" rel="noopener">https://claude.ai/code/artifact/75de5ad1-38da-481b-ae7e-a0a49ecec2a4</a></span></p>
+       <p>설치 · 사용 안내 (윈도우 · 맥) &nbsp;<span class="link"><a href="https://github.com/eoding/stay-setup-guide/blob/main/docs/설치-사용-안내.md" target="_blank" rel="noopener">https://github.com/eoding/stay-setup-guide/blob/main/docs/설치-사용-안내.md</a></span></p>
+     </div>
+   </div>
+   <p class="foot">체크리스트 한 장을 나눠 드렸습니다 — 그걸 보면서 같이 가겠습니다.</p>
+  </div>
+ </div>
+ <aside class="notes">
+  여기까지가 설명이고, 이제 실제로 해 보겠습니다.
+  나눠 드린 체크리스트 한 장 꺼내 주세요. 0단계부터 6단계까지 있습니다.
+  폴더 만들고, 지시서 뽑고, 로봇 돌리고, 배너에서 빨강 0 노랑 0 확인하고,
+  마지막에 판매 시작을 여러분이 직접 누르는 데까지 갑니다.
+  중간에 막히시면 손 들어 주세요. 막히는 것도 오늘 볼 거리입니다.
+  그리고 이 네 개 링크는 나중에 혼자 보실 수 있게 그림으로 만든 설명입니다. 채팅으로 보내 드리겠습니다.
+ </aside>
+</section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js" integrity="sha512-sMRSj1Ns64C2OE6VNS7WrV63OHW7dLAvi96CXRoy9AEe/tKF+868fhUJpc5ZKS166lwhe2ArCYjFitLJUY+VWA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js" integrity="sha512-tDzEYXTFwGOO3tWp8oTV3yGeZ4lG4gUt+tJFQTsP7W4jV/MJ1Rgr6m9aICicjh/ymL5GD6jkHXDi9cHKfctFGQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+Reveal.initialize({
+  width: 1280, height: 720, margin: 0.02,
+  controls: true, progress: true, slideNumber: 'c/t', hash: true,
+  center: false, transition: 'slide', plugins: [ RevealNotes ]
+});
+</script>
+</body>
+</html>

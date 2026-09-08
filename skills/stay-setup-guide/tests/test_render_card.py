@@ -396,6 +396,152 @@ class TestStayGuideApi(unittest.TestCase):
             self.assertIn("'%s'" % alias, self.html)
 
 
+#: 2026-09-08 정본이 새로 세운 칸들 — 라벨의 EM DASH(U+2014)와 값의 콜론·쉼표·부호가
+#: 원고에서 HTML 로 **글자 그대로** 실려야 한다. 러너는 화면 라벨을 글자로 찾고, 담당자는
+#: [복사] 버튼이 넣어 주는 글자를 그대로 붙여 넣는다 — 한 글자만 달라져도 그 칸을 못 찾는다.
+NEW_FIELDS = ZERO_OK + """
+## 4. 연령 구간 만들기 (1번째, 소아)
+탭: `오퍼`
+카드: `2026~2027 시즌 요금`
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | CHD |
+| 노출명 | 소아 |
+| 최소 연령 (만 나이) | 5 |
+| 최대 연령 (만 나이) | 11.99 |
+| 방 인원수에 포함 | 체크 |
+| 요금 기준 유형 | 선택: 정액 |
+| 요금 기준 값 | 23.18 |
+
+→ [추가]
+
+## 5. 시즌 가격 채우기 (1회차, Low × Deluxe Garden)
+탭: `시즌`
+카드: `Low`
+버튼: [가격]
+
+| 칸 | 값 |
+|---|---|
+| 판매 단가(공급 통화) | 92.00 |
+| 인원 조합(선택) | A2,A3 |
+| 인원 조합별 조정(선택) | A3:+30 |
+| 박수별 단가(선택) | 3:100,5:90 |
+| 아동 추가 금액 — 소아 | 23.18 |
+| 아동 추가 금액 — 미취학 | 자동 입력됨 · 그대로 둠 |
+| 이미 값이 있는 날도 덮기 | 해제 |
+
+→ [이 단가로 깔기]
+"""
+
+
+class TestNewFieldPassthrough(unittest.TestCase):
+    """새 칸(아동 추가 금액 · 박수별 단가 · 인원 조합)이 이름으로 걸러지지 않고 그대로 실린다.
+
+    렌더러에는 라벨 화이트리스트도, 특정 라벨만 특별 취급하는 자리도 없다 — 이 시험은 그
+    사실을 못박는다. 누가 라벨을 자르거나(EM DASH 를 구분자로 쓰거나) 값을 다시 쓰면 여기서 깨진다.
+    """
+
+    def setUp(self):
+        self.html, self.stats = rc.render_card(NEW_FIELDS, "manual.md", None, None)
+
+    def test_child_extra_label_is_carried_character_for_character(self):
+        """`아동 추가 금액 — 소아` — 구분자는 EM DASH(U+2014) 앞뒤 공백이다."""
+        label = "아동 추가 금액 — 소아"
+        self.assertIn("\u2014", label)  # 시험 자신이 EN DASH·하이픈으로 바뀌지 않았는지
+        self.assertIn("<td>%s</td>" % label, self.html)
+
+    def test_los_prices_value_is_carried_verbatim(self):
+        """`박수별 단가(선택)` 값 `3:100,5:90` — 콜론·쉼표가 그대로 실리고 복사 글자도 같다."""
+        self.assertIn('<span class="cell-text">3:100,5:90</span>', self.html)
+        self.assertIn('data-copy="3:100,5:90"', self.html)
+
+    def test_occupancy_adjust_keeps_the_plus_sign(self):
+        """`인원 조합별 조정(선택)` 값 `A3:+30` — 부호가 필수라 `+` 가 살아 있어야 한다."""
+        self.assertIn('<span class="cell-text">A3:+30</span>', self.html)
+        self.assertIn('data-copy="A3:+30"', self.html)
+        self.assertNotIn("A3:30", self.html)
+
+    def test_occupancy_keys_value_is_carried_verbatim(self):
+        self.assertIn('data-copy="A2,A3"', self.html)
+
+    def test_new_labels_are_not_filtered_out(self):
+        for label in ("밴드 코드",
+                      "최소 연령 (만 나이)",
+                      "최대 연령 (만 나이)",
+                      "요금 기준 값",
+                      "인원 조합(선택)",
+                      "인원 조합별 조정(선택)",
+                      "박수별 단가(선택)"):
+            self.assertIn("<td>%s</td>" % label, self.html)
+
+    def test_readonly_child_amount_gets_no_copy_button(self):
+        """`성인 요금의 %` 구간의 칸은 읽기 전용이다 — `자동 입력됨 · 그대로 둠` 은 회색이고
+        복사 글자를 만들지 않는다(러너가 손대면 실패한다)."""
+        auto = "자동 입력됨 · 그대로 둠"
+        self.assertIn('<span class="v-muted">%s</span>' % auto, self.html)
+        self.assertNotIn('data-copy="자동 입력됨', self.html)
+
+    def test_em_dash_label_does_not_break_the_step_or_the_toc(self):
+        """EM DASH 가 든 라벨이 표에 있어도 단계 번호·목차는 그대로 선다."""
+        self.assertIn('<section class="step" data-step="5">', self.html)
+        self.assertEqual(self.stats["steps"], 5)
+        self.assertEqual(self.stats["nav_items"], 5)
+
+
+class _StubChecker:
+    """`check_manual` 대역 — run_checker 가 결과 dict 의 키를 하나도 꺼내 쓰지 않는다는 증거."""
+
+    def __init__(self, behaviour):
+        self.behaviour = behaviour
+
+    def main(self, argv=None):
+        print("새 규칙 결과 키를 알 필요가 없다")
+        if self.behaviour == "ok":
+            return 0
+        if self.behaviour == "fail":
+            return 1
+        if self.behaviour == "exit":
+            raise SystemExit(2)
+        raise RuntimeError("검사기가 터졌다")
+
+
+class TestCheckerContract(unittest.TestCase):
+    """검사기와 렌더러 사이의 계약은 **종료 코드 하나**다.
+
+    검사기에 새 규칙(그래서 새 결과 키)이 들어와도 렌더러는 몰라도 된다 — 모르는 키는
+    애초에 꺼내 쓰지 않는다. 검사기가 터져도 도장은 `fail` 이지 예외가 아니다.
+    """
+
+    def run_with(self, behaviour):
+        saved = sys.modules.get("check_manual")
+        sys.modules["check_manual"] = _StubChecker(behaviour)
+        try:
+            return rc.run_checker("manual.md")
+        finally:
+            if saved is None:
+                del sys.modules["check_manual"]
+            else:
+                sys.modules["check_manual"] = saved
+
+    def test_exit_zero_is_the_only_thing_that_stamps_ok(self):
+        ok, out = self.run_with("ok")
+        self.assertTrue(ok)
+        self.assertIn("새 규칙", out)
+
+    def test_nonzero_exit_stamps_fail(self):
+        self.assertFalse(self.run_with("fail")[0])
+
+    def test_sys_exit_from_the_checker_stamps_fail(self):
+        self.assertFalse(self.run_with("exit")[0])
+
+    def test_a_crashing_checker_stamps_fail_instead_of_raising(self):
+        ok, out = self.run_with("boom")
+        self.assertFalse(ok)
+        self.assertIn("검사기 실행 중 오류", out)
+
+
 class TestRenderRegression(unittest.TestCase):
     """진행 현황을 붙이면서 기존 것(단계별 완료 체크박스·목차)이 사라지지 않았는지 본다."""
 

@@ -582,6 +582,186 @@ class TestAgeBandOverlap(unittest.TestCase):
         self.assertEqual(parse_guide.preflight(steps)["age_overlap"], [])
 
 
+# ---------------------------------------------------------------------------
+# 2026-09-08 신설 칸 — `박수별 단가(선택)` · `아동 추가 금액 — <노출명>`
+#
+# 넷 다 **막는** 판정이다: 그대로 실행하면 그 단계에서 반드시 실패하고, 그때는 앞 단계들이
+# 이미 화면에 만들어져 있다. 파일 단계에서 걸러 내면 그 되돌리기가 통째로 없어진다.
+# 아래 본문은 넷을 다 통과하는 정본이고, 실패 짝은 한 줄만 바꿔 만든다.
+# ---------------------------------------------------------------------------
+SEASON_CHILD = """# 시험 호텔 — 입력 지시서
+
+## 1. 연령 구간 만들기 (1번째, 소아)
+탭: `오퍼`
+카드: `2026 계약`
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | CHD |
+| 노출명 | 소아 |
+| 최소 연령 (만 나이) | 5 |
+| 최대 연령 (만 나이) | 11.99 |
+| 방 인원수에 포함 | 체크 |
+| 요금 기준 유형 | 선택: 정액 |
+| 요금 기준 값 | 23.18 |
+
+→ [추가]
+
+## 2. 시즌 가격 채우기 (1회차, Low × Deluxe Garden)
+탭: `시즌`
+카드: `Low`
+버튼: [가격]
+
+| 칸 | 값 |
+|---|---|
+| 판매 단가(공급 통화) | 92.00 |
+| 대상 룸 | 선택: 2026 계약 · Deluxe Garden |
+| 인원 조합(선택) | A2,A3 |
+| 인원 조합별 조정(선택) | A3:+30 |
+| 박수별 단가(선택) | 3:100,5:90 |
+| 아동 추가 금액 — 소아 | 23.18 |
+| 이미 값이 있는 날도 덮기 | 해제 |
+
+→ [이 단가로 깔기]
+"""
+
+
+def swap(old, new, text=None):
+    """정본 본문에서 한 줄만 바꾼다 — 실패 짝은 늘 한 군데만 다르다."""
+    text = SEASON_CHILD if text is None else text
+    assert old in text, old
+    return text.replace(old, new)
+
+
+class TestNewFieldPreflight(unittest.TestCase):
+    """신설 칸 넷의 판정. 통과/실패를 짝으로 본다."""
+
+    def _pre(self, text):
+        _, raws = parse_guide.parse_markdown(text)
+        return parse_guide.preflight([parse_guide.build_step(r) for r in raws])
+
+    def _why(self, text, bucket="value_format"):
+        hits = self._pre(text)[bucket]
+        self.assertEqual(len(hits), 1, hits)
+        return hits[0]["why"]
+
+    # --- 통과 짝 ---------------------------------------------------------
+    def test_clean_guide_passes(self):
+        pre = self._pre(SEASON_CHILD)
+        self.assertEqual(pre["value_format"], [])
+        self.assertEqual(pre["step_order"], [])
+        self.assertEqual(pre["unknown_kinds"], [])
+        self.assertEqual(pre["stale"], [])
+
+    def test_new_fields_land_in_steps(self):
+        """새 칸은 화이트리스트 없이 그대로 실린다 — 러너는 라벨로 찾는다."""
+        _, raws = parse_guide.parse_markdown(SEASON_CHILD)
+        fill = [parse_guide.build_step(r) for r in raws][1]
+        self.assertEqual(field_by_label(fill, "박수별 단가(선택)")["value"], "3:100,5:90")
+        child = field_by_label(fill, "아동 추가 금액 — 소아")
+        self.assertEqual((child["kind"], child["value"]), ("typed", "23.18"))
+
+    def test_child_extra_label_re_reads_the_display_name(self):
+        """구분자는 EM DASH 가 정본이지만 EN DASH·하이픈·가운뎃점도 받는다(원고 오타로 안 멈춘다)."""
+        for label, name in (("아동 추가 금액 — 소아", "소아"), ("아동 추가 금액 – 소아", "소아"),
+                            ("아동 추가 금액 - 소아", "소아"), ("아동 추가 금액 · 소아", "소아")):
+            m = parse_guide.CHILD_EXTRA_LABEL_RE.match(label)
+            self.assertIsNotNone(m, label)
+            self.assertEqual(m.group("name"), name, label)
+        self.assertIsNone(parse_guide.CHILD_EXTRA_LABEL_RE.match("아동 정책 표기"))
+
+    def test_auto_child_extra_row_still_passes(self):
+        """`성인 요금의 %` 구간의 칸은 `자동 입력됨 · 그대로 둠` 이다 — 값 판정에 걸리지 않는다."""
+        md = swap("| 아동 추가 금액 — 소아 | 23.18 |",
+                  "| 아동 추가 금액 — 소아 | 자동 입력됨 · 그대로 둠 |")
+        _, raws = parse_guide.parse_markdown(md)
+        steps = [parse_guide.build_step(r) for r in raws]
+        self.assertEqual(field_by_label(steps[1], "아동 추가 금액 — 소아")["kind"], "auto")
+        self.assertEqual(parse_guide.preflight(steps)["value_format"], [])
+
+    # --- 1. 박수별 단가 꼴 -------------------------------------------------
+    def test_los_prices_with_sign_is_flagged(self):
+        why = self._why(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                             "| 박수별 단가(선택) | 3:+100,5:90 |"))
+        self.assertIn("박수별 단가", why)
+        self.assertIn("부호", why)
+
+    def test_los_prices_one_night_is_flagged(self):
+        why = self._why(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                             "| 박수별 단가(선택) | 1:100,5:90 |"))
+        self.assertIn("2 이상", why)
+
+    def test_los_prices_duplicate_nights_is_flagged(self):
+        why = self._why(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                             "| 박수별 단가(선택) | 3:100,3:90 |"))
+        self.assertIn("두 번", why)
+
+    def test_los_prices_without_colon_is_flagged(self):
+        why = self._why(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                             "| 박수별 단가(선택) | 100,90 |"))
+        self.assertIn("박수:1박 단가", why)
+
+    def test_empty_los_prices_passes(self):
+        self.assertEqual(
+            self._pre(swap("| 박수별 단가(선택) | 3:100,5:90 |", "| 박수별 단가(선택) | 비움 |"))["value_format"], [])
+
+    # --- 2. 인원 조합의 옛 숫자 키 ----------------------------------------
+    def test_bare_number_occupancy_keys_is_flagged(self):
+        why = self._why(swap("| 인원 조합(선택) | A2,A3 |", "| 인원 조합(선택) | 2,3 |"))
+        self.assertIn("인원 조합", why)
+        self.assertIn("A2,A3", why)
+
+    def test_bare_number_adjust_key_is_flagged(self):
+        why = self._why(swap("| 인원 조합별 조정(선택) | A3:+30 |", "| 인원 조합별 조정(선택) | 3:+14 |"))
+        self.assertIn("인원 조합별 조정", why)
+
+    def test_child_occupancy_key_passes(self):
+        """아동 조합(`A2C2_CHD`)은 자동 전개로 안 나와 직접 적는다 — 막으면 안 된다."""
+        self.assertEqual(
+            self._pre(swap("| 인원 조합(선택) | A2,A3 |", "| 인원 조합(선택) | A2,A2C2_CHD |"))["value_format"], [])
+
+    # --- 3. 밴드 코드 꼴 ---------------------------------------------------
+    def test_band_code_with_underscore_is_flagged(self):
+        why = self._why(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | CHILD_1 |"))
+        self.assertIn("밴드 코드", why)
+        self.assertIn("2~8자", why)
+
+    def test_band_code_too_long_or_short_is_flagged(self):
+        for bad in ("C", "CHILDBAND9"):
+            with self.subTest(code=bad):
+                self.assertIn("밴드 코드", self._why(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | %s |" % bad)))
+
+    def test_band_code_in_hangul_is_flagged(self):
+        self.assertIn("밴드 코드", self._why(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | 소아 |")))
+
+    def test_lowercase_band_code_passes(self):
+        """서버가 대문자로 굳힌다 — 소문자로 적었다고 막지 않는다."""
+        self.assertEqual(self._pre(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | chd |"))["value_format"], [])
+
+    # --- 4. `아동 추가 금액` 줄과 `연령 구간 만들기` 의 차례 ----------------
+    def test_age_band_after_season_fill_is_flagged(self):
+        """단계 차례를 뒤집으면 그 칸이 화면에 서지 않는다(유료 구간이 아직 없다)."""
+        _, raws = parse_guide.parse_markdown(SEASON_CHILD)
+        steps = [parse_guide.build_step(r) for r in raws]
+        steps[0]["no"], steps[1]["no"] = 2, 1          # 연령 구간이 뒤로 밀렸다
+        hits = parse_guide.preflight(steps)["step_order"]
+        self.assertEqual([x["no"] for x in hits], [1])
+        self.assertIn("연령 구간 만들기", hits[0]["why"])
+        self.assertIn("소아", hits[0]["why"])
+
+    def test_child_extra_without_any_age_band_is_flagged(self):
+        md = swap("## 1. 연령 구간 만들기 (1번째, 소아)", "## 1. 룸 만들기 (1번째, Deluxe Garden)")
+        why = self._why(md, "step_order")
+        self.assertIn("`연령 구간 만들기` 단계가 없습니다", why)
+
+    def test_season_fill_without_child_row_passes(self):
+        """아동 정책이 없는 계약 — 그 줄이 없으면 연령 구간 단계도 있을 이유가 없다."""
+        md = swap("| 아동 추가 금액 — 소아 | 23.18 |\n", "")
+        md = swap("## 1. 연령 구간 만들기 (1번째, 소아)", "## 1. 룸 만들기 (1번째, Deluxe Garden)", md)
+        self.assertEqual(self._pre(md)["step_order"], [])
+
+
 class TestCheckModeStale(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -619,6 +799,20 @@ class TestCheckModeStale(unittest.TestCase):
         r = run(str(self.dir), "--check")
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertIn("나이 범위가 겹치는 단계: 1", r.stdout)
+
+    def test_check_passes_on_new_child_fields(self):
+        render_guide(self.dir, SEASON_CHILD)
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("값 형식이 어긋난 단계: 0", r.stdout)
+        self.assertIn("단계 차례가 어긋난 단계: 0", r.stdout)
+
+    def test_check_fails_on_bad_los_prices(self):
+        render_guide(self.dir, swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                                    "| 박수별 단가(선택) | 3:+100 |"))
+        r = run(str(self.dir), "--check")
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertIn("값 형식이 어긋난 단계: 1", r.stdout)
 
     def test_preflight_lands_in_json(self):
         render_guide(self.dir, AGE_BAND)
