@@ -25,6 +25,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `오퍼 고치기` 단계가 있는지(있으면 오류 — 호텔은 빈 상태로 만들어져 고칠 기본 오퍼가 없다)
 - `룸 만들기`·`판매 연결` 단계가 첫 `오퍼 만들기` 보다 앞에 있는지(있으면 오류 — 오퍼가 없으면 객실 추가가 막힌다)
 - `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
+- 단계 제목의 갈래가 규칙서 §단계 갈래별 마지막 줄 표의 정본(또는 러너가 받는 별칭)인지(오류 — 러너가 모르는 갈래에서 멈춘다)
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
@@ -67,6 +68,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 import argparse
 import datetime
 import decimal
+import difflib
 import json
 import os
 import re
@@ -162,6 +164,41 @@ CAMPAIGN_FIELD = "캠페인"
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
 SKIP_WARNING_BUTTON = "넘어가기"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 단계 제목의 갈래 — 러너가 단계를 알아보는 **유일한** 열쇠다.
+#
+# 러너(`stay-setup-run/scripts/parse_guide.py`)는 제목 끝의 ` (…)` 를 떼고 남은 앞부분을
+# `KNOWN_KINDS` 에서 찾는다. 없으면 그 단계를 실행하지 못하고 사람을 부른다 — 화면은 그대로
+# 있는데 글자만 달라서 멈추는 자리라, 원고를 만들 때 잡아야 한다(실측: `택1 그룹에 혜택 추가`
+# 6단계 · `프로모션 만들기` 1단계, 2026-09-09 재생성).
+#
+# `STEP_KINDS` 는 규칙서 §단계 갈래별 마지막 줄 표의 **정본**이고, `STEP_KIND_ALIASES` 는
+# 러너가 더 받아 주는 표기다(같은 화면·같은 버튼이라 실행이 한 글자도 다르지 않다).
+# 둘을 합친 것이 러너 `KNOWN_KINDS` 와 **한 글자도 다르면 안 된다** — 시험이 두 목록을 대조한다.
+STEP_KINDS = (
+    "환율 확인", "거래처 확인", "도시 확인",
+    "호텔 만들기", "기본정보 글 입력", "대표이미지 올리기", "상품상세 이미지 올리기", "호텔 정보 입력",
+    "취소정책 만들기",
+    "오퍼 만들기", "연령 구간 만들기",
+    "룸 만들기", "룸 사진 올리기",
+    "판매 연결 한 번에 만들기", "판매 연결 표시명 넣기", "판매 연결 표시명 고치기",
+    "시즌 만들기", "시즌 가격 채우기", "셀 상태 바꾸기",
+    "가격 셀 만들기", "가격 셀 손으로 고치기",
+    "요금제 고치기", "요금제 배포", "요금제 전체 적용", "기준 요금제 바꾸기",
+    "판매일 열기",
+    "부과금 추가", "부가옵션 만들기", "부가옵션 가격 넣기",
+    "프로모션 추가", "혜택 추가", "택1 그룹 만들기", "그룹에 혜택 추가",
+    "판매 시작",
+)
+#: 러너가 더 받는 표기 — 정본은 아니지만 실행은 된다. 새 원고는 위 정본으로 적는다.
+#: `택1 그룹 후보 추가`·`택1 후보 혜택 추가` 는 `그룹에 혜택 추가` 와 같은 화면이고,
+#: `요금제 만들기`·`요금제 정본 …`·`요금제 삭제` 는 요금제 정본 화면의 다른 버튼이다.
+STEP_KIND_ALIASES = (
+    "요금제 만들기", "요금제 정본 고치기", "요금제 정본 만들기", "요금제 삭제",
+    "택1 그룹 후보 추가", "택1 후보 혜택 추가",
+)
+KNOWN_STEP_KINDS = frozenset(STEP_KINDS) | frozenset(STEP_KIND_ALIASES)
 
 # 오퍼 단계 — 호텔이 빈 상태로 만들어지므로(2026-09-04) 오퍼는 언제나 **만드는** 단계다.
 OFFER_CREATE_TITLE = "오퍼 만들기"
@@ -345,7 +382,13 @@ ADULT_ONLY_SUFFIX_RE = re.compile(r"\(\s*성인\s*\)\s*$")
 # 실제 사례(2026-09-04): `수량` 을 비운 채 `제공 주기 | 체크` 만 남긴 원고를 러너가 실행하다
 # "화면에 없는 칸" 으로 막혔다. 택1 그룹 안에 넣는 후보(`[이 그룹에 혜택 추가]`)도 같은 드로어다.
 BENEFIT_CREATE_TITLE = "혜택 추가"
-BENEFIT_CANDIDATE_TITLE = "택1 그룹 후보 추가"
+#: 택1 그룹 카드의 [이 그룹에 혜택 추가] 로 여는 **같은 드로어**의 갈래들 — 정본은 규칙서 표의
+#: `그룹에 혜택 추가` 이고 나머지 둘은 러너가 받는 별칭이다(`STEP_KIND_ALIASES`). 셋 다 적어야
+#: 하는 이유는 원고가 셋 중 아무 표기나 쓸 수 있기 때문이다 — 정본만 보면 별칭으로 적힌 원고가
+#: 이 검사를 통째로 건너뛴다(실측: 정본 `그룹에 혜택 추가` 로 정규화되기 전 D·F 6단계).
+BENEFIT_CANDIDATE_TITLE = ("그룹에 혜택 추가", "택1 그룹 후보 추가", "택1 후보 혜택 추가")
+#: 혜택 드로어를 여는 단계 제목 전부 — `startswith` 에 그대로 넘긴다.
+BENEFIT_STEP_TITLES = (BENEFIT_CREATE_TITLE,) + BENEFIT_CANDIDATE_TITLE
 QUANTITY_FIELD = "수량"
 PROVISION_FREQUENCY_FIELD = "제공 주기"
 
@@ -1916,8 +1959,7 @@ def find_benefit_frequency_without_quantity(steps):
     """
     problems = []
     for step in steps:
-        if not (step["title"].startswith(BENEFIT_CREATE_TITLE)
-                or step["title"].startswith(BENEFIT_CANDIDATE_TITLE)):
+        if not step["title"].startswith(BENEFIT_STEP_TITLES):
             continue
         frequency = _field_value(step, PROVISION_FREQUENCY_FIELD)
         if (frequency or "").strip() != "체크":
@@ -2017,6 +2059,55 @@ def find_campaign_uses(steps):
             problems.append(
                 f"{step['num']}단계: `{CAMPAIGN_FIELD}` 칸은 화면에서 없어졌다 — 줄을 뺀다"
             )
+    return problems
+
+
+def step_kind(title):
+    """제목에서 갈래만 — 끝의 ` (…)` 를 떼되 괄호가 겹쳐도 짝을 맞춘다.
+
+    러너 `parse_guide.title_kind` 와 **같은 셈**이다. 여기서 한 글자라도 다르게 자르면
+    검사기가 통과시킨 제목을 러너가 모르는 갈래로 읽는다 — `가격 셀 손으로 고치기
+    (1번째, 2026-12-24)` 처럼 괄호 안에 또 괄호가 드는 제목이 그 자리다.
+    """
+    text = (title or "").strip()
+    if not text.endswith(")"):
+        return text
+    depth = 0
+    for i in range(len(text) - 1, -1, -1):
+        if text[i] == ")":
+            depth += 1
+        elif text[i] == "(":
+            depth -= 1
+            if depth == 0:
+                return text[:i].strip()
+    return text
+
+
+def find_unknown_step_kinds(steps):
+    """단계 제목의 갈래가 정본도 러너 별칭도 아니면 오류 — 러너가 그 단계에서 멈춘다.
+
+    러너는 제목의 갈래로 무슨 화면을 여는지 정한다(`parse_guide.KNOWN_KINDS`). 화면도 버튼도
+    맞는데 **글자만** 다르면 그 단계는 실행되지 않고 사람이 불려 나온다 — 원고에서 고치면
+    되는 일이라 여기서 오류로 잡는다. 실측(2026-09-09 재생성): `택1 그룹에 혜택 추가` 6단계,
+    `프로모션 만들기` 1단계.
+
+    `오퍼 고치기`·`경고 넘어가기` 는 여기서 말하지 않는다 — 갈래를 몰라서가 아니라 **쓰면 안
+    되는 단계**라 전용 검사가 이유를 대고 막는다(같은 단계를 두 줄로 말하지 않는다).
+    """
+    problems = []
+    for step in steps:
+        kind = step_kind(step["title"])
+        if not kind or kind in KNOWN_STEP_KINDS:
+            continue
+        if kind.startswith(OFFER_EDIT_TITLE) or kind.startswith(SKIP_WARNING_TITLE):
+            continue
+        near = difflib.get_close_matches(kind, sorted(KNOWN_STEP_KINDS), n=1, cutoff=0.5)
+        hint = f" — 가장 가까운 정본은 `{near[0]}` 다" if near else ""
+        problems.append(
+            f"{step['num']}단계: 단계 갈래 `{kind}` 는 러너가 모르는 제목이다{hint} · "
+            "제목의 갈래는 규칙서 §단계 갈래별 마지막 줄 표의 글자 그대로 적는다"
+            "(러너는 그 갈래로 열 화면을 정하므로 글자가 다르면 그 단계에서 멈춘다)"
+        )
     return problems
 
 
@@ -2425,6 +2516,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     legacy_offer_steps = find_legacy_offer_edit_steps(parsed)
     rooms_before_offer = find_rooms_before_offer(parsed)
     skip_warning_steps = find_skip_warning_steps(parsed)
+    unknown_step_kinds = find_unknown_step_kinds(parsed)
     campaign_uses = find_campaign_uses(parsed)
     age_band_order = find_age_band_order(parsed)
     age_band_overlaps = find_age_band_overlaps(parsed)
@@ -2531,6 +2623,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "past_seasons": past_seasons,
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
+        "unknown_step_kinds": unknown_step_kinds,
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
         "age_band_order": age_band_order,
@@ -2624,6 +2717,7 @@ def main(argv=None):
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["past_sale_starts"] + r["past_seasons"]
               + r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
+              + r["unknown_step_kinds"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]

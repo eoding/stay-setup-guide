@@ -7,6 +7,7 @@
 """
 import datetime
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -2170,10 +2171,20 @@ class BenefitFrequencyWithoutQuantityTest(unittest.TestCase):
         self.assertIn("4단계", problems[0])
 
     def test_candidate_title_is_checked_too(self):
-        """택1 그룹 후보(`[이 그룹에 혜택 추가]`)도 같은 드로어다."""
-        md = benefit_step(4, title="택1 그룹 후보 추가", quantity="비움", frequency="체크")
-        problems = self.problems(HEAD + md)
-        self.assertEqual(len(problems), 1, problems)
+        """택1 그룹 후보(`[이 그룹에 혜택 추가]`)도 같은 드로어다 — 정본과 별칭 셋 다 본다.
+
+        정본 `그룹에 혜택 추가` 가 빠져 있던 동안, 정본으로 적은 원고는 이 검사를 통째로
+        건너뛰었다(D·F 의 6단계가 그 표기로 정규화되면서 드러났다).
+        """
+        for title in ("그룹에 혜택 추가", "택1 그룹 후보 추가", "택1 후보 혜택 추가"):
+            md = benefit_step(4, title=title, quantity="비움", frequency="체크")
+            problems = self.problems(HEAD + md)
+            self.assertEqual(len(problems), 1, (title, problems))
+
+    def test_the_benefit_titles_are_known_step_kinds(self):
+        """혜택 드로어 제목은 전부 러너가 아는 갈래다 — 오타면 검사가 조용히 헛돈다."""
+        for title in cm.BENEFIT_STEP_TITLES:
+            self.assertIn(title, cm.KNOWN_STEP_KINDS, title)
 
     def test_it_is_an_error_not_a_warning(self):
         with tempfile.TemporaryDirectory() as d:
@@ -3377,3 +3388,135 @@ class UnmatchedFillStepTest(unittest.TestCase):
     def test_the_example_manual_is_clean(self):
         with open(EXAMPLE, encoding="utf-8") as handle:
             self.assertEqual(cm.find_unmatched_fill_steps(steps_of(handle.read())), [])
+
+
+#: 러너의 단계 갈래 목록 — 검사기가 통과시킨 제목을 러너가 모르면 그 단계에서 멈춘다.
+RUNNER_PARSE_GUIDE = os.path.normpath(
+    os.path.join(SKILL, os.pardir, "stay-setup-run", "scripts", "parse_guide.py")
+)
+
+
+def runner_known_kinds():
+    """러너 `parse_guide.py` 의 `KNOWN_KINDS` 를 **읽어서**(실행하지 않고) 가져온다.
+
+    import 하지 않는 이유는 그 스크립트가 러너 실행을 전제로 쓰였기 때문이다 — 목록 하나를
+    보려고 남의 스킬 모듈을 돌리지 않는다. `ast` 로 대입문만 찾아 값을 읽는다.
+    """
+    import ast
+    with open(RUNNER_PARSE_GUIDE, encoding="utf-8") as handle:
+        tree = ast.parse(handle.read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            getattr(target, "id", "") == "KNOWN_KINDS" for target in node.targets
+        ):
+            return set(ast.literal_eval(node.value))
+    raise AssertionError("러너 parse_guide.py 에서 KNOWN_KINDS 를 찾지 못했다")
+
+
+def spec_table_kinds():
+    """규칙서 §단계 갈래별 마지막 줄 표의 백틱 갈래 — 두 열을 모두 읽는다.
+
+    `가격 셀 손으로 고치기`·`요금제 배포`·`택1 그룹 만들기` 는 둘째 열(예외 설명)에만 있어서
+    첫 열만 읽으면 정본이 셋 빠진다.
+    """
+    with open(os.path.join(SKILL, "references", "MANUAL-SPEC.md"), encoding="utf-8") as handle:
+        spec = handle.read()
+    block = spec.split("### 단계 갈래별 마지막 줄", 1)[1].split("\n## ", 1)[0]
+    kinds = set()
+    for line in block.splitlines():
+        if not line.startswith("|") or line.startswith("|---") or "단계 갈래" in line:
+            continue
+        for cell in line.strip("|").split("|"):
+            for m in re.finditer(r"`([^`]+)`", cell):
+                token = m.group(1).strip()
+                if token.startswith("→") or token.startswith("["):
+                    continue  # `→ [추가]` 는 마지막 줄이지 갈래가 아니다
+                kinds.add(token)
+    return kinds
+
+
+def kind_step(num, title, save="저장"):
+    """갈래만 갈아 끼우는 단계 하나."""
+    return f"""
+## {num}. {title}
+탭: `프로모션`
+카드: `전 오퍼 공통`
+버튼: [추가]
+
+| 칸 | 값 |
+|---|---|
+| 이름 | 얼리버드 |
+
+→ [{save}]
+"""
+
+
+class StepKindTest(unittest.TestCase):
+    """단계 제목의 갈래는 규칙서 표의 정본(또는 러너가 받는 별칭)이어야 한다."""
+
+    def problems(self, title):
+        return cm.find_unknown_step_kinds(steps_of(HEAD + kind_step(4, title)))
+
+    def test_canonical_kind_is_ok(self):
+        self.assertEqual(self.problems("프로모션 추가 (1개, 얼리버드)"), [])
+
+    def test_unknown_kind_is_error(self):
+        """실측(E-empyrean 51단계) — 화면도 버튼도 맞는데 갈래 글자가 달라 러너가 멈췄다."""
+        problems = self.problems("프로모션 만들기 (1개, 얼리버드)")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("`프로모션 만들기`", problems[0])
+        self.assertIn("`프로모션 추가`", problems[0])
+
+    def test_the_nearest_canonical_is_suggested(self):
+        """실측(D-amiana·F-grandvrio 6단계) — `택1 그룹에 혜택 추가` 는 `그룹에 혜택 추가` 다."""
+        problems = self.problems("택1 그룹에 혜택 추가 (1번째, 조식)")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`그룹에 혜택 추가`", problems[0])
+
+    def test_runner_aliases_pass(self):
+        """러너가 받는 표기는 실행이 되므로 막지 않는다 — 정본으로 옮기는 것은 원고의 몫이다."""
+        for title in ("택1 그룹 후보 추가 (1번째, 조식)", "택1 후보 혜택 추가 (1번째, 조식)"):
+            self.assertEqual(self.problems(title), [], title)
+
+    def test_nested_parentheses_are_stripped_like_the_runner(self):
+        self.assertEqual(cm.step_kind("가격 셀 손으로 고치기 (1번째, 2026-12-24 (성수기))"),
+                         "가격 셀 손으로 고치기")
+        self.assertEqual(cm.step_kind("판매 시작"), "판매 시작")
+
+    def test_forbidden_kinds_are_left_to_their_own_checks(self):
+        """`오퍼 고치기`·`경고 넘어가기` 는 갈래를 몰라서가 아니라 쓰면 안 되는 단계다."""
+        for title in ("오퍼 고치기 (1번째, 기본 오퍼)", "경고 넘어가기 (1번째)"):
+            self.assertEqual(self.problems(title), [], title)
+
+    def test_it_is_an_error_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + kind_step(4, "프로모션 만들기 (1개, 얼리버드)"))
+            r = cm.check(path)
+            self.assertEqual(len(r["unknown_step_kinds"]), 1, r["unknown_step_kinds"])
+            self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_unknown_step_kinds(steps_of(handle.read())), [])
+
+
+class StepKindListsAgreeTest(unittest.TestCase):
+    """갈래 목록은 세 곳에 있다 — 규칙서 표 · 검사기 · 러너. 셋이 어긋나면 여기서 깨진다."""
+
+    def test_the_checker_matches_the_spec_table(self):
+        self.assertEqual(set(cm.STEP_KINDS), spec_table_kinds())
+
+    def test_the_checker_matches_the_runner(self):
+        """검사기가 받는 갈래 전부(정본 + 별칭)가 러너 `KNOWN_KINDS` 와 같아야 한다."""
+        self.assertEqual(set(cm.KNOWN_STEP_KINDS), runner_known_kinds())
+
+    def test_the_aliases_are_not_in_the_spec_table(self):
+        """별칭은 정본이 아니다 — 표에 들어가면 그것은 별칭이 아니라 정본이다."""
+        self.assertEqual(set(cm.STEP_KIND_ALIASES) & spec_table_kinds(), set())
+
+    def test_the_zero_steps_are_canonical_kinds(self):
+        for want in ("환율 확인", "거래처 확인", "도시 확인"):
+            self.assertIn(want, cm.STEP_KINDS)
