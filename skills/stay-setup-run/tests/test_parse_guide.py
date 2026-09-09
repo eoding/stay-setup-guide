@@ -795,6 +795,46 @@ class TestNewFieldPreflight(unittest.TestCase):
                 self.assertEqual(
                     self._pre(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | %s |" % good))["value_format"], [])
 
+    def test_occupancy_key_shape_matches_the_server_parser(self):
+        """`occupancy_key_shape` 는 `services.occupancy_key.parse_key` 와 **같은 판정**이다.
+
+        표는 그 파서를 실제로 돌려 맞춘 것이다(2026-09-09, 생성 키 14,776개 대조 · 불일치 0).
+        두 벌이 되면 여기서 통과한 좌표가 화면에서 거부되고, 그때는 앞 단계가 이미 깔려 있다.
+        """
+        for key in ("A2", "A0", "A12", "A2C1", "A2C1_CHD", "A2C2_CHD", "A2C1_CHD_C1_INF"):
+            with self.subTest(key=key, want="pass"):
+                self.assertIsNone(parse_guide.occupancy_key_shape(key))
+        for key, mark in (
+            ("A2_C1_CHD", "붙여 씁니다"),        # 첫 아동 조각 앞 밑줄
+            ("A2C1_C1_CHD", "한 모양뿐"),        # 코드 없는 조각과 코드 있는 조각의 혼합
+            ("A2C0_CHD", "0인 조각"),
+            ("A2C1_CHD_XX", "코드가 둘"),
+            ("A2C1__CHD", "빈 조각"),
+            ("A2CHD", "앞에 아동 조각"),
+            ("A2C1_C", "2~8자"),
+            ("2A+1유아", "꼴이어야"),
+        ):
+            with self.subTest(key=key, want="reject"):
+                why = parse_guide.occupancy_key_shape(key)
+                self.assertIsNotNone(why, key)
+                self.assertIn(mark, why)
+
+    def test_mixed_shape_occupancy_key_is_flagged_in_a_step(self):
+        """혼합 형식(`A2C1_C1_CHD`)은 화면에서 거부돼 그 시즌이 한 셀도 안 깔린다."""
+        why = self._why(swap("| 인원 조합(선택) | A2,A3 |", "| 인원 조합(선택) | A2,A2C1_C1_CHD |"))
+        self.assertIn("인원 조합", why)
+        self.assertIn("한 모양뿐", why)
+
+    def test_leading_underscore_occupancy_key_is_flagged_in_a_step(self):
+        why = self._why(swap("| 인원 조합(선택) | A2,A3 |", "| 인원 조합(선택) | A2_C1_CHD |"))
+        self.assertIn("붙여 씁니다", why)
+
+    def test_two_coded_child_parts_pass(self):
+        """코드를 모두 적으면 조각이 둘이어도 좋다 — 막는 것은 혼합뿐이다."""
+        self.assertEqual(
+            self._pre(swap("| 인원 조합(선택) | A2,A3 |",
+                           "| 인원 조합(선택) | A2C1_CHD_C1_INF |"))["value_format"], [])
+
     def test_occupancy_key_over_32_chars_is_flagged(self):
         """좌표 컬럼이 32자다 — 넘는 조합은 저장될 자리가 아예 없다."""
         long_key = "A2C1_XXXXXXXX_C1_YYYYYYYY_C1_ZZZZZZZZ"
