@@ -1603,6 +1603,82 @@ class DictionaryMdJsonAgreeTest(unittest.TestCase):
         self.assertEqual(data["meta"]["screen_count"], len(self.js))
 
 
+def read_dictionary_md_rows():
+    """`.md` 의 칸 표를 `{(화면, 칸): (언제 보임, 거부 문구 목록)}` 으로 읽는다."""
+    import re
+    rows, screen, in_table = {}, None, False
+    with open(DICTIONARY_MD, encoding="utf-8") as handle:
+        for line in handle.read().splitlines():
+            m = re.match(r"^## \d+\.\s*(.+?)\s*$", line)
+            if m:
+                screen, in_table = m.group(1), False
+                continue
+            if line.startswith("| 칸 | 종류 |"):
+                in_table = True
+                continue
+            if not in_table:
+                continue
+            if not line.startswith("|"):
+                in_table = False
+                continue
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if len(cells) != 6 or set("".join(cells)) <= set("- "):
+                continue
+            reject = [p.strip() for p in cells[5].split(" / ") if p.strip()]
+            rows[(screen, cells[0])] = (cells[4], reject)
+    return rows
+
+
+def read_dictionary_json_rows():
+    """`.json` 에서 같은 것을 — 참조(`ref`) 줄은 정본을 따라간다."""
+    import json
+    with open(DICTIONARY, encoding="utf-8") as handle:
+        data = json.load(handle)
+    rows = {}
+    for screen in data["screens"]:
+        source = data[screen["ref"]] if screen.get("ref") else screen
+        for block in source.get("blocks") or []:
+            for field in block.get("fields") or []:
+                rows[(screen["name"], field["label"])] = (
+                    field.get("visible_when") or "", list(field.get("reject") or [])
+                )
+    return rows
+
+
+class DictionaryRejectAndVisibilityAgreeTest(unittest.TestCase):
+    """두 사본은 **거부 문구와 보임 조건**까지 같은 글자여야 한다.
+
+    라벨만 견주던 동안 한쪽만 고친 내용이 오래 남았다(2026-09-09 Codex 리뷰 12): `.json` 은
+    연령 범위를 옛 표기 `만 N~M세` 로 설명하고 있었고, 시간대별 요율이 있을 때 연령별 단가
+    표가 사라진다는 조건은 `.md` 에만 있었다. 거부 문구·보임 조건은 화면이 실제로 뱉는 글자라
+    두 사본이 다르면 한쪽을 보고 쓴 원고가 다른 쪽 검사와 어긋난다.
+
+    도움말 산문까지 글자로 묶지는 않는다 — 같은 뜻을 다른 문장으로 적는 자리라, 여기서
+    묶으면 사전을 손보는 일이 시험을 고치는 일이 된다.
+    """
+
+    def setUp(self):
+        self.md = read_dictionary_md_rows()
+        self.js = read_dictionary_json_rows()
+
+    def test_the_same_rows_are_in_both(self):
+        self.assertEqual(sorted(self.md), sorted(self.js))
+
+    def test_reject_messages_match(self):
+        for key in sorted(self.md):
+            self.assertEqual(self.md[key][1], self.js[key][1], key)
+
+    def test_visible_conditions_match(self):
+        for key in sorted(self.md):
+            self.assertEqual(self.md[key][0], self.js[key][0], key)
+
+    def test_the_age_range_wording_is_the_current_one(self):
+        """`만 N~M세` 는 2026-09-08 에 없어진 표기다 — 두 사본 어디에도 남으면 안 된다."""
+        for path in (DICTIONARY_MD, DICTIONARY):
+            with open(path, encoding="utf-8") as handle:
+                self.assertNotIn("만 N~M세", handle.read(), path)
+
+
 class ValidationScreenTest(unittest.TestCase):
     """검증 배너는 사전에 **한 벌만** 있다 — 최상위 `validation` 이 정본이고 `screens` 줄은 참조다."""
 
@@ -1742,6 +1818,32 @@ class OccupancyKeyIsNotASheetCellTest(unittest.TestCase):
 → [저장]
 """
         self.assertEqual(self.cells(body), ["B47"])
+
+    def test_a_multi_band_key_is_not_a_sheet_cell(self):
+        """`A2C1_CHD_C1_INF` 의 둘째 조각 머리 `_C1` 은 C열 좌표가 아니다.
+
+        좌표를 **조각**으로 거르던 동안 그 `C1` 이 「좌표 의심」으로 남았고, 서버가 정상으로
+        받는 키에 전체 검사기가 종료 코드 1을 냈다(2026-09-09 Codex 리뷰 3).
+        """
+        body = self.FILL.replace("| 인원 조합(선택) | A2,A3 |",
+                                 "| 인원 조합(선택) | A2C1_CHD_C1_INF |")
+        body = body.replace("| 인원 조합별 조정(선택) | A3:+30 |", "")
+        self.assertEqual(self.cells(body), [])
+
+    def test_a_multi_band_key_passes_the_whole_checker(self):
+        """조각 검사만 고치면 모자란다 — `check`/`main` 전체 경로까지 통과해야 한다."""
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            text = handle.read()
+        text = text.replace("| 인원 조합(선택) | A1 |",
+                            "| 인원 조합(선택) | A2C1_CHD_C1_INF |", 1)
+        with tempfile.TemporaryDirectory() as d:
+            share = os.path.join(d, "우에노_토우가네야", "_원고")
+            os.makedirs(share)
+            path = os.path.join(share, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            self.assertEqual(cm.check(path)["sheet_cells"], [])
+            self.assertEqual(cm.main([path, "--dictionary", DICTIONARY]), 0)
 
 
 def child_addon_step(num, name, title="부가옵션 만들기", extra=()):
@@ -3244,13 +3346,282 @@ class CellLosNightsTest(unittest.TestCase):
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("읽지 못한다", problems[0])
 
-    def test_badge_form_is_read_as_the_number(self):
-        """화면 배지를 따라 `3박~` 으로 적어도 같은 숫자로 읽는다 — 범위를 보는 자리다."""
-        self.assertEqual(self.problems("3박~"), [])
+    def test_badge_form_is_an_error(self):
+        """화면 배지를 따라 적은 `3박~` 는 **오류**다 — 러너가 그 칸에서 층 조건을 잃는다.
+
+        종전에는 같은 숫자로 읽어 통과시켰다. 그 원고를 러너가 실행하면 부트가 비숫자라는
+        이유로 `wantLos` 를 비우고 같은 인원 조합의 첫 층을 골라, 3박 층을 만들려던 단계가
+        1박 행을 고치고 끝난다(2026-09-09 Codex 리뷰 9).
+        """
+        problems = self.problems("3박~")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("배지", problems[0])
+        self.assertIn("`3`", problems[0])
+
+    def test_other_badge_spellings_are_errors_too(self):
+        for typed in ("3박", "3~", "3 박 ~"):
+            problems = self.problems(typed)
+            self.assertEqual(len(problems), 1, (typed, problems))
+            self.assertIn("`3`", problems[0], typed)
 
     def test_the_example_manual_is_clean(self):
         with open(EXAMPLE, encoding="utf-8") as handle:
             self.assertEqual(cm.find_cell_los_nights(steps_of(handle.read())), [])
+
+
+class PlanAdjustTest(unittest.TestCase):
+    """`기준 요금제 대비 조정(선택)` — 부호 필수 · 요금제 필수 · 결과가 음수면 오류.
+
+    종전 검사기는 이 칸을 아예 보지 않아 서버가 거부하는 원고를 `ALL OK` 로 내보냈다
+    (2026-09-09 Codex 리뷰 6).
+    """
+
+    def problems(self, adjust, plans="선택: 조식 포함", **rows):
+        fields = [("기준 요금제 대비 조정(선택)", adjust), ("요금제(선택)", plans)]
+        fields += list(rows.items())
+        md = HEAD + price_fill_step(4, rows=fields)
+        return cm.find_plan_adjust_gaps(steps_of(md))
+
+    def test_signed_adjust_with_a_plan_is_ok(self):
+        self.assertEqual(self.problems("-8"), [])
+        self.assertEqual(self.problems("-5%"), [])
+
+    def test_blank_is_ok(self):
+        self.assertEqual(self.problems("비움", plans="비움"), [])
+
+    def test_missing_sign_is_an_error(self):
+        problems = self.problems("8")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("부호가 없다", problems[0])
+
+    def test_adjust_without_a_rate_plan_is_an_error(self):
+        """조정은 기준이 아닌 요금제에만 걸린다 — 요금제를 비우면 아무 데도 닿지 않는다."""
+        problems = self.problems("-8", plans="비움")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("요금제가 비어 있다", problems[0])
+
+    def test_percent_below_minus_hundred_is_an_error(self):
+        problems = self.problems("-101%")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("-100%", problems[0])
+
+    def test_a_negative_result_is_an_error(self):
+        """기준가 92.00 에 `-100` 을 걸면 판매 단가가 음수다 — 깔기 전에 막힌다."""
+        problems = self.problems("-100")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("음수", problems[0])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_plan_adjust_gaps(steps_of(handle.read())), [])
+
+
+class OccupancyAdjustAmountTest(unittest.TestCase):
+    """`인원 조합별 조정(선택)` 의 **크기** — 정률 -100% 이상 · 결과 0 이상."""
+
+    def problems(self, adjust, keys="A1,A2", price="92.00"):
+        rows = [("인원 조합(선택)", keys), ("인원 조합별 조정(선택)", adjust)]
+        md = HEAD + price_fill_step(4, rows=rows).replace(
+            "| 판매 단가(공급 통화) | 92.00 |", f"| 판매 단가(공급 통화) | {price} |")
+        return cm.find_occupancy_adjust_gaps(steps_of(md))
+
+    def test_ordinary_adjust_is_ok(self):
+        self.assertEqual(self.problems("A2:+14"), [])
+
+    def test_percent_below_minus_hundred_is_an_error(self):
+        problems = self.problems("A1:-101%")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("-100%", problems[0])
+
+    def test_minus_hundred_percent_is_still_ok(self):
+        """`-100%` 는 값이 0이라 하한 그 자체다 — 하한을 넘지 않았으므로 통과다."""
+        self.assertEqual(self.problems("A1:-100%"), [])
+
+    def test_a_flat_adjust_below_the_base_price_is_an_error(self):
+        """기준가 8500에 `A1:-9000` — 결과가 -500이라 화면이 깔기 전에 막는다."""
+        problems = self.problems("A1:-9000", price="8500")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("음수", problems[0])
+        self.assertIn("-500", problems[0])
+
+
+class OccupancyKeyNormalizationTest(unittest.TestCase):
+    """좌표 존재·중복은 **서버와 같은 정규화 뒤에** 판정한다(`normalize_key`)."""
+
+    def test_normalization_matches_the_server(self):
+        for raw, want in (
+            ("A02", "A2"),
+            ("3", "A3"),
+            ("A2C1_TEEN_C1_CHD", "A2C1_CHD_C1_TEEN"),
+            ("A2C1_CHD_C1_CHD", "A2C2_CHD"),
+            ("a2c1_chd", "A2C1_CHD"),
+            ("", ""),
+        ):
+            self.assertEqual(cm.normalize_occupancy_key(raw), want, raw)
+
+    def test_unreadable_and_codeless_keys_are_left_alone(self):
+        """읽지 못하는 값과 코드 없는 `A2C1` 은 그대로 둔다 — 지어내면 다른 구간을 덮는다."""
+        for raw in ("A2C1", "A2C1_C1_CHD", "2A+1유아"):
+            self.assertEqual(cm.normalize_occupancy_key(raw), raw.upper(), raw)
+
+    def test_a_zero_padded_key_matches_the_adjust_key(self):
+        """`인원 조합=A02` 에 `조정=A2:+10` 은 서버에서 맞물린다 — 없는 키가 아니다."""
+        rows = [("인원 조합(선택)", "A02"), ("인원 조합별 조정(선택)", "A2:+10")]
+        md = HEAD + price_fill_step(4, rows=rows)
+        self.assertEqual(cm.find_occupancy_adjust_gaps(steps_of(md)), [])
+
+    def test_two_spellings_of_one_key_are_a_duplicate(self):
+        """`A02,A2` 는 서버가 한 좌표로 접는다 — 두 인원의 셀을 깐다고 믿으면 안 된다."""
+        md = HEAD + price_fill_step(4, rows=[("인원 조합(선택)", "A02,A2")])
+        problems = cm.find_occupancy_key_duplicates(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`A02`", problems[0])
+        self.assertIn("같은 좌표", problems[0])
+
+    def test_a_select_field_is_not_split_on_spaces(self):
+        """가격 셀의 `인원 조합` 은 셀렉트다 — `선택: A2 · 성인 2` 의 끝 `2` 는 좌표가 아니다."""
+        md = HEAD + cell_step(4, CARD_KEYED, occupancy="선택: A2 · 성인 2")
+        self.assertEqual(cm.find_occupancy_key_duplicates(steps_of(md)), [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_occupancy_key_duplicates(steps_of(handle.read())), [])
+
+
+class OccupancyKeyNormalFormTest(unittest.TestCase):
+    """원고는 서버 정규형으로만 적는다 — 저장되는 글자가 달라지면 러너가 없는 행을 찾는다."""
+
+    def fill(self, keys="A2", adjust=None):
+        rows = [("인원 조합(선택)", keys)]
+        if adjust:
+            rows.append(("인원 조합별 조정(선택)", adjust))
+        md = HEAD + price_fill_step(4, rows=rows)
+        return cm.find_occupancy_key_denormalized(steps_of(md))
+
+    def test_a_normal_form_key_is_ok(self):
+        for key in ("A2", "A2C1_CHD", "A2C1_CHD_C1_TEEN", "A2C2_CHD"):
+            self.assertEqual(self.fill(key), [], key)
+
+    def test_band_order_is_an_error_with_the_normal_form(self):
+        """`A2C1_TEEN_C1_CHD` 는 서버가 코드 알파벳순으로 다시 세워 저장한다."""
+        problems = self.fill("A2C1_TEEN_C1_CHD")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`A2C1_TEEN_C1_CHD` → `A2C1_CHD_C1_TEEN`", problems[0])
+
+    def test_repeated_band_parts_are_merged(self):
+        problems = self.fill("A2C1_CHD_C1_CHD")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`A2C2_CHD`", problems[0])
+
+    def test_a_zero_padded_adult_count_is_an_error(self):
+        problems = self.fill("A02")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`A02` → `A2`", problems[0])
+
+    def test_the_adjust_field_is_checked_too(self):
+        problems = self.fill(keys="A2,A2C1_CHD_C1_TEEN", adjust="A2C1_TEEN_C1_CHD:+10")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("인원 조합별 조정", problems[0])
+
+    def test_the_card_line_is_checked_too(self):
+        """러너가 좌표를 실제로 읽는 자리는 카드 줄이다."""
+        card = "`2026 시즌 요금 · Single` × `조식 포함` 의 인원 조합 `A2C1_TEEN_C1_CHD` 행"
+        md = HEAD + cell_step(4, card, occupancy="선택: A2C1_CHD_C1_TEEN · 성인 2 · 소아 1 · 청소년 1")
+        problems = cm.find_occupancy_key_denormalized(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("카드 줄", problems[0])
+
+    def test_a_broken_key_is_left_to_the_shape_check(self):
+        """모양이 어긋난 좌표는 `find_occupancy_key_legacy` 의 몫이다 — 두 줄로 말하지 않는다."""
+        for key in ("A2C1", "A2C1_C1_CHD", "3"):
+            self.assertEqual(self.fill(key), [], key)
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_occupancy_key_denormalized(steps_of(handle.read())), [])
+
+
+class BlankBandCodeTest(unittest.TestCase):
+    """`밴드 코드` 는 서버 필수다 — `비움` 은 화면이 「필수 항목입니다.」로 막는다."""
+
+    def problems(self, code):
+        md = HEAD + offer_step(4) + paid_band_step(5, code=code)
+        return cm.find_band_code_format(steps_of(md))
+
+    def test_a_code_is_ok(self):
+        self.assertEqual(self.problems("CHD"), [])
+
+    def test_a_blank_code_is_an_error(self):
+        problems = self.problems("비움")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("5단계", problems[0])
+        self.assertIn("필수 항목입니다.", problems[0])
+
+    def test_a_dash_is_also_blank(self):
+        self.assertEqual(len(self.problems("—")), 1)
+
+
+class AmountFormatTest(unittest.TestCase):
+    """금액 칸의 서버 `DecimalField` 규칙과 정가 관계 — 화면 거부를 원고에서 먼저 잡는다."""
+
+    def fill(self, **rows):
+        md = HEAD + price_fill_step(4, rows=list(rows.items()))
+        return cm.find_amount_format_gaps(steps_of(md))
+
+    def cell(self, body):
+        return cm.find_amount_format_gaps(steps_of(HEAD + body))
+
+    def test_ordinary_amounts_are_ok(self):
+        self.assertEqual(self.fill(**{"정가(취소선, 선택)": "120.00",
+                                      "공급 원가(net, 선택)": "60"}), [])
+
+    def test_a_negative_price_is_an_error(self):
+        md = HEAD + price_fill_step(4).replace(
+            "| 판매 단가(공급 통화) | 92.00 |", "| 판매 단가(공급 통화) | -1 |")
+        problems = cm.find_amount_format_gaps(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("0보다 작을 수 없다", problems[0])
+
+    def test_a_non_numeric_child_amount_is_an_error(self):
+        problems = self.fill(**{"아동 추가 금액 — 소아": "abc"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("숫자만 받는다", problems[0])
+
+    def test_three_decimal_places_are_an_error(self):
+        problems = self.fill(**{"아동 추가 금액 — 소아": "1.234"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("소수 자릿수가 3자리", problems[0])
+
+    def test_too_many_digits_are_an_error(self):
+        """12자리 상한 · 소수 2자리 — 소수점 앞은 10자리까지다."""
+        problems = self.fill(**{"공급 원가(net, 선택)": "12345678901"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("소수점 앞", problems[0])
+
+    def test_an_original_price_below_the_sale_price_is_an_error(self):
+        problems = self.fill(**{"정가(취소선, 선택)": "80"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("정가는 판매가보다 작을 수 없습니다", problems[0])
+
+    def test_a_los_tier_above_the_original_price_is_an_error(self):
+        problems = self.fill(**{"정가(취소선, 선택)": "120", "박수별 단가(선택)": "3:200"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("정가보다 비싼 박수 단가가 있습니다", problems[0])
+
+    def test_the_cell_net_amount_allows_fourteen_digits(self):
+        """가격 셀의 `공급 원가` 만 14자리다 — 같은 뜻의 칸이라도 화면이 다르면 상한이 다르다."""
+        body = cell_step(4, CARD_SINGLE).replace(
+            "| 공급 원가 | 비움 |", "| 공급 원가 | 123456789012 |")
+        self.assertEqual(self.cell(body), [])
+
+    def test_an_auto_filled_child_row_is_not_an_amount(self):
+        """`자동 입력됨 · 그대로 둠` 은 값이 아니라 상태다 — 다른 검사가 옳고 그름을 말한다."""
+        self.assertEqual(self.fill(**{"아동 추가 금액 — 소아": "자동 입력됨 · 그대로 둠"}), [])
+
+    def test_the_example_manual_is_clean(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_amount_format_gaps(steps_of(handle.read())), [])
 
 
 class SpecWordingTest(unittest.TestCase):
