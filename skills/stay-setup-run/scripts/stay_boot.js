@@ -255,14 +255,28 @@
     var isNewTable = function (tb) { return !!tb.querySelector('input[type=hidden][name=date],input[type=hidden][name=option]'); };
     var oldTables = tables.filter(function (tb) { return !isNewTable(tb); });
     var newTable = tables.filter(isNewTable)[0] || (tables.length > 1 ? tables[tables.length - 1] : null);
+    // 박수 층 (2026-09-09 배포판) — 같은 인원 조합이 층마다 한 행씩 선다(`A2` 1박~ · `A2` 3박~).
+    // 층을 안 보고 첫 행만 잡으면 `3박~` 값을 적으라는 단계가 **1박 행을 덮는다** — 화면은
+    // 아무 것도 말하지 않고, 3박 층은 옛 값 그대로 남는다. 단계가 `박수~` 칸을 부르면 그 값의
+    // 층을 먼저 찾고, 그 층이 아직 없으면 아래에서 새 행 표로 떨어진다(새 좌표를 만드는 일이다).
+    var losCtl = function (r) { return r.querySelector('input[name=los_nights],select[name=los_nights]'); };
+    var losField = (s.fields || []).filter(function (f) {
+      return /^박수\s*~?$/.test(clean(f.label || '').replace(/\(선택\)$/, ''));
+    })[0];
+    var wantLos = losField ? clean(String(losField.value !== undefined && losField.value !== null ? losField.value : '')) : '';
+    if (wantLos && !/^\d+$/.test(wantLos)) wantLos = '';
+    out.wantLos = wantLos || null;
+    var keyHit = function (r) {
+      var oc = keyCtl(r); if (!oc) return false;
+      var v = clean(oc.value);
+      return occ === '무관' ? (v === '' || v === '0' || /무관/.test(clean(r.textContent))) : v === occ;
+    };
     oldTables.forEach(function (tb) {
       if (found) return;
       [].slice.call(tb.querySelectorAll('tbody tr')).forEach(function (r) {
-        if (found) return;
-        var oc = keyCtl(r);
-        if (!oc) return;
-        var v = clean(oc.value);
-        if (occ === '무관' ? (v === '' || v === '0' || /무관/.test(clean(r.textContent))) : v === occ) found = { row: r, table: tb };
+        if (found || !keyHit(r)) return;
+        if (wantLos) { var lc = losCtl(r); if (!lc || clean(lc.value) !== wantLos) return; }
+        found = { row: r, table: tb };
       });
     });
     // 인원 구분이 없는 카드면 기존 행이 하나뿐일 때 그 행을 쓴다
@@ -292,8 +306,11 @@
       }
     }
     // 6) 열 제목으로 칸을 찾아 채운다
+    // 칸은 자리가 아니라 **열 번호**로 잡는다(`stayRun.rowCells`) — 2026-09-09 배포판의 위 표는
+    // 좌표 묶음이라 `인원 조합` 칸이 그룹 첫 행에서 `rowspan` 으로 층 전체를 덮고, 층 둘째
+    // 행부터는 `<td>` 가 하나 적다. 자리로 세면 `판매가` 에 적을 값이 `정가` 칸에 들어간다.
     var ths = [].slice.call(found.table.querySelectorAll('thead th')).map(function (h) { return clean(h.textContent); });
-    var tds = [].slice.call(found.row.children);
+    var tds = (stayRun.rowCells ? stayRun.rowCells(found.row) : [].slice.call(found.row.children));
     var setNative = function (el, v) { var proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype); var d = Object.getOwnPropertyDescriptor(proto, 'value'); if (d && d.set) d.set.call(el, v); else el.value = v; ['input', 'change'].forEach(function (ev) { el.dispatchEvent(new Event(ev, { bubbles: true })); }); };
     var results = [];
     window.stepFields(n).forEach(function (f) {
@@ -325,12 +342,33 @@
     await settled(function () { save.click(); }, 10000);
     out.submitted = true; out.submit = hx.error ? 'error' : 'settled'; out.errors = hx.error ? [hx.error] : [];
     var ed2 = document.getElementById('stay_cell_edit');
-    // 되읽기 — 인원 칸은 글자 칸일 수도 셀렉트일 수도 있으므로 **값**으로 읽는다(셀렉트의 보이는
-    // 글자는 `인원 무관 단일가` 라 값(빈 문자열)과 다르다).
+    // 저장 거부는 **배너 한 줄**로 돌아온다 — 이 표는 한 줄이 한 좌표인 컴팩트 표라 필드 오류를
+    // 칸 옆에 못 두고 `.stay-banner--blocking` 하나에 모은다(`_calendar_cell_edit.html`).
+    // 안 읽으면 "같은 인원 조합의 가격 행이 이미 있습니다" · "판매 가능한 셀은 0원일 수
+    // 없습니다" · "박수는 30 이하여야 합니다" 가 `errors: []` 로 보고돼 저장된 줄로 읽힌다.
+    if (ed2) {
+      var banned = 0;
+      [].slice.call(ed2.querySelectorAll('.stay-banner--blocking')).forEach(function (b) {
+        var t = clean(b.textContent);
+        if (!t) return;
+        banned++;
+        if (out.errors.indexOf(t) < 0) out.errors.push(t);
+      });
+      // 요청 자체가 깨진 것(`hx.error`)은 `error` 로 남긴다 — 그쪽이 더 급한 진단이다.
+      if (banned && !hx.error) out.submit = 'refused';
+    }
+    // 되읽기 — 인원 칸은 글자 칸일 수도, 셀렉트일 수도, **숨은 칸**일 수도 있다. 2026-09-09
+    // 배포판의 기존 행 표는 `인원 조합` 을 그룹 머리의 글자로 올리고 값은 행마다 hidden 으로
+    // 싣는다 — 숨은 칸을 빼고 읽으면 `occupancy_key=` 가 아예 안 나와 아래 거르개가 **모든
+    // 행을 버리고** `after: []` 가 된다(되읽기가 조용히 죽는다). 그래서 이 칸만 따로 앞에 세운다.
     out.after = ed2 ? [].slice.call(ed2.querySelectorAll('tbody tr')).map(function (r) {
-      return [].slice.call(r.querySelectorAll('input:not([type=hidden]),select')).map(function (i) {
-        return i.name + '=' + (i.tagName === 'SELECT' && i.name !== 'occupancy_key' ? clean((i.options[i.selectedIndex] || {}).textContent) : i.value);
-      }).join(' ');
+      var oc = r.querySelector('input[name=occupancy_key],select[name=occupancy_key]');
+      var head = oc ? ['occupancy_key=' + oc.value] : [];
+      return head.concat([].slice.call(r.querySelectorAll('input:not([type=hidden]),select')).filter(function (i) {
+        return i.name !== 'occupancy_key';
+      }).map(function (i) {
+        return i.name + '=' + (i.tagName === 'SELECT' ? clean((i.options[i.selectedIndex] || {}).textContent) : i.value);
+      })).join(' ');
     }).filter(function (x) { return occ === '무관' ? /^occupancy_key=(0)?\s/.test(x) : x.indexOf('occupancy_key=' + occ + ' ') === 0; }) : [];
     var closeBtn = ed2 && [].slice.call(ed2.querySelectorAll('button')).find(function (b) { return tier(b.textContent, '닫기') >= 3; });
     if (closeBtn) { closeBtn.click(); await sleep(300); }

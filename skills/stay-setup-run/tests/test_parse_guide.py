@@ -718,6 +718,31 @@ class TestNewFieldPreflight(unittest.TestCase):
         self.assertEqual(
             self._pre(swap("| 박수별 단가(선택) | 3:100,5:90 |", "| 박수별 단가(선택) | 비움 |"))["value_format"], [])
 
+    def test_los_prices_over_thirty_nights_is_flagged(self):
+        """상한은 `season.MAX_LOS_NIGHTS` 와 같은 30이다 — 넘으면 견적이 영영 안 집는 셀이 깔린다."""
+        why = self._why(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                             "| 박수별 단가(선택) | 3:100,31:90 |"))
+        self.assertIn("박수별 단가", why)
+        self.assertIn("30박", why)
+
+    def test_los_prices_thirty_nights_passes(self):
+        """경계는 포함이다 — 30박은 받는다."""
+        self.assertEqual(
+            self._pre(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                           "| 박수별 단가(선택) | 3:100,30:90 |"))["value_format"], [])
+
+    def test_los_prices_too_many_tiers_is_flagged(self):
+        """층 하나가 셀 수를 통째로 곱한다 — 서버 상한(`MAX_LOS_TIERS`)과 같은 6개까지다."""
+        why = self._why(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                             "| 박수별 단가(선택) | 2:99,3:98,4:97,5:96,6:95,7:94,8:93 |"))
+        self.assertIn("층", why)
+        self.assertIn("6개", why)
+
+    def test_los_prices_six_tiers_passes(self):
+        self.assertEqual(
+            self._pre(swap("| 박수별 단가(선택) | 3:100,5:90 |",
+                           "| 박수별 단가(선택) | 2:99,3:98,4:97,5:96,6:95,7:94 |"))["value_format"], [])
+
     # --- 2. 인원 조합의 옛 숫자 키 ----------------------------------------
     def test_bare_number_occupancy_keys_is_flagged(self):
         why = self._why(swap("| 인원 조합(선택) | A2,A3 |", "| 인원 조합(선택) | 2,3 |"))
@@ -750,6 +775,33 @@ class TestNewFieldPreflight(unittest.TestCase):
     def test_lowercase_band_code_passes(self):
         """서버가 대문자로 굳힌다 — 소문자로 적었다고 막지 않는다."""
         self.assertEqual(self._pre(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | chd |"))["value_format"], [])
+
+    def test_child_head_shaped_band_code_is_flagged(self):
+        """`C1` 은 정규식을 통과하지만 서버가 따로 거부한다 — 좌표의 아동 조각 머리와 같아서다.
+
+        `A2C1_C1` 이 "아동 1명 + 아동 1명" 으로 읽혀 왕복이 깨진다. 정규식만 보고 통과시키면
+        이 오타가 브라우저까지 가서 그 `연령 구간 만들기` 단계에서 멈춘다.
+        """
+        for bad in ("C1", "C12", "c1"):
+            with self.subTest(code=bad):
+                why = self._why(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | %s |" % bad))
+                self.assertIn("밴드 코드", why)
+                self.assertIn("아동 조각", why)
+
+    def test_band_code_starting_with_c_and_letters_passes(self):
+        """막는 것은 `C`+숫자뿐이다 — `CHD`·`C2A` 처럼 글자가 섞이면 좌표와 안 헷갈린다."""
+        for good in ("CHD", "C2A"):
+            with self.subTest(code=good):
+                self.assertEqual(
+                    self._pre(swap("| 밴드 코드 | CHD |", "| 밴드 코드 | %s |" % good))["value_format"], [])
+
+    def test_occupancy_key_over_32_chars_is_flagged(self):
+        """좌표 컬럼이 32자다 — 넘는 조합은 저장될 자리가 아예 없다."""
+        long_key = "A2C1_XXXXXXXX_C1_YYYYYYYY_C1_ZZZZZZZZ"
+        self.assertGreater(len(long_key), 32)
+        why = self._why(swap("| 인원 조합(선택) | A2,A3 |", "| 인원 조합(선택) | A2,%s |" % long_key))
+        self.assertIn("인원 조합", why)
+        self.assertIn("32자", why)
 
     # --- 4. `아동 추가 금액` 줄과 `연령 구간 만들기` 의 차례 ----------------
     def test_age_band_after_season_fill_is_flagged(self):

@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.5.0'; // 운영 2026-09-04 배포판 화면 기준
+  var VERSION = '0.6.0'; // 운영 2026-09-09 배포판 화면 기준(좌표 묶음 rowspan · stay-banner 되읽기)
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -305,6 +305,10 @@
     if (/[·・‧∙]/.test(nfc(card))) { var g0 = tableGroup(root, heads, card); if (g0) return g0; }
     var best = null, bt = 0, bs = Infinity, bh = 0;
     for (var i = 0; i < heads.length; i++) {
+      // 접힌 제목은 후보가 아니다 — `tableGroup`·`sectionTierOf` 와 같은 규칙이다. 2026-09-09
+      // 배포판부터 에이전트 모달 둘(`#stay_agent_install`·`#stay_agent_resume`)이 `hidden` 으로
+      // **늘 실려 있어**, 이 걸음이 없으면 안 보이는 제목이 카드로 잡힐 수 있다.
+      if (!shown(heads[i])) continue;
       var t = tier(textOf(heads[i]), card);
       if (t < 2) continue;
       // 제목이 표의 한 행 안에 있으면(예: 시즌 표의 `LOW SEASON`) 그 행이 카드다 — 표 전체로 넓히지 않는다
@@ -395,6 +399,50 @@
       [].slice.call(root.querySelectorAll('tr')),
       [].slice.call(root.querySelectorAll('li,.row,[class*="row"],[class*="item"]'))
     ];
+  }
+
+  /* ────────────── 표의 rowspan 을 푼 열 자리 (2026-09-09 배포판) ──────────────
+     가격 셀 편집 창의 위 표는 행이 아니라 **좌표 묶음**을 그린다 — 같은 인원 조합의 박수 층이
+     한 묶음이고, `인원 조합` 칸은 그룹 첫 행이 `rowspan` 으로 층 전체(오류 배너 행까지)를
+     덮는다. 그래서 층 둘째 행부터는 `<td>` 수가 열 수보다 하나 적다.
+
+     자리(`row.children[i]`)로 세면 그 행에서 열이 통째로 한 칸씩 밀린다 — `판매가` 에 적을
+     값이 `정가` 칸에 들어가고, 화면은 아무 것도 말하지 않는다. 그래서 표를 위에서부터 훑어
+     격자를 만들고 **열 번호로** 칸을 돌려준다. colspan(오류 배너의 `colspan=6`)도 같이 푼다.
+
+     캐시하지 않는다 — htmx 가 이 조각을 통째로 갈아 끼우므로 오래된 격자는 떨어져 나간
+     노드를 가리킨다. 한 표는 많아야 수십 행이라 매번 세도 싸다. */
+  function gridCells(table) {
+    var out = [], carry = [];
+    [].slice.call(table.querySelectorAll('tr')).filter(function (tr) {
+      return tr.closest('table') === table; // 중첩 표의 행은 이 격자의 것이 아니다
+    }).forEach(function (tr) {
+      var cells = [].slice.call(tr.children).filter(function (c) { return /^(TD|TH)$/.test(c.tagName); });
+      var line = [], i = 0, c = 0, guard = 0;
+      while ((i < cells.length || (carry[c] && carry[c].left > 0)) && guard++ < 200) {
+        if (carry[c] && carry[c].left > 0) { line[c] = carry[c].el; carry[c].left--; c++; continue; }
+        var td = cells[i++];
+        var rs = parseInt(td.getAttribute('rowspan') || '1', 10) || 1;
+        var cs = parseInt(td.getAttribute('colspan') || '1', 10) || 1;
+        for (var k = 0; k < cs; k++) {
+          line[c] = td;
+          if (rs > 1) carry[c] = { el: td, left: rs - 1 };
+          c++;
+        }
+      }
+      out.push({ row: tr, cells: line });
+    });
+    return out;
+  }
+  // 한 행의 열 자리 배열. 표 밖이거나 rowspan 이 없으면 `row.children` 그대로다.
+  function rowCells(row) {
+    if (!row || !row.closest) return [];
+    var table = row.tagName === 'TR' ? row.closest('table') : null;
+    if (!table) return [].slice.call(row.children || []);
+    if (!table.querySelector('[rowspan]')) return [].slice.call(row.children || []);
+    var grid = gridCells(table);
+    for (var i = 0; i < grid.length; i++) if (grid[i].row === row) return grid[i].cells;
+    return [].slice.call(row.children || []);
   }
 
   // 행의 칸 하나가 이름과 얼마나 맞는지 — `디럭스` 를 찾을 때 `그랜드 디럭스` 행(포함, 1)보다 `디럭스` 행(일치, 4)이 이긴다
@@ -743,7 +791,9 @@
         var hit = pick(heads, textOf, field, 2);
         if (hit.status === 'ok') {
           var idx = heads.indexOf(hit.el);
-          var cells = [].slice.call(row.children);
+          // 자리가 아니라 **열 번호**로 잡는다 — 좌표 묶음 표는 `인원 조합` 칸이 rowspan 이라
+          // 층 둘째 행부터 `row.children` 이 한 칸씩 밀린다(`rowCells` 주석).
+          var cells = rowCells(row);
           var cell = cells[idx] || null;
           if (cell) {
             var cs = [].slice.call(cell.querySelectorAll(CTRL_SEL)).filter(function (e) { return isCtrl(e) && usable(e); });
@@ -1142,6 +1192,26 @@
       var st = getComputedStyle(e);
       if (e.classList.contains('helper-text') && !/rgb\(2[0-9]{2},|red|f44336/i.test(st.color)) return;
       push(textOf(e));
+    });
+    // 저장 거부 띠(`.stay-banner--blocking`) — 클래스에 `error` 가 없어 위 두 훑기가 통째로
+    // 놓치던 자리다. 가격 셀 편집 창은 필드 오류를 칸 옆이 아니라 **한 배너에 모아** 그리므로
+    // (`_calendar_cell_edit.html`: 컴팩트 표라 칸 옆에 둘 자리가 없다), 이것을 안 읽으면
+    // "같은 인원 조합의 가격 행이 이미 있습니다" · "판매 가능한 셀은 0원일 수 없습니다" 같은
+    // 거부가 `errors: []` 로 보고돼 담당자가 저장된 줄로 읽는다. 드로어 폼의 non_field_errors ·
+    // 전개 불가 사유(`error_message`)도 같은 상자다.
+    // `--warning` · `--info` · `--ok` 는 담지 않는다 — 저장이 **성공**해도 서는 안내다
+    // (통화 미지정 경고 · "이 날짜에 아직 가격이 없습니다" · "저장했습니다").
+    // 훑는 자리는 좁힌 범위 + **지금 열린 드로어·모달**이다. 배너는 좁힌 행의 형제라
+    // (오류 배너도 제 `<tr>` 이다) 행으로 좁히면 안 보이고, 반대로 탭 화면 전체를 훑으면
+    // 앞 단계가 남긴 패널 배너까지 이번 저장의 오류로 읽힌다. 드로어·모달은 요청마다 통째로
+    // 다시 그려지므로 그 안의 배너는 언제나 이번 응답의 것이다.
+    var banners = [root, modalRoot(), drawerRoot()].filter(Boolean);
+    banners.forEach(function (box, i) {
+      if (banners.indexOf(box) !== i) return;
+      [].slice.call(box.querySelectorAll('.stay-banner--blocking')).forEach(function (e) {
+        if (e.closest('#stay_validation_banner')) return; // 검증 배너는 `state().banner` 가 따로 읽는다
+        if (shown(e)) push(textOf(e));
+      });
     });
     // 안내 띠(토스트)는 여기서 담지 않는다 — 저장이 **성공**할 때도 뜨기 때문이다
     // ("저장되었습니다."). 종전에는 그것이 `errors` 에 들어가 드로어 저장마다 오류가 난 것처럼
@@ -1931,7 +2001,9 @@
     bridge: bridge,
     takeFiles: takeFiles,
     clearBridge: clearBridge,
-    sleep: sleep, waitFor: waitFor, tier: tier, findButton: findButton
+    sleep: sleep, waitFor: waitFor, tier: tier, findButton: findButton,
+    // 부트(`stay_boot.js`)의 가격 셀 단계가 같은 격자를 쓴다 — 두 벌이 되면 한쪽만 고쳐진다.
+    rowCells: rowCells
   };
 
   window.stayRun = api;

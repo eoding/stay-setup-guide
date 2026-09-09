@@ -228,7 +228,14 @@
      ② 아래 카드 이름이 `인원별 가격 추가` → **`인원별 · 박수별 가격 추가`** 로 바뀌었고,
         그 카드의 `인원 조합` 은 텍스트가 아니라 **셀렉트**다. 항목 글자는 **키가 앞**이다
         (`forms.occupancy_select_label`) — 원고가 `A2C1_CHD` 만 적어도 그 항목이 골라져야 한다.
-     ③ 새 행 표에는 `<th>` 가 없다 — 열 제목은 `<thead>` 에만 있고 행은 `<td>` 뿐이다. -->
+     ③ 새 행 표에는 `<th>` 가 없다 — 열 제목은 `<thead>` 에만 있고 행은 `<td>` 뿐이다.
+     ④ (2026-09-09 배포판) 그룹 머리의 `rowspan` 때문에 **층 둘째 행은 `<td>` 가 하나 적다.**
+        자리(`row.children[i]`)로 세면 열이 통째로 한 칸씩 밀려 `판매가` 값이 `정가` 칸에
+        들어간다 — 도우미는 `rowCells` 로 격자를 풀어 열 번호로 잡는다.
+     ⑤ 인원 조합 값은 행마다 **hidden** 으로 실린다(`hx-include` 가 걷는다). 사람이 읽는
+        자리만 그룹 머리로 올라갔을 뿐 값이 없어진 것이 아니다.
+     ⑥ 액션 칸의 버튼은 `td.td_actions > div.stay-actions` 안이다(2026-09-09 — 줄이 접힐 때의
+        간격을 flex gap 으로 옮겼다). 버튼을 찾는 길은 그대로여야 한다. -->
 <div id="stay_cell_edit" class="stay-modal stay-modal--page" style="display:none">
   <div class="stay-modal__mask">
     <div class="stay-modal__panel">
@@ -241,23 +248,46 @@
             <th>공급 원가</th><th>상태</th><th>액션</th>
           </tr></thead>
           <tbody>
-            <tr>
+            <tr id="cell_row_101">
               <td rowspan="2" class="stay-cell-group">A2 · 성인 2</td>
-              <td><input type="number" name="los_nights" value="1"></td>
+              <td class="stay-cell-tier">
+                <input type="hidden" name="occupancy_key" value="A2">
+                <input type="number" name="los_nights" value="1" list="stay_los_options">
+                <span class="stay-badge stay-badge--tinted">1박~</span></td>
               <td><input type="number" name="price" value="92"></td>
               <td><input type="number" name="original_price"></td>
               <td><input type="number" name="net_amount"></td>
-              <td>열림</td>
-              <td><button type="button">저장</button></td>
+              <td><select class="browser-default" name="availability_status">
+                <option value="0">열림</option><option value="1">닫힘</option></select></td>
+              <td class="td_actions"><div class="stay-actions"><button type="button">저장</button></div></td>
             </tr>
-            <tr>
-              <td class="stay-cell-tier"><input type="number" name="los_nights" value="3">
-                <span class="stay-badge">3박~</span></td>
+            <tr id="cell_row_102">
+              <td class="stay-cell-tier">
+                <input type="hidden" name="occupancy_key" value="A2">
+                <input type="number" name="los_nights" value="3" list="stay_los_options">
+                <span class="stay-badge stay-badge--tinted">3박~</span></td>
               <td><input type="number" name="price" value="82"></td>
               <td><input type="number" name="original_price"></td>
               <td><input type="number" name="net_amount"></td>
-              <td>열림</td>
-              <td><button type="button">저장</button></td>
+              <td><select class="browser-default" name="availability_status">
+                <option value="0">열림</option><option value="1">닫힘</option></select></td>
+              <td class="td_actions"><div class="stay-actions"><button type="button">저장</button></div></td>
+            </tr>
+            <!-- 맨 숫자 키(`2`)는 읽기만 하는 옛 형식이라 회색 `옛 형식` 배지가 함께 선다 —
+                 새로 만들지 않는 좌표이고, 정렬도 A-형 뒤다. 층이 하나라 rowspan="1" 이다. -->
+            <tr id="cell_row_103">
+              <td rowspan="1" class="stay-cell-group">2 · 2인
+                <span class="stay-badge stay-badge--draft"
+                      title="성인·아동 구분이 없는 옛 표기입니다 — 새 행은 A2 · A2C1_CHD 형식으로 만듭니다.">옛 형식</span></td>
+              <td>
+                <input type="hidden" name="occupancy_key" value="2">
+                <input type="number" name="los_nights" value="1" list="stay_los_options"></td>
+              <td><input type="number" name="price" value="70"></td>
+              <td><input type="number" name="original_price"></td>
+              <td><input type="number" name="net_amount"></td>
+              <td><select class="browser-default" name="availability_status">
+                <option value="0">열림</option><option value="1">닫힘</option></select></td>
+              <td class="td_actions"><div class="stay-actions"><button type="button">저장</button></div></td>
             </tr>
           </tbody>
         </table>
@@ -312,6 +342,32 @@
 <div id="logout-warning-modal" style="display:none">
   <p>확인 버튼을 눌러 로그인을 유지하세요</p>
   <button type="button" onclick="document.getElementById('logout-warning-modal').style.display='none'">확인</button>
+</div>
+
+<!-- 편집 화면의 [에이전트에 복사] 모달(2026-09-09 신설, `_agent_resume_modal.html`).
+     `.stay-modal` 인데 **`hidden` 으로 늘 실려 있다** — 열린 모달로 세면 안 되고, 그 안의
+     제목이 카드로 잡혀서도 안 된다. 러너는 이 모달을 열지도 누르지도 않는다. -->
+<div class="stay-root stay-agent-bar">
+  <button type="button" class="stay-btn stay-btn--ghost" data-agent-open="stay_agent_resume">에이전트에 복사</button>
+</div>
+<div class="stay-root">
+  <div id="stay_agent_resume" class="stay-modal stay-modal--page stay-agent-modal" hidden>
+    <div class="stay-modal__mask" data-agent-mask>
+      <div class="stay-modal__panel" role="dialog" aria-modal="true">
+        <div class="stay-modal__head">
+          <h4 class="stay-modal__title">이 호텔을 에이전트로 이어서 하기</h4>
+          <button type="button" class="stay-btn stay-btn--ghost" data-agent-close>닫기</button>
+        </div>
+        <div class="stay-agent__block">
+          <p class="stay-agent__head">객실 (룸 타입)</p>
+          <textarea class="stay-agent__text" data-agent-text="resume" readonly rows="4">이어서 깔아줘</textarea>
+          <div class="stay-modal__foot">
+            <button type="button" class="stay-btn stay-btn--primary" data-agent-copy="resume">복사</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="toast-container"></div>
@@ -444,6 +500,10 @@ var DRAWER_HTML = [
   '<button type="button" onclick="fakeSave()">저장</button>',
   // 실패 띠를 내는 버튼 — 실패로 읽히는 글자는 그대로 errors 에 들어가야 한다
   '<button type="button" onclick="fakeSave(\'저장에 실패했습니다\')">등록</button>',
+  // 저장 거부 — 드로어가 **열린 채로** 조각이 다시 그려지고 사유가 `.stay-banner--blocking`
+  // 한 줄로 온다(`_season_form.html` 등의 non_field_errors · 전개 불가 사유가 그 상자다).
+  // 클래스에 `error` 가 없어 종전 훑기가 통째로 놓치던 자리다.
+  '<button type="button" onclick="fakeRefuse()">거부 저장</button>',
   // ERP 2026-09-08 이후 `hx-confirm` 은 네이티브 confirm 이 아니라 페이지 안 확인창을 띄운다.
   '<button type="button" hx-confirm="정말 삭제할까요?" onclick="openStayConfirm(this)">삭제</button>'
 ].join('');
@@ -533,6 +593,21 @@ function fakeSave(toastText) {
     // 저장이 **성공**해도 띠가 뜬다 — 그것을 오류로 세면 드로어 저장마다 실패로 보인다
     document.getElementById('toast-container').innerHTML =
       '<div class="toast">' + (toastText || '저장되었습니다.') + '</div>';
+    document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSwap', { bubbles: true }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSettle', { bubbles: true }));
+  }, 300);
+}
+
+/* ── 저장 거부 흉내: 드로어는 **열린 채**로 사유 배너가 조각 맨 위에 붙는다 ────── */
+function fakeRefuse() {
+  document.body.dispatchEvent(new CustomEvent('htmx:beforeRequest', { bubbles: true }));
+  setTimeout(function () {
+    var body = document.getElementById('stay_drawer_body');
+    body.insertAdjacentHTML('afterbegin',
+      '<div class="stay-banner stay-banner--blocking"><span>' +
+      '전개 날짜가 0일입니다 — 이 시즌에 열린 판매일이 없습니다' +
+      '</span></div>');
     document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { bubbles: true }));
     document.body.dispatchEvent(new CustomEvent('htmx:afterSwap', { bubbles: true }));
     document.body.dispatchEvent(new CustomEvent('htmx:afterSettle', { bubbles: true }));
