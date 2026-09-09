@@ -133,7 +133,7 @@ section.remember li::before{
 <p class="lead">호텔 하나를 ERP에 까는 동안 나오는 말을 <strong>일하는 순서대로</strong> 모았습니다. 가나다순이 아닙니다. 위에서부터 읽으면 그게 곧 작업 순서입니다.</p>
 <p class="legend">각 용어는 다섯 줄로 봅니다 — 한 줄 정의 / ERP 어디에 있나 / 고객이 어디서 보나 / 계약서의 어떤 말이 여기로 오나 / 헷갈리는 짝.</p>
 <ul class="meta">
-<li>화면 기준: <strong>운영 2026-09-04 배포판</strong> + 2026-09-08 신설 칸(박수별 단가·아동 추가 금액·좌표 접기)</li>
+<li>화면 기준: <strong>운영 2026-09-09 배포판</strong>(박수별 단가·아동 추가 금액·좌표 접기·박수 층 마감 규칙·아동 만 0~17세)</li>
 <li>화면에 실제로 보이는 글자만 씁니다. 내부 이름은 괄호로만 적었습니다.</li>
 <li>편집 화면 탭 순서: <code>기본정보</code> · <code>호텔 정보</code> · <code>객실</code> · <code>오퍼</code> · <code>시즌</code> · <code>요금제</code> · <code>판매일</code> · <code>가격 캘린더</code> · <code>부과금</code> · <code>부가옵션</code> · <code>프로모션</code> · <code>취소정책</code> · <code>혜택</code></li>
 </ul>
@@ -250,7 +250,7 @@ section.remember li::before{
 <div><dt>ERP</dt><dd>시즌 가격 채우기에서 <code>인원 조합</code>과 <code>아동 추가 금액</code>을 함께 적으면 저절로 깔립니다. 손으로는 셀 편집 창의 <code>인원 조합</code>에서 고릅니다.</dd></div>
 <div><dt>고객 화면</dt><dd>"성인 2, 소아 1"로 예약할 때 잡히는 값.</dd></div>
 <div><dt>계약서에서</dt><dd>"성인 2 + 소아 1" 줄.</dd></div>
-<div><dt>꼭 알 것</dt><dd>이 좌표가 없으면 "성인 2 + 소아 1"이 <code>A3</code>(성인 3명)으로 뭉개져 <strong>성인 3명 값으로 팔립니다.</strong> 구간이 둘이면 <code>A2C1_CHD_C1_TEEN</code> 처럼 늘리고, 구간 코드는 알파벳순으로 씁니다.</dd></div>
+<div><dt>꼭 알 것</dt><dd>이 좌표가 없으면 "성인 2 + 소아 1"이 <code>A3</code>으로 뭉개져 성인 3명 값으로 팔리고, <code>A3</code>도 없으면 <strong>아예 팔리지 않습니다.</strong> 구간이 둘이면 <code>A2C1_CHD_C1_TEEN</code> 처럼 늘리고, 구간 코드는 알파벳순으로 씁니다.</dd></div>
 </dl>
 </article>
 <article class="term">
@@ -360,8 +360,8 @@ section.remember li::before{
 <article class="term">
 <h3>밴드 코드</h3>
 <dl class="facts">
-<div class="def"><dt>정의</dt><dd>그 연령 구간을 가리키는 짧은 이름표입니다. <code>CHD</code>·<code>INF</code>·<code>CHILD</code>.</dd></div>
-<div><dt>ERP</dt><dd>연령 구간 드로어의 <code>밴드 코드</code>. 화면 안내는 「영문·숫자·밑줄만 씁니다(대문자로 저장됩니다) · 16자까지」입니다.</dd></div>
+<div class="def"><dt>정의</dt><dd>그 연령 구간을 가리키는 짧은 이름표입니다. <code>CHD</code>·<code>INF</code>·<code>TEEN</code>.</dd></div>
+<div><dt>ERP</dt><dd>연령 구간 드로어의 <code>밴드 코드</code>. 화면 안내는 「영대문자·숫자 2~8자 (예 CHD·INF·TEEN) · 밑줄·한글·공백은 쓸 수 없습니다」입니다.</dd></div>
 <div><dt>고객 화면</dt><dd>안 보입니다. 표에 나가는 이름은 <code>노출명</code>입니다.</dd></div>
 <div><dt>계약서에서</dt><dd>계약서에 없는 값입니다. 우리가 짧게 붙입니다.</dd></div>
 <div><dt>꼭 알 것</dt><dd>아동 조합 좌표(<code>A2C1_CHD</code>)와 부과금의 <code>연령별 단가</code>가 <strong>이 코드로</strong> 그 구간을 가리킵니다. 짧고 굵은 영대문자로 둡니다.</dd></div>
