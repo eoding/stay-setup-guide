@@ -64,7 +64,7 @@ python3 scripts/check_manual.py examples/우에노_토우가네야/_원고/manua
 |---|---|
 | `SKILL.md` | 이 스킬의 진입점. 입력 → 절차 → 반드시 지킬 것 → 하지 말 것 → 산출물 |
 | `references/MANUAL-SPEC.md` | 지시서 원고(`_원고/manual.md`) 형식 규칙 정본 — 구조·표 표기·단계 갈래별 마지막 줄·순서·금지어 |
-| `references/screen-dictionary.md` · `references/screen-dictionary.json` | ERP Stay 화면 27개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 검사기용 json — 함께 고친다) |
+| `references/screen-dictionary.md` · `references/screen-dictionary.json` | ERP Stay 화면 31개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 검사기용 json — 함께 고친다) |
 | `references/facts-guide.md` | 호텔·룸 팩트(주소·시설·면적·전망·침대·좌표·도시 코드) 수집 절차와 출처 우선순위 |
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님). 공유 폴더 배치 그대로다: 맨 위에 지시서 `우에노_토우가네야_입력지시서.html` · `changes.md` · `사진목록.txt`(파일명 · 출처 — **사진 파일 자체는 저작권 때문에 담지 않는다**), 작업 파일은 `_원고/` 안에 `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(원고 정답지) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |
