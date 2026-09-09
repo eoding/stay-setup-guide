@@ -83,10 +83,14 @@ const STEPS = {
       // `인원 조합` 칸이 `rowspan` 에 덮여 `<td>` 가 하나 적다 — 자리로 세면 `판매가` 에 적을
       // 값이 `정가` 칸에 들어간다. 층을 안 고르면 첫 층(1박~)을 덮는다.
       no: 5,
-      title: '가격 셀 고치기 (2026-01-03)',
-      kind: '가격 셀 고치기',
+      title: '가격 셀 손으로 고치기 (2026-01-03)',
+      kind: '가격 셀 손으로 고치기',
       head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 A2 행', buttons: [], buttons_parsed: [] },
       fields: [
+        // 규칙서(MANUAL-SPEC §가격 셀)가 기존 행 단계에도 이 줄을 적으라고 한다. 화면의 그
+        // 열에는 채울 칸이 없으므로(그룹 머리 글자 + 행마다 hidden) **입력이 아니라 좌표
+        // 대조 정보**다 — 칸으로 찾으면 늘 `not-found` 가 되어 이 단계가 저장까지 못 갔다.
+        { label: '인원 조합', kind: 'typed', value: 'A2' },
         { label: '박수~', kind: 'typed', value: '3' },
         { label: '판매가', kind: 'typed', value: '95' }
       ],
@@ -108,6 +112,58 @@ const STEPS = {
       kind: '가격 셀 고치기',
       head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 무관 단일가 행', buttons: [], buttons_parsed: [] },
       fields: [{ label: '판매가', kind: 'typed', value: '111' }],
+      longtexts: [], photos: [], submit: '저장'
+    },
+    {
+      // 2026-01-04 는 `인원 무관 / 1박 / 110` **한 행뿐**인 날이다. 여기에 3박 층을 다는
+      // 단계다 — 층은 좌표의 일부라 새 좌표를 만드는 일이고, 그래서 **새 행 표**로 가야 한다.
+      // 종전에는 "행이 하나뿐" 이라는 이유로 그 1박 행을 잡아 110 을 111 로 덮었다.
+      no: 8,
+      title: '가격 셀 만들기 (2026-01-04)',
+      kind: '가격 셀 만들기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원별 · 박수별 가격 추가', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '박수~', kind: 'typed', value: '3' },
+        { label: '판매가', kind: 'typed', value: '111' }
+      ],
+      longtexts: [], photos: [], submit: '추가'
+    },
+    {
+      // 같은 날·같은 값인데 제목이 **기존 행을 고치는 단계**다. 그 층이 화면에 없으므로
+      // 고칠 행이 없다 — 다른 층을 대신 덮지 말고 멈춰야 한다.
+      no: 9,
+      title: '가격 셀 손으로 고치기 (2026-01-04)',
+      kind: '가격 셀 손으로 고치기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 무관 단일가 행', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '박수~', kind: 'typed', value: '3' },
+        { label: '판매가', kind: 'typed', value: '111' }
+      ],
+      longtexts: [], photos: [], submit: '저장'
+    },
+    {
+      // `인원 조합` 줄이 화면의 좌표와 다르다 — 그대로 저장하면 **다른 좌표**를 덮는다.
+      no: 10,
+      title: '가격 셀 손으로 고치기 (2026-01-03)',
+      kind: '가격 셀 손으로 고치기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 A2 행', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '인원 조합', kind: 'typed', value: 'A2C1_CHD' },
+        { label: '판매가', kind: 'typed', value: '999' }
+      ],
+      longtexts: [], photos: [], submit: '저장'
+    },
+    {
+      // 화면 배지 글자를 그대로 옮겨 적은 원고 — 파서가 벗기지만 옛 산출물에는 남아 있다.
+      // 종전에는 비숫자라며 층 조건을 조용히 버리고 첫 층을 덮었다.
+      no: 11,
+      title: '가격 셀 손으로 고치기 (2026-01-03)',
+      kind: '가격 셀 손으로 고치기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 A2 행', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '박수~', kind: 'typed', value: '세 밤' },
+        { label: '판매가', kind: 'typed', value: '999' }
+      ],
       longtexts: [], photos: [], submit: '저장'
     }
   ]
@@ -327,6 +383,97 @@ const run = async () => {
   ok((rgb.after || []).length > 0, 'runCellStep: 숨은 `인원 조합` 칸으로도 되읽는다', rgb.after);
   ok((rgb.after || []).every((x) => x.indexOf('occupancy_key=A2 ') === 0),
      'runCellStep: 되읽기가 그 좌표의 층만 담는다', rgb.after);
+
+  // 2-i) 규칙서대로 `인원 조합` 줄을 적은 기존 행 단계 — 그 줄은 입력이 아니라 좌표 대조다.
+  //      칸으로 찾으면 늘 `not-found` 라 저장까지 못 갔다(2026-09-09 Codex 지적 [차단 2]).
+  const rocc = await win.runCellStep(5, { dry: true });
+  ok(!rocc.error, 'runCellStep: `인원 조합` 줄이 있는 기존 행 단계도 읽는다', rocc.error);
+  ok((rocc.bad || []).length === 0,
+     'runCellStep: `인원 조합` 줄을 not-found 로 세지 않는다', rocc.bad);
+  ok((rocc.fields || []).some((f) => f.label === '인원 조합' && f.status === 'ok' && /좌표 대조/.test(f.detail || '')),
+     'runCellStep: `인원 조합` 은 hidden 좌표와 대조만 한다', rocc.fields);
+  ok(win.document.getElementById('cell_row_102').querySelector('[name=price]').value === '95',
+     'runCellStep: 대조가 맞으면 그 층에 값을 넣는다');
+
+  // 2-j) 대조가 어긋나면 **다른 좌표를 덮지 않고** 멈춘다.
+  const rbadocc = await win.runCellStep(10);
+  ok(rbadocc.refused === true, 'runCellStep: `인원 조합` 이 화면 좌표와 다르면 거부한다', rbadocc);
+  ok(/A2C1_CHD/.test(rbadocc.error || '') && /A2/.test(rbadocc.error || ''),
+     'runCellStep: 원고 값과 화면 값을 함께 알려 준다', rbadocc.error);
+  ok(rbadocc.submitted === false, 'runCellStep: 거부한 단계는 저장하지 않는다', rbadocc.submitted);
+  ok(win.document.getElementById('cell_row_101').querySelector('[name=price]').value !== '999',
+     'runCellStep: 거부한 단계는 화면 값을 바꾸지 않는다');
+
+  // 2-k) 못 읽는 `박수~` — 조용히 첫 층을 덮지 않고 멈춘다.
+  const rlosbad = await win.runCellStep(11);
+  ok(rlosbad.refused === true, 'runCellStep: 숫자가 아닌 `박수~` 는 거부한다', rlosbad);
+  ok(win.document.getElementById('cell_row_101').querySelector('[name=price]').value !== '999',
+     'runCellStep: 그 단계도 화면 값을 바꾸지 않는다');
+
+  // 2-l) [차단 1] 층 추가가 기존 1박 행을 덮지 않는다.
+  //      2026-01-04 는 `인원 무관 / 1박 / 110` 한 행뿐인 날이다. `박수~=3, 판매가=111` 을
+  //      적으면 종전에는 "행이 하나뿐" 폴백이 그 1박 행을 잡아 110 을 111 로 덮었다.
+  const rnew = await win.runCellStep(8, { dry: true });
+  ok(!rnew.error, 'runCellStep: 한 행뿐인 날에 새 층을 다는 단계도 읽는다', rnew.error);
+  ok(rnew.wantLos === '3', 'runCellStep: 층을 읽는다', rnew.wantLos);
+  ok(rnew.newRow === true, 'runCellStep: 없는 층은 **새 행 표**로 간다 — 기존 행이 아니다', rnew);
+  {
+    const one = win.document.getElementById('cell_row_201');
+    ok(one.querySelector('[name=price]').value === '110',
+       'runCellStep: 기존 1박 행의 판매가가 그대로다', one.querySelector('[name=price]').value);
+    ok(one.querySelector('[name=los_nights]').value === '1',
+       'runCellStep: 기존 1박 행의 박수도 그대로다', one.querySelector('[name=los_nights]').value);
+    const add = win.document.querySelector('#stay_cell_edit input[type=hidden][name=date]').closest('table');
+    ok(add.querySelector('[name=los_nights]').value === '3',
+       'runCellStep: 새 행에 층을 넣었다', add.querySelector('[name=los_nights]').value);
+    ok(add.querySelector('[name=price]').value === '111',
+       'runCellStep: 새 행에 판매가를 넣었다', add.querySelector('[name=price]').value);
+  }
+  const rnew2 = await win.runCellStep(8);
+  ok(rnew2.saveAs === '추가', 'runCellStep: 새 행이므로 [추가] 를 누른다', rnew2.saveAs);
+  ok(rnew2.submitted === true && rnew2.submit === 'settled',
+     'runCellStep: 새 행 저장까지 갔다', { s: rnew2.submitted, r: rnew2.submit });
+
+  // 2-m) 같은 값인데 제목이 **기존 행을 고치는 단계**면 고칠 행이 없으므로 멈춘다.
+  const rmiss = await win.runCellStep(9);
+  ok(rmiss.refused === true, 'runCellStep: 없는 층을 고치라는 단계는 거부한다', rmiss);
+  ok(/박수~ 3/.test(rmiss.error || '') && /가격 셀 만들기/.test(rmiss.error || ''),
+     'runCellStep: 왜 멈췄고 원고를 어떻게 고칠지 알려 준다', rmiss.error);
+  ok(win.document.getElementById('cell_row_201').querySelector('[name=price]').value === '110',
+     'runCellStep: 거부해도 기존 1박 행은 그대로다');
+
+  // 2-n) 실패 판정 — `error` · `errors` · `mismatch` · 드로어가 남은 `stayed` 를 다 실패로 본다.
+  //      종전에는 셋 다 안 봐서, 시즌 거부 배너를 모아 놓고도 그 단계를 완료로 셌다.
+  ok(win.stepFailed({ error: '날짜 칸 편집창이 열리지 않았습니다' }) === true,
+     'stepFailed: `error` 는 실패다');
+  ok(win.stepFailed({ submit: 'stayed', errors: ['전개 날짜가 0일입니다'] }) === true,
+     'stepFailed: 서버가 거부한 사유(`errors`)는 실패다');
+  ok(win.stepFailed({ submit: 'closed', mismatch: ['판매가'] }) === true,
+     'stepFailed: 되읽기 불일치(`mismatch`)는 실패다');
+  ok(win.stepFailed({ refused: true, error: '거부' }) === true, 'stepFailed: 거부한 단계는 실패다');
+  ok(win.stepFailed({ submit: 'stayed', drawer: { open: true }, modal: { open: false } }) === true,
+     'stepFailed: 저장 뒤 드로어가 남았으면 실패다');
+  ok(win.stepFailed({ submit: 'stayed', drawer: { open: false }, modal: { open: false } }) === false,
+     'stepFailed: 드로어가 없는 전체 화면 폼의 `stayed` 는 실패가 아니다');
+  ok(win.stepFailed({ submit: 'closed', errors: [], mismatch: [], bad: [] }) === false,
+     'stepFailed: 깨끗하게 닫힌 저장은 완료다');
+  ok(win.SUBMIT_OK.indexOf('stayed') < 0, 'SUBMIT_OK: `stayed` 를 무조건 성공으로 세지 않는다', win.SUBMIT_OK);
+
+  // 2-o) 서버가 500 으로 답한 저장 (2026-09-09 Codex 지적 [차단 · htmx 4 이벤트 이름])
+  //      ERP 는 `htmx.config.noSwap = [204,304,'4xx','5xx']` 이라 오류 응답으로 화면을
+  //      갈아끼우지 않는다 — 거부 배너도 안 붙고 모달도 그대로다. 저장이 안 됐다는 표시가
+  //      화면 어디에도 없으므로 **htmx 이벤트가 유일한 단서**이고, 종전에는 그 이름을
+  //      htmx 1 카멜로만 들어서 이 저장이 `submit:'settled'` · `errors:[]` 로 완료가 됐다.
+  win.progressReset();
+  win.__failNextSave = true;
+  const r500 = await win.runStep(8);
+  ok(r500.submit === 'error', 'runCellStep: 서버가 500 으로 답하면 `error` 다', r500.submit);
+  ok((r500.errors || []).some((e) => /500/.test(e)), 'runCellStep: 응답 코드를 errors 에 담는다', r500.errors);
+  ok(win.stepFailed(r500) === true, 'stepFailed: 서버 오류는 실패다', r500);
+  ok(win.stayRun.progressState().failed === 1 && win.stayRun.progressState().done === 0,
+     'runStep: 띠도 실패로 센다 — 완료로 세지 않는다', win.stayRun.progressState());
+  win.progressReset();
+  win.__stayRunHtmx.error = null;
 
   // 3) 룸 사진 올리기 — 지시서가 `→ [사진 추가]` 로 끝나는 단계(2026-09-04 합의).
   //    그 버튼은 파일 고르개이고 이 화면에는 저장 버튼이 없다. 러너가 대안(`저장`…)을 훑으면
@@ -583,6 +730,104 @@ const run = async () => {
   ok((h7.bad || []).length === 0, 'runStep: 기다린 뒤에는 칸을 다 찾는다', h7.bad);
   ok(w7.document.querySelector('[name=currency]').value === 'JPY', 'DOM: 늦게 찬 통화 목록에서 골랐다',
     w7.document.querySelector('[name=currency]').value);
+
+  // 8) 되읽기 불일치 — **믿을 수 있는 칸에서만** 저장을 막는다 (2026-09-09)
+  //    저장은 되돌리기 어렵다: 금액·좌표가 어긋난 채로 저장하면 그 값이 그대로 굳는다.
+  //    그렇다고 아무 칸에서나 멈추면 되읽기 한계(포함물 행·정률 값·침대 구성·글상자) 때문에
+  //    아무 문제 없는 단계마다 로봇이 서서 리허설이 끊긴다. 그래서 둘로 가른다.
+  //    아래 두 칸은 화면이 입력을 되받아 제 값으로 고친다 — 채우기는 `ok` 인데 되읽기가 어긋난다.
+  const MISMATCH_HTML = `<!doctype html><html lang="ko"><body>
+  <div class="erp_cont_head"><h4>되읽기 시험</h4></div>
+  <form>
+    <table class="bs-table"><tbody>
+      <tr><th>정책명</th><td><input type="text" name="title"></td></tr>
+      <tr><th>판매가</th><td><input type="text" name="price"></td></tr>
+      <tr><th>설명</th><td><input type="text" name="memo"></td></tr>
+    </tbody></table>
+    <button type="button" id="save">저장</button>
+  </form>
+  <script>
+    document.querySelector('[name=price]').addEventListener('input', function () { this.value = '999'; });
+    document.querySelector('[name=memo]').addEventListener('input', function () { this.value = '화면이 고친 값'; });
+    document.getElementById('save').addEventListener('click', function () {
+      window.__saved = (window.__saved || 0) + 1;
+      document.body.dispatchEvent(new CustomEvent('htmx:before:request', { bubbles: true }));
+      document.body.dispatchEvent(new CustomEvent('htmx:after:swap', { bubbles: true }));
+      document.body.dispatchEvent(new CustomEvent('htmx:after:settle', { bubbles: true }));
+      document.body.dispatchEvent(new CustomEvent('htmx:finally:request', { bubbles: true }));
+    });
+  <\/script>
+</body></html>`;
+
+  const MISMATCH_STEPS = {
+    guide: { title: '시험 호텔' },
+    steps: [
+      {
+        //: 되읽기 한계 쪽만 어긋난다 — 경고만 남기고 그대로 저장한다
+        no: 1, title: '취소정책 고치기 (되읽기 한계)', kind: '취소정책 고치기',
+        head: { tab: null, card: null, block: null, screen: null, buttons: [], buttons_parsed: [] },
+        fields: [
+          { label: '정책명', kind: 'typed', value: '표준' },
+          { label: '설명', kind: 'typed', value: '원고가 적은 값' }
+        ],
+        longtexts: [], photos: [], submit: '저장'
+      },
+      {
+        //: 금액이 어긋난다 — 값이 그대로 되읽히는 칸이므로 저장 전에 멈춘다
+        no: 2, title: '취소정책 고치기 (금액 어긋남)', kind: '취소정책 고치기',
+        head: { tab: null, card: null, block: null, screen: null, buttons: [], buttons_parsed: [] },
+        fields: [
+          { label: '정책명', kind: 'typed', value: '표준' },
+          { label: '판매가', kind: 'typed', value: '120' }
+        ],
+        longtexts: [], photos: [], submit: '저장'
+      }
+    ]
+  };
+
+  const dom8 = new JSDOM(MISMATCH_HTML, {
+    url: 'https://example.test/stay/43900/', runScripts: 'dangerously', pretendToBeVisual: true
+  });
+  const w8 = dom8.window;
+  w8.localStorage.setItem('staySteps', JSON.stringify(MISMATCH_STEPS));
+  w8.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+  w8.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+
+  // 8a) 믿을 수 있는 칸(금액)이 어긋났다 — 저장 전에 멈춘다
+  const m1 = await w8.runStep(2);
+  ok((m1.mismatch || []).indexOf('판매가') >= 0, 'runStep: 금액 불일치를 `mismatch` 로 잡는다', m1.mismatch);
+  ok(m1.submitted === false && m1.stoppedBy === 'mismatch',
+     'runStep: 믿을 수 있는 칸이 어긋나면 저장 전에 멈춘다', m1);
+  ok(w8.__saved === undefined, 'runStep: 저장 버튼을 누르지 않았다', w8.__saved);
+  ok(/ignoreMismatch/.test(m1.note || ''), 'runStep: 다음에 무엇을 할지 알려 준다', m1.note);
+  ok(w8.stayRun.progressState().failed === 1, 'runStep: 띠도 실패로 센다', w8.stayRun.progressState());
+
+  // 8b) 되읽기 한계 쪽만 어긋났다 — 경고만 남기고 **그대로 간다**(리허설이 여기서 끊기면 안 된다)
+  const m2 = await w8.runStep(1);
+  ok((m2.mismatch || []).length === 0, 'runStep: 못 믿는 칸은 `mismatch` 에 넣지 않는다', m2.mismatch);
+  ok((m2.mismatchWarn || []).indexOf('설명') >= 0, 'runStep: 대신 `mismatchWarn` 에 남긴다', m2.mismatchWarn);
+  ok((m2.warn || []).some((w) => /설명/.test(w) && /되읽기만/.test(w)),
+     'runStep: `warn` 으로도 남겨 로그에 적을 수 있게 한다', m2.warn);
+  ok(m2.submitted === true && w8.__saved === 1, 'runStep: 멈추지 않고 저장한다', { s: m2.submitted, n: w8.__saved });
+  ok(w8.stepFailed(m2) === false, 'stepFailed: 되읽기 한계뿐이면 실패가 아니다', m2);
+  ok(m2.submit === 'stayed' && m2.drawer && m2.drawer.open === false,
+     'runStep: 드로어 없는 전체 화면 폼은 `stayed` 로 돌아온다', m2);
+
+  // 8c) 사람이 화면을 눈으로 확인했으면 막힌 단계를 `{ignoreMismatch:true}` 로 다시 부른다
+  const m3 = await w8.runStep(2, { ignoreMismatch: true });
+  ok(m3.submitted === true && w8.__saved === 2, 'runStep: 눈으로 확인했으면 넘어갈 길이 있다', m3);
+
+  // 8d) 어느 칸을 믿는가 — 값이 그대로 되읽히는 것만이다
+  [['판매가', true], ['정가', true], ['공급 원가', true], ['아동 추가 금액 — 소아', true],
+   ['박수~', true], ['인원 조합', true], ['밴드 코드', true], ['호텔명', true],
+   ['룸 이름', true], ['최소 연령 (만 나이)', true], ['시작일', true],
+   ['포함물 1 · 포함물 이름', false], ['침대 구성 1 · 침대 종류', false],
+   ['제공 주기 · 1박당 제공', false], ['연령별 단가 · 초등학생', false],
+   ['요금 기준 값', false], ['한줄설명', false], ['어메니티', false]
+  ].forEach(function (pair) {
+    ok(w8.readbackTrusted(pair[0]) === pair[1],
+       'readbackTrusted: `' + pair[0] + '` → ' + (pair[1] ? '믿는다' : '경고만'), w8.readbackTrusted(pair[0]));
+  });
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);

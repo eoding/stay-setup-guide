@@ -866,6 +866,80 @@ class TestNewFieldPreflight(unittest.TestCase):
         self.assertEqual(self._pre(md)["step_order"], [])
 
 
+#: 가격 셀의 `박수~` 칸. 화면 위젯은 숫자만 받는데 그 옆에 `3박~` 배지가 서 있어 원고가 배지
+#: 글자를 그대로 옮겨 적는다. 그대로 두면 러너가 층 조건을 버리고 같은 인원 조합의 **첫 층**을
+#: 덮는다 — 화면은 아무 것도 말하지 않고 3박 층은 옛 값 그대로 남는다.
+CELL_LOS = """# 시험 호텔 — 입력 지시서
+
+## 1. 가격 셀 손으로 고치기 (2026-01-03)
+탭: `가격 캘린더`
+카드: `2026 계약 · Deluxe Garden × 기본 요금제 의 인원 조합 A2 행`
+
+| 칸 | 값 |
+|---|---|
+| 인원 조합 | A2 |
+| 박수~ | 3 |
+| 판매가 | 95 |
+
+→ [저장]
+"""
+
+
+class TestCellLosNights(unittest.TestCase):
+    """가격 셀 `박수~` 칸 — 배지 글자를 벗기고, 못 읽는 값은 막는다."""
+
+    def _steps(self, text):
+        _, raws = parse_guide.parse_markdown(text)
+        return [parse_guide.build_step(r) for r in raws]
+
+    def _value(self, text):
+        return field_by_label(self._steps(text)[0], "박수~")["value"]
+
+    def _why(self, text):
+        hits = parse_guide.preflight(self._steps(text))["value_format"]
+        self.assertEqual(len(hits), 1, hits)
+        return hits[0]["why"]
+
+    def test_plain_number_passes(self):
+        self.assertEqual(self._value(CELL_LOS), "3")
+        self.assertEqual(parse_guide.preflight(self._steps(CELL_LOS))["value_format"], [])
+
+    def test_badge_text_is_normalized_to_a_number(self):
+        """`3박~` 은 화면 배지의 글자다 — 그 뜻은 `3` 이고, 칸이 받는 것도 `3` 이다."""
+        for raw in ("3박~", "3박", "3 박 ~", "3~"):
+            md = swap("| 박수~ | 3 |", "| 박수~ | %s |" % raw, CELL_LOS)
+            self.assertEqual(self._value(md), "3", raw)
+            self.assertEqual(parse_guide.preflight(self._steps(md))["value_format"], [], raw)
+
+    def test_normalized_field_keeps_the_original_text(self):
+        md = swap("| 박수~ | 3 |", "| 박수~ | 3박~ |", CELL_LOS)
+        f = field_by_label(self._steps(md)[0], "박수~")
+        self.assertEqual(f["raw_value"], "3박~")
+        self.assertTrue(f.get("normalized"))
+
+    def test_unreadable_los_nights_is_flagged(self):
+        why = self._why(swap("| 박수~ | 3 |", "| 박수~ | 세 밤 |", CELL_LOS))
+        self.assertIn("박수~", why)
+        self.assertIn("세 밤", why)
+
+    def test_los_nights_over_thirty_is_flagged(self):
+        why = self._why(swap("| 박수~ | 3 |", "| 박수~ | 31박~ |", CELL_LOS))
+        self.assertIn("30박", why)
+
+    def test_los_nights_thirty_passes(self):
+        md = swap("| 박수~ | 3 |", "| 박수~ | 30 |", CELL_LOS)
+        self.assertEqual(parse_guide.preflight(self._steps(md))["value_format"], [])
+
+    def test_zero_nights_is_flagged(self):
+        why = self._why(swap("| 박수~ | 3 |", "| 박수~ | 0 |", CELL_LOS))
+        self.assertIn("1 이상", why)
+
+    def test_empty_los_nights_passes(self):
+        """`박수~` 는 선택 칸이다 — 안 적으면 화면 초깃값(1 = 박수 무관)이다."""
+        md = swap("| 박수~ | 3 |", "| 박수~ | 비움 |", CELL_LOS)
+        self.assertEqual(parse_guide.preflight(self._steps(md))["value_format"], [])
+
+
 class TestCheckModeStale(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

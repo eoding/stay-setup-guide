@@ -45,7 +45,9 @@ metadata:
 > - 좌표 값은 행마다 **hidden** 으로 실린다(읽는 자리만 그룹 머리로 올라갔다). 되읽기가 숨은
 >   칸을 함께 읽는다 — 안 읽으면 좌표가 하나도 안 잡혀 되읽기가 통째로 빈다.
 > - **단계에 `박수~` 칸을 적으면 그 층을 고른다.** 안 적으면 종전대로 묶음의 첫 층(1박~)이다.
->   층이 아직 없으면 아래 추가 표로 떨어져 새 좌표를 만든다.
+>   그 층이 아직 없으면 `가격 셀 만들기` 는 아래 추가 표로 떨어져 새 좌표를 만들고,
+>   `가격 셀 손으로 고치기` 는 **거부한다** — 층은 좌표의 일부라 다른 층을 대신 고치면 그 층을 덮는다.
+>   행이 하나뿐이라는 이유로 그 행을 잡지 않는다(그 하나가 맞는 층이라는 뜻이 아니다).
 > - 셀 편집·드로어의 **저장 거부는 `.stay-banner--blocking` 배너 한 줄**로 온다(클래스에 `error`
 >   가 없어 종전 훑기가 놓쳤다). 도우미가 그 글자를 `errors` 에 담고, 셀 단계는 `submit:'refused'`
 >   로 알린다. 실제 문구는 `같은 인원 조합의 가격 행이 이미 있습니다` · `판매 가능한 셀은 0원일
@@ -182,8 +184,9 @@ checkGuide();                                      // [] 면 진행. 비어 있�
 stayRun.state()                    // {url, hotelId, loginPage, logoutWarning, drawer, modal, confirm, activeTab, banner, toast}
                                    // confirm 은 페이지 안 확인창 — 떠 있으면 {open:true, text}, 아니면 null
 stayRun.tab("객실") · stayRun.open({button, row, card, block}) · stayRun.fill(fields)
-stayRun.submit("저장")             // {status:"closed|stayed|navigated|login|timeout|refused|not-found|upload-label", errors, toast}
+stayRun.submit("저장")             // {status:"closed|stayed|error|navigated|login|timeout|refused|not-found|upload-label", errors, toast}
                                    // errors 는 진짜 오류만이다 — 성공 안내 띠는 toast 로만 온다
+                                   // error 는 요청이 거부되거나(500·CSRF 403) 끝나지 못한 것이다 — 저장은 안 됐다
                                    // force 로 확인창 버튼을 누르면 그 문구가 confirmText 로 온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
 stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFor(fn, ms) · stayRun.findButton(scope, "저장")
@@ -205,26 +208,57 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
   for (const n of [12,13,14,15,16]) {
     const r = await Promise.race([runStep(n), stayRun.sleep(12000).then(() => ({no:n, timeout:true}))]);
     out.push(r);
-    if (r.timeout || (r.bad && r.bad.length) || (r.submitted && r.submit !== 'closed')) break;
+    if (r.timeout || stepFailed(r)) break;   // 끝났는지 가르는 판정은 `stepFailed` 하나뿐이다
   }
   return out;
 })()
 ```
 
 - 뒤로 간 탭은 크롬이 페이지 타이머를 늦춘다. 도우미의 대기는 워커 타이머로 재므로 탭을 앞에 두지 않아도 되지만, **스크린샷은 탭이 앞에 있어야** 찍힌다.
-- `runStep` 이 돌려주는 키: `open`·`openDetail`·`fill`·`bad`·`warn`·`mismatch`·`submit`·`submitAs`·`skipped`·`cardPick`·`rowHint`·`uploads`·`refused`.
+- `runStep` 이 돌려주는 키: `open`·`openDetail`·`fill`·`bad`·`warn`·`mismatch`·`mismatchWarn`·`stoppedBy`·`submit`·`submitAs`·`skipped`·`cardPick`·`rowHint`·`uploads`·`refused`.
 - **0단계 확인**(`환율 확인`·`거래처 확인`·`도시 확인`)은 저장이 없는 단계다. `runStep` 이
   `{checked, found, bad}` 로 돌려준다 — 폼이 다 설 때까지 기다린 뒤(`formReady`·`formWaited`)
   [호텔 만들기] 폼의 목록에 지시서 값이 뜨는지만 보고,
   폼을 떠나는 마지막 단계에서 `→ [목록]` 으로 돌아온다(`left: true`). 값이 목록에 없으면 `bad` 에
   담고 폼에 남는다 — 비슷한 값을 대신 고르지 않는다.
-- `refused: true` 는 옛 화면 기준 단계이거나 금지된 단계(`경고 넘어가기`)라 실행을 거부한 것이다(`fatal: true`). 다음 단계로 넘어가지 말고 멈춘다.
+- `refused: true` · `fatal: true` 는 옛 화면 기준 단계이거나 금지된 단계(`경고 넘어가기`)다 — 실행 전체를 멈춘다.
+  `fatal` 없는 `refused: true` 는 **그 단계 하나**를 거부한 것이다(아래 「가격 셀 단계가 거부하는 것」). 그 단계를 고치고 다시 부른다.
 - `bad`(칸 못 찾음·후보 여럿)가 하나라도 있으면 **저장하지 않고** 그 단계에서 멈춘다.
 - `submit` 이 `closed` 가 아니면 화면을 보고 판단한다. 가격 셀 단계(`runCellStep`)는 저장해도
   모달을 닫지 않으므로 성공이 `settled` 다 — 그 단계에서 멈추는 것이 정상이고, `refused` 면
   화면의 `.stay-banner--blocking` 사유가 `errors` 에 담겨 온다. `skipped: true` 는 같은 이름이 이미 목록에 있어 건너뛴 것이다(정상).
-- `mismatch`(되읽기 불일치)는 대개 되읽기의 한계다 — 포함물 행, 제공 주기, 요금제 scope, 정률 값, 침대 구성. **화면 값을 따로 확인**하고 맞으면 로그 비고에 `되읽기만` 이라고 적는다.
+- **한 단계가 깨끗하게 끝났는지는 `stepFailed(r)` 하나가 정한다** — 진행 띠도 로그도 이 판정을 쓴다.
+  실패로 보는 것: `refused` · `error` · `bad` · `errors`(서버가 거부한 사유) ·
+  `mismatch`(**믿을 수 있는 칸**의 되읽기 불일치 — 아래) ·
+  `open: 'not-found'|'ambiguous'` · `submit` 이 `closed`·`settled`·`navigated`·`ok` 가 아닌 것.
+  `mismatchWarn`(되읽기 한계)은 실패가 아니다.
+  `submit: 'stayed'` 는 **드로어·모달이 실제로 남았을 때만** 실패다(`drawer.open`·`modal.open` 으로 가른다) —
+  드로어가 없는 전체 화면 폼은 저장이 잘돼도 `stayed` 로 돌아온다.
+- **되읽기 불일치는 둘로 갈린다** — 아무 칸에서나 멈추면 되읽기 한계 때문에 문제 없는 단계마다 로봇이 선다.
+  - `mismatch` — **값이 그대로 되읽히는 칸**이 어긋났다: 금액 · 날짜 · 좌표(`인원 조합`) · `박수~` ·
+    코드 · 이름. 값이 진짜로 안 들어간 것이므로 **저장하지 않고 멈춘다**(`submitted:false` ·
+    `stoppedBy:'mismatch'`). 화면 값을 **눈으로 확인**하고 맞으면
+    `runStep(n, {ignoreMismatch:true})` 로 다시 불러 저장하고 로그 비고에 `되읽기만` 이라고 적는다.
+    확인 없이 이 옵션을 쓰지 않는다.
+  - `mismatchWarn` — 되읽기 한계로 어긋나 보이는 칸: 두 조각 이름 전부(포함물 행 · 침대 구성 ·
+    제공 주기 · 연령별 단가)와 정률 값, 글상자. **경고만 남기고 그대로 저장한다**(`warn` 에도 실린다).
+    실패로 세지 않으므로 진행 띠도 멈추지 않는다 — 화면 값을 따로 보고 로그 비고에 적는다.
+  - 가르는 규칙은 `readbackTrusted(라벨)` 하나다(`stay_boot.js`). **모르는 이름은 믿지 않는다** —
+    새 칸이 생겨 실행이 서는 쪽보다 경고 한 줄로 남는 쪽이 안전하다.
 - 지시서의 저장 글자와 화면 버튼 글자가 다르면(시즌 드로어는 [추가]) 도우미가 `저장·추가·만들기·등록·확인` 을 차례로 시도하고 `submitAs` 로 알려 준다.
+
+### 가격 셀 단계가 거부하는 것 (`refused: true`, `fatal` 없음)
+
+셋 다 **다른 좌표를 덮는 사고**를 막는 것이다. 화면을 고칠 방법이 없으므로 원고를 고치고 다시 렌더한다.
+
+| 사유 | 무엇을 고치나 |
+|---|---|
+| `박수~` 가 숫자가 아니다(`3박~` 배지 글자를 그대로 적었다) | 원고의 그 칸을 `3` 으로. 파서가 이미 벗기므로 대개 옛 산출물에서만 난다 |
+| 그 `박수~` 층이 화면에 없는데 단계 제목이 `가격 셀 손으로 고치기` 다 | 층은 좌표의 일부라 **새 좌표를 만드는 일**이다 — 제목을 `가격 셀 만들기`, 마지막 줄을 `→ [추가]` 로 |
+| `인원 조합` 줄이 고르려는 행의 hidden 좌표와 다르다 | 원고의 카드 줄이나 그 줄 중 하나가 틀렸다. 화면에 적힌 좌표로 맞춘다 |
+
+기존 행 단계의 `인원 조합` 줄은 **입력이 아니라 좌표 대조 정보**다(그 열에는 채울 칸이 없다) —
+러너가 hidden `occupancy_key` 와 맞춰만 보고 `좌표 대조` 로 적는다. 새 행 표에서만 셀렉트에 넣는다.
 
 ## 진행 상황 보이기
 
@@ -268,8 +302,10 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
 ```
 
 - 상태는 여섯이다: `대기` · `진행 중` · `완료` · `건너뜀` · `실패` · `확인 필요`.
-  `runStep` 결과를 그대로 옮긴다 — `skipped: true` → `건너뜀`, `refused`·`bad`·`open: 'not-found'` → `실패`,
-  `mismatch` 만 남았으면 `확인 필요`, 나머지는 `완료`.
+  `runStep` 결과를 그대로 옮긴다 — `skipped: true` → `건너뜀`, `refused`·`bad`·`errors`·`open: 'not-found'` → `실패`,
+  `mismatch` 만 남았으면 `확인 필요`, 나머지는 `완료`(`mismatchWarn` 만 있으면 `완료` 이고 비고에 `되읽기만` 이라고 적는다).
+  **띠에는 `확인 필요` 칸이 없다** — `stepFailed` 가 참이므로 실패로 센다. 화면을 확인하고
+  `{ignoreMismatch:true}` 로 다시 돌리면 그 판정이 `완료` 로 갈리고 실패 수가 도로 줄어든다.
 - 지시서 탭이 없으면 **말없이 건너뛴다.** 실행을 멈추거나 사용자에게 다시 묻지 않는다.
 - 사람이 손으로 체크하던 길은 그대로다. 손으로 켠 것은 `완료 (수동)` 로 구분해 남는다.
 - `stayGuide.export()` 는 단계별 상태·시각을 JSON 으로 돌려준다 — 로그에 그대로 붙일 수 있다.

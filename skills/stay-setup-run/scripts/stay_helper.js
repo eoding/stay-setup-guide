@@ -177,21 +177,66 @@
   }
 
   /* ─────────────────────────── htmx 감시 ─────────────────────────── */
-  // 저장 뒤 응답이 끝났는지 알려면 htmx 이벤트를 세어야 한다. 재주입해도 한 번만 붙인다.
+  // 저장 뒤 응답이 끝났는지, 그리고 **서버가 거부했는지**를 알려면 htmx 이벤트를 세어야 한다.
+  // 재주입해도 한 번만 붙인다.
+  //
+  // ── 이름이 두 벌이다 (2026-09-09 실측 · Codex 지적) ────────────────────────────
+  // Stay 화면은 htmx **4.0.0-beta6** 을 싣는다(`common/templates/common/_htmx_stay.html`).
+  // htmx 4 는 이벤트 이름을 **콜론 표기**로 바꿨다 — `htmx:afterSettle` 이 아니라
+  // `htmx:after:settle` 이다. 카멜 이름만 듣던 종전 감시자는 **한 번도 깨어나지 않았고**,
+  // 그래서 `error` 가 영영 null 이라 500·CSRF 403·네트워크 실패가 `errors: []` 로,
+  // 셀 단계는 `submit:'settled'` 로 **성공 보고**됐다(`noSwap` 설정 때문에 화면에 배너도
+  // 안 남는다 — 저장이 안 됐다는 표시가 아무 데도 없다).
+  // 옛 화면(레거시 3개)은 아직 htmx 1·2 카멜 이름이므로 **두 표기를 다 듣는다.**
+  //
+  // ── 무엇을 들어야 하는가 (beta6 번들 소스 실측) ────────────────────────────────
+  // 요청 한 건의 차례:
+  //   htmx:before:request → (fetch) → htmx:before:response → htmx:after:request
+  //   → 400+ 이면 htmx:response:error → (noSwap 이면 여기서 끝)
+  //   → swap: htmx:after:swap · htmx:after:settle
+  //   → 던져지면 htmx:error → **언제나** htmx:finally:request
+  // 그래서 `pending--` 는 `after:request` 가 아니라 **`finally:request`** 에 건다 —
+  // fetch 가 던지면(네트워크 끊김) `after:request` 는 아예 안 오고 `finally` 만 온다.
+  // htmx 1·2 쪽의 언제나 오는 짝은 `afterRequest` 다. 한 요청에 감소가 두 번 걸리지
+  // 않도록 **버전마다 하나씩만** 건다.
+  //
+  // ── 왜 document 에 거는가 ──────────────────────────────────────────────────────
+  // htmx 4 코어는 元 element 가 DOM 에서 떨어져 있으면 이벤트를 `document` 에 쏜다
+  // (`target = on?.isConnected ? on : document`). Stay 는 "패널 안 저장 버튼이 그 패널을
+  // outerHTML 로 갈아끼우는" 모양이 대부분이라 swap 뒤에는 늘 떨어져 있다 —
+  // `document` 에 직접 쏜 이벤트는 그 **아래**인 `document.body` 에 영영 닿지 않는다.
   function htmxWatch() {
     if (window.__stayRunHtmx) return window.__stayRunHtmx;
     var st = { pending: 0, requests: 0, settles: 0, swaps: 0, error: null, unloading: false };
-    var on = function (n, f) { document.body.addEventListener(n, f, true); };
-    on('htmx:beforeRequest', function () { st.pending++; st.requests++; });
-    on('htmx:afterRequest', function () { st.pending = Math.max(0, st.pending - 1); });
-    on('htmx:afterSwap', function () { st.swaps++; });
-    on('htmx:afterSettle', function () { st.settles++; });
-    on('htmx:responseError', function (e) {
-      var code = e && e.detail && e.detail.xhr ? e.detail.xhr.status : '';
+    var on = function (names, f) {
+      names.forEach(function (n) { document.addEventListener(n, f, true); });
+    };
+    // 응답 코드 — htmx 1·2 는 `detail.xhr`, htmx 4 는 `detail.ctx.response` 다.
+    var statusOf = function (e) {
+      var d = (e && e.detail) || {};
+      if (d.xhr && d.xhr.status) return d.xhr.status;
+      if (d.ctx && d.ctx.response && d.ctx.response.status) return d.ctx.response.status;
+      return '';
+    };
+    on(['htmx:beforeRequest', 'htmx:before:request'], function () { st.pending++; st.requests++; });
+    on(['htmx:afterRequest', 'htmx:finally:request'], function () { st.pending = Math.max(0, st.pending - 1); });
+    on(['htmx:afterSwap', 'htmx:after:swap'], function () { st.swaps++; });
+    on(['htmx:afterSettle', 'htmx:after:settle'], function () { st.settles++; });
+    on(['htmx:responseError', 'htmx:response:error'], function (e) {
+      var code = statusOf(e);
       st.error = '서버가 오류로 답했습니다' + (code ? ' (' + code + ')' : '');
     });
-    on('htmx:sendError', function () { st.error = '요청을 보내지 못했습니다(네트워크)'; });
-    on('htmx:timeout', function () { st.error = '요청이 시간 안에 끝나지 않았습니다'; });
+    on(['htmx:sendError'], function () { st.error = '요청을 보내지 못했습니다(네트워크)'; });
+    on(['htmx:timeout'], function () { st.error = '요청이 시간 안에 끝나지 않았습니다'; });
+    // htmx 4 에는 `sendError`·`timeout` 이 없다 — fetch 가 던지거나(네트워크·중단) 스왑 중
+    // 스크립트가 터지면 전부 `htmx:error` 하나로 온다. 이미 응답 코드를 잡아 뒀으면
+    // 그쪽이 더 또렷하므로 덮지 않는다.
+    on(['htmx:error'], function (e) {
+      if (st.error) return;
+      var err = (e && e.detail && e.detail.error) || null;
+      var msg = err ? (err.message || String(err)) : '';
+      st.error = '요청이 끝나지 못했습니다(네트워크·스크립트)' + (msg ? ': ' + trunc(msg, 120) : '');
+    });
     window.addEventListener('beforeunload', function () { st.unloading = true; });
     window.addEventListener('pagehide', function () { st.unloading = true; });
     window.__stayRunHtmx = st;
@@ -1641,6 +1686,10 @@
     if (confirmText !== null) out.confirmText = confirmText;
     if (st.confirm) out.confirm = st.confirm;
     if (st.loginPage) out.status = 'login';
+    // 요청 자체가 거부되거나 끝나지 못했으면 **저장은 안 된 것**이다 — 드로어가 우연히
+    // 닫혔더라도 `closed`(성공)로 읽으면 안 된다. ERP 는 `noSwap` 이라 500·403 에서 화면이
+    // 그대로 남으므로, 이 갈래가 없으면 거부가 아무 표시 없이 지나간다.
+    else if (hx.error) out.status = 'error';
     else if (status === 'settled') {
       var closed = (before.drawer && !st.drawer.open) || (before.modal && !st.modal.open);
       out.status = closed ? 'closed' : 'stayed';

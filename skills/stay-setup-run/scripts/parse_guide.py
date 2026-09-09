@@ -435,6 +435,13 @@ def build_step(raw):
         if name != label:
             f["label_base"] = label
         f.update(classify_value(value_raw))
+        # `박수~` 는 숫자 칸이다 — 화면 배지 글자(`3박~`)로 적혀 와도 숫자만 남긴다.
+        # 원문은 `raw_value` 에 그대로 있고, 못 읽는 값은 건드리지 않는다(preflight 가 막는다).
+        if LOS_NIGHTS_LABEL_RE.match(label) and f.get("kind") == "typed":
+            norm = normalize_los_nights(f.get("value"))
+            if norm is not None and norm != f.get("value"):
+                f["value"] = norm
+                f["normalized"] = True
         m = ROW_LABEL_RE.match(label)
         if m:
             f["row_group"] = m.group(1).strip()
@@ -542,6 +549,18 @@ BAND_CODE_LABELS = ("밴드 코드", "밴드코드")
 CHILD_HEAD_CODE_RE = re.compile(r"^[Cc]\d+$")
 #: 박수 상한 — `season.MAX_LOS_NIGHTS`. 넘으면 견적이 영영 안 집는 셀이 날짜 수만큼 깔린다.
 MAX_LOS_NIGHTS = 30
+#: 가격 셀의 `박수~` 칸. 화면 위젯은 숫자만 받는 `los_nights` 인데, 그 옆에 `3박~` 배지가 서 있어
+#: 원고가 배지 글자를 그대로 옮겨 적는 일이 잦다. 그대로 두면 부트가 비숫자라며 층 조건을 버리고
+#: 같은 인원 조합의 **첫 층을 덮는다** — 화면은 아무 것도 말하지 않는다(2026-09-09 Codex 지적).
+#: 그래서 파싱 단계에서 숫자만 남기고, 그래도 못 읽는 값은 preflight 가 막는다.
+LOS_NIGHTS_LABEL_RE = re.compile(r"^박수\s*~?(?:\s*\(선택\))?$")
+LOS_NIGHTS_VALUE_RE = re.compile(r"^(\d+)\s*박?\s*~?$")
+
+
+def normalize_los_nights(value):
+    """`3박~` · `3박` · `3` → `"3"`. 못 읽으면 None (원문을 그대로 두고 preflight 가 막는다)."""
+    m = LOS_NIGHTS_VALUE_RE.match((value or "").strip())
+    return m.group(1) if m else None
 #: 한 전개가 만들 수 있는 층 수(1박 제외) — `season.MAX_LOS_TIERS`. 층 하나가 셀 수를 통째로 곱한다.
 MAX_LOS_TIERS = 6
 #: 좌표 문자열 길이 상한 — `occupancy_key.KEY_MAX_LENGTH`(컬럼이 32자다).
@@ -636,6 +655,33 @@ def los_prices_problem(step):
     if len(seen) > MAX_LOS_TIERS:
         return ("[박수별 단가] 의 층이 %d개입니다 — %d개까지입니다(층 하나가 셀 수를 통째로 "
                 "곱합니다). `%s`" % (len(seen), MAX_LOS_TIERS, raw))
+    return None
+
+
+def los_nights_problem(step):
+    """가격 셀 단계의 `박수~` 칸이 화면이 받는 꼴인가 — 이유 한 줄, 아니면 None.
+
+    `build_step` 이 `3박~` 을 `3` 으로 이미 벗겼다. 여기까지 숫자가 아닌 값이 남아 있으면
+    사람이 봐야 하는 값이다 — 그대로 실행하면 러너가 층을 못 고르고 같은 인원 조합의 첫 층을
+    덮는다. 범위(1~%d박)도 함께 본다: 화면이 거부하는 값이라 브라우저를 열 이유가 없다.
+    """ % MAX_LOS_NIGHTS
+    for f in step["fields"]:
+        label = f.get("label_base") or f["label"]
+        if not LOS_NIGHTS_LABEL_RE.match(label) or f.get("kind") != "typed":
+            continue
+        value = (f.get("value") or "").strip()
+        if not value:
+            continue
+        raw = (f.get("raw_value") or value).strip()
+        if not value.isdigit():
+            return ("[박수~] `%s` 를 읽지 못합니다 — 숫자만 적습니다(`3박~` 배지가 뜻하는 값은 "
+                    "`3` 입니다)" % raw)
+        nights = int(value)
+        if nights < 1:
+            return "[박수~] `%s` 는 1 이상이어야 합니다 — 박수 무관은 `1` 입니다" % raw
+        if nights > MAX_LOS_NIGHTS:
+            return ("[박수~] `%s` 가 너무 큽니다 — %d박까지입니다(그보다 긴 층은 화면이 "
+                    "거부합니다)" % (raw, MAX_LOS_NIGHTS))
     return None
 
 
@@ -835,9 +881,9 @@ def preflight(steps):
     그때는 앞 단계들이 이미 화면에 만들어져 있다. `unknown_kinds` 만 알리고 지나간다 —
     지시서 쪽이 새 화면을 먼저 낼 수 있고, 그때 러너가 못 하는 것은 사람이 판단할 일이다.
 
-    `value_format` 은 값 글자만으로 갈리는 셋(박수별 단가 꼴 · 인원 조합의 옛 숫자 키 ·
-    밴드 코드 꼴)이고, `step_order` 는 단계 차례가 화면을 못 세우는 것(아동 추가 금액 줄이
-    연령 구간보다 앞)이다.
+    `value_format` 은 값 글자만으로 갈리는 넷(박수별 단가 꼴 · 인원 조합의 옛 숫자 키 ·
+    밴드 코드 꼴 · 가격 셀 `박수~` 꼴)이고, `step_order` 는 단계 차례가 화면을 못 세우는
+    것(아동 추가 금액 줄이 연령 구간보다 앞)이다.
     """
     stale = [{"no": s["no"], "title": s["title"], "why": w}
              for s in steps for w in [stale_reason(s)] if w]
@@ -850,7 +896,8 @@ def preflight(steps):
              for s in steps for w in [charge_order_problem(s)] if w]
     fmt = [{"no": s["no"], "title": s["title"], "why": w}
            for s in steps
-           for w in [los_prices_problem(s) or occupancy_key_problem(s) or band_code_problem(s)]
+           for w in [los_prices_problem(s) or occupancy_key_problem(s) or band_code_problem(s)
+                     or los_nights_problem(s)]
            if w]
     return {"stale": stale, "unknown_kinds": unknown, "charge_order": order,
             "age_overlap": age_band_overlaps(steps), "value_format": fmt,
