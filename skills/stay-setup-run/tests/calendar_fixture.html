@@ -63,6 +63,12 @@
       <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(3)">
         <span class="stay-cal-head"><span class="stay-cal-cell__day">3</span></span>
         <span class="stay-cal-cell__foot"><span class="stay-cal-cell__price">120</span></span></button></td>
+      <!-- 4일은 `인원 무관 / 1박 / 110` **한 행뿐**인 날이다(실측에서 가장 흔한 꼴).
+           `박수~=3` 을 부르는 단계가 이 날을 가리키면, 층을 안 보는 러너는 "행이 하나뿐이니
+           이것" 이라며 1박 행을 3박 값으로 덮는다 — 3박 층은 생기지 않고 1·2박 판매만 바뀐다. -->
+      <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(4)">
+        <span class="stay-cal-head"><span class="stay-cal-cell__day">4</span></span>
+        <span class="stay-cal-cell__foot"><span class="stay-cal-cell__price">110</span></span></button></td>
     </tr></tbody></table>
 
     <div id="stay_cell_slot"></div>
@@ -172,6 +178,15 @@ var ROWS = [
 
 var CELL_EDIT_ROWS = shell(ROWS + ADD);
 
+/* ③ `인원 무관 / 1박 / 110` 한 행뿐인 날 — 층이 하나라 `rowspan="1"` 이다. */
+var ONE_ROW = [
+  '<div class="table1"><table class="bs-table stay-table">', HEAD, '<tbody>',
+  tierRow('201', '', '1', '110', '140', '85', true, 1),
+  '</tbody></table></div>'
+].join('');
+
+var CELL_EDIT_ONE = shell(ONE_ROW + ADD);
+
 /* 저장 거부 — 이 표는 한 줄이 한 좌표인 컴팩트 표라 필드 오류를 칸 옆에 못 두고
    `.stay-banner--blocking` 하나에 모은다. 그룹 머리의 `rowspan` 이 이 배너 행까지 덮으므로
    배너의 `colspan` 은 6이다(7열 - 그룹 머리 1). */
@@ -184,23 +199,52 @@ var CELL_EDIT_REFUSED = shell([
   '</tbody></table></div>'
 ].join('') + ADD);
 
-function fire(name) { document.body.dispatchEvent(new CustomEvent(name, { bubbles: true })); }
+/* ── htmx 이벤트 흉내 ─────────────────────────────────────────────────────────
+   운영 Stay 화면은 htmx **4.0.0-beta6** 을 싣고(`common/templates/common/_htmx_stay.html`),
+   htmx 4 의 이벤트 이름은 **콜론 표기**다(`htmx:after:settle`). 카멜 이름(htmx 1·2)으로
+   흉내 내면 러너가 v4 이름을 안 들어도 시험이 통과한다 — 실제로 그렇게 놓쳐서 500·CSRF 403
+   이 `errors: []` · `submit:'settled'` 로 성공 보고됐다(2026-09-09). */
+function fire(name, detail) {
+  document.body.dispatchEvent(new CustomEvent(name, { bubbles: true, detail: detail || {} }));
+}
+/* 요청 한 건이 끝까지 간 차례. `finally:request` 는 **언제나** 온다(러너가 여기서 pending 을 뺀다). */
+function hxSwapped() {
+  fire('htmx:before:request');
+  fire('htmx:before:response');
+  fire('htmx:after:request');
+  fire('htmx:after:swap');
+  fire('htmx:after:settle');
+  fire('htmx:finally:request');
+}
+/* 서버 오류. ERP 는 `htmx.config.noSwap = [204,304,'4xx','5xx']` 이라 **화면을 갈아끼우지
+   않는다** — swap·settle 도 없고 거부 배너도 안 붙는다. 저장이 안 됐다는 표시가 화면에
+   아무 데도 없으므로, 러너가 이 이벤트를 놓치면 그대로 성공으로 센다. */
+function hxFailed(code) {
+  fire('htmx:before:request');
+  fire('htmx:before:response');
+  fire('htmx:after:request');
+  fire('htmx:response:error', { ctx: { response: { status: code || 500 } } });
+  fire('htmx:finally:request');
+}
 
 function openCell(day) {
-  var html = day === 3 ? CELL_EDIT_ROWS : CELL_EDIT;
+  var html = day === 3 ? CELL_EDIT_ROWS : (day === 4 ? CELL_EDIT_ONE : CELL_EDIT);
   document.getElementById('stay_cell_slot').innerHTML =
     html.replace(/2026-01-DAY/g, '2026-01-0' + day);
-  fire('htmx:afterSwap'); fire('htmx:afterSettle');
+  hxSwapped();
 }
 function closeCell() { document.getElementById('stay_cell_slot').innerHTML = ''; }
 function fakeAdd() {
+  if (window.__failNextSave) { window.__failNextSave = false; hxFailed(500); return; }
   document.getElementById('toast-container').innerHTML = '<div class="toast">추가했습니다</div>';
-  fire('htmx:afterSwap'); fire('htmx:afterSettle');
+  hxSwapped();
 }
 /* 저장은 이 조각을 **제자리에서** 다시 그린다(`hx-target="#stay_cell_edit"` outerHTML) —
-   모달은 닫지 않는다. `window.__refuseNextSave` 가 참이면 서버가 거부한 판을 돌려준다. */
+   모달은 닫지 않는다. `window.__refuseNextSave` 는 폼이 거부한 판(200 + 배너),
+   `window.__failNextSave` 는 서버 오류(500, 화면 그대로)다. */
 function fakeSave() {
   var day = (document.querySelector('#stay_cell_edit input[name=date]') || {}).value || '2026-01-03';
+  if (window.__failNextSave) { window.__failNextSave = false; hxFailed(500); return; }
   if (window.__refuseNextSave) {
     window.__refuseNextSave = false;
     document.getElementById('stay_cell_slot').innerHTML =
@@ -208,7 +252,7 @@ function fakeSave() {
   } else {
     document.getElementById('toast-container').innerHTML = '<div class="toast">저장했습니다</div>';
   }
-  fire('htmx:afterSwap'); fire('htmx:afterSettle');
+  hxSwapped();
 }
 </script>
 </body>

@@ -419,6 +419,67 @@ const run = async () => {
     'submit: `.stay-banner--blocking` 의 사유를 errors 로 돌려준다', refused.errors);
   win.closeDrawer();
 
+  // 12f. 서버 오류(500 · CSRF 403) — ERP 는 `htmx.config.noSwap` 이라 **화면이 그대로 남는다.**
+  //      저장이 안 됐다는 표시가 화면 어디에도 없으므로 htmx 이벤트가 유일한 단서다.
+  win.openRoomDrawer('스탠다드');
+  win.__failNextSave = true;
+  const failed = await R.submit('저장');
+  ok(failed.status === 'error', 'submit: 서버가 오류로 답하면 error 다', failed);
+  ok((failed.errors || []).some((e) => /서버가 오류로 답했습니다 \(500\)/.test(e)),
+    'submit: 응답 코드를 사유에 담는다', failed.errors);
+  ok(R.state().drawer.open === true, 'submit: 오류면 드로어가 그대로다');
+  win.closeDrawer();
+  win.__stayRunHtmx.error = null;
+
+  // 12g. htmx 이벤트 이름이 두 벌이다 — 운영 Stay 화면은 htmx **4**(콜론 표기)를 싣고
+  //      레거시 3화면은 아직 1·2(카멜)다. 한쪽만 들으면 그 화면에서 감시자가 **통째로 침묵**하고,
+  //      `error` 가 영영 null 이라 500·403·네트워크 실패가 성공으로 보고된다(2026-09-09).
+  {
+    const hx = win.__stayRunHtmx;
+    const reset = () => { hx.pending = 0; hx.requests = 0; hx.swaps = 0; hx.settles = 0; hx.error = null; };
+    const fire = (n, d) => win.document.body.dispatchEvent(new win.CustomEvent(n, { bubbles: true, detail: d || {} }));
+
+    reset();
+    fire('htmx:before:request');
+    ok(hx.pending === 1 && hx.requests === 1, 'htmx4: `before:request` 를 센다', { p: hx.pending, r: hx.requests });
+    fire('htmx:after:swap'); fire('htmx:after:settle');
+    ok(hx.swaps === 1 && hx.settles === 1, 'htmx4: `after:swap` · `after:settle` 을 센다', { s: hx.swaps, t: hx.settles });
+    fire('htmx:after:request');
+    ok(hx.pending === 1, 'htmx4: `after:request` 로는 pending 을 빼지 않는다(fetch 가 던지면 안 온다)', hx.pending);
+    fire('htmx:finally:request');
+    ok(hx.pending === 0, 'htmx4: 언제나 오는 `finally:request` 로 pending 을 뺀다', hx.pending);
+
+    // 네트워크가 끊기면 htmx 4 는 `after:request` 를 아예 안 쏘고 `error` → `finally` 만 쏜다
+    reset();
+    fire('htmx:before:request');
+    fire('htmx:error', { error: { message: 'Failed to fetch' } });
+    fire('htmx:finally:request');
+    ok(hx.pending === 0, 'htmx4: 요청이 던져져도 pending 이 새지 않는다', hx.pending);
+    ok(/Failed to fetch/.test(hx.error || ''), 'htmx4: `htmx:error` 의 사유를 담는다', hx.error);
+
+    reset();
+    fire('htmx:response:error', { ctx: { response: { status: 403 } } });
+    ok(/403/.test(hx.error || ''), 'htmx4: `response:error` 의 응답 코드를 담는다(detail.ctx.response)', hx.error);
+
+    // 코어는 元 element 가 DOM 에서 떨어져 있으면 이벤트를 **document 에 쏜다.**
+    // Stay 는 패널이 제 자신을 outerHTML 로 갈아끼우는 모양이라 늘 그렇게 된다 —
+    // `document.body` 에 걸어 두면 그 이벤트가 영영 안 닿는다(그 아래이기 때문이다).
+    reset();
+    win.document.dispatchEvent(new win.CustomEvent('htmx:after:settle', { bubbles: true, detail: {} }));
+    ok(hx.settles === 1, 'htmx4: 코어가 document 에 쏜 이벤트도 듣는다(body 가 아니라 document 에 건다)', hx.settles);
+
+    // 레거시 화면(htmx 1·2)의 카멜 이름도 그대로 듣는다 — 호환 한 벌
+    reset();
+    fire('htmx:beforeRequest'); fire('htmx:afterSwap'); fire('htmx:afterSettle'); fire('htmx:afterRequest');
+    ok(hx.pending === 0 && hx.requests === 1 && hx.swaps === 1 && hx.settles === 1,
+      'htmx1·2: 카멜 이름도 그대로 센다(레거시 화면 호환)',
+      { p: hx.pending, r: hx.requests, s: hx.swaps, t: hx.settles });
+    reset();
+    fire('htmx:responseError', { xhr: { status: 500 } });
+    ok(/500/.test(hx.error || ''), 'htmx1·2: `responseError` 의 `xhr.status` 를 담는다', hx.error);
+    reset();
+  }
+
   // 13. 진행 표시 띠 — 화면 오른쪽 위에 늘 떠 있는 한 줄. 지켜보는 사람이 콘솔 없이도 읽는다.
   const strip = () => win.document.getElementById('stay_progress');
   const stripText = () => (strip() ? strip().textContent : '');

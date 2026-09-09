@@ -16,6 +16,39 @@
     return f.concat((s.longtexts || []).map(function (l) { return { label: l.label, kind: 'typed', value: l.text }; }));
   };
 
+  /* ────────── 되읽기를 믿을 수 있는 칸 (2026-09-09) ──────────
+   * 되읽기(`stayRun.readback`)는 만능이 아니다. 화면이 값을 제 꼴로 고쳐 되돌려주거나
+   * (정률 `50` → `50%`), 반복 행·두 조각 이름이라 되읽을 때 칸을 다시 못 찾는 자리가 있다.
+   * 그런 칸까지 저장을 막으면 아무 문제 없는 단계마다 로봇이 서고, 리허설·강의가 거기서 끊긴다.
+   *
+   * 그래서 **값이 그대로 되읽히는 칸에서만** 저장 전에 멈춘다 — 금액 · 날짜 · 좌표 · 박수 ·
+   * 코드 · 이름. 그 칸이 어긋났다는 것은 값이 진짜로 안 들어갔다는 뜻이고, 그대로 저장하면
+   * 틀린 금액·틀린 좌표가 굳는다(되돌리기 어렵다). 나머지는 `warn` 으로만 남기고 지나간다 —
+   * 로그 비고에 `되읽기만` 이라고 적고 화면을 눈으로 확인한다.
+   *
+   * 모르는 이름은 **믿지 않는다**(=지나간다). 새 칸이 생겼을 때 실행이 서는 쪽보다
+   * 한 줄 경고로 남는 쪽이 안전하다 — 못 믿는 칸도 `warn` 에는 반드시 남는다.
+   */
+  window.READBACK_UNTRUSTED_RES = [
+    /[·・‧∙]/,      // 두 조각 이름 — 포함물 행 · 침대 구성 · 제공 주기 · 연령별 단가
+    /설명$/         // 글상자 — 편집기가 값을 제 꼴로 되돌린다
+  ];
+  window.READBACK_TRUSTED_RES = [
+    /(금액|단가|원가|판매가|정가|기준가|수수료)/,   // 금액 — 숫자가 그대로 되읽힌다
+    /(날짜|일자|시작일|종료일)/,                    // 날짜
+    /^인원\s*조합/,                                 // 좌표 — 틀리면 다른 셀을 덮는다
+    /^박수/,                                        // 층 — 좌표의 일부다
+    /코드$/,                                        // 밴드 코드 · 요금제 코드
+    /^(최소|최대)\s*연령/,                          // 연령 경계 — 숫자 그대로
+    /(명|이름)$/                                    // 호텔명 · 룸 이름 · 시즌명 · 노출명 · 정책명 …
+  ];
+  window.readbackTrusted = function (label) {
+    var t = String(label || '').normalize('NFC').replace(/\s+/g, ' ').trim().replace(/\s*#\d+$/, '');
+    if (!t) return false;
+    if (window.READBACK_UNTRUSTED_RES.some(function (re) { return re.test(t); })) return false;
+    return window.READBACK_TRUSTED_RES.some(function (re) { return re.test(t); });
+  };
+
   // 만들기 단계의 "이름" 칸 — 목록에 같은 이름이 이미 있으면 그 단계를 건너뛴다(공용 정책 포함)
   window.nameOf = function (s) {
     // `노출명`·`밴드 코드` 는 연령 구간 단계의 이름 칸이다(2026-09-04 신설 화면).
@@ -135,13 +168,18 @@
     // **아무도 팔지 않는 좌표**가 하나 생긴다(2026-09-08 C-voco 에서 실제로 났다).
     // 칸 값은 셀렉트 항목 글자(`선택: A2 · 성인 2`)로 오므로 접두·꼬리를 벗겨 키만 남긴다 —
     // 검사기 `_occupancy_key_of_value` 와 **같은 판정**이다(두 벌이 되면 또 어긋난다).
+    var isOccField = function (f) {
+      return /^인원\s*조합$/.test(clean(f.label || '').replace(/\s*#\d+$/, '').replace(/\(선택\)$/, ''));
+    };
+    // 칸 값 → 좌표 키. `선택: A2 · 성인 2` · `A2` · `비움` 을 다 같은 자리로 읽는다.
+    var keyOfValue = function (v) {
+      var t = clean(v).replace(/^선택\s*:\s*/, '').split(/\s+[·・‧∙]\s+/)[0];
+      return /^(비움|없음|빈|-|무관|인원\s*무관\s*단일가)$/.test(t) ? '' : t;
+    };
     if (!m[3]) {
-      var occField = (s.fields || []).filter(function (f) {
-        return /^인원\s*조합$/.test(clean(f.label || '').replace(/\(선택\)$/, ''));
-      })[0];
-      var occRaw = occField ? clean(occField.value || occField.raw_value || '') : '';
-      occRaw = occRaw.replace(/^선택\s*:\s*/, '').split(/\s+[·・‧∙]\s+/)[0];
-      if (occRaw && !/^(비움|인원\s*무관\s*단일가)$/.test(occRaw)) occ = occRaw;
+      var occField = (s.fields || []).filter(isOccField)[0];
+      var occRaw = occField ? keyOfValue(occField.value || occField.raw_value || '') : '';
+      if (occRaw) occ = occRaw;
     }
     if (/^(빈|없음|-)$/.test(occ)) occ = '무관'; // `인원 조합 빈 행` = 인원 무관 행
     var parts = linkName.split(/\s+[·・‧∙]\s+/); var offerName = parts.slice(0, -1).join(' · '), roomName = parts[parts.length - 1];
@@ -164,11 +202,16 @@
       });
     }
     out.display = display;
-    // 클릭 뒤 화면이 바뀔 때까지: htmx 정착 횟수 또는 화면 내용(길이)이 바뀌면 끝, 최대 ms
+    // 클릭 뒤 화면이 바뀔 때까지: htmx 정착 횟수 또는 화면 내용(길이)이 바뀌면 끝, 최대 ms.
+    // **오류도 끝이다.** ERP 는 `htmx.config.noSwap = [204,304,'4xx','5xx']` 이라 500·403 은
+    // 화면을 갈아끼우지 않는다 — 그런데 화면 길이는 다른 이유로도 흔들리므로(토스트·배지),
+    // 길이 변화만 보면 거부된 저장이 "정착했다" 로 통과한다. `hx.error` 를 함께 본다.
+    // 부르기 전에 비워 두므로, 돌아온 뒤 `hx.error` 는 **이번 클릭**의 결과다.
     var settled = async function (fn, ms) {
       var sw = hx.settles, sp = hx.swaps, len = pane.innerHTML.length;
+      hx.error = null;
       fn();
-      await waitFor(function () { return hx.pending === 0 && (hx.settles > sw || hx.swaps > sp || pane.innerHTML.length !== len); }, ms || 6000);
+      await waitFor(function () { return hx.error || (hx.pending === 0 && (hx.settles > sw || hx.swaps > sp || pane.innerHTML.length !== len)); }, ms || 6000);
       await sleep(250);
     };
     // 1) 오퍼 줄
@@ -258,14 +301,25 @@
     // 박수 층 (2026-09-09 배포판) — 같은 인원 조합이 층마다 한 행씩 선다(`A2` 1박~ · `A2` 3박~).
     // 층을 안 보고 첫 행만 잡으면 `3박~` 값을 적으라는 단계가 **1박 행을 덮는다** — 화면은
     // 아무 것도 말하지 않고, 3박 층은 옛 값 그대로 남는다. 단계가 `박수~` 칸을 부르면 그 값의
-    // 층을 먼저 찾고, 그 층이 아직 없으면 아래에서 새 행 표로 떨어진다(새 좌표를 만드는 일이다).
+    // 층을 먼저 찾고, 그 층이 아직 없으면 `가격 셀 만들기` 는 새 행 표로 떨어지고
+    // `가격 셀 손으로 고치기` 는 멈춘다(아래) — 없는 층을 다는 것은 새 좌표를 만드는 일이다.
     var losCtl = function (r) { return r.querySelector('input[name=los_nights],select[name=los_nights]'); };
     var losField = (s.fields || []).filter(function (f) {
       return /^박수\s*~?$/.test(clean(f.label || '').replace(/\(선택\)$/, ''));
     })[0];
-    var wantLos = losField ? clean(String(losField.value !== undefined && losField.value !== null ? losField.value : '')) : '';
-    if (wantLos && !/^\d+$/.test(wantLos)) wantLos = '';
+    var wantLosRaw = losField ? clean(String(losField.value !== undefined && losField.value !== null ? losField.value : '')) : '';
+    // 화면 배지 글자(`3박~`)를 그대로 옮겨 적은 원고가 있다 — 파서가 숫자만 남기지만
+    // 이미 만들어 둔 옛 steps.json 에는 배지 글자가 남아 있으므로 여기서 한 번 더 벗긴다.
+    var wantLos = (wantLosRaw.match(/^(\d+)\s*박?\s*~?$/) || [])[1] || '';
     out.wantLos = wantLos || null;
+    // 못 읽는 값은 **조용히 버리지 않는다.** 종전에는 비숫자면 `wantLos` 를 비워 첫 층을
+    // 골랐다 — `3박~` 이라고 적힌 단계가 1박 행을 덮고 그 값을 그대로 칸에 넣어 서버까지 갔다.
+    if (wantLosRaw && !wantLos) {
+      out.refused = true;
+      out.error = '`박수~` 칸의 `' + wantLosRaw + '` 를 읽지 못했습니다 — 숫자만 적습니다(`3박~` 배지의 뜻은 `3` 입니다).';
+      out.submitted = false;
+      return out;
+    }
     var keyHit = function (r) {
       var oc = keyCtl(r); if (!oc) return false;
       var v = clean(oc.value);
@@ -279,8 +333,32 @@
         found = { row: r, table: tb };
       });
     });
-    // 인원 구분이 없는 카드면 기존 행이 하나뿐일 때 그 행을 쓴다
-    if (!found && occ === '무관' && oldTables.length) { var only = [].slice.call(oldTables[0].querySelectorAll('tbody tr')).filter(keyCtl); if (only.length === 1) found = { row: only[0], table: oldTables[0] }; }
+    // 인원 구분이 없는 카드면 기존 행이 하나뿐일 때 그 행을 쓴다.
+    // **층을 부른 단계에서는 이 폴백을 쓰지 않는다** — 행이 하나라는 것은 그 하나가 맞는
+    // 층이라는 뜻이 아니다. `인원 무관/1박/110` 한 행에 `박수~=3, 판매가=111` 을 적으면
+    // 종전에는 이 갈래가 그 1박 행을 잡아 110 을 111 로 덮었다: 3박 층은 생기지 않고
+    // 1·2박 값만 조용히 바뀐다(2026-09-09 Codex 지적).
+    if (!found && !wantLos && occ === '무관' && oldTables.length) { var only = [].slice.call(oldTables[0].querySelectorAll('tbody tr')).filter(keyCtl); if (only.length === 1) found = { row: only[0], table: oldTables[0] }; }
+    // 층은 좌표의 일부다(`unique_together(product, rate_plan, occupancy_key, los_nights)`) —
+    // 없는 층을 다는 것은 **새 좌표를 만드는 일**이라 새 행 표로 가야 하고, 기존 행을 고치는
+    // 단계(`가격 셀 손으로 고치기`)라면 원고가 가리키는 행이 화면에 없다는 뜻이라 멈춘다.
+    var makeKind = /만들기/.test(nfc(s.kind || s.title || ''));
+    if (!found && wantLos && !makeKind) {
+      var haveLos = [];
+      oldTables.forEach(function (tb) {
+        [].slice.call(tb.querySelectorAll('tbody tr')).forEach(function (r) {
+          if (!keyHit(r)) return;
+          var lc = losCtl(r); if (lc) haveLos.push(clean(lc.value));
+        });
+      });
+      out.refused = true;
+      out.error = '`박수~ ' + wantLos + '` 층이 인원 조합 ' + occ + ' 에 없습니다'
+        + (haveLos.length ? ' (있는 층: ' + haveLos.join('박~ · ') + '박~)' : ' (그 인원 조합의 행이 없습니다)')
+        + ' — 층은 좌표의 일부라 다른 층을 대신 고치면 그 층을 덮습니다. 새 층을 다는 단계면'
+        + ' 원고의 제목을 `가격 셀 만들기` 로, 마지막 줄을 `→ [추가]` 로 고치세요.';
+      out.submitted = false;
+      return out;
+    }
     if (!found && newTable) {
       var nr = [].slice.call(newTable.querySelectorAll('tbody tr')).filter(keyCtl)[0] || newTable.querySelector('tbody tr');
       if (nr) { found = { row: nr, table: newTable }; isNew = true; }
@@ -312,8 +390,39 @@
     var ths = [].slice.call(found.table.querySelectorAll('thead th')).map(function (h) { return clean(h.textContent); });
     var tds = (stayRun.rowCells ? stayRun.rowCells(found.row) : [].slice.call(found.row.children));
     var setNative = function (el, v) { var proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype); var d = Object.getOwnPropertyDescriptor(proto, 'value'); if (d && d.set) d.set.call(el, v); else el.value = v; ['input', 'change'].forEach(function (ev) { el.dispatchEvent(new Event(ev, { bubbles: true })); }); };
+    // `인원 조합` 줄은 **기존 행에서는 입력이 아니라 좌표 대조 정보**다.
+    // 2026-09-09 배포판의 위 표는 그 열에 채울 칸이 없다 — 사람이 읽는 자리는 그룹 머리의
+    // 글자이고 값은 행마다 hidden 으로만 실린다. 규칙서(MANUAL-SPEC §가격 셀)는
+    // `가격 셀 손으로 고치기` 단계에도 `| 인원 조합 | A2 |` 를 적으라고 하므로, 그 줄을 칸으로
+    // 찾으면 **늘** `not-found` 가 되어 규칙서대로 쓴 원고가 저장까지 못 갔다.
+    // 그래서 값을 hidden 좌표와 맞춰만 보고, 다르면 다른 좌표를 고치는 사고라 멈춘다.
+    // **다른 칸을 건드리기 전에** 본다 — 어긋난 채로 판매가를 먼저 쓰면 그 값이 화면에 남는다.
+    // 새 행에서는 그대로 셀렉트에 넣는다(아래 일반 갈래에서 채운다).
+    var occCheck = null;
+    if (!isNew) {
+      var occF = window.stepFields(n).filter(isOccField)[0];
+      if (occF) {
+        var wantKey = keyOfValue(occF.value !== undefined && occF.value !== null ? occF.value : ((occF.values || [])[0] || ''));
+        var haveKey = clean(((keyCtl(found.row) || {}).value) || '');
+        occCheck = { label: occF.label, want: wantKey, have: haveKey,
+          same: wantKey.toUpperCase() === haveKey.toUpperCase() };
+        if (!occCheck.same) {
+          out.refused = true;
+          out.error = '`인원 조합` 줄이 `' + (wantKey || '인원 무관 단일가') + '` 인데 고르려는 행의 좌표는 `'
+            + (haveKey || '인원 무관 단일가') + '` 입니다 — 다른 좌표를 덮지 않으려고 멈춥니다'
+            + '(원고의 카드 줄이나 이 줄을 고치세요).';
+          out.submitted = false;
+          return out;
+        }
+      }
+    }
     var results = [];
     window.stepFields(n).forEach(function (f) {
+      if (occCheck && f.label === occCheck.label) {
+        results.push({ label: f.label, status: 'ok',
+          detail: '좌표 대조 — 화면 `' + (occCheck.have || '인원 무관 단일가') + '`' });
+        return;
+      }
       var ci = -1; ths.forEach(function (h, i) { if (ci < 0 && tier(h, f.label) >= 3) ci = i; });
       var td = ci >= 0 ? tds[ci] : null;
       var el = td ? td.querySelector('input:not([type=hidden]),select,textarea') : null;
@@ -545,8 +654,30 @@
       .map(function (x) { return x.label + ': ' + x.status + ' ' + (x.detail || '').slice(0, 140); });
     out.uploads = r.filter(function (x) { return x.status === 'needs-upload'; }).map(function (x) { return x.label; });
     var rb = stayRun.readback(F);
-    out.readback = rb.ok + '/' + rb.total; out.mismatch = rb.mismatch;
+    out.readback = rb.ok + '/' + rb.total;
+    // 되읽기 불일치를 둘로 가른다(위 `readbackTrusted`).
+    //   `mismatch`     — 값이 그대로 되읽히는 칸(금액·날짜·좌표·박수·코드·이름)이 어긋났다.
+    //                    값이 진짜로 안 들어간 것이라 **저장 전에 멈춘다.**
+    //   `mismatchWarn` — 되읽기 한계로 어긋나 보이는 칸(포함물 행 · 침대 구성 · 제공 주기 ·
+    //                    연령별 단가 · 정률 값 · 글상자). 경고만 남기고 **그대로 간다** —
+    //                    여기서 멈추면 아무 문제 없는 단계마다 로봇이 선다.
+    out.mismatch = rb.mismatch.filter(window.readbackTrusted);
+    out.mismatchWarn = rb.mismatch.filter(function (l) { return !window.readbackTrusted(l); });
+    if (out.mismatchWarn.length) {
+      out.warn = out.warn.concat(out.mismatchWarn.map(function (l) {
+        return l + ': 되읽기만 어긋남 — 화면 값을 눈으로 확인하세요';
+      }));
+    }
     if (opt.dry || out.bad.length || (out.uploads.length && !opt.uploaded) || (s.photos && s.photos.length && !opt.uploaded)) { out.submitted = false; return out; }
+    // 믿을 수 있는 칸이 어긋난 채로 저장하지 않는다 — 저장은 되돌리기 어렵고, 그 값이 그대로
+    // 굳는다. 화면을 눈으로 확인해 맞으면 `{ignoreMismatch:true}` 로 같은 단계를 다시 부른다.
+    if (out.mismatch.length && !opt.ignoreMismatch) {
+      out.submitted = false;
+      out.stoppedBy = 'mismatch';
+      out.note = '되읽기가 어긋났습니다: ' + out.mismatch.join(' · ')
+        + ' — 화면 값을 눈으로 확인하고, 맞으면 `runStep(' + n + ', {ignoreMismatch:true})` 로 다시 부르세요.';
+      return out;
+    }
     var sub = await stayRun.submit(s.submit);
     // 마지막 버튼이 저장이 아니라 **파일 고르개**인 단계가 있다(룸 사진 올리기 — 지시서는
     // `→ [사진 추가]` 로 끝난다, 2026-09-04 dict-audit 합의). 그 화면에는 누를 저장 버튼이
@@ -563,6 +694,9 @@
       for (var k = 0; k < alts.length && sub.status === 'not-found'; k++) { sub = await stayRun.submit(alts[k]); if (sub.status !== 'not-found') out.submitAs = alts[k]; }
     }
     out.submit = sub.status; out.errors = sub.errors; out.toast = sub.toast; out.submitted = true;
+    // 저장 뒤의 드로어·모달 상태를 그대로 들고 나온다 — `stayed`(정착했는데 안 닫힘)가
+    // **드로어가 남은 것**인지 처음부터 드로어가 없는 전체 화면 폼인지 이것으로만 갈린다.
+    out.drawer = sub.drawer; out.modal = sub.modal;
     return out;
   };
 
@@ -598,20 +732,39 @@
   // 왜 실패했는지 한 줄 — 띠에 들어갈 만큼만 자른다
   function progReason(r) {
     var t = '';
-    if (r && r.bad && r.bad.length) t = String(r.bad[0]);
-    else if (r && r.error) t = String(r.error);
+    if (r && r.error) t = String(r.error);
+    else if (r && r.bad && r.bad.length) t = String(r.bad[0]);
+    else if (r && r.errors && r.errors.length) t = String(r.errors[0]);
+    else if (r && r.mismatch && r.mismatch.length) t = '되읽기 불일치: ' + r.mismatch.join(' · ');
     else if (r && r.openDetail) t = String(r.openDetail);
+    else if (r && String(r.submit) === 'stayed') t = '저장 뒤에도 드로어가 그대로입니다';
     t = String(t).normalize('NFC').replace(/\s+/g, ' ').trim();
     return t.length > 60 ? t.slice(0, 60) + '…' : t;
   }
-  // 저장이 잘 끝난 상태들 — `stayRun.submit` 은 `ok` 를 돌려주지 않는다(`closed`·`stayed`·`settled`·`navigated`).
+  // 저장이 잘 끝난 상태들 — `stayRun.submit` 은 `ok` 를 돌려주지 않는다(`closed`·`settled`·`navigated`).
   // 그래서 `submit !== 'ok'` 만 보면 저장이 성공한 단계까지 전부 실패로 세게 된다.
-  window.SUBMIT_OK = ['ok', 'closed', 'stayed', 'settled', 'navigated'];
+  // `stayed` 는 여기 없다 — 아래에서 드로어가 실제로 남았는지 보고 가른다.
+  window.SUBMIT_OK = ['ok', 'closed', 'settled', 'navigated'];
+  // `stayed` = 요청은 정착했는데 드로어·모달이 안 닫혔다. 드로어 단계에서는 **저장이 막힌
+  // 것**이고(폼 오류·서버 거부), 처음부터 드로어가 없는 전체 화면 폼에서는 정상이다.
+  // 그래서 저장 뒤 상태를 보고 가른다 — 상태를 못 들고 온 결과는 안전한 쪽(실패)으로 읽는다.
+  function drawerLeftOpen(r) {
+    if (r.drawer && r.drawer.open) return true;
+    if (r.modal && r.modal.open) return true;
+    return !r.drawer && !r.modal;
+  }
+  // 한 단계가 깨끗하게 끝났는가 — 진행 띠·로그·반복문이 모두 이 판정 하나를 쓴다.
+  // 종전에는 `error`(칸을 못 열었다) · `errors`(서버가 거부한 사유) · `mismatch`(되읽기 불일치)를
+  // 하나도 보지 않아, 시즌 거부 배너를 모아 놓고도 그 단계를 완료로 셌다(2026-09-09 Codex 지적).
   window.stepFailed = function (r) {
     if (!r) return false;
     if (r.refused || r.fatal) return true;
+    if (r.error) return true;
     if (r.bad && r.bad.length) return true;
+    if (r.errors && r.errors.length) return true;
+    if (r.mismatch && r.mismatch.length) return true;
     if (r.open === 'not-found' || r.open === 'ambiguous') return true;
+    if (String(r.submit) === 'stayed') return drawerLeftOpen(r);
     if (r.submit !== undefined && r.submit !== null && window.SUBMIT_OK.indexOf(String(r.submit)) < 0) return true;
     return false;
   };
