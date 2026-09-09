@@ -77,6 +77,38 @@ const STEPS = {
         { label: '판매가', kind: 'typed', value: '140' }
       ],
       longtexts: [], photos: [], submit: '추가'
+    },
+    {
+      // 2026-09-09 배포판: 셀이 있는 날의 위 표는 **좌표 묶음**이다. `A2` 묶음의 둘째 층은
+      // `인원 조합` 칸이 `rowspan` 에 덮여 `<td>` 가 하나 적다 — 자리로 세면 `판매가` 에 적을
+      // 값이 `정가` 칸에 들어간다. 층을 안 고르면 첫 층(1박~)을 덮는다.
+      no: 5,
+      title: '가격 셀 고치기 (2026-01-03)',
+      kind: '가격 셀 고치기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 A2 행', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '박수~', kind: 'typed', value: '3' },
+        { label: '판매가', kind: 'typed', value: '95' }
+      ],
+      longtexts: [], photos: [], submit: '저장'
+    },
+    {
+      // 같은 카드인데 `박수~` 를 안 부르면 종전대로 첫 층(1박~)이다.
+      no: 6,
+      title: '가격 셀 고치기 (2026-01-03)',
+      kind: '가격 셀 고치기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 A2 행', buttons: [], buttons_parsed: [] },
+      fields: [{ label: '판매가', kind: 'typed', value: '125' }],
+      longtexts: [], photos: [], submit: '저장'
+    },
+    {
+      // 인원 무관 묶음 — 층이 하나라 `rowspan="1"` 이다. 그룹 머리 글자로 잡힌다.
+      no: 7,
+      title: '가격 셀 고치기 (2026-01-03)',
+      kind: '가격 셀 고치기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 무관 단일가 행', buttons: [], buttons_parsed: [] },
+      fields: [{ label: '판매가', kind: 'typed', value: '111' }],
+      longtexts: [], photos: [], submit: '저장'
     }
   ]
 };
@@ -248,6 +280,53 @@ const run = async () => {
   ok(!r2c.error, 'runCellStep: 새 행 카드 + 인원 조합 칸도 읽는다', r2c.error);
   ok(r2c.want && r2c.want.occ === 'A2',
      'runCellStep: 카드가 좌표를 안 부르면 `인원 조합` 칸(`선택: A2 · 성인 2`)에서 읽는다', r2c.want);
+
+  // 2-d) 좌표 묶음(2026-09-09 배포판) — `A2` 묶음의 둘째 층은 `인원 조합` 칸이 rowspan 에
+  //      덮여 `<td>` 가 하나 적다. 자리로 세면 `판매가` 값이 `정가` 칸에 들어간다.
+  const rg3 = await win.runCellStep(5, { dry: true });
+  ok(!rg3.error, 'runCellStep: 좌표 묶음 표에서도 행을 찾는다', rg3.error);
+  ok(rg3.newRow !== true, 'runCellStep: 이미 있는 좌표는 기존 행이다', rg3);
+  ok(rg3.wantLos === '3', 'runCellStep: 카드가 아니라 `박수~` 칸에서 층을 읽는다', rg3.wantLos);
+  ok((rg3.bad || []).length === 0, 'runCellStep: 묶음 둘째 층에서도 못 찾은 칸이 없다', rg3.bad);
+  {
+    const row = win.document.getElementById('cell_row_102');
+    const v = (n) => row.querySelector('[name=' + n + ']').value;
+    ok(v('price') === '95', 'runCellStep: rowspan 에 덮인 층에도 `판매가` 를 제 칸에 넣는다', v('price'));
+    ok(v('original_price') === '150', 'runCellStep: 옆 칸(`정가`)을 덮어쓰지 않았다', v('original_price'));
+    ok(v('los_nights') === '3', 'runCellStep: 그 층의 `박수~` 는 그대로다', v('los_nights'));
+    const first = win.document.getElementById('cell_row_101');
+    ok(first.querySelector('[name=price]').value === '120',
+       'runCellStep: 층을 골랐으므로 첫 층(1박~)은 손대지 않았다', first.querySelector('[name=price]').value);
+  }
+
+  // 2-e) `박수~` 를 안 부르면 종전대로 첫 층이다.
+  const rg1 = await win.runCellStep(6, { dry: true });
+  ok(rg1.wantLos === null, 'runCellStep: `박수~` 칸이 없으면 층을 고르지 않는다', rg1.wantLos);
+  ok(win.document.getElementById('cell_row_101').querySelector('[name=price]').value === '125',
+     'runCellStep: 층을 안 고르면 묶음의 첫 층에 넣는다');
+
+  // 2-f) 인원 무관 묶음 — 층이 하나라 rowspan="1" 이다.
+  const rgu = await win.runCellStep(7, { dry: true });
+  ok(!rgu.error, 'runCellStep: 인원 무관 묶음도 찾는다', rgu.error);
+  ok(win.document.getElementById('cell_row_103').querySelector('[name=price]').value === '111',
+     'runCellStep: 인원 무관 묶음의 `판매가` 를 제 칸에 넣는다');
+
+  // 2-g) 저장 거부는 `.stay-banner--blocking` 배너 한 줄로 돌아온다 — 이 표는 필드 오류를
+  //      칸 옆에 못 두고 한 배너에 모은다. 안 읽으면 `errors: []` 로 저장된 줄처럼 보고된다.
+  win.__refuseNextSave = true;
+  const rgx = await win.runCellStep(7);
+  ok(rgx.submitted === true, 'runCellStep: 저장을 눌렀다', rgx.submitted);
+  ok(rgx.submit === 'refused', 'runCellStep: 배너가 서면 거부로 읽는다', rgx.submit);
+  ok((rgx.errors || []).some((e) => /같은 인원 조합의 가격 행이 이미 있습니다/.test(e)),
+     'runCellStep: 거부 문구를 errors 로 돌려준다', rgx.errors);
+
+  // 2-h) 되읽기 — 인원 조합이 hidden 이라도 좌표를 읽어야 한다(안 읽으면 after 가 통째로 빈다).
+  win.openCell(3);
+  await win.stayRun.sleep(50);
+  const rgb = await win.runCellStep(6);
+  ok((rgb.after || []).length > 0, 'runCellStep: 숨은 `인원 조합` 칸으로도 되읽는다', rgb.after);
+  ok((rgb.after || []).every((x) => x.indexOf('occupancy_key=A2 ') === 0),
+     'runCellStep: 되읽기가 그 좌표의 층만 담는다', rgb.after);
 
   // 3) 룸 사진 올리기 — 지시서가 `→ [사진 추가]` 로 끝나는 단계(2026-09-04 합의).
   //    그 버튼은 파일 고르개이고 이 화면에는 저장 버튼이 없다. 러너가 대안(`저장`…)을 훑으면

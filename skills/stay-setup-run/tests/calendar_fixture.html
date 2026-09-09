@@ -5,12 +5,20 @@
 <title>stay_boot 가격 캘린더 시험용 화면</title>
 <!--
   가격 캘린더 탭의 뼈대만 흉내 낸 시험용 파일이다(실제 값·실제 회사 이름 없음).
-  운영 화면의 달력·날짜 칸·셀 편집창 마크업을 따른다.
+  운영 2026-09-09 배포판의 달력·날짜 칸·셀 편집창 마크업을 따른다
+  (`stay/templates/stay/_calendar_cell_edit.html`).
 
-  여기서 붙잡으려는 것은 하나다: **그 날짜에 가격 셀이 하나도 없을 때** 셀 편집 모달에는
-  `인원별 가격 추가` 표 **한 개만** 그려지고, 그 표의 인원 칸은 글자 칸이 아니라 셀렉트다
-  (이미 쓰는 인원 키만 고르게 한다). 종전 러너는 표가 둘일 때만 새 행을 찾아서
-  `가격 셀 만들기` 단계가 통째로 실패했다.
+  붙잡으려는 것이 둘이다.
+
+  ① **그 날짜에 가격 셀이 하나도 없을 때** — 셀 편집 모달에 `인원별 · 박수별 가격 추가` 표
+     **한 개만** 그려지고, 그 표의 인원 칸은 글자 칸이 아니라 셀렉트다. 종전 러너는 표가 둘일
+     때만 새 행을 찾아서 `가격 셀 만들기` 단계가 통째로 실패했다.
+
+  ② **셀이 있는 날의 위 표는 행이 아니라 좌표 묶음이다**(2026-09-09 배포판) — 같은 인원 조합의
+     박수 층이 한 묶음이고, `인원 조합` 칸은 그룹 첫 행이 `rowspan` 으로 층 전체를 덮는다.
+     그래서 층 둘째 행부터는 `<td>` 가 하나 적다. 자리로 세면 `판매가` 에 적을 값이 `정가`
+     칸에 들어가고 화면은 아무 것도 말하지 않는다 — 러너가 열 번호로 잡는지 여기서 본다.
+     `인원 조합` 은 행마다 **hidden** 으로 실린다(사람이 읽는 자리만 그룹 머리로 올라갔다).
 -->
 </head>
 <body>
@@ -40,11 +48,21 @@
       <button type="button" class="stay-coord-btn stay-btn stay-btn--ghost">트윈룸 · 기본 요금제</button>
     </div>
 
+    <!-- 날짜 칸의 속 구조는 운영 `_calendar_cell.html` 을 따른다 — 날짜와 금액이 각각
+         `.stay-cal-head` · `.stay-cal-cell__foot` 안에 **줄을 나눠** 들어간다. 러너는 칸 글자의
+         맨 앞 숫자로 날짜를 찾으므로(`^(\d{1,2})\b`), 두 span 을 붙여 쓰면 `3` 과 `120` 이
+         `3120` 한 낱말이 되어 3일 칸을 못 찾는다. 이 공백은 서식이 아니라 시험의 전제다. -->
     <table class="bs-table"><tbody><tr>
       <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(1)">
-        <span class="stay-cal-cell__day">1</span><span class="stay-cal-cell__price">–</span></button></td>
+        <span class="stay-cal-head"><span class="stay-cal-cell__day">1</span></span>
+        <span class="stay-cal-cell__foot"><span class="stay-cal-cell__price">–</span></span></button></td>
       <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(2)">
-        <span class="stay-cal-cell__day">2</span><span class="stay-cal-cell__price">–</span></button></td>
+        <span class="stay-cal-head"><span class="stay-cal-cell__day">2</span></span>
+        <span class="stay-cal-cell__foot"><span class="stay-cal-cell__price">–</span></span></button></td>
+      <!-- 3일은 셀이 이미 있는 날이다 — 위 표(좌표 묶음)와 아래 추가 표가 함께 선다. -->
+      <td><button type="button" class="stay-cal-cell stay-cal-cell--open" onclick="openCell(3)">
+        <span class="stay-cal-head"><span class="stay-cal-cell__day">3</span></span>
+        <span class="stay-cal-cell__foot"><span class="stay-cal-cell__price">120</span></span></button></td>
     </tr></tbody></table>
 
     <div id="stay_cell_slot"></div>
@@ -66,46 +84,130 @@
 <div id="toast-container"></div>
 
 <script>
-/* 그 날짜에 셀이 하나도 없는 상태 — `인원별 가격 추가` 표 하나뿐이고 인원 칸은 셀렉트다.
-   (셀이 있는 날은 그 위에 기존 행 표가 하나 더 붙는다 — 여기서는 그 없는 쪽만 본다.) */
-var CELL_EDIT = [
-  '<div id="stay_cell_edit" class="stay-modal stay-modal--page"><div class="stay-modal__mask">',
-  '<div class="stay-modal__panel"><div class="stay-modal__head">',
-  '<h4 class="stay-modal__title">2026-01-DAY · 싱글룸</h4></div>',
-  '<div class="stay-banner stay-banner--info"><span>이 날짜에 아직 가격이 없습니다 — 아래에서 추가하세요.</span></div>',
-  '<h4 class="stay-section-title">인원별 가격 추가</h4>',
-  '<table class="bs-table"><thead><tr>',
-  '<th>인원 조합</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th><th>액션</th>',
-  '</tr></thead><tbody><tr>',
+/* ── 모달 껍데기 ── 열 구성은 위아래 표가 **한 벌**이다(7열):
+   인원 조합 · 박수~ · 판매가 · 정가 · 공급 원가 · 상태 · 액션.
+   `출처` 열은 2026-09-08 에 없어졌다. */
+var HEAD = [
+  '<thead><tr>',
+  '<th>인원 조합</th><th>박수~</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th><th>액션</th>',
+  '</tr></thead>'
+].join('');
+
+var STATUS = '<select name="availability_status" class="browser-default"><option>판매</option><option>블랙아웃</option><option>데이터 누락</option></select>';
+
+/* 아래 카드 — `인원별 · 박수별 가격 추가`. 좌표(룸·요금제·일자)는 hidden 이고, 박수는 초깃값
+   1(= 박수 무관)에 `<datalist>` 가 붙는다(종전에는 hidden 1 이었다). */
+var ADD = [
+  '<h4 class="stay-section-title">인원별 · 박수별 가격 추가',
+  '<span class="stay-info" tabindex="0" aria-label="한 날짜에 인원별 · 박수별로 가격 행을 따로 둘 수 있습니다.">?</span></h4>',
+  '<div id="stay_cell_add_x1" class="table1"><table class="bs-table stay-table">', HEAD, '<tbody><tr>',
   '<td><select name="occupancy_key" class="browser-default">',
   // 항목 글자는 **키가 앞**이다(`forms.occupancy_select_label`, 2026-09-08) — `A2 · 성인 2`.
-  // 맨 숫자(`2인`·`4인`)는 이사 전 DB 에만 남는 옛 형식이라 읽기 폴백으로 함께 세워 둔다.
+  // 맨 숫자(`2 · 2인`)는 이사 전 DB 에만 남는 옛 형식이라 읽기 폴백으로 함께 세워 둔다.
   '<option value="">인원 무관 단일가</option>',
   '<option value="A2">A2 · 성인 2</option><option value="A2C1_CHD">A2C1_CHD · 성인 2 · 소아 1</option>',
-  '<option value="2">2인</option><option value="4">4인</option>',
-  '</select><input type="hidden" name="los_nights" value="1"></td>',
-  '<td><input type="number" name="amount"></td>',
-  '<td><input type="number" name="original_amount"></td>',
-  '<td><input type="number" name="net_amount"></td>',
-  '<td><select name="status" class="browser-default"><option>판매</option><option>블랙아웃</option></select>',
-  '<input type="hidden" name="option" value="9"><input type="hidden" name="rate_plan" value="5">',
-  '<input type="hidden" name="date" value="2026-01-DAY"></td>',
-  '<td><button type="button" onclick="fakeAdd()">추가</button></td>',
-  '</tr></tbody></table>',
-  '<button type="button" onclick="closeCell()">닫기</button>',
-  '</div></div></div>'
+  '<option value="2">2 · 2인</option><option value="4">4 · 4인</option>',
+  '</select></td>',
+  '<td><input type="text" name="los_nights" value="1" list="stay_los_options"></td>',
+  '<td><input type="text" name="price"></td>',
+  '<td><input type="text" name="original_price"></td>',
+  '<td><input type="text" name="net_amount"></td>',
+  '<td>', STATUS, '</td>',
+  '<td><input type="hidden" name="option" value="9"><input type="hidden" name="rate_plan" value="5">',
+  '<input type="hidden" name="date" value="2026-01-DAY">',
+  '<button type="button" onclick="fakeAdd()">추가</button></td>',
+  '</tr></tbody></table></div>',
+  // 박수 후보. 모달 하나에 하나만 두고 위아래 표의 모든 칸이 같은 id 를 가리킨다.
+  '<datalist id="stay_los_options"><option value="1">박수 무관</option>',
+  '<option value="2"></option><option value="3"></option><option value="4"></option>',
+  '<option value="5"></option><option value="7"></option></datalist>'
 ].join('');
+
+function shell(inner) {
+  return [
+    '<div id="stay_cell_edit" class="stay-modal stay-modal--page"><div class="stay-modal__mask">',
+    '<div class="stay-modal__panel"><div class="stay-modal__head">',
+    '<h4 class="stay-modal__title"><span class="stay-card__title">싱글룸</span> · 기본 요금제 · 2026-01-DAY</h4>',
+    '<button type="button" onclick="closeCell()">닫기</button></div>',
+    inner,
+    '</div></div></div>'
+  ].join('');
+}
+
+/* ① 셀이 하나도 없는 날 — 추가 표 하나뿐이다. */
+var CELL_EDIT = shell(
+  '<div class="stay-banner stay-banner--info"><span>이 날짜에 아직 가격이 없습니다 — 아래에서 추가하세요.</span></div>' + ADD
+);
+
+/* ② 셀이 있는 날 — 위 표가 **좌표 묶음**으로 선다.
+   · `A2` 묶음은 층이 둘(1박~ · 3박~)이라 `인원 조합` 칸이 `rowspan="2"` 로 두 층을 덮는다.
+     둘째 층의 `<td>` 는 6개뿐이다 — 자리로 세면 열이 통째로 한 칸씩 밀린다.
+   · `인원 무관 단일가` 묶음은 층이 하나라 `rowspan="1"` 이다.
+   · 인원 조합 값은 행마다 **hidden** 으로 실린다(읽는 자리만 그룹 머리로 올라갔다). */
+function tierRow(id, key, nights, price, orig, net, first, span) {
+  return [
+    '<tr id="cell_row_' + id + '">',
+    first ? '<td rowspan="' + span + '" class="stay-cell-group">' + (key || '인원 무관 단일가') + '</td>' : '',
+    '<td' + (span > 1 ? ' class="stay-cell-tier"' : '') + '>',
+    '<input type="hidden" name="occupancy_key" value="' + key + '">',
+    '<input type="text" name="los_nights" value="' + nights + '" list="stay_los_options">',
+    nights !== '1' ? '<span class="stay-badge stay-badge--tinted">' + nights + '박~</span>' : '',
+    '</td>',
+    '<td><input type="text" name="price" value="' + price + '"></td>',
+    '<td><input type="text" name="original_price" value="' + orig + '"></td>',
+    '<td><input type="text" name="net_amount" value="' + net + '"></td>',
+    '<td>', STATUS, '</td>',
+    '<td><div class="stay-actions"><button type="button" onclick="fakeSave()">저장</button></div></td>',
+    '</tr>'
+  ].join('');
+}
+
+var ROWS = [
+  '<div class="table1"><table class="bs-table stay-table">', HEAD, '<tbody>',
+  tierRow('101', 'A2', '1', '120', '150', '90', true, 2),
+  tierRow('102', 'A2', '3', '100', '150', '80', false, 2),
+  tierRow('103', '', '1', '110', '140', '85', true, 1),
+  '</tbody></table></div>'
+].join('');
+
+var CELL_EDIT_ROWS = shell(ROWS + ADD);
+
+/* 저장 거부 — 이 표는 한 줄이 한 좌표인 컴팩트 표라 필드 오류를 칸 옆에 못 두고
+   `.stay-banner--blocking` 하나에 모은다. 그룹 머리의 `rowspan` 이 이 배너 행까지 덮으므로
+   배너의 `colspan` 은 6이다(7열 - 그룹 머리 1). */
+var CELL_EDIT_REFUSED = shell([
+  '<div class="table1"><table class="bs-table stay-table">', HEAD, '<tbody>',
+  tierRow('101', 'A2', '1', '120', '150', '90', true, 2),
+  '<tr><td colspan="6"><div class="stay-banner stay-banner--blocking"><span>',
+  '같은 인원 조합의 가격 행이 이미 있습니다 — 위 표에서 그 행을 고치세요',
+  '</span></div></td></tr>',
+  '</tbody></table></div>'
+].join('') + ADD);
 
 function fire(name) { document.body.dispatchEvent(new CustomEvent(name, { bubbles: true })); }
 
 function openCell(day) {
+  var html = day === 3 ? CELL_EDIT_ROWS : CELL_EDIT;
   document.getElementById('stay_cell_slot').innerHTML =
-    CELL_EDIT.replace(/2026-01-DAY/g, '2026-01-0' + day);
+    html.replace(/2026-01-DAY/g, '2026-01-0' + day);
   fire('htmx:afterSwap'); fire('htmx:afterSettle');
 }
 function closeCell() { document.getElementById('stay_cell_slot').innerHTML = ''; }
 function fakeAdd() {
   document.getElementById('toast-container').innerHTML = '<div class="toast">추가했습니다</div>';
+  fire('htmx:afterSwap'); fire('htmx:afterSettle');
+}
+/* 저장은 이 조각을 **제자리에서** 다시 그린다(`hx-target="#stay_cell_edit"` outerHTML) —
+   모달은 닫지 않는다. `window.__refuseNextSave` 가 참이면 서버가 거부한 판을 돌려준다. */
+function fakeSave() {
+  var day = (document.querySelector('#stay_cell_edit input[name=date]') || {}).value || '2026-01-03';
+  if (window.__refuseNextSave) {
+    window.__refuseNextSave = false;
+    document.getElementById('stay_cell_slot').innerHTML =
+      CELL_EDIT_REFUSED.replace(/2026-01-DAY/g, day);
+  } else {
+    document.getElementById('toast-container').innerHTML = '<div class="toast">저장했습니다</div>';
+  }
   fire('htmx:afterSwap'); fire('htmx:afterSettle');
 }
 </script>

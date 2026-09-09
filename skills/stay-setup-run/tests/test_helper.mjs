@@ -353,7 +353,9 @@ const run = async () => {
   //      항목 글자는 키가 앞이다: `A2C1_CHD · 성인 2 · 소아 1`. 원고는 좌표만 적으므로
   //      `A2` 는 `A2C1_CHD` 의 앞글자이기도 해서 글자 전체로는 둘 다에 걸린다 —
   //      앞 조각이 **완전히 같은** 항목을 골라야 한다.
-  const occSel = () => q('[name=occupancy_key]');
+  // 아래 추가 카드의 셀렉트다 — 위 좌표 묶음 표에도 같은 이름의 **숨은** 칸이 행마다 있으므로
+  // 문서 전체에서 첫 것을 집으면 그 hidden 을 읽는다(2026-09-09 배포판).
+  const occSel = () => win.document.querySelector('#stay_cell_add_1 [name=occupancy_key]');
   const cell = { card: '인원별 · 박수별 가격 추가' };
   for (const [want, value, why] of [
     ['A2C1_CHD', 'A2C1_CHD', '키만 적어도 `A2C1_CHD · 성인 2 · 소아 1` 을 고른다'],
@@ -369,7 +371,53 @@ const run = async () => {
   const noOcc = await R.fill([{ label: '인원 조합', kind: 'select', value: 'A9C9_ZZZ' }], cell);
   ok(noOcc[0].status !== 'ok', 'fill: 목록에 없는 좌표는 고르지 않는다', noOcc[0]);
 
+  // 12b-2. 에이전트 모달(2026-09-09 신설)은 `.stay-modal` 인데 `hidden` 으로 **늘 실려 있다**.
+  //        열린 모달로 세면 안 되고, 그 안의 제목·버튼이 카드·저장 버튼으로 잡혀서도 안 된다.
+  {
+    ok(!!win.document.getElementById('stay_agent_resume'), '픽스처: 에이전트 모달이 DOM 에 있다');
+    // 위 12번이 셀 편집 모달을 열어 둔 상태다 — 그때도 잡히는 것은 그쪽 하나여야 한다.
+    ok(R.state().modal.id === 'stay_cell_edit',
+      'state: 접힌 에이전트 모달을 열린 모달로 세지 않는다', R.state().modal);
+    ok(R.findButton(win.document.body, '복사') === null,
+      'findButton: 접힌 모달의 [복사] 는 고르지 않는다');
+    const agentBtns = R.buttons({ card: '이 호텔을 에이전트로 이어서 하기' });
+    ok(!agentBtns.includes('복사'), 'buttons: 접힌 모달 제목으로 좁혀도 그 안 버튼은 안 나온다', agentBtns);
+  }
+
+  // 12c. 좌표 묶음의 열 자리 (2026-09-09 배포판) — 그룹 머리가 `rowspan` 으로 층 전체를 덮어
+  //      층 둘째 행은 `<td>` 가 하나 적다. 자리로 세면 `판매가` 값이 `정가` 칸에 들어간다.
+  {
+    const rows = ['cell_row_101', 'cell_row_102', 'cell_row_103'].map((id) => win.document.getElementById(id));
+    const cols = rows.map((r) => R.rowCells(r).length);
+    ok(cols.every((n) => n === 7), 'rowCells: 층 둘째 행도 7열로 푼다', cols);
+    // 첫 열은 그룹 머리 — 묶음의 두 층이 **같은 칸**을 가리킨다(rowspan 이 덮은 자리다).
+    ok(R.rowCells(rows[0])[0] === R.rowCells(rows[1])[0],
+      'rowCells: rowspan 으로 덮인 첫 열은 두 층이 같은 칸이다');
+    ok(R.rowCells(rows[1])[2] === rows[1].querySelector('[name=price]').closest('td'),
+      'rowCells: 층 둘째 행의 3열이 `판매가` 칸이다');
+    // 자리로 세던 종전 방식이면 여기서 `정가` 칸이 나온다 — 그 차이가 이 시험의 값이다.
+    ok(rows[1].children[2] !== R.rowCells(rows[1])[2],
+      'rowCells: 자리(`row.children`)와 열 번호가 실제로 어긋난다(시험이 의미가 있다)');
+  }
+
+  // 12d. 액션 칸의 버튼이 `div.stay-actions` 안으로 한 겹 더 들어갔다(2026-09-09) —
+  //      버튼을 찾는 길이 그대로여야 한다.
+  {
+    const row = win.document.getElementById('cell_row_102');
+    ok(!!row.querySelector('.stay-actions button'), '픽스처: 액션 버튼이 `.stay-actions` 안이다');
+    ok(!!R.findButton(row, '저장'), 'findButton: 한 겹 더 싸여도 행의 [저장] 을 찾는다');
+  }
+
   win.document.getElementById('stay_cell_edit').style.display = 'none';
+
+  // 12e. 저장 거부는 `.stay-banner--blocking` 한 줄로 온다 — 클래스에 `error` 가 없어
+  //      종전 훑기가 통째로 놓치던 자리다. 드로어가 **열린 채**라 `stayed` 로 끝난다.
+  win.openRoomDrawer('스탠다드');
+  const refused = await R.submit('거부 저장');
+  ok(refused.status === 'stayed', 'submit: 거부되면 드로어가 열린 채다', refused.status);
+  ok((refused.errors || []).some((e) => /전개 날짜가 0일입니다/.test(e)),
+    'submit: `.stay-banner--blocking` 의 사유를 errors 로 돌려준다', refused.errors);
+  win.closeDrawer();
 
   // 13. 진행 표시 띠 — 화면 오른쪽 위에 늘 떠 있는 한 줄. 지켜보는 사람이 콘솔 없이도 읽는다.
   const strip = () => win.document.getElementById('stay_progress');

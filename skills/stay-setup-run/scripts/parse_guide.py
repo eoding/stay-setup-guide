@@ -535,6 +535,17 @@ OCCUPANCY_ADJUST_LABELS = ("인원 조합별 조정(선택)", "인원 조합별 
 #: 대문자로 굳으므로 여기서는 소문자도 받는다. 밑줄은 좌표 조각 구분자라 안 된다(`A2C1_CHD`).
 BAND_CODE_RE = re.compile(r"^[A-Za-z0-9]{2,8}$")
 BAND_CODE_LABELS = ("밴드 코드", "밴드코드")
+#: `C` + 숫자(`C1`·`C12`)는 위 정규식을 통과하지만 서버가 **따로 거부한다**
+#: (`occupancy_key.validate_band_code`): 그 모양이 좌표의 아동 조각 머리와 같아서 코드로 쓰면
+#: `A2C1_C1` 이 "1명 + 1명" 으로 읽혀 왕복이 깨진다. 정규식만 보고 통과시키면 이 오타가
+#: 브라우저까지 가서 그 연령 구간 단계에서 멈춘다.
+CHILD_HEAD_CODE_RE = re.compile(r"^[Cc]\d+$")
+#: 박수 상한 — `season.MAX_LOS_NIGHTS`. 넘으면 견적이 영영 안 집는 셀이 날짜 수만큼 깔린다.
+MAX_LOS_NIGHTS = 30
+#: 한 전개가 만들 수 있는 층 수(1박 제외) — `season.MAX_LOS_TIERS`. 층 하나가 셀 수를 통째로 곱한다.
+MAX_LOS_TIERS = 6
+#: 좌표 문자열 길이 상한 — `occupancy_key.KEY_MAX_LENGTH`(컬럼이 32자다).
+MAX_OCCUPANCY_KEY_LEN = 32
 #: `박수별 단가` 한 조각 — `3:100`. **부호를 일부러 안 받는다**(차액이 아니라 단가다).
 LOS_ITEM_RE = re.compile(r"^(\d+)\s*[:：]\s*(\d+(?:\.\d+)?)$")
 #: `인원 조합별 조정` 한 조각 — `A3:+14` 의 키와 차액.
@@ -615,10 +626,59 @@ def los_prices_problem(step):
         if nights < 2:
             return ("[박수별 단가] `%s` 의 박수는 2 이상이어야 합니다 — 1박 단가는 위 "
                     "[판매 단가(공급 통화)] 칸입니다" % item)
+        if nights > MAX_LOS_NIGHTS:
+            return ("[박수별 단가] `%s` 의 박수가 너무 큽니다 — %d박까지입니다(그보다 긴 계단은 "
+                    "견적이 집지 않습니다)" % (item, MAX_LOS_NIGHTS))
         if nights in seen:
             return ("[박수별 단가] 에 %d박이 두 번 있습니다 — 한 박수에 한 단가입니다 (`%s`)"
                     % (nights, raw))
         seen.append(nights)
+    if len(seen) > MAX_LOS_TIERS:
+        return ("[박수별 단가] 의 층이 %d개입니다 — %d개까지입니다(층 하나가 셀 수를 통째로 "
+                "곱합니다). `%s`" % (len(seen), MAX_LOS_TIERS, raw))
+    return None
+
+
+def occupancy_key_shape(key):
+    """좌표 하나가 서버가 읽는 꼴인가 — 이유 한 줄, 아니면 None.
+
+    `stay.services.occupancy_key.parse_key` 와 **같은 판정**이다. 두 벌이 되면 여기서 통과한
+    좌표가 화면에서 거부되고, 그때는 앞 단계가 이미 화면에 만들어져 있다. 서버 문구를 그대로
+    베끼지 않고 지시서 말로 옮기되 **막는 값은 똑같이** 막는다.
+
+    빈 값(`인원 무관 단일가`)과 맨 숫자는 여기서 보지 않는다 — 부르는 쪽이 먼저 가른다.
+    """
+    head = re.match(r"^A(\d+)", key)
+    if head is None:
+        return "`A2`(성인 2) · `A2C1_CHD`(성인 2 · CHD 아동 1) 꼴이어야 합니다"
+    rest = key[head.end():]
+    if not rest:
+        return None
+    if rest.startswith("_"):
+        return "첫 아동 조각은 성인 자리에 붙여 씁니다 — `A2C1_CHD` 이지 `A2_C1_CHD` 가 아닙니다"
+    children = []                 # 조각마다 코드가 있는지 — 서버의 `ChildPart.code` 와 같은 자리
+    for token in rest.split("_"):
+        if not token:
+            return "빈 조각이 있습니다(밑줄이 겹쳤습니다)"
+        child = re.match(r"^C(\d+)$", token)
+        if child is not None:
+            if int(child.group(1)) <= 0:
+                return "아동 수가 0인 조각은 좌표가 될 수 없습니다"
+            children.append(False)          # 아직 코드가 안 붙은 아동 조각
+            continue
+        # 조각 머리가 아니면 **직전 조각의 코드**다.
+        if not children:
+            return "구간 코드 `%s` 앞에 아동 조각(`C1` 처럼 C+숫자)이 없습니다" % token
+        if children[-1]:
+            return "아동 조각 하나에 구간 코드가 둘입니다"
+        if not BAND_CODE_RE.match(token):
+            return "구간 코드 `%s` 는 영문자·숫자 2~8자여야 합니다" % token
+        children[-1] = True
+    # 코드 없는 조각은 **하위호환 `A2C1` 한 모양**뿐이다. `A2C1_C1_CHD` 처럼 코드 있는 조각과
+    # 섞이면 어느 조각이 어느 구간인지 정해지지 않아, 저장도 선택도 못 하는 좌표가 깔린다.
+    if not all(children) and len(children) != 1:
+        return ("구간 코드 없는 아동 조각은 `A2C1` 한 모양뿐입니다 — 조각이 둘 이상이면 "
+                "`A2C1_CHD_C1_INF` 처럼 코드를 모두 적습니다")
     return None
 
 
@@ -639,6 +699,19 @@ def occupancy_key_problem(step):
         if bad:
             return ("[인원 조합] `%s` 은 옛 숫자 표기입니다 — 성인 수 앞에 A 를 붙여 `A2,A3` 로 "
                     "적습니다" % ",".join(bad))
+        # 좌표 문자열은 컬럼이 32자다 — 넘는 조합은 저장될 자리가 아예 없다. 구간 코드를 여럿
+        # 물린 긴 키(`A2C1_XXXXXXXX_C1_YYYYYYYY`)가 실제로 여기에 걸린다.
+        toolong = [k for k in _split_items(raw) if len(k) > MAX_OCCUPANCY_KEY_LEN]
+        if toolong:
+            return ("[인원 조합] `%s` 이(가) %d자를 넘습니다 — 그 길이의 좌표는 저장될 자리가 "
+                    "없습니다(연령 구간 코드를 짧게 짓습니다)"
+                    % (",".join(toolong), MAX_OCCUPANCY_KEY_LEN))
+        # 꼴 자체가 서버 파서를 못 지나는 좌표 — `A2_C1_CHD`(앞 밑줄) · `A2C1_C1_CHD`(혼합) 등.
+        # 화면에서 거부되면 그 시즌은 한 셀도 안 깔린다.
+        for key in _split_items(raw):
+            why = occupancy_key_shape(key.upper())
+            if why:
+                return "[인원 조합] `%s` 를 읽지 못합니다 — %s" % (key, why)
     raw = _typed_value(step, OCCUPANCY_ADJUST_LABELS)
     if raw:
         bad = []
@@ -660,10 +733,16 @@ def band_code_problem(step):
     칸이므로 보지 않는다(라벨이 정확히 `밴드 코드` 일 때만 본다).
     """
     code = _typed_value(step, BAND_CODE_LABELS)
-    if code is None or BAND_CODE_RE.match(code):
+    if code is None:
         return None
-    return ("[밴드 코드] `%s` 는 쓸 수 없습니다 — 영문자·숫자 2~8자입니다(CHD·INF·TEEN). "
-            "밑줄·한글·공백은 가격 셀 좌표(`A2C1_CHD`)를 갈라 놓습니다" % code)
+    if not BAND_CODE_RE.match(code):
+        return ("[밴드 코드] `%s` 는 쓸 수 없습니다 — 영문자·숫자 2~8자입니다(CHD·INF·TEEN). "
+                "밑줄·한글·공백은 가격 셀 좌표(`A2C1_CHD`)를 갈라 놓습니다" % code)
+    if CHILD_HEAD_CODE_RE.match(code):
+        return ("[밴드 코드] `%s` 는 인원 조합 키의 아동 조각 표기(C+숫자)와 같아 쓸 수 없습니다 "
+                "— `A2C1_C1` 이 아동 두 조각으로 읽힙니다. CHD·TEEN 처럼 글자로 시작하는 코드를 "
+                "주세요" % code)
+    return None
 
 
 def child_extra_order(steps):
