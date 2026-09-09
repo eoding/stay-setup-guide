@@ -28,13 +28,18 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
-- 유료 연령 구간마다 `시즌 가격 채우기` 에 `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 아이 1박 요금의 자리는 그 칸 하나다)
+- 유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 빠진 회차의 날짜만 마감으로 팔린다)
+- `시즌 가격 채우기` 의 `카드:` 로 시즌을 못 짚는 회차가 있는지(경고 — 그 회차는 오퍼를 축으로 도는 검사에서 빠진다)
+- 그 줄의 값이 구간의 `요금 기준 유형` 과 맞는지(오류 — 유료인데 비었다 · 무료인데 줄이 있다 · `성인 요금의 %` 인데 금액을 적었다)
 - `아동 추가 금액` 을 적었는데 `인원 조합(선택)` 이 비었는지(오류 — 아동 금액은 성인 좌표 위에 얹혀 화면이 저장을 막는다)
 - `연령 구간 만들기` 가 그 오퍼의 첫 `시즌 가격 채우기` 보다 앞인지(오류 — 유료 구간이 없으면 그 드로어에 아동 금액 칸이 서지 않는다)
 - 부가옵션이 아이의 잠자리(쉐어베드·소파베드·아동 1박)를 파는지(오류 — 식사·픽업·엑스트라베드는 따로 사는 것이라 부가옵션이 맞다)
-- `밴드 코드` 가 영대문자·숫자 2~8자인지(오류 — 그 코드가 가격 셀 좌표에 그대로 실린다)
-- `인원 조합(선택)`·`인원 조합별 조정(선택)` 의 키가 A-형(`A2`·`A2C1_CHD`)인지(오류 — 옛 숫자 키 `2,3`·`3:+14`)
-- `박수별 단가(선택)` 가 `박수:1박 단가` 목록인지(오류 — 부호 없음 · 박수 2 이상 · 같은 박수 한 번)
+- `밴드 코드` 가 영대문자·숫자 2~8자인지(오류 — 그 코드가 가격 셀 좌표에 그대로 실린다 · `C1` 처럼 `C`+숫자도 막는다)
+- `인원 조합(선택)`·`인원 조합별 조정(선택)`·가격 셀 `카드:` 줄의 키가 A-형인지(오류 — 옛 숫자 키 `2,3` · 코드 없는 `A2C1` · 혼합 `A2C1_C1_CHD` · 32자 초과)
+- `인원 조합별 조정(선택)` 의 값에 부호가 있고 그 키가 `인원 조합(선택)` 에 있는지(오류 — 부호 없는 `A3:8`, 닿지 않는 키)
+- `박수별 단가(선택)` 가 `박수:1박 단가` 목록인지(오류 — 부호 없음 · 박수 2~30 · 층 6개까지 · 같은 박수 한 번)
+- `박수별 단가` 를 적었는데 `판매 단가(공급 통화)` 가 비었는지(오류 — 1박 층이 없으면 그 좌표는 어느 박수로도 안 팔린다)
+- 가격 셀 단계의 `박수~` 가 1~30인지(오류 — 1이 「박수 무관」이고 30 초과는 견적이 집지 않는다)
 - 가격 셀 단계의 `카드:` 줄과 `인원 조합` 칸이 같은 좌표를 부르는지(오류 — 러너는 카드 줄을 읽는다)
 - 가격 셀 단계의 좌표가 그 룸의 `시즌 가격 채우기` 가 깐 좌표인지(오류 — 없는 행을 고치거나 안 파는 좌표를 만든다)
 - 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
@@ -204,9 +209,16 @@ AGE_RATE_FIELD = "연령별 단가"
 # (`A2` → `A2C1_CHD` = A2 + 그 금액), 아이가 방에서 자는 1박 요금은 **그 칸 한 곳**에만 둔다.
 AGE_BAND_TYPE_FIELD = "요금 기준 유형"
 AGE_BAND_FREE_TYPE = "무료"
+#: `성인 요금의 %` 구간의 아동 금액 칸은 **읽기 전용**이다(`SeasonPriceFillForm._build_child_extra_fields`
+#: — `disabled=True`, 「성인 1인 추가분의 N% 로 계산됨」). 그 값의 정본은 구간 정의
+#: (`rate_basis_value`)라 시즌에서 고칠 자리가 없다 — 지시서는 `자동 입력됨 · 그대로 둠` 으로 적는다.
+AGE_BAND_PERCENT_TYPE = "성인 요금의 %"
+AGE_BAND_AUTO_VALUE = "자동 입력됨"
 AGE_BAND_NAME_FIELD = "노출명"
 AGE_BAND_CODE_FIELD = "밴드 코드"
 SEASON_FILL_TITLE = "시즌 가격 채우기"
+#: 시즌 가격 채우기의 1박 층 — `박수별 단가` 가 얹히는 바닥이다(폼에서 `required=True`).
+FILL_PRICE_FIELD = "판매 단가(공급 통화)"
 CHILD_EXTRA_FIELD = "아동 추가 금액"
 #: `아동 추가 금액 — 소아` — 구분자는 EM DASH(U+2014)를 빈칸으로 감싼 것이 정본이다.
 #: 원고 오타 하나로 검사가 헛돌면 안 되므로 EN DASH·하이픈·가운뎃점도 같은 칸으로 읽는다.
@@ -219,19 +231,42 @@ CHILD_EXTRA_LABEL_RE = re.compile(
 # (밑줄은 좌표 조각 구분자다 — `A2C1_CHD`). 정본 표기는 `CHD`·`INF`·`TEEN`.
 BAND_CODE_RE = re.compile(r"^[A-Za-z0-9]{2,8}$")
 
+#: 좌표 안에서 읽는 구간 코드 — `occupancy_key.BAND_CODE_RE` 그대로다(좌표는 언제나 대문자로
+#: 굳어 저장되므로 좌표 안에서는 소문자를 받지 않는다).
+KEY_BAND_CODE_RE = re.compile(r"^[A-Z0-9]{2,8}$")
+#: 아동 조각의 머리(`C1`) — 코드와 조각을 가르는 유일한 표지다(`occupancy_key._CHILD_HEAD_RE`).
+#: 그래서 `C1`·`C12` 는 **밴드 코드로 쓸 수 없다**: `A2C1_C1` 이 "1명 + 1명" 으로 읽혀 왕복이 깨진다.
+CHILD_HEAD_RE = re.compile(r"^C(\d+)$")
+
 # 인원 조합 좌표 — `stay.services.occupancy_key` 의 A-형 정규형이다: 성인 수 `A2` 뒤에 아동
 # 조각이 붙고(첫 조각은 붙여 `A2C1_CHD`, 둘째부터 `_C1_TEEN` 이 더 붙는다). 옛 숫자 키
 # (`2,3` · `3:+14`)도 서버가 받아 A-형으로 저장하지만, 같은 좌표가 화면·요금표·엔진 로그에서
 # A-형으로 다시 나오므로 지시서는 A-형만 쓴다.
 OCCUPANCY_KEYS_FIELDS = ("인원 조합(선택)", "인원 조합")
 OCCUPANCY_ADJUST_FIELDS = ("인원 조합별 조정(선택)", "인원 조합별 조정")
-OCCUPANCY_KEY_RE = re.compile(r"^A\d+(?:C\d+_[A-Z0-9]{2,8})?(?:_C\d+_[A-Z0-9]{2,8})*$")
 BARE_NUMBER_RE = re.compile(r"^\d+$")
+#: `ProductPrice.occupancy_key` 의 `max_length`(`occupancy_key.KEY_MAX_LENGTH`). 넘는 좌표는
+#: 컬럼에 들어가지 못해 그 조합의 셀이 **아예 만들어지지 않는다** — 유료 구간이 넷인 계약의
+#: `A2C1_CHD_C1_TEEN_C1_JUNIOR_C1_YOUTH`(35자)가 실측 사례다.
+OCCUPANCY_KEY_MAX = 32
+#: 조정 값 한 칸 — 부호 필수다(`season._ADJUST_PATTERN`). `A3:8` 은 화면이 거부한다.
+ADJUST_VALUE_RE = re.compile(r"^([+-])\s*(\d+(?:\.\d+)?)\s*(%?)$")
+#: 조정 목록의 한 항목(`A3:+14`) — 값 쪽에 `%`·부호가 있으므로 첫 `:` 로만 가른다
+#: (`season._OCCUPANCY_ADJUST_ENTRY`).
+OCCUPANCY_ADJUST_ENTRY_RE = re.compile(r"^\s*([^:]+?)\s*:\s*(.+?)\s*$")
+#: `인원 조합` 칸의 구분자 — 쉼표와 빈칸 둘 다다(`season._OCCUPANCY_SPLIT`). 쉼표만 보면
+#: 서버가 통과시키는 `A2 A3` 을 검사기가 "읽지 못하는 좌표 하나" 로 세운다.
+OCCUPANCY_SPLIT_RE = re.compile(r"[,\s]+")
 
 # 박수별 단가 — `박수:1박 단가` 를 쉼표로 잇는다(`3:100,5:90` = 3박부터 1박 100, 5박부터 90).
 # 차액이 아니라 **단가**라 부호를 붙이지 않고, 1박 단가는 위 `판매 단가(공급 통화)` 칸이라
 # 박수는 2 이상이다. 층 하나가 셀 수를 통째로 곱하므로 같은 박수를 두 번 적지 않는다.
 LOS_PRICES_FIELDS = ("박수별 단가(선택)", "박수별 단가")
+#: 한 전개가 만들 수 있는 층 수(1박 제외) · 박수 상한 — `season.MAX_LOS_TIERS`·`MAX_LOS_NIGHTS`.
+#: 층 하나가 셀 수를 통째로 곱하고(룸 × 요금제 × 인원 조합 × 날짜), 30박을 넘는 계단은
+#: 견적이 영영 집지 않는 셀만 날짜 수만큼 깐다.
+MAX_LOS_TIERS = 6
+MAX_LOS_NIGHTS = 30
 
 # 가격 셀 손입력 — 러너는 `인원 조합` **칸이 아니라 `카드:` 줄**에서 좌표를 읽는다
 # (`stay_boot.js`). 그래서 카드 줄과 칸이 서로 다른 행을 부르면 없는 행을 고치러 간다.
@@ -240,6 +275,14 @@ LOS_PRICES_FIELDS = ("박수별 단가(선택)", "박수별 단가")
 # `… 의 `인원별 · 박수별 가격 추가``(새 행 표 — 좌표는 그 표의 셀렉트가 정한다).
 CELL_STEP_TITLES = ("가격 셀 손으로 고치기", "가격 셀 만들기")
 CELL_OCCUPANCY_FIELD = "인원 조합"
+#: 가격 셀 모달의 박수 축(화면 사전 §18). 시즌 채우기의 `박수별 단가` 와 달리 **1을 받는다** —
+#: 1이 「박수 무관」이고 견적이 언제나 집는 바닥 층이다(`CellEditForm.clean_los_nights`).
+#: 상한은 같은 30박이다.
+CELL_LOS_FIELD = "박수~"
+MAX_CELL_LOS_NIGHTS = MAX_LOS_NIGHTS
+#: 숫자 칸이라 값은 `3` 이 정본이다. 원고가 화면 배지를 따라 `3박~` 으로 적는 일이 있어
+#: 그 꼴도 같은 숫자로 읽는다 — 읽고 나서 범위를 보는 것이 목적이지 표기를 다투는 자리가 아니다.
+CELL_LOS_VALUE_RE = re.compile(r"^(-?\d+)\s*박?\s*~?$")
 #: 새 행을 만드는 표 — 카드에 좌표 절이 없는 것이 정본이라 카드↔칸 대조에서 뺀다.
 CELL_NEW_ROW_CARDS = ("인원별 · 박수별 가격 추가", "인원별 가격 추가")
 CELL_CARD_KEY_RE = re.compile(r"의\s*인원\s*조합\s*`(?P<key>[^`]+)`\s*행\s*$")
@@ -886,23 +929,65 @@ def _fills_of_offer(fills, offer):
     return [step for step, own in fills if own is None or own == offer]
 
 
-def _child_extra_names(step):
-    """그 단계의 `아동 추가 금액 — <노출명>` 줄에서 노출명(비교용 꼴)을 모은다."""
-    names = set()
-    for name, _ in step["rows"]:
+def _child_extra_rows(step):
+    """그 단계의 `아동 추가 금액 — <노출명>` 줄을 `{노출명(비교용 꼴): 값}` 으로 모은다."""
+    rows = {}
+    for name, value in step["rows"]:
         m = CHILD_EXTRA_LABEL_RE.match(name.strip())
         if m and m.group("name"):
-            names.add(_fold(m.group("name")))
-    return names
+            rows.setdefault(_fold(m.group("name")), value)
+    return rows
+
+
+def _child_extra_names(step):
+    """그 단계의 `아동 추가 금액 — <노출명>` 줄에서 노출명(비교용 꼴)만."""
+    return set(_child_extra_rows(step))
+
+
+def _age_band_steps(steps):
+    """`연령 구간 만들기` 단계를 `(단계, 유형, 노출명)` 으로 — 유형·이름을 못 읽은 구간은 뺀다.
+
+    유형(`요금 기준 유형`)을 못 읽으면 유료인지 무료인지 모르고, 이름을 못 읽으면 시즌 채우기의
+    어느 줄이 그 구간인지 이을 수 없다 — 둘 다 근거가 모자라 아무 말도 하지 않는다.
+    """
+    found = []
+    for step in steps:
+        if not step["title"].startswith(AGE_BAND_TITLE):
+            continue
+        kind = strip_select(step["fields"].get(AGE_BAND_TYPE_FIELD) or "")
+        label = (step["fields"].get(AGE_BAND_NAME_FIELD)
+                 or step["fields"].get(AGE_BAND_CODE_FIELD) or "")
+        if _blank(kind) or _blank(label):
+            continue
+        found.append((step, kind.strip(), label.strip()))
+    return found
+
+
+def _step_numbers(steps, limit=6):
+    """`7·9단계` — 여럿이면 앞에서 `limit` 개까지만 적고 나머지는 `…` 로 접는다."""
+    nums = [str(step["num"]) for step in steps]
+    shown = "·".join(nums[:limit])
+    return f"{shown}…단계 ({len(nums)}회차)" if len(nums) > limit else f"{shown}단계"
 
 
 def find_child_extra_missing(steps):
-    """유료 연령 구간마다 `시즌 가격 채우기` 에 `아동 추가 금액 — <노출명>` 줄이 있어야 한다.
+    """유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** 아동 금액 줄이 있어야 한다.
 
     `요금 기준 유형` 이 `무료` 가 **아닌** 구간(정액 · 성인 요금의 % · 타 밴드 요금과 동일)은
     시즌 채우기 드로어에 아동 금액 칸을 하나 세우고, 그 칸이 성인 좌표 옆에 아동 좌표를 함께
     깐다(`A2` → `A2C1_CHD`). 줄이 빠지면 아이 1박 요금이 어디에도 실리지 않는다 — 그 돈을
     부가옵션으로 옮겨 적는 길은 2026-09-08 부로 막혔다(§D-1).
+
+    **회차마다 본다**(2026-09-09). 아동 금액은 그 회차가 깔 날짜에만 걸리므로, 한 회차에서
+    빠지면 그 시즌의 날짜에만 아동 조합 셀이 없다 — 그 날짜의 그 조합은 통째로 마감으로 팔린다.
+    "어느 회차엔가 있으면 통과" 로 두면 시즌 하나가 통째로 빠진 원고가 조용히 지나간다.
+
+    회차의 오퍼는 `카드:`(시즌 이름) → `시즌 만들기` 를 거쳐 찾는다. **오퍼를 못 읽은 회차는
+    건너뛴다** — 그 회차가 이 구간의 오퍼인지 알 수 없어서 물으면 오탐이 된다. 못 읽은 회차가
+    있다는 사실 자체는 `find_unmatched_fill_steps` 가 경고로 따로 알린다.
+
+    그 구간의 오퍼로 확인된 회차가 **하나도 없으면** 종전처럼 느슨하게 본다(오퍼를 못 읽은
+    회차까지 통틀어 어딘가에 줄이 있으면 통과) — 근거가 없는 자리에서 오류를 세우지 않는다.
 
     가격을 셀로 손입력하는 원고(=`시즌 가격 채우기` 단계가 아예 없다)와 `요금 기준 유형` 줄이
     없어 유료인지 알 수 없는 구간은 건너뛴다.
@@ -911,18 +996,24 @@ def find_child_extra_missing(steps):
     if not fills:
         return []
     problems = []
-    for step in steps:
-        if not step["title"].startswith(AGE_BAND_TITLE):
+    for step, kind, label in _age_band_steps(steps):
+        if kind.startswith(AGE_BAND_FREE_TYPE):
             continue
-        kind = strip_select(step["fields"].get(AGE_BAND_TYPE_FIELD) or "")
-        if _blank(kind) or kind.startswith(AGE_BAND_FREE_TYPE):
+        offer = card_name(step) or ""
+        known = [fill for fill, own in fills if own is not None and own == offer]
+        if known:
+            missing = [fill for fill in known if _fold(label) not in _child_extra_names(fill)]
+            if not missing:
+                continue
+            problems.append(
+                f"{step['num']}단계: 유료 연령 구간 `{label}` 의 "
+                f"`{CHILD_EXTRA_FIELD} — {label}` 줄이 "
+                f"`{SEASON_FILL_TITLE}` {_step_numbers(missing)}에 없다 — "
+                "아이 1박 요금은 그 칸 한 곳에만 둔다"
+                "(그 회차가 깔 날짜에는 아동 조합 셀이 없어 그 조합이 통째로 마감으로 보인다)"
+            )
             continue
-        label = (step["fields"].get(AGE_BAND_NAME_FIELD)
-                 or step["fields"].get(AGE_BAND_CODE_FIELD) or "")
-        if _blank(label):
-            continue
-        label = label.strip()
-        mine = _fills_of_offer(fills, card_name(step) or "")
+        mine = _fills_of_offer(fills, offer)
         if not mine:
             continue
         if any(_fold(label) in _child_extra_names(fill) for fill in mine):
@@ -931,7 +1022,95 @@ def find_child_extra_missing(steps):
             f"{step['num']}단계: 유료 연령 구간 `{label}` 의 "
             f"`{CHILD_EXTRA_FIELD} \u2014 {label}` 줄이 `{SEASON_FILL_TITLE}` 에 없다 — "
             "아이 1박 요금은 그 칸 한 곳에만 둔다"
+            "(유료 아동인데 조합 셀이 없으면 그 조합이 통째로 마감으로 보인다)"
         )
+    return problems
+
+
+def find_unmatched_fill_steps(steps):
+    """`시즌 가격 채우기` 의 `카드:` 로 시즌을 못 짚으면 경고 — 그 회차는 오퍼 검사에서 빠진다.
+
+    이 드로어는 `시즌` 탭 시즌 줄의 [가격] 으로 열리므로 `카드:` 줄은 그 회차가 여는 **시즌
+    이름**이다(`카드: Regular`). 거기에 오퍼 이름을 적으면 `시즌 만들기` 색인과 이어지지 않아
+    그 회차의 오퍼를 알 수 없고, 오퍼를 축으로 도는 검사들이 그 회차를 **말없이 건너뛴다**
+    (`find_child_extra_missing` · `find_cell_step_without_filled_coordinate`). 오류가 아니라
+    경고인 이유는 그 표기만으로 화면 조작이 틀어지지는 않기 때문이다 — 검사의 눈이 감길 뿐이다.
+
+    시즌 이름이 원고 안에서 겹칠 때도 같은 자리에 선다(어느 시즌인지 하나로 정해지지 않는다).
+    """
+    fills = _season_fill_steps(steps)
+    unmatched = [step for step, own in fills if own is None]
+    if not unmatched:
+        return []
+    return [
+        f"오퍼를 못 읽은 `{SEASON_FILL_TITLE}` 회차가 있다 — {_step_numbers(unmatched)} · "
+        f"`카드:` 줄은 그 회차가 여는 시즌 이름이다(`카드: Regular`) — "
+        "오퍼 이름을 적거나 시즌 이름이 겹치면 그 회차는 아동 금액·좌표 검사에서 빠진다"
+    ]
+
+
+def find_child_extra_value_gaps(steps):
+    """`아동 추가 금액 — <노출명>` 줄의 **값**이 그 구간의 `요금 기준 유형` 과 맞는지 본다.
+
+    넷 다 오류다:
+
+    * **유료 구간인데 값이 비었다** — 그 구간의 아동 조합 셀이 아예 만들어지지 않는다
+      (화면 사전 §16: "비우면 이 구간의 아동 조합 셀을 만들지 않습니다"). 그러면 소아 1명이 낀
+      요청은 좌표를 못 찾아 머릿수 셀(`A3`)로 내려가고, `인원 조합` 에 `A3` 도 없으면 **판매
+      불가**다. 아이를 무료로 팔 생각이면 `0` 이 그 뜻이다 — 빈 칸과 `0` 은 다른 값이다.
+    * **무료 구간인데 줄이 있다** — 그 칸은 화면에 서지 않는다
+      (`SeasonPriceFillForm._build_child_extra_fields` 가 `FREE` 를 건너뛴다). 없는 칸을 채우라는
+      단계라 담당자가 화면에서 그 줄을 찾다가 멈춘다.
+    * **`성인 요금의 %` 구간에 금액을 적었다** — 그 칸은 읽기 전용이고(`disabled=True`) 값의
+      정본은 연령 구간의 비율이다. 지시서는 `자동 입력됨 · 그대로 둠` 으로 적는다 — 숫자를
+      적어 두면 담당자가 못 고치는 칸 앞에서 멈춘다.
+    * **그 밖의 유료 구간에 `자동 입력됨` 을 적었다** — 반대 방향의 같은 사고다. 그 칸은
+      담당자가 실제로 채워야 하는 숫자인데 "그대로 둠" 이라고 적혀 있으면 빈 칸으로 지나간다.
+
+    줄이 아예 없는 유료 구간은 `find_child_extra_missing` 이 말한다(두 번 알리지 않는다).
+    """
+    fills = _season_fill_steps(steps)
+    if not fills:
+        return []
+    problems = []
+    for step, kind, label in _age_band_steps(steps):
+        free = kind.startswith(AGE_BAND_FREE_TYPE)
+        percent = kind.startswith(AGE_BAND_PERCENT_TYPE)
+        for fill in _fills_of_offer(fills, card_name(step) or ""):
+            rows = _child_extra_rows(fill)
+            if _fold(label) not in rows:
+                continue
+            value = str(rows[_fold(label)] or "").strip()
+            if free:
+                problems.append(
+                    f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} — {label}` 줄이 있는데 "
+                    f"그 구간({step['num']}단계)은 `{AGE_BAND_FREE_TYPE}` 다 — "
+                    "무료 구간은 그 칸이 화면에 서지 않으므로 줄을 적지 않는다"
+                )
+                continue
+            auto = value.startswith(AGE_BAND_AUTO_VALUE)
+            if percent:
+                if not auto:
+                    problems.append(
+                        f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} — {label}` 이 `{value}` 다 — "
+                        f"`{AGE_BAND_PERCENT_TYPE}` 구간의 칸은 읽기 전용이라 "
+                        "`자동 입력됨 · 그대로 둠` 으로 적는다(값의 정본은 연령 구간의 비율이다)"
+                    )
+                continue
+            if auto:
+                problems.append(
+                    f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} — {label}` 을 `자동 입력됨` 으로 "
+                    f"적었는데 그 구간({step['num']}단계)은 `{kind}` 다 — 그 칸은 담당자가 적는 숫자다"
+                )
+                continue
+            if _blank(value):
+                problems.append(
+                    f"{fill['num']}단계: 유료 연령 구간 `{label}` 의 "
+                    f"`{CHILD_EXTRA_FIELD} — {label}` 이 비어 있다 — "
+                    "비우면 그 구간의 아동 조합 셀을 만들지 않는다"
+                    "(유료 아동인데 조합 셀이 없으면 성인 전용 좌표로 내려가지 않아 "
+                    "그 조합이 통째로 마감으로 보인다 · 무료로 팔 생각이면 `0` 이 그 뜻이다)"
+                )
     return problems
 
 
@@ -998,19 +1177,106 @@ def find_band_code_format(steps):
 
     소문자로 쳐도 서버가 대문자로 굳히므로 소문자는 받아 준다. 밑줄은 좌표 조각 구분자라
     (`A2C1_CHD`) 코드 안에 들어가면 좌표가 갈라지고, 한글·공백·기호·1자·9자 이상도 막힌다.
+
+    막는 이유는 저장이 아니라 **계산**이다 — 구간 코드를 읽지 못하면 그 나이의 아이는
+    성인으로 계산된다(경고만 로그에 남고 화면은 조용하다, §연령 구간). 밑줄이 든 옛 코드
+    (`CHILD_UNDER12`)가 그 자리라, 그런 구간은 코드를 `CHD` 처럼 고쳐야 아이 값이 제 좌표로 간다.
     """
     problems = []
     for step in steps:
         if not step["title"].startswith(AGE_BAND_TITLE):
             continue
         code = (step["fields"].get(AGE_BAND_CODE_FIELD) or "").strip()
-        if _blank(code) or BAND_CODE_RE.match(code):
+        if _blank(code):
+            continue
+        if CHILD_HEAD_RE.match(code.upper()):
+            # `C1` 은 아동 조각의 머리와 글자가 같다 — 코드로 쓰면 `A2C1_C1` 이 "1명 + 1명" 으로
+            # 읽혀 서버가 만든 좌표를 서버가 도로 못 읽는다(`occupancy_key.validate_band_code`).
+            problems.append(
+                f"{step['num']}단계: 밴드 코드 `{code}` 는 쓸 수 없다 — "
+                "`C`+숫자는 좌표의 아동 조각 표기(`A2C1`)와 같아 좌표가 갈린다(CHD·TEEN 처럼 글자로 시작한다)"
+            )
+            continue
+        if BAND_CODE_RE.match(code):
             continue
         problems.append(
             f"{step['num']}단계: 밴드 코드 `{code}` 는 쓸 수 없다 — "
-            "영대문자·숫자 2~8자다(CHD·INF·TEEN · 밑줄은 좌표 조각 구분자라 못 쓴다)"
+            "영대문자·숫자 2~8자다(CHD·INF·TEEN · 밑줄은 좌표 조각 구분자라 못 쓴다) · "
+            "구간 코드를 읽지 못하면 그 나이의 아이는 성인으로 계산된다"
         )
     return problems
+
+
+def read_occupancy_key(key):
+    """좌표 하나를 ERP 와 **같은 문**으로 읽는다 — 통과하면 `None`, 아니면 왜 못 쓰는지 한 마디.
+
+    정본은 `stay.services.occupancy_key.parse_key` 다(2026-09-09 배포). 정규식 한 줄로 흉내
+    내면 통과하는 모양이 서로 어긋난다 — 종전 `OCCUPANCY_KEY_RE` 는 `A2C1_C1` 을 "C1 조각 +
+    코드 C1" 로 읽어 통과시켰는데, 서버는 그 키를 **거부한다**(코드 없는 조각이 둘이다).
+    그래서 파서를 그대로 옮겼다: 조각 머리(`C<n>`)가 먼저고, 머리가 아닌 토큰은 **직전 조각의
+    코드**다.
+
+    말은 규칙서 §인원 조합·§연령 구간과 **같은 말**을 쓴다(검사기와 규칙서가 다른 낱말을 쓰면
+    담당자가 두 글을 같은 규칙으로 못 읽는다):
+
+    * "인원 조합 키는 32자까지다" — 넘으면 화면이 「인원 조합 키가 너무 깁니다(32자까지)」로
+      막는다. 그때는 구간 코드를 짧게 하거나 조합을 줄인다.
+    * "키의 철자는 한 가지뿐이다" — 첫 아동 조각은 성인 자리에 붙여 쓰고(`A2C1_CHD`,
+      `A2_C1_CHD` 아님), 조각마다 구간 코드를 하나씩 붙인다. 코드 있는 조각과 없는 조각을 섞은
+      `A2C1_C1_CHD` 는 거부되고, **코드가 없는 형식은 정확히 `A<성인수>C<아동수>` 한 가지**다.
+    * "코드 없는 `A2C1` 은 지시서가 쓰지 않는다" — 그 옛 손입력 키가 후보가 되는 것은 그 오퍼의
+      유료 구간이 하나뿐일 때만이라, 둘 이상이면 TEEN 값이 CHD 로 팔릴 수 있다. 원고는 언제나
+      구간 코드가 붙은 키(`A2C1_CHD`)를 적는다.
+
+    답은 `None`(통과) 또는 `(갈래, 까닭)` 이다. 갈래를 나누는 이유는 **고치는 손이 다르기**
+    때문이다: `long` 은 구간 코드를 짧게 하는 일이고, `codeless` 는 코드를 덧붙이는 일이며,
+    `legacy` 는 표기를 A-형으로 옮기는 일이고, `unread` 는 좌표를 다시 쓰는 일이다.
+
+    * `legacy`   — 맨 숫자(`3`). 서버는 `A3` 으로 옮겨 저장하지만 화면에는 A-형으로 다시 뜬다.
+    * `long`     — 32자 초과. **읽히기는 한다** — 다만 컬럼이 32자라 그 셀이 안 생긴다.
+    * `codeless` — 코드 없는 `A2C1`. 서버는 하위호환으로 읽지만 원고는 쓰지 않는다(위 목록 ③).
+    * `unread`   — 서버도 거부하는 모양(혼합 `A2C1_C1_CHD` · `A2_C1_CHD` · 알 수 없는 글자).
+    """
+    text = (key or "").strip().upper()
+    if not text:
+        return None  # 인원 무관 단일가 — 좌표가 아니라 폴백이다
+    if len(text) > OCCUPANCY_KEY_MAX:
+        return ("long", f"{len(text)}자")
+    if BARE_NUMBER_RE.match(text):
+        return ("legacy", "성인·아동 구분이 없는 옛 숫자 표기다")
+    head_match = re.match(r"^A(\d+)", text)
+    if head_match is None:
+        return ("unread", "A-형이 아니다")
+    rest = text[head_match.end():]
+    if not rest:
+        return None
+    if rest.startswith("_"):
+        return ("unread", "첫 아동 조각은 성인 자리에 붙여 쓴다(`A2C1_CHD`, `A2_C1_CHD` 아님)")
+    parts = []  # [[아동 수, 구간 코드 or None], …]
+    for token in rest.split("_"):
+        if not token:
+            return ("unread", "빈 조각이 있다")
+        child_head = CHILD_HEAD_RE.match(token)
+        if child_head is not None:
+            if int(child_head.group(1)) <= 0:
+                return ("unread", "아동 수가 0인 조각은 좌표가 될 수 없다")
+            parts.append([int(child_head.group(1)), None])
+            continue
+        if not parts:
+            return ("unread", f"구간 코드 `{token}` 앞에 아동 조각(`C`+숫자)이 없다")
+        if parts[-1][1] is not None:
+            return ("unread", "아동 조각 하나에 구간 코드가 둘이다")
+        if not KEY_BAND_CODE_RE.match(token):
+            return ("unread", f"구간 코드 `{token}` 가 영대문자·숫자 2~8자가 아니다")
+        parts[-1][1] = token
+    if all(code is not None for _, code in parts):
+        return None
+    if len(parts) != 1:
+        # `A2C1_C1_CHD` 처럼 코드 있는 조각과 없는 조각이 섞인 모양 — 서버도 거부한다.
+        return ("unread",
+                "코드 있는 조각과 없는 조각을 섞었다"
+                "(코드가 없는 형식은 정확히 `A<성인수>C<아동수>` 한 가지다)")
+    return ("codeless", "구간 코드가 없다")
 
 
 def find_occupancy_key_legacy(steps):
@@ -1020,19 +1286,27 @@ def find_occupancy_key_legacy(steps):
     엔진 로그에서 A-형으로 다시 나온다 — 지시서와 화면이 다른 글자를 쓰면 대조가 끊긴다.
     아동을 더한 좌표는 밴드 코드까지 적는다(`A2C1_CHD` · 둘째 구간부터 `_C1_TEEN`). `비움` 은 통과.
 
-    칸이 두 갈래라 값의 꼴도 두 갈래다:
+    칸이 세 갈래라 값의 꼴도 세 갈래다:
     - `시즌 가격 채우기` 의 `인원 조합(선택)` 은 **텍스트** — `A2,A3` 쉼표 목록 그대로 본다.
     - 가격 셀 편집 모달의 `인원 조합` 은 **셀렉트** — `선택: A2C1_CHD · 성인 2 · 소아 1` 처럼
       옵션 글자를 그대로 적는 것이 정본이라(§표기 규칙) `_occupancy_key_of_value` 로 키만 뽑고,
       `선택: 인원 무관 단일가`(빈 키)는 통과시킨다.
+    - 가격 셀 단계의 **`카드:` 줄**(`… 의 인원 조합 A2C1_CHD 행`) — 러너가 좌표를 실제로
+      읽는 자리다(`stay_boot.js`). 칸만 보면 카드 줄의 `A2C1` 이 그대로 남아 러너가 그 오퍼에
+      뜻이 정해지지 않는 행을 연다.
+
+    모양은 `read_occupancy_key` 한 문으로 본다 — 32자 초과·코드 없는 `A2C1`·혼합
+    (`A2C1_C1_CHD`)·읽지 못하는 코드가 모두 그 문에서 갈린다.
     """
     problems = []
     for step in steps:
         select = any(step["title"].startswith(t) for t in CELL_STEP_TITLES)
-        for names, what, example, with_amount in (
+        sources = [
             (OCCUPANCY_KEYS_FIELDS, "인원 조합", "A2,A3", False),
             (OCCUPANCY_ADJUST_FIELDS, "인원 조합별 조정", "A3:+14,A4:+26", True),
-        ):
+        ]
+        seen = set()
+        for names, what, example, with_amount in sources:
             value = _labeled_value(step, names)
             if value is None or _blank(value):
                 continue
@@ -1041,34 +1315,75 @@ def find_occupancy_key_legacy(steps):
                 # 셀렉트 항목 글자 하나 — 문(門)으로 키만 뽑는다(`인원 무관 단일가` 는 빈 키)
                 keys = [key for key in [_occupancy_key_of_value(text)] if key]
                 shape = "선택: A2 · 성인 2"
-            else:
-                keys = [
-                    (part.split(":", 1)[0].strip() if with_amount else part.strip())
-                    for part in text.split(",") if part.strip()
-                ]
+            elif with_amount:
+                # 조정 칸은 **쉼표만** 가른다 — 값 쪽(`-5 %`)에 빈칸이 들어갈 수 있다.
+                keys = [part.split(":", 1)[0].strip() for part in text.split(",") if part.strip()]
                 shape = example
-            numeric = [key for key in keys if BARE_NUMBER_RE.match(key)]
-            unread = [key for key in keys
-                      if not BARE_NUMBER_RE.match(key) and not OCCUPANCY_KEY_RE.match(key)]
-            if numeric:
-                problems.append(
-                    f"{step['num']}단계: {what} `{text}` 은 옛 숫자 표기다 — "
-                    f"{shape} 처럼 A-형 좌표로 적는다(아이를 더하면 A2C1_CHD)"
+            else:
+                keys = [part for part in OCCUPANCY_SPLIT_RE.split(text) if part]
+                shape = example
+            seen.update(keys)
+            problem = _occupancy_key_problem(step, what, text, keys, shape)
+            if problem:
+                problems.append(problem)
+        if select and not _cell_new_row_card(step):
+            # 카드 줄은 러너가 읽는 좌표다 — 칸에서 이미 말한 키는 두 번 알리지 않는다.
+            card_key = _cell_card_key(step)
+            if card_key and card_key not in seen:
+                problem = _occupancy_key_problem(
+                    step, "카드 줄의 인원 조합", card_key, [card_key],
+                    "… 의 인원 조합 `A2C1_CHD` 행",
                 )
-            elif unread:
-                problems.append(
-                    f"{step['num']}단계: {what} 의 좌표 `{', '.join(unread)}` 를 읽지 못한다 — "
-                    f"{shape} 처럼 A-형으로 적는다(성인 수 A2 뒤에 아동 조각 C1_CHD)"
-                )
+                if problem:
+                    problems.append(problem)
     return problems
 
 
+#: 한 칸에 여러 갈래가 섞이면 이 순서로 말한다 — 옛 숫자 표기부터 고쳐야 나머지가 드러난다.
+_KEY_PROBLEM_ORDER = ("legacy", "long", "codeless", "unread")
+
+
+def _occupancy_key_problem(step, what, text, keys, shape):
+    """좌표 목록 하나를 보고 문제 한 줄(없으면 None).
+
+    한 칸에서 여러 키가 어긋나도 줄은 하나다 — 담당자가 고치는 자리는 그 칸 하나이고, 같은
+    칸을 키 수만큼 반복해 적으면 보고가 그 칸 하나로 뒤덮인다. 갈래마다 말이 다른 이유는
+    고치는 손이 다르기 때문이다(`read_occupancy_key`).
+    """
+    found = []
+    for key in keys:
+        judged = read_occupancy_key(key)
+        if judged:
+            found.append((key, judged[0], judged[1]))
+    if not found:
+        return None
+    kind = min((k for _, k, _ in found), key=_KEY_PROBLEM_ORDER.index)
+    picked = [(key, why) for key, k, why in found if k == kind]
+    listed = " · ".join(f"`{key}`" for key, _ in picked)
+    why = picked[0][1]
+    if kind == "legacy":
+        return (f"{step['num']}단계: {what} `{text}` 은 옛 숫자 표기다 — "
+                f"{shape} 처럼 A-형 좌표로 적는다(아이를 더하면 A2C1_CHD)")
+    if kind == "long":
+        return (f"{step['num']}단계: {what} 의 좌표 {listed} 가 {OCCUPANCY_KEY_MAX}자를 넘는다({why}) — "
+                f"화면이 「인원 조합 키가 너무 깁니다({OCCUPANCY_KEY_MAX}자까지)」로 막는다 · "
+                "구간 코드를 짧게 하거나 조합을 줄인다(그 좌표의 셀은 만들어지지 않는다)")
+    if kind == "codeless":
+        return (f"{step['num']}단계: {what} 의 좌표 {listed} 에 구간 코드가 없다 — "
+                "원고는 언제나 구간 코드가 붙은 키(`A2C1_CHD`)를 적는다"
+                "(코드 없는 `A2C1` 은 그 오퍼의 유료 구간이 하나뿐일 때만 뜻이 정해져, "
+                "둘 이상이면 TEEN 값이 CHD 로 팔릴 수 있다)")
+    return (f"{step['num']}단계: {what} 의 좌표 {listed} 를 읽지 못한다 — {why} · "
+            f"{shape} 처럼 성인 수 A2 뒤에 아동 조각 C1_CHD 를 붙인다")
+
+
 def find_los_prices_format(steps):
-    """`박수별 단가(선택)` 는 `박수:1박 단가` 쉼표 목록이다 — 부호·1박 이하·중복은 오류.
+    """`박수별 단가(선택)` 는 `박수:1박 단가` 쉼표 목록이다 — 부호·1박 이하·30박 초과·층 초과·중복은 오류.
 
     차액이 아니라 **단가**라 부호를 붙이지 않고(`3:+100` 은 화면이 거부한다), 1박 단가는 위
-    `판매 단가(공급 통화)` 칸이라 박수는 2 이상이다. 층 하나가 셀 수를 통째로 곱하므로 같은
-    박수를 두 번 적지 않는다. `비움` 은 통과.
+    `판매 단가(공급 통화)` 칸이라 박수는 2 이상이다. 상한은 `season.MAX_LOS_NIGHTS`(30박)·
+    `MAX_LOS_TIERS`(6층)다 — 층 하나가 (룸 × 요금제 × 인원 조합 × 날짜)를 통째로 곱하고,
+    30박을 넘는 계단은 견적이 영영 집지 않는 셀만 날짜 수만큼 깐다. `비움` 은 통과.
     """
     problems = []
     for step in steps:
@@ -1096,6 +1411,12 @@ def find_los_prices_format(steps):
                     "박수는 2 이상이다(1박 단가는 위 `판매 단가(공급 통화)` 칸이다)"
                 )
                 break
+            if nights > MAX_LOS_NIGHTS:
+                message = (
+                    f"{step['num']}단계: 박수별 단가 `{text}` 의 박수가 {nights} 다 — "
+                    f"{MAX_LOS_NIGHTS}박까지다(그보다 긴 계단은 견적이 집지 않는 셀만 깐다)"
+                )
+                break
             if nights in seen:
                 message = (
                     f"{step['num']}단계: 박수별 단가 `{text}` 에 {nights}박이 두 번 있다 — "
@@ -1103,6 +1424,159 @@ def find_los_prices_format(steps):
                 )
                 break
             seen.add(nights)
+        if message is None and len(seen) > MAX_LOS_TIERS:
+            message = (
+                f"{step['num']}단계: 박수별 단가 `{text}` 의 층이 {len(seen)}개다 — "
+                f"{MAX_LOS_TIERS}개까지다(층 하나가 룸 × 요금제 × 인원 조합 × 날짜를 통째로 곱한다)"
+            )
+        if message:
+            problems.append(message)
+    return problems
+
+
+def find_los_without_base_price(steps):
+    """`박수별 단가` 를 적었는데 `판매 단가(공급 통화)` 가 비면 오류 — 1박 층이 없는 시즌이 된다.
+
+    2026-09-09 배포로 LOS 의 뜻이 **날짜마다 요청 박수 이하에서 가장 큰 층**으로 바뀌었고,
+    이하 층이 하나도 없는 날이 체류에 끼면 **그 체류는 마감**이다(최소 층으로 물러나지 않는다).
+    그래서 3박 층만 깔린 좌표는 1·2박 요청에 팔리지 않고, 1박 층이 없는 날이 하루라도 끼면
+    3박 요청까지 통째로 막힌다 — `박수별 단가` 는 1박 층 **위에** 층을 더하는 칸이지 1박 층을
+    대신하는 칸이 아니다(화면 사전 §16).
+
+    폼도 막는다(`판매 단가` 는 `required=True`) — 여기서 먼저 잡는 이유는 그 거부가 담당자
+    화면에서야 나오고, 그때 담당자는 지시서에 없는 숫자를 스스로 지어내야 하기 때문이다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(SEASON_FILL_TITLE):
+            continue
+        los = _labeled_value(step, LOS_PRICES_FIELDS)
+        if los is None or _blank(los):
+            continue
+        price = _field_value(step, FILL_PRICE_FIELD)
+        if price is not None and not _blank(price):
+            continue
+        problems.append(
+            f"{step['num']}단계: 박수별 단가 `{str(los).strip()}` 를 적었는데 "
+            f"`{FILL_PRICE_FIELD}` 가 비어 있다 — 그 칸이 1박 층이다"
+            "(1박 층이 없으면 그 좌표는 어느 박수로도 팔리지 않는다)"
+        )
+    return problems
+
+
+def find_cell_los_nights(steps):
+    """가격 셀 단계의 `박수~` 는 1~30 정수여야 한다 — 1이 「박수 무관」이다.
+
+    시즌 채우기의 `박수별 단가` 와 달리 이 칸은 **1을 받는다**(`CellEditForm.clean_los_nights`):
+    견적은 날짜마다 요청 박수 이하에서 가장 큰 층을 고르므로 1박 층은 언제나 집히는 바닥이다.
+    0·음수는 화면이 거부하고, 30을 넘는 계단은 견적이 집지 않는 셀만 남긴다. `비움` 은 통과 —
+    그 칸의 초깃값이 1이다.
+    """
+    problems = []
+    for step in steps:
+        if not any(step["title"].startswith(t) for t in CELL_STEP_TITLES):
+            continue
+        value = _field_value(step, CELL_LOS_FIELD)
+        if value is None or _blank(value):
+            continue
+        text = strip_select(str(value)).strip()
+        m = CELL_LOS_VALUE_RE.match(text)
+        if m is None:
+            problems.append(
+                f"{step['num']}단계: `{CELL_LOS_FIELD}` `{text}` 를 읽지 못한다 — "
+                "3 처럼 숫자만 적는다(1이 「박수 무관」이다)"
+            )
+            continue
+        nights = int(m.group(1))
+        if 1 <= nights <= MAX_CELL_LOS_NIGHTS:
+            continue
+        if nights < 1:
+            problems.append(
+                f"{step['num']}단계: `{CELL_LOS_FIELD}` 가 {nights} 다 — "
+                "1 이상이다(1이 「박수 무관」이라 언제나 집히는 바닥 층이다)"
+            )
+        else:
+            problems.append(
+                f"{step['num']}단계: `{CELL_LOS_FIELD}` 가 {nights} 다 — "
+                f"{MAX_CELL_LOS_NIGHTS} 이하다(그보다 긴 계단은 견적이 집지 않는다)"
+            )
+    return problems
+
+
+def _normalized_occupancy_key(key):
+    """조정 키와 인원 조합 키를 **같은 문**으로 굳힌다 — 맨 숫자는 A-형으로(`3` → `A3`).
+
+    서버가 두 칸을 같은 `normalize_key` 로 지나게 하므로(`season._normalized_adjust_key`),
+    검사기가 문자열 그대로 견주면 `2,3` + `3:+14` 처럼 **서버에서는 맞물리는** 조합을
+    어긋난다고 말하게 된다. A-형 강제는 `find_occupancy_key_legacy` 가 따로 한다.
+    """
+    text = (key or "").strip().upper()
+    return f"A{int(text)}" if BARE_NUMBER_RE.match(text) else text
+
+
+def find_occupancy_adjust_gaps(steps):
+    """`인원 조합별 조정(선택)` — 부호 필수 · `인원 조합(선택)` 에 있는 키만 · 같은 키 한 번.
+
+    이 칸은 위 단가 대비 **차액**이라 부호가 문법의 일부다(`season.parse_plan_adjust` —
+    `A3:8` 은 "8 비싸게" 가 아니라 읽지 못하는 값이다). 그리고 조정은 좌표 위에 얹히는 값이라
+    인원 조합 칸에 없는 키를 적으면 그 줄은 **아무 좌표에도 닿지 않는다** — 저장은 성공하고
+    화면에는 아무 일도 일어나지 않으므로 `occupancy_amounts` 가 이름을 대고 막는다.
+
+    좌표의 **모양**은 여기서 보지 않는다(`find_occupancy_key_legacy` 의 몫이다) — 두 검사가
+    같은 값을 두 줄로 말하면 담당자가 칸 하나를 두 번 고치러 간다.
+    """
+    problems = []
+    for step in steps:
+        text = _labeled_value(step, OCCUPANCY_ADJUST_FIELDS)
+        if text is None or _blank(text):
+            continue
+        text = str(text).strip()
+        keys_value = _labeled_value(step, OCCUPANCY_KEYS_FIELDS)
+        laid = [] if keys_value is None or _blank(keys_value) else [
+            _normalized_occupancy_key(part)
+            for part in OCCUPANCY_SPLIT_RE.split(str(keys_value).strip()) if part
+        ]
+        if not laid:
+            problems.append(
+                f"{step['num']}단계: 인원 조합별 조정 `{text}` 을 적었는데 인원 조합이 비어 있다 — "
+                "조정은 인원 조합을 적은 전개에서만 걸린다(인원 조합 칸을 채우거나 조정을 비운다)"
+            )
+            continue
+        message, seen, missing = None, set(), []
+        for chunk in text.split(","):
+            entry = chunk.strip()
+            if not entry:
+                continue
+            m = OCCUPANCY_ADJUST_ENTRY_RE.match(entry)
+            if m is None:
+                message = (
+                    f"{step['num']}단계: 인원 조합별 조정 `{text}` 를 읽지 못한다 — "
+                    "A3:+14,A4:+26 처럼 `키:조정` 으로 적는다"
+                )
+                break
+            key, amount = _normalized_occupancy_key(m.group(1)), m.group(2).strip()
+            if not ADJUST_VALUE_RE.match(amount):
+                message = (
+                    f"{step['num']}단계: 인원 조합별 조정 `{entry}` 의 조정 값에 부호가 없다 — "
+                    "+14(14 비싸게) · -8(8 싸게) · -5% 처럼 부호를 붙인다(차액이라 부호가 문법이다)"
+                )
+                break
+            if key in seen:
+                message = (
+                    f"{step['num']}단계: 인원 조합별 조정 `{text}` 에 `{key}` 가 두 번 있다 — "
+                    "어느 쪽을 쓸지 정해지지 않아 화면이 거부한다"
+                )
+                break
+            seen.add(key)
+            if key not in laid:
+                missing.append(key)
+        if message is None and missing:
+            message = (
+                f"{step['num']}단계: 인원 조합별 조정의 키 "
+                f"{' · '.join(f'`{key}`' for key in missing)} 가 "
+                f"인원 조합 칸(`{str(keys_value).strip()}`)에 없다 — "
+                "그 조정은 아무 좌표에도 닿지 않는다(키를 인원 조합에 더하거나 조정을 뺀다)"
+            )
         if message:
             problems.append(message)
     return problems
@@ -1956,10 +2430,15 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     age_band_overlaps = find_age_band_overlaps(parsed)
     band_code_formats = find_band_code_format(parsed)
     child_extra_missing = find_child_extra_missing(parsed)
+    child_extra_values = find_child_extra_value_gaps(parsed)
+    unmatched_fills = find_unmatched_fill_steps(parsed)
     child_extra_no_occupancy = find_child_extra_without_occupancy(parsed)
     child_lodging_addons = find_child_lodging_addon(parsed)
     occupancy_key_legacy = find_occupancy_key_legacy(parsed)
+    occupancy_adjust_gaps = find_occupancy_adjust_gaps(parsed)
     los_prices_formats = find_los_prices_format(parsed)
+    los_without_base_price = find_los_without_base_price(parsed)
+    cell_los_nights = find_cell_los_nights(parsed)
     cell_occupancy_mismatch = find_cell_step_occupancy_mismatch(parsed)
     cell_coordinate_gaps = find_cell_step_without_filled_coordinate(parsed)
     audience_only_names = find_audience_only_names(parsed)
@@ -2058,10 +2537,15 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "age_band_overlaps": age_band_overlaps,
         "band_code_formats": band_code_formats,
         "child_extra_missing": child_extra_missing,
+        "child_extra_values": child_extra_values,
+        "unmatched_fills": unmatched_fills,
         "child_extra_no_occupancy": child_extra_no_occupancy,
         "child_lodging_addons": child_lodging_addons,
         "occupancy_key_legacy": occupancy_key_legacy,
+        "occupancy_adjust_gaps": occupancy_adjust_gaps,
         "los_prices_formats": los_prices_formats,
+        "los_without_base_price": los_without_base_price,
+        "cell_los_nights": cell_los_nights,
         "cell_occupancy_mismatch": cell_occupancy_mismatch,
         "cell_coordinate_gaps": cell_coordinate_gaps,
         "audience_only_names": audience_only_names,
@@ -2143,9 +2627,11 @@ def main(argv=None):
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]
-              + r["child_extra_no_occupancy"]
+              + r["child_extra_values"] + r["child_extra_no_occupancy"]
               + r["child_lodging_addons"] + r["occupancy_key_legacy"]
-              + r["los_prices_formats"]
+              + r["occupancy_adjust_gaps"]
+              + r["los_prices_formats"] + r["los_without_base_price"]
+              + r["cell_los_nights"]
               + r["cell_occupancy_mismatch"] + r["cell_coordinate_gaps"]
               + r["audience_only_names"] + r["gala_addons"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
@@ -2168,6 +2654,8 @@ def main(argv=None):
     for w in r["blank_booking_window"]:
         warnings.append(w)
     for w in r["needless_overwrite"]:
+        warnings.append(w)
+    for w in r["unmatched_fills"]:
         warnings.append(w)
     for w in r["child_policy_gaps"]:
         warnings.append(w)
