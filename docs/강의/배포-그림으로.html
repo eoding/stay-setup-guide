@@ -362,29 +362,29 @@ DELETE FROM `stay_productprice` WHERE `stay_productprice`.`id` IN (337063, 33710
 </section>
 <section class="sec" id="sec-5">
 <h2><span class="num">5</span>Stay 밖에는 영향이 없다</h2>
-<div class="fig"><svg viewBox="0 0 900 404" role="img" aria-label="저장소 셋의 바뀐 파일 수와 Stay 밖 파일 수, ERP 한 파일을 include 하는 곳 지도">
+<div class="fig"><svg viewBox="0 0 900 470" role="img" aria-label="저장소 셋의 바뀐 파일 수와 Stay 밖 파일 수, ERP 두 파일(include 하는 곳과 fit 한 곳) 지도">
 <rect class="box" x="16" y="16" width="280" height="176" rx="16"/>
 <text class="t-rh" x="156" y="48" text-anchor="middle">ERP</text>
 <text class="mono" x="156" y="68" text-anchor="middle">basecamp</text>
-<text class="big" x="156" y="128" text-anchor="middle">64</text>
+<text class="big" x="156" y="128" text-anchor="middle">68</text>
 <text class="t-s" x="156" y="148" text-anchor="middle">바뀐 파일</text>
 <rect class="pill-acc" x="81" y="156" width="150" height="30" rx="15"/>
-<text class="t-pa" x="156" y="176" text-anchor="middle">Stay 밖: 1</text>
+<text class="t-pa" x="156" y="176" text-anchor="middle">Stay 밖: 2</text>
 <rect class="box" x="310" y="16" width="280" height="176" rx="16"/>
 <text class="t-rh" x="450" y="48" text-anchor="middle">엔진</text>
 <text class="mono" x="450" y="68" text-anchor="middle">homepage-backend</text>
-<text class="big" x="450" y="128" text-anchor="middle">17</text>
+<text class="big" x="450" y="128" text-anchor="middle">20</text>
 <text class="t-s" x="450" y="148" text-anchor="middle">바뀐 파일</text>
 <rect class="pill-teal" x="375" y="156" width="150" height="30" rx="15"/>
 <text class="t-pt" x="450" y="176" text-anchor="middle">Stay 밖: 0</text>
 <rect class="box" x="604" y="16" width="280" height="176" rx="16"/>
 <text class="t-rh" x="744" y="48" text-anchor="middle">고객 화면</text>
 <text class="mono" x="744" y="68" text-anchor="middle">website-ui</text>
-<text class="big" x="744" y="128" text-anchor="middle">19</text>
+<text class="big" x="744" y="128" text-anchor="middle">27</text>
 <text class="t-s" x="744" y="148" text-anchor="middle">바뀐 파일</text>
 <rect class="pill-teal" x="669" y="156" width="150" height="30" rx="15"/>
 <text class="t-pt" x="744" y="176" text-anchor="middle">Stay 밖: 0</text>
-<text class="t-cap" x="16" y="224">ERP 의 그 한 파일 — include 하는 곳</text>
+<text class="t-cap" x="16" y="224">ERP 의 두 파일 — include 하는 곳, 그리고 fit 한 곳</text>
 <rect class="box" x="16" y="238" width="400" height="100" rx="12"/>
 <text class="t-s" x="216" y="266" text-anchor="middle">Stay 템플릿 4개</text>
 <rect class="box-teal" x="36" y="278" width="180" height="26" rx="8"/>
@@ -403,9 +403,15 @@ DELETE FROM `stay_productprice` WHERE `stay_productprice`.`id` IN (337063, 33710
 <path class="arw-old" d="M424 371 H452"/><path class="arw-old" d="M445 364 L453 371 L445 378"/>
 <rect class="box-old" x="476" y="350" width="408" height="42" rx="12"/>
 <text class="code-m dim" x="680" y="376" text-anchor="middle">_htmx.html</text>
+<rect class="box" x="16" y="406" width="400" height="48" rx="12"/>
+<text class="t-s" x="216" y="435" text-anchor="middle">FIT 예약 상세 · 추가수집정보 탭 저장</text>
+<path class="arw-acc" d="M424 430 H452"/><path class="arw-acc" d="M444 421 L456 430 L444 439"/>
+<rect class="box-acc" x="476" y="406" width="408" height="48" rx="12"/>
+<text class="code-s" x="680" y="427" text-anchor="middle">fit/views/reservation.py</text>
+<text class="t-s" x="680" y="446" text-anchor="middle">한 곳 · 병합 헬퍼 호출로 교체</text>
 </svg></div>
-<div class="table-wrap"><table><thead><tr><th>저장소</th><th>바뀐 파일</th><th>Stay 밖</th></tr></thead><tbody><tr><td>ERP (basecamp)</td><td>64</td><td>1 — <code>common/templates/common/_htmx_stay.html</code></td></tr><tr><td>엔진 (homepage-backend)</td><td>17</td><td>0 — 전부 <code>stay/</code> 패키지</td></tr><tr><td>고객 화면 (website-ui)</td><td>19</td><td>0 — 전부 <code>src/stay/</code> 와 <code>__tests__/stay/</code></td></tr></tbody></table></div>
-<p>ERP 의 그 한 파일은 Stay 전용 htmx 로더고 include 하는 곳이 Stay 템플릿 넷(<code>master_list</code> · <code>master_editor</code> · <code>staff_reservation_create</code> · <code>cancellation_policy_list</code>)뿐이다. 레거시 화면 셋은 옆의 <code>_htmx.html</code> 을 그대로 쓴다. 공용 모델·URL·시그널·설정 변경은 0, 정적 파일(S3) 변경도 0 이다. 마이그레이션이 <code>fit</code> 을 읽기는 한다(<code>masteroption.offer_id</code>, 읽기만). 그래서 <code>fit.0165</code> 뒤에 서게 해 뒀고 prod 에는 이미 있다.</p>
+<div class="table-wrap"><table><thead><tr><th>저장소</th><th>바뀐 파일</th><th>Stay 밖</th></tr></thead><tbody><tr><td>ERP (basecamp)</td><td>68</td><td>2 — <code>common/templates/common/_htmx_stay.html</code> · <code>fit/views/reservation.py</code></td></tr><tr><td>엔진 (homepage-backend)</td><td>20</td><td>0 — 전부 <code>stay/</code> 패키지</td></tr><tr><td>고객 화면 (website-ui)</td><td>27</td><td>0 — 전부 <code>src/stay/</code> 와 <code>__tests__/stay/</code></td></tr></tbody></table></div>
+<p>ERP 의 두 파일 중 하나는 Stay 전용 htmx 로더고 include 하는 곳이 Stay 템플릿 넷(<code>master_list</code> · <code>master_editor</code> · <code>staff_reservation_create</code> · <code>cancellation_policy_list</code>)뿐이다. 레거시 화면 셋은 옆의 <code>_htmx.html</code> 을 그대로 쓴다. 다른 하나는 <code>fit/views/reservation.py</code> 한 곳이다. 추가수집정보 탭을 저장할 때 <code>optional_info</code> 를 통째로 바꾸는 대입이 있었다. 이제 Stay 의 병합 헬퍼를 호출한다. 다른 키는 그대로 두고 <code>stayOccupancy</code> 만 지킨다. 공용 모델·URL·시그널·설정 변경은 0, 정적 파일(S3) 변경도 0 이다. 마이그레이션이 <code>fit</code> 을 읽기는 한다(<code>masteroption.offer_id</code>, 읽기만). 그래서 <code>fit.0165</code> 뒤에 서게 해 뒀고 prod 에는 이미 있다.</p>
 </section>
 <section class="sec" id="sec-6">
 <h2><span class="num">6</span>코드 리뷰 결과</h2>
@@ -413,21 +419,21 @@ DELETE FROM `stay_productprice` WHERE `stay_productprice`.`id` IN (337063, 33710
 <p>리뷰어 여섯이 세 브랜치를 봤다. Claude(opus) 셋은 커밋 범위, Codex(gpt-6-astra, reasoning high) 셋은 <code>origin/develop...HEAD</code> 범위. 원문은 리뷰 전문 페이지에 있다: <a class="plain" href="https://claude.ai/code/artifact/61ebcc4f-da35-46fd-9941-e4bdf484c812">https://claude.ai/code/artifact/61ebcc4f-da35-46fd-9941-e4bdf484c812</a></p>
 <div class="table-wrap"><table><thead><tr><th>리뷰어</th><th>대상</th><th>판정</th><th>발견</th></tr></thead><tbody><tr><td>Claude</td><td>ERP</td><td>조건부</td><td>높음 4 · 중간 2 · 낮음 2</td></tr><tr><td>Claude</td><td>엔진</td><td>조건부</td><td>심각 2 · 보통 3 · 낮음 4</td></tr><tr><td>Claude</td><td>고객 화면</td><td>조건부</td><td>중 2 · 하 5 · 정보 3</td></tr><tr><td>Codex</td><td>ERP</td><td>차단</td><td>차단 1 · 높음 9 · 중간 3 · 낮음 1</td></tr><tr><td>Codex</td><td>엔진</td><td>차단</td><td>높음 5 · 중간 2</td></tr><tr><td>Codex</td><td>고객 화면</td><td>차단</td><td>높음 2 · 중간 2 · 낮음 1</td></tr></tbody></table></div>
 <p>여섯 판정을 합치면 "고치기 전에는 내보내지 말 것"이다. 그래서 고쳤다. 아래는 고친 것과 남긴 것이다.</p>
-<h3 class="lbl"><strong>고친 것 — ERP</strong> (테스트 2218 → 2249)</h3>
-<ul class="dots"><li>마이그레이션 0013 을 한 트랜잭션으로 감쌌다. MySQL 은 RunPython 을 자동으로 감싸지 않아 2,000행 묶음마다 따로 커밋됐는데 이제 전부 아니면 전무로 끝난다.</li><li>재실행이 멱등이다. <code>"2"</code> 와 <code>"02"</code> 처럼 1회차가 보류한 셀을 2회차가 지우던 것을 막았다. 선행 0 키는 언제나 보류다.</li><li>비활성(<code>use_flag=False</code>) <code>A2</code> 는 활성 숫자 셀을 못 지운다. 생존 후보는 활성 행만이고, 아니면 보류다.</li><li>코드 없는 <code>A2C1</code> 과 <code>A02C1</code> 이 같은 <code>A2C1_CHD</code> 로 가려다 UNIQUE 에 걸리던 것을 보류로 돌렸다.</li><li>옛 규칙 연령 구간 코드(<code>CHILD_UNDER12</code>)가 견적을 500 으로 만들던 것을 성인 취급 + 경고로 바꿨다.</li><li>코드 없는 <code>A2C1</code> 후보는 그 오퍼의 유료 구간이 정확히 하나일 때만 넣는다. 문서와 마이그레이션이 이미 그 규칙이었다.</li><li>유료 아동인데 조합 셀이 없으면 성인 전용 <code>A2</code> 로 내려가 아이 요금이 사라지던 것을 머릿수 <code>A3</code> 로 바꿨다. 옛 총원 규칙과 같은 값이다. 조합 셀도 <code>A3</code> 도 없는 계약은 과소 청구 대신 판매 불가로 접힌다. 이 선택은 James 확인이 필요하다.</li><li>다객실·성인만 요청의 폴백에서도 A-형이 숫자보다 먼저다.</li><li>직원 예약이 실패한 화면에서 견적을 재조회할 때 여행사·마스터 조건을 걸었다. 다른 여행사 견적의 아동 정보가 그 화면에 나오지 않는다.</li><li><code>los_prices</code>·<code>occupancy_adjust</code> 의 dict 입력도 문자열과 같은 검증을 지난다. 파서는 <code>A2C1_C1_CHD</code> 같은 혼합 형식과 33자 결과를 거부한다.</li><li>삭제 예정 셀을 CSV 로 떠 두는 <code>--dump-deletes</code> 옵션을 더했다. 확인창은 마스크를 눌렀을 때만 닫힌다.</li></ul>
+<h3 class="lbl"><strong>고친 것 — ERP</strong> (테스트 2218 → 2268)</h3>
+<ul class="dots"><li>마이그레이션 0013 을 한 트랜잭션으로 감쌌다. MySQL 은 RunPython 을 자동으로 감싸지 않아 2,000행 묶음마다 따로 커밋됐는데 이제 전부 아니면 전무로 끝난다.</li><li>재실행이 멱등이다. <code>"2"</code> 와 <code>"02"</code> 처럼 1회차가 보류한 셀을 2회차가 지우던 것을 막았다. 선행 0 키는 언제나 보류다.</li><li>비활성(<code>use_flag=False</code>) <code>A2</code> 는 활성 숫자 셀을 못 지운다. 생존 후보는 활성 행만이고, 아니면 보류다.</li><li>코드 없는 <code>A2C1</code> 과 <code>A02C1</code> 이 같은 <code>A2C1_CHD</code> 로 가려다 UNIQUE 에 걸리던 것을 보류로 돌렸다.</li><li>옛 규칙 연령 구간 코드(<code>CHILD_UNDER12</code>)가 견적을 500 으로 만들던 것을 성인 취급 + 경고로 바꿨다.</li><li>코드 없는 <code>A2C1</code> 후보는 그 오퍼의 유료 구간이 정확히 하나일 때만 넣는다. 문서와 마이그레이션이 이미 그 규칙이었다.</li><li>유료 아동인데 조합 셀이 없으면 성인 전용 <code>A2</code> 로 내려가 아이 요금이 사라졌다. 이제 머릿수 <code>A3</code> 로 간다. 옛 총원 규칙과 같은 값이다. 조합 셀도 <code>A3</code> 도 없는 계약은 과소 청구 대신 판매 불가로 접힌다. 이 선택은 James 확인이 필요하다.</li><li>다객실·성인만 요청의 폴백에서도 A-형이 숫자보다 먼저다.</li><li>직원 예약이 실패한 화면에서 견적을 재조회할 때 여행사·마스터 조건을 걸었다. 다른 여행사 견적의 아동 정보가 그 화면에 나오지 않는다.</li><li><code>los_prices</code>·<code>occupancy_adjust</code> 의 dict 입력도 문자열과 같은 검증을 지난다. 파서는 <code>A2C1_C1_CHD</code> 같은 혼합 형식과 33자 결과를 거부한다.</li><li>삭제 예정 셀을 CSV 로 떠 두는 <code>--dump-deletes</code> 옵션을 더했다. 확인창은 마스크를 눌렀을 때만 닫힌다.</li><li>맨 숫자 셀을 지우기 전에 살아남는 A-형 셀과 가격·정가·상태·권위값을 대조한다. 하나라도 다르면 지우지 않고 보류로 남긴다. 활성 A-형이 둘 이상이어도 보류다.</li><li>FIT 예약 상세의 추가수집정보 탭을 저장해도 <code>stayOccupancy</code> 가 남는다. James 가 배포 차단으로 지정해 <code>fit/</code> 한 곳을 고쳤다.</li></ul>
 <p><strong>고친 것 — 엔진</strong> (Stay 테스트 696 → 710, DB 미접속 9건은 전과 같음)</p>
 <ul class="dots"><li>ERP 와 같은 네 규칙: 코드 없는 후보 가드, 머릿수 폴백, 폴백의 A-형 우선, 읽지 못한 구간 코드는 성인 취급 + <code>AGE_BAND_CODE_UNREADABLE</code> 경고.</li><li>견적 요청에 optional <code>children</code> 을 받아 룸 리스트와 같은 "나이가 다 왔나" 판정을 한다. 나이 없는 옛 요청에서 목록 130 · 견적 150 으로 갈리던 답이 같아진다.</li><li>최종 필터가 정규화 키로 비교한다. <code>a2</code> 와 <code>A2</code> 가 한 좌표다.</li><li>잘못된 키마다 예외를 만들던 자리를 <code>parseKeyOrNull</code> 로 바꾸고 LOS 주석과 원장 문구를 새 규칙으로 고쳤다. 조합 좌표를 못 만든 요청에 <code>OCCUPANCY_WITHOUT_PARTY</code> 경고를 남긴다.</li></ul>
 <h3 class="lbl"><strong>고친 것 — 고객 화면</strong> (Stay 테스트 974 → 995)</h3>
 <ul class="dots"><li>키 파서를 순차 파싱으로 다시 썼다. 5초 넘게 돌던 123자 악성 키가 1ms 안에 거부되고 <code>A2_C1_CHDC1_TEEN</code> 처럼 반만 읽히던 키를 거부한다.</li><li>재조회 중에는 이전 가격 옆에 새 아이 나이가 붙지 않는다. 화면에 있는 행을 만든 검색 인원을 함께 들고 다닌다.</li><li>검색 인원 주석을 본문 캡션으로 내렸다. 터치·키보드에서도 보인다.</li><li>마이페이지 성인 행의 나이 표기, 아이 수 불일치 주석, <code>CHILD_AGE_MAX</code> 단일 원천, React key 중복을 고쳤다.</li><li>견적 요청에 <code>children</code> 을 싣는다. 결제 준비 요청의 <code>selection</code> 에서는 뺀다. ERP 가 selection 전체를 해시하므로 실으면 모든 예약이 튕긴다.</li></ul>
-<p><strong>남긴 것</strong> — 8절에 적었다. 박수 층의 날짜별 선택, 요청 박수 이하 층이 없을 때의 최소 층 폴백, FIT 추가수집정보 저장의 <code>stayOccupancy</code> 소실. 그리고 리뷰가 짚은 데이터 점검 둘(옛 규칙 구간 코드, 박수 층 둘 이상인 좌표)은 7절 체크리스트에 들어갔다.</p>
+<p><strong>남긴 것</strong> — 8절에 적었다. 박수 층을 날짜별로 고르기, 요청 박수 이하 층이 없을 때 최소 층으로 내려가는 폴백. 리뷰가 짚은 데이터 점검 둘(옛 규칙 구간 코드, 박수 층 둘 이상인 좌표)은 7절 체크리스트에 들어갔다.</p>
 </section>
 <section class="sec" id="sec-7">
 <h2><span class="num">7</span>순서대로 할 것</h2>
-<ol class="timeline"><li><span class="tl-n">1</span><div class="tl-b"><p>엔진: <code>feat/stay-age-band-cells-engine</code> 에 develop 머지(3커밋 뒤) → PR → stage 푸시(자동) → prod 수동 dispatch.</p></div></li><li><span class="tl-n">2</span><div class="tl-b"><p>ERP: <code>feat/stay-age-band-cells</code> PR(develop 의 fast-forward) → stage 푸시 → prod 수동 dispatch(service=erp).</p></div></li><li><span class="tl-n">3</span><div class="tl-b"><p>고객 화면: <code>feat/stay-child-age-label</code> PR → stage → prod.</p></div></li><li><span class="tl-n">4</span><div class="tl-b"><p>배포 직후 확인: 시즌 [가격] 드로어에 <code>아동 추가 금액</code> 칸, 씨센스 43886 고객 페이지 금액 그대로.</p></div></li><li><span class="tl-n">5</span><div class="tl-b"><p>prod 서버: <code>python manage.py showmigrations stay | tail -3</code> → <code>[X] 0012</code> · <code>[ ] 0013</code>.</p></div></li><li><span class="tl-n">6</span><div class="tl-b"><p>prod 서버: <code>python manage.py stay_normalize_occupancy_keys --dry-run --dump-deletes /tmp/0013_deletes.csv</code> → 변경·삭제·보류 건수. 보류가 있으면 목록을 보낸다. 삭제 예정 셀은 CSV 로 남는다.</p></div></li><li class="sub"><span class="tl-n">6-1</span><div class="tl-b"><p>prod 서버: <code>python manage.py migrate stay --plan</code> → 걸리는 것이 0013 하나뿐인지 본다. fit 이 같이 걸리면 멈춘다.</p></div></li><li class="sub"><span class="tl-n">6-2</span><div class="tl-b"><p>prod DB 에서 옛 규칙 연령 구간 코드 점검. 0건이어야 한다.</p><pre class="cmd">SELECT offer_id, code FROM stay_offerageband WHERE code NOT REGEXP '^[A-Z0-9]{2,8}$';</pre></div></li><li><span class="tl-n">7</span><div class="tl-b"><p>prod DB 에서 박수 층 점검 한 번. 엔진 리뷰가 짚은 항목이다. 층이 둘 이상인 좌표가 0이면 새 박수 규칙은 답을 바꾸지 않는다. 있으면 그 계약의 큰 층이 "박수 이상이면 이 1박 단가"인지 확인한다.</p><pre class="cmd">SELECT product_id, rate_plan_id, occupancy_key, COUNT(DISTINCT los_nights) AS layers
+<ol class="timeline"><li><span class="tl-n">1</span><div class="tl-b"><p>엔진: <code>feat/stay-age-band-cells-engine</code> PR #956(develop 머지 완료) → stage 푸시(자동) → prod 수동 dispatch.</p></div></li><li><span class="tl-n">2</span><div class="tl-b"><p>ERP: <code>feat/stay-age-band-cells</code> PR #9096(develop 머지 완료) → stage 푸시 → prod 수동 dispatch(service=erp).</p></div></li><li><span class="tl-n">3</span><div class="tl-b"><p>고객 화면: <code>feat/stay-child-age-label</code> PR #2456(develop 머지 완료) → stage → prod.</p></div></li><li><span class="tl-n">4</span><div class="tl-b"><p>배포 직후 확인: 시즌 [가격] 드로어에 <code>아동 추가 금액</code> 칸, 씨센스 43886 고객 페이지 금액 그대로.</p></div></li><li><span class="tl-n">5</span><div class="tl-b"><p>prod 서버: <code>python manage.py showmigrations stay | tail -3</code> → <code>[X] 0012</code> · <code>[ ] 0013</code>.</p></div></li><li><span class="tl-n">6</span><div class="tl-b"><p>prod 서버: <code>python manage.py stay_normalize_occupancy_keys --dry-run --dump-deletes /tmp/0013_deletes.csv</code> → 변경·삭제·보류 건수. 보류가 있으면 목록을 보낸다. 삭제 예정 셀은 CSV 로 남는다.</p></div></li><li class="sub"><span class="tl-n">6-1</span><div class="tl-b"><p>prod 서버: <code>python manage.py migrate stay --plan</code> → 걸리는 것이 0013 하나뿐인지 본다. fit 이 같이 걸리면 멈춘다.</p></div></li><li class="sub"><span class="tl-n">6-2</span><div class="tl-b"><p>prod DB 에서 옛 규칙 연령 구간 코드 점검. 0건이어야 한다.</p><pre class="cmd">SELECT offer_id, code FROM stay_offerageband WHERE code NOT REGEXP '^[A-Z0-9]{2,8}$';</pre></div></li><li><span class="tl-n">7</span><div class="tl-b"><p>prod DB 에서 박수 층 점검 한 번. 엔진 리뷰가 짚은 항목이다. 층이 둘 이상인 좌표가 0이면 새 박수 규칙은 답을 바꾸지 않는다. 있으면 그 계약의 큰 층이 "박수 이상이면 이 1박 단가"인지 확인한다.</p><pre class="cmd">SELECT product_id, rate_plan_id, occupancy_key, COUNT(DISTINCT los_nights) AS layers
 FROM stay_productprice GROUP BY 1,2,3 HAVING layers &gt; 1;</pre></div></li><li class="hi"><span class="tl-n">8</span><div class="tl-b"><p>DB 스냅샷. 되돌리기는 복원뿐이다. 이사하는 동안 ERP 에서 가격을 고치지 않는다(점검 창, 몇 분). 이사는 한 트랜잭션이라 짧다.</p></div></li><li><span class="tl-n">9</span><div class="tl-b"><p>prod 서버: <code>python manage.py migrate stay</code> → 처리 건수 확인.</p></div></li><li><span class="tl-n">10</span><div class="tl-b"><p>prod 서버: dry-run 다시 → 0건.</p></div></li><li><span class="tl-n">11</span><div class="tl-b"><p>씨센스 43886 고객 페이지 · 직원 예약 화면 · 편집 화면 가격 캘린더(옛 형식 배지 0) 확인.</p></div></li></ol>
 </section>
 <section class="sec" id="sec-8">
 <h2><span class="num">8</span>남긴 것 (후속, 배포를 막지 않음)</h2>
-<ul class="dots"><li>박수 층을 체류 전체에서 하나로 고른다. 어떤 날에만 층이 더 있으면 그 날만 남고 나머지 날이 빈다. 시즌 채우기는 층을 시즌 전체에 고르게 깔아 평소엔 안 생기지만, 날짜별 선택으로 바꾸는 것이 다음 순번이다(ERP·엔진 같이).</li><li>요청 박수 이하 층이 하나도 없으면(2박인데 <code>3박~</code> 층뿐) 가장 작은 층으로 물러난다. 방이 이유 없이 사라지지 않게 한 설계이고 ERP·엔진이 같다. 엄격하게 바꿀지는 James 결정.</li><li>기존 FIT 예약 상세의 추가수집정보 탭을 저장하면 <code>optional_info</code> 전체가 바뀌어 예약 쪽 손님 구성 사본(<code>stayOccupancy</code>)이 지워진다. 견적 원본은 남는다. 고치려면 <code>fit/</code> 을 건드려야 해서 손대지 않았다.</li></ul>
+<ul class="dots"><li>박수 층을 체류 전체에서 하나로 고른다. 어떤 날에만 층이 더 있으면 그 날만 남고 나머지 날이 빈다. 시즌 채우기는 층을 시즌 전체에 고르게 깔아 평소엔 안 생기지만, 날짜별 선택으로 바꾸는 것이 다음 순번이다(ERP·엔진 같이).</li><li>요청 박수 이하 층이 하나도 없으면(2박인데 <code>3박~</code> 층뿐) 가장 작은 층으로 물러난다. 방이 이유 없이 사라지지 않게 한 설계이고 ERP·엔진이 같다. 엄격하게 바꿀지는 James 결정.</li></ul>
 </section>
 </div>
