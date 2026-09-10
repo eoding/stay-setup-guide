@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.9.2
+version: 0.9.3
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -21,6 +21,12 @@ metadata:
 
 화면의 동작(탭·드로어·모달·배너·위젯)은 `references/screen-mechanics.md`, 로그 형식은 `references/run-log-spec.md` 가 정본이다.
 
+> **0.9.3 에서 고친 것** (2026-09-10 운영 호텔 44000 실측):
+> - 이미지 모달 단계(`대표이미지 올리기`·`상품상세 이미지 올리기`)가 모달 [저장] 뒤에
+>   **기본정보 폼의 [저장] 까지** 누른다(`stayRun.pageSave()`). 모달 [저장] 은 이미지 행만
+>   만들 뿐이고 호텔과 사진의 **연결**은 폼이 저장될 때 생긴다 — 종전에는 화면에 사진이
+>   보이는데 고객 화면에는 "사진 준비 중" 이 떴다. 그 저장을 확인하지 못한 단계는 **실패**다.
+>
 > **0.9.2 에서 고친 것** (2026-09-10 운영 실행에서 실측한 러너 결함 3건):
 > - 오퍼 카드의 **빈 상태 안내문**("이 오퍼에 연결된 객실이 없습니다 …")을 서버 거부로 세지 않는다 —
 >   `룸 만들기`·`판매 연결` 이 저장에 성공하고도 실패로 보고되던 오탐을 없앴다(`pageNotes` 로만 남는다).
@@ -198,6 +204,10 @@ stayRun.submit("저장")             // {status:"closed|stayed|error|navigated|l
                                    // 오류가 아니다 — `pageNotes` 로만 온다(0.9.2)
                                    // error 는 요청이 거부되거나(500·CSRF 403) 끝나지 못한 것이다 — 저장은 안 됐다
                                    // force 로 확인창 버튼을 누르면 그 문구가 confirmText 로 온다
+stayRun.pageSave()                 // 페이지 우상단(.right_header)의 [저장] — **기본정보 폼 전체 저장**
+                                   // {status:"settled|navigated|invalid|blocked|timeout|error|login|not-found", saved, errors, toast, invalid}
+                                   // 이미지 모달의 [저장] 은 이미지 행만 만든다 — 호텔과 사진의 연결은 이 저장에서 생긴다(0.9.3)
+                                   // 모달·드로어가 열려 있으면 누르지 않고 blocked 로 돌아온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
 stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFor(fn, ms) · stayRun.findButton(scope, "저장")
 stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progressState() · stayRun.progressHide()
@@ -337,6 +347,8 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
   `runStep` 으로 돌리면 이 기다림은 저절로 들어가고(`formReady`·`formWaited`), 이미 폼 위에 있으면
   [호텔 만들기] 를 **여는 버튼으로 누르지 않는다**(그 화면에서는 저장 버튼이다).
 - **기본정보 글 입력 · 호텔 정보 입력** — 저장이 전체 화면 저장이라 `submit` 이 `timeout` 으로 보일 수 있다. **스크린샷과 토스트("저장되었습니다")로 확인**하고 완료로 적는다.
+- **대표이미지 올리기 · 상품상세 이미지 올리기** — 모달 헤더 [저장] 뒤에 **페이지 우상단 [저장]**
+  (`stayRun.pageSave()`)까지 눌러야 사진이 호텔에 붙는다. 아래 「사진 단계」 7번이 그 자리다.
 - **`캠페인` 은 화면에 없다**(2026-09-04). 지시서에 캠페인 단계나 `캠페인` 줄이 보이면 실행하지 말고 멈춰서 보고한다.
 
 ## 사진 단계
@@ -356,6 +368,18 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
    - **이미지 모달은 다르다.** 헤더 [저장] 을 장수만큼 누른다: `stayRun.submit('저장')`.
      `대표이미지 올리기`·`상품상세 이미지 올리기` 는 그대로 `→ [저장]` 로 끝난다.
 6. `stayRun.clearBridge()`.
+7. **기본정보 폼의 [저장]** — `stayRun.pageSave()` (이미지 모달 단계만. 룸 사진은 해당 없다).
+   모달 헤더 [저장] 은 이미지 행만 만들고, **호텔과 사진의 연결은 기본정보 폼이 저장될 때**
+   생긴다. 이 한 번을 빠뜨리면 화면에는 사진이 보이는데 고객 화면에는 "사진 준비 중" 이 뜬다
+   (2026-09-10 운영 호텔 44000). 두 이미지 단계가 잇달아도 매번 눌러 둔다 — 기존 호텔의
+   폼 저장은 ajax 라 화면이 넘어가지 않아 두 번 눌러도 해가 없다.
+   - `runStep(n, {uploaded:true})` 로 돌리면 이 저장은 **저절로 들어간다** — 결과의
+     `pageSave`(`settled`·`invalid`·`timeout`…)와 `pageSaved` 로 확인한다.
+     `pageSaved: false` 인 단계는 완료로 세지 않는다(`stepFailed` 가 참이다).
+   - 모달·드로어가 열려 있으면 `pageSave()` 는 **누르지 않고** `blocked` 로 돌아온다.
+     먼저 모달 헤더 [저장] 으로 사진을 화면에 붙여야 한다.
+   - 필수 칸이 비어 있으면 ERP 는 요청을 아예 보내지 않고 칸에 표시만 붙인다 —
+     `status: 'invalid'` 와 `invalid: [칸 이름…]` 으로 온다. 그 칸을 채우고 다시 부른다.
 
 같은 단계를 **다시 불러도 안전하다**(0.9.2). 모달이 이미 열려 있으면 여는 버튼을 다시 누르지 않고
 `open: 'already'` 로 이어간다 — 종전에는 `open: 'timeout'` 으로 끝났다.
