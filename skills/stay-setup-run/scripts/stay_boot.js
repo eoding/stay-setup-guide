@@ -637,7 +637,10 @@
         if (hint && hint !== bp.row) { spec.row = hint; o = await stayRun.open(spec); out.rowHint = hint; }
       }
       out.open = o.status;
-      if (o.status !== 'ok') { out.openDetail = o.detail; out.buttons = o.buttons; out.rows = o.rows; return out; }
+      // `already` 는 **성공**이다 — 이 버튼이 연 모달이 아직 열려 있어 다시 누르지 않은 것이다.
+      // 사진 단계는 첫 호출이 모달만 열고 `submitted:false` 로 끝나므로 재호출이 정상 경로다
+      // (2026-09-10 운영 실행에서 재호출이 `open: 'timeout'` 으로 막혔다).
+      if (o.status !== 'ok' && o.status !== 'already') { out.openDetail = o.detail; out.buttons = o.buttons; out.rows = o.rows; return out; }
     }
 
     // [호텔 만들기] 는 전체 화면 폼이다 — 통화 목록·select2 가 다 설 때까지 기다린 뒤에 채운다

@@ -170,6 +170,27 @@ const STEPS = {
 };
 
 //: 룸 사진 올리기 — 마지막 줄이 `→ [사진 추가]` 인 단계. `버튼:` 줄은 룸 행의 [편집] 하나뿐이다.
+// 기본정보 탭의 이미지 모달 단계(`대표이미지 올리기`) — 여는 버튼이 [이미지 직접등록] 이고
+// 저장은 모달 헤더 [저장] 이다. 한 번에 한 장이라 같은 단계를 장수만큼 다시 부른다.
+const IMAGE_STEPS = {
+  guide: { title: '시험 호텔' },
+  steps: [{
+    no: 1,
+    title: '대표이미지 올리기 (1장)',
+    kind: '대표이미지 올리기',
+    head: {
+      tab: '기본정보', card: '대표이미지', block: null, screen: null,
+      notice: null,
+      buttons: ['[이미지 직접등록]'],
+      buttons_parsed: [{ raw: '[이미지 직접등록]', text: '이미지 직접등록', row: null, card: null, group: null, drawer: false, times: 1 }]
+    },
+    fields: [{ label: '이미지설명(Alt)', kind: 'typed', value: '호텔 외관' }],
+    longtexts: [],
+    photos: [{ file: 'hotel_01.jpg', source: null }],
+    submit: '저장'
+  }]
+};
+
 const PHOTO_STEPS = {
   guide: { title: '시험 호텔' },
   steps: [{
@@ -501,6 +522,33 @@ const run = async () => {
     'runStep: `사진 추가` 로 넘긴 단계는 아직 어느 숫자에도 세지 않는다', p3);
   ok(p3.current === PHOTO_STEPS.steps[0].title, 'runStep: 넘긴 단계 제목이 띠에 그대로 있다', p3);
   ok(p3.status === 'running', 'runStep: 넘긴 단계를 실패로 물들이지 않는다', p3);
+
+  // 3b) 기본정보 이미지 모달 — 첫 `runStep` 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
+  //     **같은 단계를 다시 부르는 것이 정상 경로**다(파일을 다리에 올린 뒤 다시 부른다).
+  //     종전에는 이미 열린 `#content-modal` 을 또 열려다 `open: 'timeout'` 으로 끝났다
+  //     (2026-09-10 운영 실행). 모달이 화면을 덮어 뒤의 여는 버튼은 눌러도 아무 변화가 없다.
+  {
+    const domI = new JSDOM(readFileSync(join(here, 'helper_fixture.html'), 'utf8'), {
+      url: 'https://example.test/stay/43900/#stay_tab_room_types',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true
+    });
+    const wI = domI.window;
+    wI.localStorage.setItem('staySteps', JSON.stringify(IMAGE_STEPS));
+    wI.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+    wI.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+
+    const i1 = await wI.runStep(1);
+    ok(i1.open === 'ok', 'runStep: [이미지 직접등록] 으로 모달을 연다', i1.open);
+    ok(i1.submitted === false, 'runStep: 사진 단계는 모달만 열고 끝난다', i1.submitted);
+    ok(wI.stayRun.state().modal.open === true, 'runStep: 모달이 열린 채로 남는다', wI.stayRun.state().modal);
+
+    const i2 = await wI.runStep(1);
+    ok(i2.open === 'already', 'runStep: 다시 불러도 열려 있으면 already 다 — timeout 이 아니다', i2.open);
+    ok(!i2.openDetail, 'runStep: already 는 끊지 않고 칸 채우기로 이어간다', i2.openDetail);
+    ok((i2.bad || []).length === 0, 'runStep: already 뒤에도 모달 안 칸을 다 찾는다', i2.bad);
+    ok(wI.stepFailed(i2) === false, 'stepFailed: already 는 실패가 아니다', i2);
+  }
 
   // 4) 여는 버튼 거르개 — 반복 행 추가만 걸러야 한다.
   //    `연령 구간 추가` 는 글자가 `구간 추가` 로 끝나지만 오퍼 탭 `연령 구간` 카드의 **드로어를 여는 버튼**이다.

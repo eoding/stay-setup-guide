@@ -14,6 +14,7 @@
 <ul class="tab-container">
   <li class="tab"><a href="#stay_tab_room_types" class="active">객실</a></li>
   <li class="tab"><a href="#stay_tab_offers">오퍼</a></li>
+  <li class="tab"><a href="#stay_tab_basic">기본정보</a></li>
 </ul>
 
 <div id="stay_validation_banner">
@@ -38,6 +39,45 @@
     </table>
     <button type="button">룸 추가</button>
   </section>
+
+  <!-- 판매 연결(오퍼 × 객실) 패널 — `_rooms_panel.html` 의 뼈대다.
+       **오퍼 카드마다** 서는 `.stay-banner--blocking` 은 서버 거부가 아니라 **빈 상태 안내문**이다
+       (`{% if not group.rooms %}`). 룸을 오퍼 하나에 붙여도 객실이 없는 다른 오퍼 카드의
+       안내문은 화면에 그대로 남는다 — 종전 러너는 그것을 이번 저장의 오류로 실어
+       `룸 만들기`·`판매 연결` 단계가 매번 실패로 보고됐다(2026-09-10 운영 실행에서 5회).
+       패널 **머리**의 띠(`{{ error_message }}` · `#stay_panel_error`)는 진짜 거부라 그대로 담는다 —
+       둘의 차이는 글자가 아니라 **카드 안이냐 밖이냐**다. -->
+  <div id="stay_rooms_panel">
+    <div id="stay_panel_error" class="stay-banner stay-banner--blocking" style="display:none"><span>판매일이 열려 있어 이 연결을 지울 수 없습니다</span></div>
+    <div class="stay-card">
+      <div class="stay-card__head"><h4 class="stay-card__title">여름 오퍼</h4></div>
+      <p><small>연결된 객실 1개</small></p>
+    </div>
+    <div class="stay-card">
+      <div class="stay-card__head"><h4 class="stay-card__title">겨울 오퍼</h4></div>
+      <div class="stay-banner stay-banner--blocking"><span>이 오퍼에 연결된 객실이 없습니다 — 객실을 하나 이상 추가해야 판매가 성립합니다.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 기본정보 탭 — Stay 바깥의 공통 상품 화면이라 위젯이 다르다.
+     [이미지 직접등록] 이 Materialize 모달(`#content-modal`, `.modal.open`)을 연다.
+     사진 단계는 첫 `runStep` 이 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
+     **같은 단계를 다시 부르는 것이 정상 경로**다(파일을 다리에 올린 뒤 다시 부른다). -->
+<div id="stay_tab_basic" style="display:none">
+  <section class="card">
+    <h3 class="card-title">대표이미지</h3>
+    <button type="button" onclick="openImageModal()">이미지 직접등록</button>
+  </section>
+</div>
+
+<div id="content-modal" class="modal" style="display:none">
+  <div class="modal-header"><h5 class="modal-title">이미지 등록/변경</h5>
+    <button type="button" class="modal-close" onclick="closeImageModal()">×</button></div>
+  <label>이미지설명(Alt) <input type="text" name="alt_text"></label>
+  <input type="file" name="pc_image">
+  <input type="file" name="mobile_image">
+  <button type="button" onclick="closeImageModal()">저장</button>
 </div>
 
 <!-- [오퍼] 탭 — 오퍼 목록과 그 아래 `연령 구간` 절이 **같은 오퍼 이름을 두 번** 들고 있다.
@@ -622,6 +662,25 @@ function fakeSave(toastText) {
       '<div class="toast">' + (toastText || '저장되었습니다.') + '</div>';
     hxDone();
   }, 300);
+}
+
+/* ── 기본정보 탭의 이미지 모달 (Materialize) ──────────────────
+   실제 화면처럼 **한 번 열리면 저장 전까지 열려 있다** — 뒤의 [이미지 직접등록] 은
+   모달에 덮여 눌러도 아무 일이 일어나지 않는다. */
+function openImageModal() {
+  var m = document.getElementById('content-modal');
+  m.classList.add('open');
+  m.style.display = 'block';
+}
+function closeImageModal() {
+  var m = document.getElementById('content-modal');
+  m.classList.remove('open');
+  m.style.display = 'none';
+}
+
+/* ── 판매 연결 패널 머리의 거부 띠 (진짜 오류) ────────────── */
+function showPanelError(on) {
+  document.getElementById('stay_panel_error').style.display = on ? 'block' : 'none';
 }
 
 /* ── 저장 거부 흉내: 드로어는 **열린 채**로 사유 배너가 조각 맨 위에 붙는다 ────── */

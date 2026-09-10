@@ -480,6 +480,92 @@ const run = async () => {
     reset();
   }
 
+  // 12h. 카드 안의 **빈 상태 안내문**은 오류가 아니다 (2026-09-10 운영 실행).
+  //      `_rooms_panel.html` 은 객실이 없는 오퍼 카드마다 `.stay-banner--blocking` 을 그린다.
+  //      룸을 오퍼 하나에 붙여도 다른 오퍼 카드의 그 안내문은 화면에 그대로 남으므로,
+  //      저장이 정상(closed · 되읽기 17/17)인데도 `errors` 가 차서 `stepFailed` 가 참이 됐다.
+  //      패널 **머리**의 거부 띠는 진짜 오류라 그대로 담아야 한다 — 카드 안이냐 밖이냐로 가른다.
+  {
+    await R.tab('객실');
+    const card = win.document.querySelector('#stay_rooms_panel .stay-card:last-child .stay-banner--blocking');
+    ok(!!card && /연결된 객실이 없습니다/.test(card.textContent), '픽스처: 오퍼 카드에 빈 상태 안내문이 있다');
+
+    win.openRoomDrawer('스탠다드');
+    const sv2 = await R.submit('저장');
+    ok(sv2.status === 'closed', 'submit: 룸 저장이 정상으로 닫혔다', sv2.status);
+    ok(!(sv2.errors || []).some((e) => /연결된 객실이 없습니다/.test(e)),
+      'submit: 카드 안 빈 상태 안내문을 errors 에 싣지 않는다', sv2.errors);
+    ok((sv2.pageNotes || []).some((e) => /연결된 객실이 없습니다/.test(e)),
+      'submit: 넘긴 안내문은 pageNotes 로 남긴다', sv2.pageNotes);
+
+    // 패널 머리의 거부 띠(카드 **밖**)는 그대로 오류다 — 이 갈래를 잃으면 진짜 거부를 놓친다
+    win.showPanelError(true);
+    win.openRoomDrawer('스탠다드');
+    const sv3 = await R.submit('저장');
+    ok((sv3.errors || []).some((e) => /판매일이 열려 있어/.test(e)),
+      'submit: 패널 머리의 거부 띠는 그대로 errors 다', sv3.errors);
+    ok(!(sv3.errors || []).some((e) => /연결된 객실이 없습니다/.test(e)),
+      'submit: 진짜 오류가 있어도 빈 상태 안내문은 섞지 않는다', sv3.errors);
+    win.showPanelError(false);
+
+    // 드로어 **안**의 카드 띠는 그대로 담는다 — 그 조각은 요청마다 다시 그려진다
+    win.openRoomDrawer('스탠다드');
+    const body = win.document.getElementById('stay_drawer_body');
+    body.insertAdjacentHTML('afterbegin',
+      '<div class="stay-card"><div class="stay-banner stay-banner--blocking"><span>구간이 겹칩니다</span></div></div>');
+    const sv4 = await R.submit('거부 저장');
+    ok((sv4.errors || []).some((e) => /구간이 겹칩니다/.test(e)),
+      'submit: 드로어 안이면 카드 안의 띠도 오류로 담는다', sv4.errors);
+    win.closeDrawer();
+  }
+
+  // 12i. **비움 지시 + 칸 없음 = 만족** (2026-09-10 운영 실행).
+  //      부과금의 `적용 날짜 (선택)` 은 부과 유형이 `선택` 이면 화면에 서지 않는다.
+  //      비우라는 지시인데 칸 자체가 없으면 이미 비어 있는 것이다 — 종전에는 `same:false` 라
+  //      믿을 수 있는 칸(날짜)이면 `mismatch` 로 저장 앞에서 멈췄다(부과금 4단계가 막혔다).
+  {
+    const chg2 = { card: '부과금' };
+    ok(!win.document.querySelector('#stay_charge_form [name*=apply_date]'),
+      '픽스처: 부과금 폼에 `적용 날짜 (선택)` 칸이 없다');
+
+    const rbAbsent = R.readback([{ label: '적용 날짜 (선택)', kind: 'empty' }], chg2);
+    ok(rbAbsent.mismatch.length === 0, 'readback: 비움 지시 + 칸 없음은 불일치가 아니다', rbAbsent.mismatch);
+    ok(rbAbsent.ok === 1 && rbAbsent.total === 1, 'readback: 만족한 칸으로 센다', { ok: rbAbsent.ok, total: rbAbsent.total });
+    ok(rbAbsent.fields[0].absent === true && rbAbsent.fields[0].actual === '(칸 없음)',
+      'readback: 왜 만족인지 `absent` 로 밝힌다', rbAbsent.fields[0]);
+
+    // 값 지시 + 칸 없음은 그대로 불일치다 — 넣어야 할 값이 갈 자리가 없다
+    const rbNeed = R.readback([{ label: '적용 날짜 (선택)', kind: 'typed', value: '2026-12-24' }], chg2);
+    ok(rbNeed.mismatch.length === 1, 'readback: 값 지시 + 칸 없음은 그대로 불일치다', rbNeed.mismatch);
+    ok(rbNeed.fields[0].absent !== true, 'readback: 값 지시는 absent 로 접지 않는다', rbNeed.fields[0]);
+  }
+
+  // 12j. 이미 열린 모달을 다시 열려 하지 않는다 (2026-09-10 운영 실행).
+  //      사진 단계는 첫 `runStep` 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
+  //      같은 단계를 다시 부르는 것이 정상 경로인데, 종전에는 `open: 'timeout'` 이 났다 —
+  //      모달이 화면을 덮고 있어 뒤의 여는 버튼을 눌러도 아무 변화가 없기 때문이다.
+  {
+    await R.tab('기본정보');
+    const spec = { button: '이미지 직접등록' };
+    const o1 = await R.open(spec);
+    ok(o1.status === 'ok', 'open: 이미지 모달을 연다', o1.status);
+    ok(o1.modal.open === true && /이미지 등록\/변경/.test(o1.modal.title || ''), 'open: 그 모달이 열렸다', o1.modal);
+
+    const o2 = await R.open(spec);
+    ok(o2.status === 'already', 'open: 이미 열려 있으면 already 로 이어간다', o2.status);
+    ok(o2.modal.open === true, 'open: already 여도 모달은 열린 그대로다', o2.modal);
+    ok((o2.fields || []).some((f) => /이미지설명/.test(f.label || '')), 'open: already 도 칸 목록을 돌려준다', o2.fields);
+
+    // 저장으로 닫힌 뒤에는 다시 눌러 연다
+    await R.submit('저장');
+    ok(R.state().modal.open === false, 'submit: 모달 헤더 [저장] 이 모달을 닫았다', R.state().modal);
+    const o3 = await R.open(spec);
+    ok(o3.status === 'ok', 'open: 닫힌 뒤에는 다시 눌러 연다', o3.status);
+    await R.close();
+    ok(R.state().modal.open === false, 'close: 모달을 닫았다', R.state().modal);
+    await R.tab('객실');
+  }
+
   // 13. 진행 표시 띠 — 화면 오른쪽 위에 늘 떠 있는 한 줄. 지켜보는 사람이 콘솔 없이도 읽는다.
   const strip = () => win.document.getElementById('stay_progress');
   const stripText = () => (strip() ? strip().textContent : '');

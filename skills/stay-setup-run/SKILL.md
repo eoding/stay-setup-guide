@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.9.1
+version: 0.9.2
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -21,6 +21,14 @@ metadata:
 
 화면의 동작(탭·드로어·모달·배너·위젯)은 `references/screen-mechanics.md`, 로그 형식은 `references/run-log-spec.md` 가 정본이다.
 
+> **0.9.2 에서 고친 것** (2026-09-10 운영 실행에서 실측한 러너 결함 3건):
+> - 오퍼 카드의 **빈 상태 안내문**("이 오퍼에 연결된 객실이 없습니다 …")을 서버 거부로 세지 않는다 —
+>   `룸 만들기`·`판매 연결` 이 저장에 성공하고도 실패로 보고되던 오탐을 없앴다(`pageNotes` 로만 남는다).
+> - **`비움` 지시인데 그 칸이 화면에 없으면 만족**으로 본다 — 부과금 `적용 날짜 (선택)` 이
+>   `mismatch` 로 저장을 막던 것을 없앴다. 값 지시 + 칸 없음은 그대로 불일치다.
+> - 이미 열린 이미지 모달을 **다시 열지 않는다**(`open: 'already'`) — 사진 단계를 다시 부를 때
+>   나던 `open: 'timeout'` 을 없앴다.
+>
 > **운영 2026-09-09 배포판 화면 기준.** 새 호텔은 **오퍼 0 · 룸 0** 으로 시작한다.
 > 그 전 화면을 보는 옛 지시서에서는 v0.2.x 를 쓴다 — 이 러너는 옛 화면 기준 단계를 만나면
 > **거부하고 멈춘다**(`window.checkGuide()` 로 실행 전에 미리 훑을 수 있다).
@@ -185,7 +193,9 @@ stayRun.state()                    // {url, hotelId, loginPage, logoutWarning, d
                                    // confirm 은 페이지 안 확인창 — 떠 있으면 {open:true, text}, 아니면 null
 stayRun.tab("객실") · stayRun.open({button, row, card, block}) · stayRun.fill(fields)
 stayRun.submit("저장")             // {status:"closed|stayed|error|navigated|login|timeout|refused|not-found|upload-label", errors, toast}
-                                   // errors 는 진짜 오류만이다 — 성공 안내 띠는 toast 로만 온다
+                                   // errors 는 진짜 오류만이다 — 성공 안내 띠는 toast 로만 온다.
+                                   // 화면 배경의 **빈 상태 안내문**(오퍼 카드의 "연결된 객실이 없습니다" 등)도
+                                   // 오류가 아니다 — `pageNotes` 로만 온다(0.9.2)
                                    // error 는 요청이 거부되거나(500·CSRF 403) 끝나지 못한 것이다 — 저장은 안 됐다
                                    // force 로 확인창 버튼을 누르면 그 문구가 confirmText 로 온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
@@ -216,6 +226,8 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
 
 - 뒤로 간 탭은 크롬이 페이지 타이머를 늦춘다. 도우미의 대기는 워커 타이머로 재므로 탭을 앞에 두지 않아도 되지만, **스크린샷은 탭이 앞에 있어야** 찍힌다.
 - `runStep` 이 돌려주는 키: `open`·`openDetail`·`fill`·`bad`·`warn`·`mismatch`·`mismatchWarn`·`stoppedBy`·`submit`·`submitAs`·`skipped`·`cardPick`·`rowHint`·`uploads`·`refused`.
+- `open: 'already'` 는 **성공**이다(0.9.2) — 이 버튼이 연 모달이 아직 열려 있어 다시 누르지 않은 것이다.
+  사진 단계처럼 같은 단계를 다시 부르는 경우에 나온다. 실패로 세지 않는다.
 - **0단계 확인**(`환율 확인`·`거래처 확인`·`도시 확인`)은 저장이 없는 단계다. `runStep` 이
   `{checked, found, bad}` 로 돌려준다 — 폼이 다 설 때까지 기다린 뒤(`formReady`·`formWaited`)
   [호텔 만들기] 폼의 목록에 지시서 값이 뜨는지만 보고,
@@ -245,6 +257,10 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
     실패로 세지 않으므로 진행 띠도 멈추지 않는다 — 화면 값을 따로 보고 로그 비고에 적는다.
   - 가르는 규칙은 `readbackTrusted(라벨)` 하나다(`stay_boot.js`). **모르는 이름은 믿지 않는다** —
     새 칸이 생겨 실행이 서는 쪽보다 경고 한 줄로 남는 쪽이 안전하다.
+  - **`비움` 지시인데 그 칸이 화면에 아예 없으면 만족이다**(0.9.2 · `actual: '(칸 없음)'` · `absent: true`).
+    화면이 조건에 따라 칸을 세우지 않는 자리가 있다(부과금의 `적용 날짜 (선택)` 은 부과 유형이
+    `선택` 이면 서지 않는다) — 비우라는 지시에 칸이 없으면 이미 비어 있는 것이다.
+    **값** 지시 + 칸 없음은 그대로 불일치다 — 넣어야 할 값이 갈 자리가 없다는 뜻이다.
 - 지시서의 저장 글자와 화면 버튼 글자가 다르면(시즌 드로어는 [추가]) 도우미가 `저장·추가·만들기·등록·확인` 을 차례로 시도하고 `submitAs` 로 알려 준다.
 
 ### 가격 셀 단계가 거부하는 것 (`refused: true`, `fatal` 없음)
@@ -340,6 +356,9 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
    - **이미지 모달은 다르다.** 헤더 [저장] 을 장수만큼 누른다: `stayRun.submit('저장')`.
      `대표이미지 올리기`·`상품상세 이미지 올리기` 는 그대로 `→ [저장]` 로 끝난다.
 6. `stayRun.clearBridge()`.
+
+같은 단계를 **다시 불러도 안전하다**(0.9.2). 모달이 이미 열려 있으면 여는 버튼을 다시 누르지 않고
+`open: 'already'` 로 이어간다 — 종전에는 `open: 'timeout'` 으로 끝났다.
 
 파일 대화상자를 못 다루는 브라우저 도구면 사진 단계는 `건너뜀 · 사용자 업로드 필요` 로 남기고 계속한다.
 

@@ -1,5 +1,5 @@
 /*!
- * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.5.0)
+ * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.9.2)
  *
  * 브라우저의 자바스크립트 실행 도구로 이 파일 전체를 페이지에서 실행하면 `window.stayRun` 이 생긴다.
  * 두 번 실행해도 안전하다(멱등). 페이지가 새로 뜨거나 주소가 바뀌면 다시 실행한다.
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.6.0'; // 운영 2026-09-09 배포판 화면 기준(좌표 묶음 rowspan · stay-banner 되읽기)
+  var VERSION = '0.6.1'; // 운영 2026-09-09 배포판 화면 기준(빈 상태 안내문 제외 · 비움+칸 없음 · 모달 재열기)
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -1226,9 +1226,18 @@
     };
   }
 
+  // 오류로 세지 않고 **넘긴** 배경 안내문. 버리지는 않는다 — `submit` 이 `pageNotes` 로 돌려주므로
+  // 담당자가 "무엇을 안 실었는지" 를 로그에서 볼 수 있다.
+  var pageNotes = [];
   function collectErrors(scope) {
     var out = [];
+    pageNotes = [];
     var push = function (t) { t = clean(t); if (t && out.indexOf(t) < 0 && out.length < 12) out.push(trunc(t, 200)); };
+    var note = function (e) {
+      if (!shown(e)) return;
+      var t = clean(textOf(e));
+      if (t && pageNotes.indexOf(t) < 0 && pageNotes.length < 6) pageNotes.push(trunc(t, 200));
+    };
     var root = scope && scope.querySelectorAll ? scope : document.body;
     [].slice.call(root.querySelectorAll('.errorlist li,.errorlist')).forEach(function (e) { if (shown(e)) push(textOf(e)); });
     [].slice.call(root.querySelectorAll('[class*="error"],[class*="invalid"],.helper-text,.invalid-feedback')).forEach(function (e) {
@@ -1250,11 +1259,24 @@
     // (오류 배너도 제 `<tr>` 이다) 행으로 좁히면 안 보이고, 반대로 탭 화면 전체를 훑으면
     // 앞 단계가 남긴 패널 배너까지 이번 저장의 오류로 읽힌다. 드로어·모달은 요청마다 통째로
     // 다시 그려지므로 그 안의 배너는 언제나 이번 응답의 것이다.
-    var banners = [root, modalRoot(), drawerRoot()].filter(Boolean);
+    // 배경(드로어·모달 **밖**)에서는 **카드 안에 든 띠를 담지 않는다** — 그것은 이번 저장의
+    // 응답이 아니라 목록 한 칸의 **빈 상태 안내문**이다. ERP 는 두 가지를 같은 클래스로
+    // 그린다(`--blocking` 은 색이지 뜻이 아니다): 저장 거부·전개 불가는 패널 머리에 **한 번**
+    // 서고(`_rooms_panel.html` 의 `{{ error_message }}` 등), 빈 상태는 `{% for %}` 안 카드마다
+    // 선다(`_rooms_panel.html`: `{% if not group.rooms %}` → "이 오퍼에 연결된 객실이
+    // 없습니다 — …"). 룸을 오퍼 A 에 붙이면 오퍼 B 카드의 그 안내문이 화면에 그대로 남는데,
+    // 종전에는 그것이 이번 저장의 오류로 실려 `룸 만들기`·`판매 연결` 이 매번 `stepFailed`
+    // 참이 됐다(2026-09-10 운영 실행에서 5회). 저장은 정상이었다.
+    // 드로어·모달 **안**의 카드 띠는 그대로 담는다 — 그 조각은 요청마다 다시 그려지므로
+    // 카드 안이든 밖이든 이번 응답의 글자다(가격 셀 편집 모달은 오류를 행 단위로 그린다).
+    var dRoot = drawerRoot(), mRoot = modalRoot();
+    var inOverlay = function (e) { return !!((dRoot && dRoot.contains(e)) || (mRoot && mRoot.contains(e))); };
+    var banners = [root, mRoot, dRoot].filter(Boolean);
     banners.forEach(function (box, i) {
       if (banners.indexOf(box) !== i) return;
       [].slice.call(box.querySelectorAll('.stay-banner--blocking')).forEach(function (e) {
         if (e.closest('#stay_validation_banner')) return; // 검증 배너는 `state().banner` 가 따로 읽는다
+        if (!inOverlay(e) && e.closest('.stay-card')) { note(e); return; }
         if (shown(e)) push(textOf(e));
       });
     });
@@ -1290,6 +1312,16 @@
     return rowCandidates(root)[0].filter(shown).map(function (r) { return trunc(textOf(r), 60); }).slice(0, 30);
   }
 
+  // 마지막으로 `open` 이 연 모달과 그때의 요청 서명. 같은 단계를 다시 부를 때
+  // "이미 열려 있다" 를 가리는 데만 쓴다.
+  var lastOpen = { key: null, modal: null, within: null };
+  function openKey(s) {
+    return [s.button || '', s.row || '', s.card || '', s.block || ''].join('|');
+  }
+  function sameOpener(s) {
+    return lastOpen.key === openKey(s) && lastOpen.within === (s.within || null);
+  }
+
   async function open(spec) {
     var s = spec || {};
     var root = s.within && s.within.querySelectorAll ? s.within : (s.inDrawer === true ? baseScope('drawer') : baseScope('pane'));
@@ -1307,6 +1339,22 @@
     if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + s.button + '] 을 찾지 못했습니다', scope: describe(scope), buttons: buttonsIn(scope) });
     var no = refusal(btn, s.button);
     if (no && !s.force) return remember({ status: 'refused', reason: no.reason, detail: no.detail });
+    // **이 버튼이 연 모달이 아직 열려 있으면 다시 누르지 않는다.** 사진 단계(`대표이미지 올리기`·
+    // `상품상세 이미지 올리기`)는 첫 `runStep` 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
+    // 같은 단계를 다시 부르는 것이 정상 경로인데, 종전에는 이미 열린 `#content-modal` 을 또 열려다
+    // `open: 'timeout'` 으로 끝났다(2026-09-10 운영 실행). 모달이 화면을 덮고 있어 뒤의 버튼을
+    // 눌러도 아무 일이 일어나지 않으므로 `waitFor` 가 붙잡을 변화가 없다.
+    // 드로어는 이 갈래가 필요 없다 — 다시 누르면 조각이 새로 그려져 `innerHTML` 이 바뀌고,
+    // 그 변화를 아래 `waitFor` 가 이미 성공으로 읽는다.
+    var openedNow = modalRoot();
+    if (openedNow && lastOpen.modal === openedNow && sameOpener(s) && !openedNow.contains(btn)) {
+      var stA = readState();
+      return remember({
+        status: 'already',
+        detail: '[' + s.button + '] 이 연 모달이 이미 열려 있어 다시 누르지 않았습니다',
+        drawer: stA.drawer, modal: stA.modal, errors: [], fields: fieldsIn()
+      });
+    }
     var before = { drawer: !!drawerRoot(), modal: !!modalRoot(), body: (drawerRoot() || {}).innerHTML ? drawerRoot().innerHTML.length : 0 };
     hx.error = null;
     btn.click();
@@ -1320,6 +1368,8 @@
     await sleep(200);
     var st = readState();
     if (st.loginPage) return remember({ status: 'login', detail: '로그인 화면이 나타났습니다 — 사용자가 로그인해야 합니다', url: st.url });
+    // 무엇이 이 버튼으로 열렸는지 적어 둔다 — 같은 단계를 다시 부를 때 위 갈래가 이것으로 갈린다.
+    lastOpen = ok ? { key: openKey(s), modal: modalRoot(), within: s.within || null } : { key: null, modal: null, within: null };
     return remember({
       status: ok ? 'ok' : 'timeout',
       drawer: st.drawer, modal: st.modal,
@@ -1682,6 +1732,8 @@
     if (failToast(st.toast) && errors.indexOf(clean(st.toast)) < 0) errors.push(trunc(clean(st.toast), 200));
     if (hx.error) errors.unshift(hx.error);
     var out = { status: status, errors: errors, toast: st.toast, url: st.url, banner: st.banner };
+    // 오류로 세지 않고 넘긴 배경 안내문(빈 상태 카드 등) — 있으면 참고로만 싣는다
+    if (pageNotes.length) out.pageNotes = pageNotes.slice();
     // 페이지 안 확인창이 떠서 러너가 [확인] 을 대신 눌렀으면 그 문구를 돌려준다.
     if (confirmText !== null) out.confirmText = confirmText;
     if (st.confirm) out.confirm = st.confirm;
@@ -1727,6 +1779,13 @@
       if (tc.length) { cands = tc; name = tailName; }
     }
     cands = dropCopySelect(scope, cands, f.kind, name);   // `다른 룸에서 복사…` 는 되읽기에서도 칸이 아니다
+    // **비움 지시 + 칸 없음 = 만족**이다. 화면이 그 칸을 아예 세우지 않는 경우가 있고
+    // (부과금의 `적용 날짜 (선택)` 은 부과 유형이 `선택` 이면 서지 않는다), 지시가 "비워 둔다"
+    // 이면 없는 칸은 이미 비어 있는 것이다. 종전에는 `same:false` 라 믿을 수 있는 칸(날짜)이면
+    // `mismatch` 로 저장 앞에서 멈췄다 — 2026-09-10 운영 실행에서 부과금 4단계가 이것으로 막혔다.
+    // 값 지시(`typed`·`select`·`check`…) + 칸 없음은 그대로 불일치다 — 넣어야 할 값이
+    // 갈 자리가 없다는 뜻이라 사람이 봐야 한다.
+    if (!cands.length && f.kind === 'empty') { out.actual = '(칸 없음)'; out.absent = true; out.same = true; return out; }
     if (!cands.length) { out.actual = '(칸 없음)'; out.same = false; return out; }
     var boxes = cands.filter(function (c) { return /^(checkbox|radio)$/.test(c.el.type); }).map(function (c) { return c.el; });
     var values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
@@ -1779,6 +1838,9 @@
     // 이름으로 못 찾은 칸은 채울 때와 같은 순서 규칙으로 되읽는다
     for (var k = 0; k < list.length; k++) {
       if (res[k].actual !== '(칸 없음)') continue;
+      // 비움 지시라 "칸 없음" 을 이미 만족으로 매듭지은 칸은 순서로 다시 찾지 않는다 —
+      // 순서 짐작이 엉뚱한 칸을 집으면 멀쩡한 단계가 다시 불일치가 된다.
+      if (res[k].absent) continue;
       var el = guessByOrder(scope, list, els, k);
       if (!el) continue;
       var f = list[k], values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
@@ -1812,6 +1874,8 @@
       try { window.dispatchEvent(new CustomEvent('stay-drawer-close')); } catch (e) { /* 무시 */ }
       await waitFor(function () { return !drawerRoot(); }, 3000);
     }
+    // 손으로 닫았으면 "이 버튼이 연 모달" 기억도 지운다 — 다음 `open` 은 다시 눌러야 한다.
+    if (!modalRoot()) lastOpen = { key: null, modal: null, within: null };
     return remember({ drawer: !!drawerRoot(), modal: !!modalRoot(), confirm: confirmState() });
   }
 
