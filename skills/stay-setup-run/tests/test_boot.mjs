@@ -522,6 +522,8 @@ const run = async () => {
     'runStep: `사진 추가` 로 넘긴 단계는 아직 어느 숫자에도 세지 않는다', p3);
   ok(p3.current === PHOTO_STEPS.steps[0].title, 'runStep: 넘긴 단계 제목이 띠에 그대로 있다', p3);
   ok(p3.status === 'running', 'runStep: 넘긴 단계를 실패로 물들이지 않는다', p3);
+  ok(w2.__pageSaveClicks === 0,
+    'runStep: 룸 사진 단계는 페이지 머리의 [저장] 을 누르지 않는다 — 룸 폼이지 기본정보 폼이 아니다', w2.__pageSaveClicks);
 
   // 3b) 기본정보 이미지 모달 — 첫 `runStep` 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
   //     **같은 단계를 다시 부르는 것이 정상 경로**다(파일을 다리에 올린 뒤 다시 부른다).
@@ -548,6 +550,39 @@ const run = async () => {
     ok(!i2.openDetail, 'runStep: already 는 끊지 않고 칸 채우기로 이어간다', i2.openDetail);
     ok((i2.bad || []).length === 0, 'runStep: already 뒤에도 모달 안 칸을 다 찾는다', i2.bad);
     ok(wI.stepFailed(i2) === false, 'stepFailed: already 는 실패가 아니다', i2);
+
+    // 3c) 사진을 올린 뒤 `{uploaded:true}` 로 부르면 **모달 [저장] + 기본정보 폼 [저장]** 이다.
+    //     모달 헤더 [저장] 은 `contents_imagecontent` 행만 만들고, 호텔과 사진의 연결
+    //     (`fit_masterimages`)은 폼이 저장될 때 생긴다(ERP `fit/views/master.py`
+    //     `after_save_model` 이 `main_image_sort`·`image_sort` 를 읽어 bulk_create).
+    //     2026-09-10 운영 호텔 44000 에서 러너가 모달까지만 저장해 고객 화면에
+    //     "사진 준비 중" 이 떴다 — DB 의 `fit_masterimages` 가 0행이었다.
+    wI.__pageSaveClicks = 0;
+    const i3 = await wI.runStep(1, { uploaded: true });
+    ok(i3.submitted === true && wI.SUBMIT_OK.indexOf(String(i3.submit)) >= 0,
+      'runStep: 모달 헤더 [저장] 까지 갔다', { s: i3.submitted, r: i3.submit });
+    ok(wI.stayRun.state().modal.open === false, 'runStep: 모달이 닫혔다', wI.stayRun.state().modal);
+    ok(i3.pageSaved === true, 'runStep: 이미지 단계는 기본정보 폼의 [저장] 까지 누른다', i3);
+    ok(wI.__pageSaveClicks === 1, 'runStep: 페이지 머리의 [저장] 을 실제로 눌렀다', wI.__pageSaveClicks);
+    ok(i3.pageSave === 'settled', 'runStep: 폼 저장이 끝난 것을 확인하고 돌아온다', i3.pageSave);
+    ok(wI.stepFailed(i3) === false, 'stepFailed: 폼 저장까지 간 이미지 단계는 완료다', i3);
+
+    // 폼 저장이 막히면(필수 칸 미입력) **완료가 아니다** — 사진이 고객에게 안 보인다
+    wI.__pageSaveClicks = 0;
+    wI.__pageSaveInvalid = true;
+    wI.document.getElementById('toast-container').innerHTML = '';
+    const i4 = await wI.runStep(1, { uploaded: true });
+    ok(i4.pageSaved === false, 'runStep: 폼 저장이 막히면 pageSaved 가 거짓이다', i4);
+    ok(i4.pageSave === 'invalid', 'runStep: 왜 막혔는지 그대로 들고 온다', i4.pageSave);
+    ok((i4.pageInvalid || []).some((x) => /상품명/.test(x)), 'runStep: 어느 칸이 비었는지 알려 준다', i4.pageInvalid);
+    ok(wI.stepFailed(i4) === true, 'stepFailed: 모달만 저장하고 끝난 이미지 단계는 실패다', i4);
+    ok(/기본정보 폼의 \[저장\]/.test(i4.note || ''), 'runStep: 무엇을 더 해야 하는지 비고에 적는다', i4.note);
+    wI.__pageSaveInvalid = false;
+    [].slice.call(wI.document.querySelectorAll('.not-valid')).forEach((el) => el.classList.remove('not-valid'));
+
+    ok(wI.isImageStep({ kind: '대표이미지 올리기' }) === true, 'isImageStep: `대표이미지 올리기` 는 이미지 단계다');
+    ok(wI.isImageStep({ kind: '상품상세 이미지 올리기' }) === true, 'isImageStep: `상품상세 이미지 올리기` 는 이미지 단계다');
+    ok(wI.isImageStep({ kind: '룸 사진 올리기' }) === false, 'isImageStep: 룸 사진은 이미지 단계가 아니다 — 페이지 저장이 없다');
   }
 
   // 4) 여는 버튼 거르개 — 반복 행 추가만 걸러야 한다.

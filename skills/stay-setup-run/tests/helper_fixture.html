@@ -11,6 +11,20 @@
 </head>
 <body>
 
+<!-- 페이지 우상단 머리 — ERP 공통 폼 뼈대(`common/frontend/base_form.html` → `.right_header`).
+     `#save` 는 **기본정보 폼 전체**를 저장하는 버튼이다(`fit/templates/fit/master_form.html`).
+     기본정보 탭의 이미지 모달 [저장] 은 이미지 행만 만들고, 호텔과 사진의 연결
+     (`fit_masterimages`)은 이 버튼이 눌릴 때 생긴다 — ERP `fit/views/master.py`
+     `after_save_model` 이 `main_image_sort`·`image_sort` 를 읽어 bulk_create 한다. -->
+<input type="hidden" name="csrfmiddlewaretoken" value="stale-token">
+
+<div class="right_header">
+  <div>
+    <a href="/fit/master/" class="btn list">목록으로</a>
+    <button type="button" class="btn" id="save" onclick="fakePageSave()">저장</button>
+  </div>
+</div>
+
 <ul class="tab-container">
   <li class="tab"><a href="#stay_tab_room_types" class="active">객실</a></li>
   <li class="tab"><a href="#stay_tab_offers">오퍼</a></li>
@@ -65,6 +79,8 @@
      사진 단계는 첫 `runStep` 이 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
      **같은 단계를 다시 부르는 것이 정상 경로**다(파일을 다리에 올린 뒤 다시 부른다). -->
 <div id="stay_tab_basic" style="display:none">
+  <label for="id_hotel_name">상품명</label>
+  <input type="text" id="id_hotel_name" name="hotel_name" value="시험 호텔">
   <section class="card">
     <h3 class="card-title">대표이미지</h3>
     <button type="button" onclick="openImageModal()">이미지 직접등록</button>
@@ -77,7 +93,9 @@
   <label>이미지설명(Alt) <input type="text" name="alt_text"></label>
   <input type="file" name="pc_image">
   <input type="file" name="mobile_image">
-  <button type="button" onclick="closeImageModal()">저장</button>
+  <!-- 모달 안에도 `id="save"` 인 저장 버튼을 두는 화면이 ERP 에 있다(`admins/**/modal/*.html`).
+       페이지 저장을 찾을 때 이것을 고르면 모달만 닫고 폼은 저장되지 않는다. -->
+  <button type="button" id="save" onclick="closeImageModal()">저장</button>
 </div>
 
 <!-- [오퍼] 탭 — 오퍼 목록과 그 아래 `연령 구간` 절이 **같은 오퍼 이름을 두 번** 들고 있다.
@@ -622,7 +640,27 @@ function openStayConfirm(btn) {
 function hxFire(name, detail) {
   document.body.dispatchEvent(new CustomEvent(name, { bubbles: true, detail: detail || {} }));
 }
-function hxStart() { hxFire('htmx:before:request'); }
+
+/* ── CSRF 흉내 ────────────────────────────────────────────────────────────────
+   ERP 는 `htmx:config:request` 에서 **페이지가 그려질 때 박은** 토큰을 헤더에 넣는다
+   (`common/templates/common/_htmx.html` 의 리스너가 `'{{ csrf_token }}'` 를 그대로 쓴다).
+   토큰이 갈리면 그 값은 낡은 채로 남아 첫 요청이 403 으로 거부되고, Django 는 거부 응답에
+   새 `csrftoken` 쿠키를 실어 준다 — 그래서 같은 버튼을 그냥 다시 눌러도 **같은 낡은 토큰**이
+   나가 또 403 이 난다. 러너가 쿠키를 다시 읽어 헤더를 덮어써야만 두 번째가 통한다. */
+window.__csrfBaked = 'stale-token';   // 페이지에 박힌 낡은 값 (ERP 리스너가 넣는 것)
+window.__csrfValid = 'fresh-token';   // 서버가 인정하는 값 (= 쿠키에 담긴 것)
+window.__csrfCheck = false;           // 참이면 CSRF 검사를 켠다
+window.__csrfSent = null;             // 마지막 요청이 실제로 보낸 헤더
+window.__hxRequests = 0;              // 나간 요청 수 (재시도가 몇 번 나갔는지 세는 자리)
+function hxConfig() {
+  // ERP 리스너가 먼저 낡은 토큰을 넣고, 러너 리스너가 (걸려 있으면) 뒤에서 덮어쓴다
+  var ctx = { request: { headers: { 'X-CSRFToken': window.__csrfBaked } } };
+  hxFire('htmx:config:request', { ctx: ctx });
+  window.__csrfSent = ctx.request.headers['X-CSRFToken'];
+  window.__hxRequests++;
+}
+function csrfOk() { return !window.__csrfCheck || window.__csrfSent === window.__csrfValid; }
+function hxStart() { hxConfig(); hxFire('htmx:before:request'); }
 function hxDone() {
   hxFire('htmx:before:response');
   hxFire('htmx:after:request');
@@ -633,7 +671,7 @@ function hxDone() {
 /* 서버 오류(500·CSRF 403). ERP 는 `htmx.config.noSwap = [204,304,'4xx','5xx']` 이라
    **화면을 갈아끼우지 않는다** — swap·settle 이 없고 배너도 안 붙는다. */
 function hxFailed(code) {
-  hxFire('htmx:before:response');
+  hxFire('htmx:before:response', { ctx: { response: { status: code || 500 } } });
   hxFire('htmx:after:request');
   hxFire('htmx:response:error', { ctx: { response: { status: code || 500 } } });
   hxFire('htmx:finally:request');
@@ -655,6 +693,8 @@ function closeStayConfirm(answer) {
 function fakeSave(toastText) {
   hxStart();
   setTimeout(function () {
+    // CSRF 는 뷰가 불리기 **전에** 끊긴다 — 저장은 일어나지 않는다
+    if (!csrfOk()) { hxFailed(403); return; }
     if (window.__failNextSave) { window.__failNextSave = false; hxFailed(500); return; }
     document.querySelector('.stay-drawer').classList.remove('is-open');
     // 저장이 **성공**해도 띠가 뜬다 — 그것을 오류로 세면 드로어 저장마다 실패로 보인다
@@ -676,6 +716,23 @@ function closeImageModal() {
   var m = document.getElementById('content-modal');
   m.classList.remove('open');
   m.style.display = 'none';
+}
+
+/* ── 페이지 우상단 [저장] (기본정보 폼 전체 저장) ──────────────
+   기존 호텔의 저장은 htmx 가 아니라 **ajax POST** 다 — 화면이 넘어가지 않고
+   Materialize 안내 띠만 뜬다(`M.toast`). 필수 칸이 비어 있으면 요청 자체를 보내지 않고
+   칸에 `.not-valid` 만 붙인다(`common/error.ts`). 둘 다 흉내 낸다. */
+window.__pageSaveClicks = 0;
+window.__pageSaveInvalid = false;
+function fakePageSave() {
+  window.__pageSaveClicks++;
+  if (window.__pageSaveInvalid) {
+    document.getElementById('id_hotel_name').classList.add('not-valid');
+    return;
+  }
+  setTimeout(function () {
+    document.getElementById('toast-container').innerHTML = '<div class="toast">저장되었습니다.</div>';
+  }, 200);
 }
 
 /* ── 판매 연결 패널 머리의 거부 띠 (진짜 오류) ────────────── */

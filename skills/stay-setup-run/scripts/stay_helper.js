@@ -1,5 +1,5 @@
 /*!
- * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.9.2)
+ * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.9.3)
  *
  * 브라우저의 자바스크립트 실행 도구로 이 파일 전체를 페이지에서 실행하면 `window.stayRun` 이 생긴다.
  * 두 번 실행해도 안전하다(멱등). 페이지가 새로 뜨거나 주소가 바뀌면 다시 실행한다.
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.6.1'; // 운영 2026-09-09 배포판 화면 기준(빈 상태 안내문 제외 · 비움+칸 없음 · 모달 재열기)
+  var VERSION = '0.6.2'; // 운영 2026-09-09 배포판 화면 기준(빈 상태 안내문 제외 · 비움+칸 없음 · 모달 재열기 · 페이지 [저장])
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -207,7 +207,9 @@
   // `document` 에 직접 쏜 이벤트는 그 **아래**인 `document.body` 에 영영 닿지 않는다.
   function htmxWatch() {
     if (window.__stayRunHtmx) return window.__stayRunHtmx;
-    var st = { pending: 0, requests: 0, settles: 0, swaps: 0, error: null, unloading: false };
+    // `errorStatus` 는 `error` 를 낸 응답의 코드다 — CSRF 403 만 골라 재시도하려면 이것이 있어야 한다
+    // (다른 4xx·5xx 는 재시도하지 않는다: 저장이 실제로 들어간 뒤 난 오류일 수 있다).
+    var st = { pending: 0, requests: 0, settles: 0, swaps: 0, error: null, errorStatus: null, lastStatus: null, unloading: false };
     var on = function (names, f) {
       names.forEach(function (n) { document.addEventListener(n, f, true); });
     };
@@ -222,9 +224,22 @@
     on(['htmx:afterRequest', 'htmx:finally:request'], function () { st.pending = Math.max(0, st.pending - 1); });
     on(['htmx:afterSwap', 'htmx:after:swap'], function () { st.swaps++; });
     on(['htmx:afterSettle', 'htmx:after:settle'], function () { st.settles++; });
+    // 응답 코드는 오류 이벤트뿐 아니라 `before:response`(htmx 4 · `detail.ctx.response.status`)
+    // 에서도 온다. ERP 는 `noSwap` 이라 4xx·5xx 에서 화면이 그대로라, 오류 이벤트를 한 번이라도
+    // 놓치면 거부가 통째로 안 보인다 — 두 자리 다 듣는다.
+    on(['htmx:beforeResponse', 'htmx:before:response'], function (e) {
+      var code = statusOf(e);
+      if (!code) return;
+      st.lastStatus = code;
+      if (code >= 400 && !st.error) {
+        st.error = '서버가 오류로 답했습니다 (' + code + ')';
+        st.errorStatus = code;
+      }
+    });
     on(['htmx:responseError', 'htmx:response:error'], function (e) {
       var code = statusOf(e);
       st.error = '서버가 오류로 답했습니다' + (code ? ' (' + code + ')' : '');
+      if (code) st.errorStatus = code;
     });
     on(['htmx:sendError'], function () { st.error = '요청을 보내지 못했습니다(네트워크)'; });
     on(['htmx:timeout'], function () { st.error = '요청이 시간 안에 끝나지 않았습니다'; });
@@ -1664,6 +1679,57 @@
     });
   }
 
+  /* ──────────────────── CSRF 토큰 다시 읽기 (403 재시도용) ────────────────────
+     오래 열려 있던 탭에서 저장하면 첫 요청이 **CSRF 403** 으로 거부되는 일이 있다.
+     ERP 는 htmx 헤더에 넣을 토큰을 **페이지가 그려질 때 한 번** 박아 둔다
+     (`common/templates/common/_htmx.html` 의 `htmx:config:request` 리스너가
+     `'{{ csrf_token }}'` 을 그대로 쓴다) — 토큰이 갈리면 그 값은 낡은 채로 남으므로
+     같은 버튼을 다시 눌러도 **같은 낡은 토큰**이 나가 또 403 이 난다.
+     Django 는 거부 응답에 새 `csrftoken` 쿠키를 실어 주므로, 재시도 전에 그 쿠키(없으면
+     화면의 `csrfmiddlewaretoken`)를 읽어 **우리 리스너가 헤더를 덮어쓰게** 해야 통한다.
+     403 은 CsrfViewMiddleware 가 뷰를 부르기 **전에** 끊는 것이라 저장이 들어가지 않았다 —
+     그래서 이 코드에서만 재시도가 안전하다(다른 4xx·5xx 는 재시도하지 않는다).
+     토큰 값 자체는 어디에도 싣지 않는다 — 어디서 읽었는지만 돌려준다. */
+  function readCookie(name) {
+    var m = (document.cookie || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function csrfDomToken() {
+    var el = [].slice.call(document.querySelectorAll('input[name=csrfmiddlewaretoken]'))
+      .find(function (i) { return i.value; });
+    return el ? el.value : '';
+  }
+  function csrfToken() { return readCookie('csrftoken') || csrfDomToken(); }
+  var csrfHooked = false;
+  // 우리 리스너는 ERP 것보다 **뒤에** 걸린다(같은 버블 단계라 나중에 건 쪽이 나중에 돈다) —
+  // 그래서 페이지에 박힌 낡은 토큰을 덮어쓴다. 매번 쿠키를 다시 읽으므로 한 번 걸어 두면
+  // 토큰이 또 갈려도 따라간다.
+  function hookCsrfHeader() {
+    if (csrfHooked) return false;
+    var set = function (e) {
+      var tok = csrfToken();
+      if (!tok) return;
+      var d = (e && e.detail) || {};
+      var h = (d.ctx && d.ctx.request && d.ctx.request.headers) || d.headers; // htmx 4 / htmx 1·2
+      if (h) h['X-CSRFToken'] = tok;
+    };
+    document.addEventListener('htmx:config:request', set);  // htmx 4
+    document.addEventListener('htmx:configRequest', set);   // htmx 1·2
+    csrfHooked = true;
+    return true;
+  }
+  function refreshCsrf() {
+    var tok = csrfToken();
+    if (!tok) return { ok: false, reason: 'no-token', detail: '페이지에서도 쿠키에서도 CSRF 토큰을 찾지 못했습니다' };
+    var from = readCookie('csrftoken') ? 'cookie' : 'dom';
+    var n = 0;
+    [].slice.call(document.querySelectorAll('input[name=csrfmiddlewaretoken]')).forEach(function (i) {
+      if (i.value !== tok) { i.value = tok; n++; }
+    });
+    var hooked = hookCsrfHeader();
+    return { ok: true, from: from, inputs: n, hooked: hooked };  // 토큰 값은 싣지 않는다
+  }
+
   async function submit(buttonText, opts) {
     var o = opts || {};
     var scope = narrow(baseScope(), o);
@@ -1684,7 +1750,7 @@
     if (no && (no.reason === 'sale-start' || !o.force)) return remember({ status: 'refused', reason: no.reason, detail: no.detail, errors: [], url: location.href });
 
     var before = { drawer: !!drawerRoot(), modal: !!modalRoot(), url: location.href, path: location.pathname, settles: hx.settles, swaps: hx.swaps };
-    hx.error = null;
+    hx.error = null; hx.errorStatus = null;
     var origConfirm = null;
     // 옛 ERP(2026-09-08 이전)는 `hx-confirm` 을 브라우저 네이티브 confirm 으로 띄운다 —
     // 그때는 이 교체가 대신 [확인] 을 누른다. 새 ERP 는 페이지 안 확인창(`#stay_confirm`)을
@@ -1723,6 +1789,29 @@
       if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) { await sleep(250); status = 'settled'; break; }
       if (before.drawer && !drawerRoot()) { status = 'settled'; break; }
       if (before.modal && !modalRoot()) { status = 'settled'; break; }
+    }
+
+    // ── CSRF 403 이면 **딱 한 번** 다시 보낸다 ────────────────────────────────
+    // 403 은 CsrfViewMiddleware 가 뷰를 부르기 전에 끊은 것이라 **저장이 들어가지 않았다** —
+    // 그래서 같은 값을 두 번 만들 걱정이 없다. 다른 4xx·5xx 는 재시도하지 않는다.
+    // 그냥 다시 누르면 페이지에 박힌 낡은 토큰이 또 나가므로, 먼저 `refreshCsrf()` 로
+    // 새 토큰을 읽어 헤더를 덮어쓸 리스너를 걸어 둔다(위 주석).
+    if (hx.error && hx.errorStatus === 403 && status !== 'navigated' && !hx.unloading &&
+        !o.__csrfRetried && o.csrfRetry !== false) {
+      // 대기 고리는 `hx.error` 를 보는 순간 끊는다 — 거부된 요청의 `finally:request` 가
+      // 아직 안 왔을 수 있다. 그대로 다시 보내면 `pending` 이 0 으로 안 떨어져 재시도가
+      // 통째로 `timeout` 이 된다. 잠깐 비는 것을 보고 간다.
+      await waitFor(function () { return hx.pending === 0; }, 2000);
+      var fix = refreshCsrf();
+      hx.error = null; hx.errorStatus = null;
+      var o2 = {}; for (var ok2 in o) if (Object.prototype.hasOwnProperty.call(o, ok2)) o2[ok2] = o[ok2];
+      o2.__csrfRetried = true;
+      var again = await submit(buttonText, o2);
+      again.csrfRefresh = fix;
+      // 두 번째도 403 이면 `error` 그대로 멈춘다 — 세 번은 없다.
+      if (again.status === 'error') again.csrfRetryFailed = true;
+      else again.csrfRetried = true;
+      return remember(again);
     }
 
     var st = readState();
@@ -1935,6 +2024,101 @@
   }
   function clearBridge() { var el = document.getElementById('stay_file_bridge'); if (el) el.value = ''; return remember({ ok: true }); }
 
+  /* ────────────────── 페이지 머리의 [저장] — 전체 화면 폼 저장 ──────────────────
+     기본정보 탭의 이미지 모달(`#content-modal`)은 헤더 [저장] 으로 **이미지 행만**
+     만든다(`contents_imagecontent`). 호텔과의 연결(`fit_masterimages`)은 그 뒤에
+     **기본정보 폼 전체가 저장될 때** 생긴다 — ERP `fit/views/master.py` 의
+     `after_save_model` 이 폼이 실어 보낸 `main_image_sort`·`image_sort` 를 읽어
+     `MasterImages` 를 bulk_create 한다. 모달만 저장하고 끝내면 화면에는 사진이
+     보이는데 DB 에는 연결이 0행이라 고객 화면에 "사진 준비 중" 이 뜬다
+     (2026-09-10 운영 호텔 44000 실측).
+
+     그 저장 버튼은 드로어·모달 **밖**, 페이지 우상단 머리(`.right_header`)의 `#save` 다
+     (`fit/templates/fit/master_form.html`). 누르면 htmx 가 아니라 **ajax POST** 가
+     나가고(새 화면으로 넘어가지 않는다) 성공하면 Materialize 안내 띠가 뜬다 —
+     그래서 `submit()` 의 htmx 기다림으로는 정착을 못 본다. 여기서는 띠가 새로 뜨는
+     것과 화면이 넘어가는 것 둘 다 본다. 필수 칸이 비어 있으면 ERP 는 요청을 아예
+     보내지 않고 칸에 `.not-valid` 만 붙인다 — 그것도 갈라 읽는다. */
+  function pageSaveButton() {
+    var inOver = function (el) {
+      return !!(el.closest('.stay-drawer') || el.closest('.modal') || el.closest('.stay-modal') ||
+        el.closest('#' + CONFIRM_ID) || el.closest('#logout-warning-modal'));
+    };
+    var cands = [].slice.call(document.querySelectorAll('#save, .right_header button, .right_header a.btn'));
+    for (var i = 0; i < cands.length; i++) {
+      var b = cands[i];
+      if (!b || b.disabled || b.getAttribute('aria-disabled') === 'true' || !shown(b) || inOver(b)) continue;
+      if (b.id === 'save') return b;                       // 페이지 머리의 저장 버튼(ERP 공통 id)
+      if (tier(btnText(b), '저장') >= 3) return b;          // id 가 다른 화면 대비
+    }
+    return null;
+  }
+  // 필수 칸 미입력 표시(`.not-valid`) — ERP 는 이걸 붙이고 요청을 보내지 않는다
+  function invalidFields() {
+    return [].slice.call(document.querySelectorAll('.not-valid')).filter(shown).slice(0, 12).map(function (el) {
+      var lab = labelsOf(el).map(function (c) { return c.text; })[0];
+      return clean(lab || el.getAttribute('name') || el.id || textOf(el)).slice(0, 60) || '(이름 없는 칸)';
+    });
+  }
+  async function pageSave(opts) {
+    var o = opts || {};
+    var btn = pageSaveButton();
+    if (!btn) return remember({
+      status: 'not-found', saved: false, errors: [],
+      detail: '페이지 우상단의 [저장] 버튼이 없습니다 — 기본정보 같은 전체 화면 폼에서만 있습니다',
+      url: location.href
+    });
+    // 모달·드로어가 열린 채로 폼을 저장하면 아직 화면에 안 붙은 값이 빠진 채 굳는다.
+    // 이미지 단계라면 **먼저 모달 헤더 [저장]** 으로 사진을 화면에 붙여야 한다.
+    var mOpen = !!modalRoot(), dOpen = !!drawerRoot();
+    if (!o.force && (mOpen || dOpen)) return remember({
+      status: 'blocked', saved: false, reason: mOpen ? 'modal' : 'drawer', errors: [],
+      detail: (mOpen ? '모달' : '드로어') + '이 아직 열려 있습니다 — 그 안의 [저장] 으로 닫은 뒤에 부르세요'
+        + ' (정말 지금 저장해야 하면 `stayRun.pageSave({force:true})`)',
+      url: location.href
+    });
+
+    var before = {
+      url: location.href, path: location.pathname,
+      settles: hx.settles, swaps: hx.swaps, toast: toastText()
+    };
+    hx.error = null; hx.errorStatus = null;
+    btn.click();
+
+    var status = 'timeout', t0 = Date.now();
+    while (Date.now() - t0 < WAIT_MS) {
+      await sleep(TICK);
+      if (hx.unloading || location.pathname !== before.path) { status = 'navigated'; break; }
+      if (hx.error) { status = 'error'; break; }
+      // ajax 저장은 안내 띠로만 끝을 알린다("저장되었습니다.")
+      var tNow = toastText();
+      if (tNow && tNow !== before.toast) { await sleep(200); status = 'settled'; break; }
+      // htmx 로 저장하는 화면(Stay 쪽 전체 화면 폼)도 있으니 그 신호도 같이 본다
+      if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) { await sleep(250); status = 'settled'; break; }
+      // 필수 칸이 비어 있으면 요청 자체가 안 나간다 — 표시가 붙는 즉시 끊는다
+      if (invalidFields().length) { status = 'invalid'; break; }
+    }
+
+    var st = readState();
+    var errors = collectErrors(baseScope());
+    if (failToast(st.toast) && errors.indexOf(clean(st.toast)) < 0) errors.push(trunc(clean(st.toast), 200));
+    if (hx.error) { errors.unshift(hx.error); status = 'error'; }
+    var bad = invalidFields();
+    if (bad.length && status !== 'navigated') status = 'invalid';
+    var out = {
+      status: status,
+      saved: (status === 'navigated' || status === 'settled') && !errors.length,
+      errors: errors, toast: st.toast, url: st.url, banner: st.banner
+    };
+    if (bad.length) {
+      out.invalid = bad;
+      out.detail = '필수 칸이 비어 저장 요청이 나가지 않았습니다: ' + bad.join(' · ');
+    }
+    if (status === 'timeout') out.detail = '저장이 끝난 표시(안내 띠·화면 갈림)를 못 봤습니다 — 스크린샷으로 확인하세요';
+    if (st.loginPage) out.status = 'login';
+    return remember(out);
+  }
+
   function keepAlive() {
     var lw = document.getElementById('logout-warning-modal');
     if (!lw || !shown(lw)) return remember({ clicked: false, logoutWarning: false });
@@ -2114,6 +2298,9 @@
     bridge: bridge,
     takeFiles: takeFiles,
     clearBridge: clearBridge,
+    pageSave: pageSave,
+    refreshCsrf: refreshCsrf,
+    pageSaveButton: pageSaveButton,
     sleep: sleep, waitFor: waitFor, tier: tier, findButton: findButton,
     // 부트(`stay_boot.js`)의 가격 셀 단계가 같은 격자를 쓴다 — 두 벌이 되면 한쪽만 고쳐진다.
     rowCells: rowCells

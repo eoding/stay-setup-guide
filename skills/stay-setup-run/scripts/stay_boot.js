@@ -98,6 +98,19 @@
     return window.ROW_ADD_RE.test(t) && !window.ROW_ADD_EXCEPT_RE.test(t);
   };
 
+  // ── 기본정보 탭의 이미지 모달 단계인가 ────────────────────────────────────────
+  // `대표이미지 올리기` · `상품상세 이미지 올리기` 다. 이 단계의 모달 헤더 [저장] 은
+  // **이미지 행만** 만들고(`contents_imagecontent`), 호텔과의 연결(`fit_masterimages`)은
+  // 기본정보 폼 전체가 저장될 때 생긴다 — ERP `fit/views/master.py` 의 `after_save_model` 이
+  // 폼이 실어 보낸 `main_image_sort`·`image_sort` 를 읽어 `MasterImages` 를 bulk_create 한다.
+  // 그래서 이 단계는 모달을 저장한 뒤 **페이지 우상단 [저장]** 까지 눌러야 끝난다
+  // (2026-09-10 운영 호텔 44000: 안 눌러 고객 화면에 "사진 준비 중" 이 떴다 — DB 0행).
+  // `룸 사진 올리기` 는 여기 들지 않는다 — 그쪽은 파일을 고르는 즉시 올라가고 저장 버튼이 없다.
+  window.IMAGE_STEP_RE = /이미지\s*올리기$/;
+  window.isImageStep = function (s) {
+    return !!(s && window.IMAGE_STEP_RE.test(String(s.kind || '').normalize('NFC').trim()));
+  };
+
   // ── 지시서가 ERP 2026-09-04 이전 화면 기준인가 ────────────────────────────────────────
   // 그전에는 [호텔 만들기]가 오퍼 `기본 오퍼` · 룸 `스탠다드` · 그 둘의 연결행을 미리 만들어 두었고,
   // 지시서는 그것들을 **고쳐 쓰는** 단계(`오퍼 고치기`, `스탠다드` 행의 [편집])를 적었다.
@@ -700,6 +713,25 @@
     // 저장 뒤의 드로어·모달 상태를 그대로 들고 나온다 — `stayed`(정착했는데 안 닫힘)가
     // **드로어가 남은 것**인지 처음부터 드로어가 없는 전체 화면 폼인지 이것으로만 갈린다.
     out.drawer = sub.drawer; out.modal = sub.modal;
+    // 기본정보 이미지 모달 단계는 모달 [저장] 만으로 끝나지 않는다 — 페이지 우상단 [저장] 을
+    // 눌러야 호텔과 사진의 연결(`fit_masterimages`)이 생긴다(위 `isImageStep` 의 주석).
+    // 두 이미지 단계가 잇달아도 매번 눌러 둔다: 기존 호텔의 저장은 ajax 라 화면이 넘어가지
+    // 않으므로 두 번 눌러도 해가 없고, 한 번이라도 빠지면 사진이 고객에게 안 보인다.
+    // 모달이 안 닫혔거나 저장이 거부됐으면 누르지 않는다 — 반쯤 찬 폼을 굳히면 안 된다.
+    if (window.isImageStep(s) && !(out.errors || []).length && !(out.modal && out.modal.open) &&
+        window.SUBMIT_OK.indexOf(sub.status) >= 0 && opt.pageSave !== false) {
+      var ps = await stayRun.pageSave();
+      out.pageSave = ps.status;
+      out.pageSaved = !!ps.saved;
+      if (ps.invalid) out.pageInvalid = ps.invalid;
+      if ((ps.errors || []).length) out.errors = (out.errors || []).concat(ps.errors);
+      if (ps.status === 'navigated') out.navigated = true;
+      if (!ps.saved) {
+        out.note = '모달은 저장했지만 기본정보 폼의 [저장] 을 확인하지 못했습니다 ('
+          + ps.status + (ps.detail ? ' — ' + ps.detail : '')
+          + ') — 사진은 이 저장까지 가야 고객 화면에 뜹니다. 화면을 보고 `stayRun.pageSave()` 를 다시 부르세요.';
+      }
+    }
     return out;
   };
 
@@ -741,6 +773,7 @@
     else if (r && r.mismatch && r.mismatch.length) t = '되읽기 불일치: ' + r.mismatch.join(' · ');
     else if (r && r.openDetail) t = String(r.openDetail);
     else if (r && String(r.submit) === 'stayed') t = '저장 뒤에도 드로어가 그대로입니다';
+    else if (r && r.pageSaved === false) t = '기본정보 폼의 [저장] 을 확인하지 못했습니다 (' + r.pageSave + ')';
     t = String(t).normalize('NFC').replace(/\s+/g, ' ').trim();
     return t.length > 60 ? t.slice(0, 60) + '…' : t;
   }
@@ -769,6 +802,9 @@
     if (r.open === 'not-found' || r.open === 'ambiguous') return true;
     if (String(r.submit) === 'stayed') return drawerLeftOpen(r);
     if (r.submit !== undefined && r.submit !== null && window.SUBMIT_OK.indexOf(String(r.submit)) < 0) return true;
+    // 이미지 단계는 모달 [저장] 만으로 끝나지 않는다 — 기본정보 폼의 [저장] 까지 가야 호텔과
+    // 사진의 연결이 생긴다. 모달만 저장하고 끝났으면 화면에는 보여도 고객에게는 안 보인다.
+    if (r.pageSaved === false) return true;
     return false;
   };
 

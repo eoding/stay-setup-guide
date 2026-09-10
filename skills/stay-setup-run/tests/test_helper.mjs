@@ -428,8 +428,66 @@ const run = async () => {
   ok((failed.errors || []).some((e) => /서버가 오류로 답했습니다 \(500\)/.test(e)),
     'submit: 응답 코드를 사유에 담는다', failed.errors);
   ok(R.state().drawer.open === true, 'submit: 오류면 드로어가 그대로다');
+  ok(win.__stayRunHtmx.errorStatus === 500, 'htmx 감시자: 어느 코드로 거부됐는지 따로 들고 있다', win.__stayRunHtmx.errorStatus);
   win.closeDrawer();
   win.__stayRunHtmx.error = null;
+  win.__stayRunHtmx.errorStatus = null;
+
+  // 12f-2. **CSRF 403 은 한 번만 자동으로 다시 보낸다** (2026-09-10 실측).
+  //   오래 열려 있던 탭에서 저장하면 첫 요청이 403 으로 거부된다. ERP 는 htmx 헤더에 넣을
+  //   토큰을 **페이지가 그려질 때 한 번** 박아 두므로(`common/templates/common/_htmx.html`),
+  //   같은 버튼을 그냥 다시 눌러도 같은 낡은 토큰이 나가 또 403 이다 — 러너가 Django 가
+  //   새로 내려 준 `csrftoken` 쿠키를 읽어 헤더를 덮어써야 두 번째가 통한다.
+  //   403 은 CsrfViewMiddleware 가 뷰를 부르기 **전에** 끊은 것이라 저장이 들어가지 않았다 —
+  //   그래서 이 코드에서만 재시도가 안전하다(같은 값을 두 번 만들지 않는다).
+  {
+    win.document.cookie = 'csrftoken=fresh-token; path=/';
+    ok(/fresh-token/.test(win.document.cookie || ''), '픽스처: 새 토큰이 쿠키에 들어갔다', win.document.cookie);
+
+    win.openRoomDrawer('스탠다드');
+    win.__csrfCheck = true;
+    win.__hxRequests = 0;
+    const rt = await R.submit('저장');
+    ok(rt.status === 'closed', 'submit: 403 을 스스로 넘기고 저장까지 끝냈다', rt);
+    ok(rt.csrfRetried === true, 'submit: 재시도했다는 것을 결과에 싣는다(로그의 `403 재시도 후 저장`)', rt.csrfRetried);
+    ok(win.__hxRequests === 2, 'submit: 요청은 딱 두 번 나갔다 — 첫 거부와 재시도', win.__hxRequests);
+    ok((rt.errors || []).length === 0, 'submit: 재시도가 통했으면 오류를 남기지 않는다', rt.errors);
+    ok(rt.csrfRefresh && rt.csrfRefresh.from === 'cookie', 'submit: 새 토큰을 쿠키에서 읽었다', rt.csrfRefresh);
+    ok(!/token/i.test(JSON.stringify(rt.csrfRefresh || {}).replace(/"(from|inputs|hooked|ok)"/g, '')),
+      'submit: 토큰 값 자체는 결과에 싣지 않는다', rt.csrfRefresh);
+    ok(win.document.querySelector('input[name=csrfmiddlewaretoken]').value === 'fresh-token',
+      'submit: 화면의 숨은 토큰 칸도 새 값으로 맞춘다(ajax·일반 폼 저장이 그걸 쓴다)');
+    ok(R.state().drawer.open === false, 'submit: 재시도로 저장이 끝나 드로어가 닫혔다');
+
+    // 두 번째도 403 이면 그대로 멈춘다 — 세 번은 없다
+    win.__csrfValid = 'another-token';   // 쿠키를 읽어도 서버가 인정하지 않는 값
+    win.openRoomDrawer('스탠다드');
+    win.__hxRequests = 0;
+    const st2 = await R.submit('저장');
+    ok(st2.status === 'error', 'submit: 두 번째도 403 이면 error 로 멈춘다', st2);
+    ok(st2.csrfRetryFailed === true, 'submit: 재시도가 통하지 않았다는 것도 남긴다', st2.csrfRetryFailed);
+    ok(st2.csrfRetried === undefined, 'submit: 실패한 재시도를 성공으로 적지 않는다', st2.csrfRetried);
+    ok(win.__hxRequests === 2, 'submit: 세 번 보내지 않는다 — 무한 재시도가 없다', win.__hxRequests);
+    ok(R.state().drawer.open === true, 'submit: 거부된 저장은 드로어가 그대로다');
+    win.closeDrawer();
+    win.__csrfValid = 'fresh-token';
+    win.__csrfCheck = false;
+    win.__stayRunHtmx.error = null;
+    win.__stayRunHtmx.errorStatus = null;
+
+    // 403 **만** 다시 보낸다 — 500 은 저장이 들어간 뒤 났을 수 있어 두 번 만들면 안 된다
+    win.openRoomDrawer('스탠다드');
+    win.__failNextSave = true;
+    win.__hxRequests = 0;
+    const f5 = await R.submit('저장');
+    ok(f5.status === 'error', 'submit: 500 은 그대로 error 다', f5.status);
+    ok(win.__hxRequests === 1, 'submit: 500 은 다시 보내지 않는다 — 요청은 한 번뿐이다', win.__hxRequests);
+    ok(f5.csrfRetried === undefined && f5.csrfRetryFailed === undefined,
+      'submit: 500 에는 재시도 표시가 붙지 않는다', { a: f5.csrfRetried, b: f5.csrfRetryFailed });
+    win.closeDrawer();
+    win.__stayRunHtmx.error = null;
+    win.__stayRunHtmx.errorStatus = null;
+  }
 
   // 12g. htmx 이벤트 이름이 두 벌이다 — 운영 Stay 화면은 htmx **4**(콜론 표기)를 싣고
   //      레거시 3화면은 아직 1·2(카멜)다. 한쪽만 들으면 그 화면에서 감시자가 **통째로 침묵**하고,
@@ -563,6 +621,55 @@ const run = async () => {
     ok(o3.status === 'ok', 'open: 닫힌 뒤에는 다시 눌러 연다', o3.status);
     await R.close();
     ok(R.state().modal.open === false, 'close: 모달을 닫았다', R.state().modal);
+    await R.tab('객실');
+  }
+
+  // 12k. 페이지 우상단 [저장] — **기본정보 폼 전체 저장** (2026-09-10 운영 호텔 44000 실측).
+  //      이미지 모달의 헤더 [저장] 은 `contents_imagecontent` 행만 만들고, 호텔과 사진의
+  //      연결(`fit_masterimages`)은 기본정보 폼이 저장될 때 생긴다 — ERP `fit/views/master.py`
+  //      의 `after_save_model` 이 `main_image_sort`·`image_sort` 를 읽어 bulk_create 한다.
+  //      모달까지만 저장하고 끝내 고객 화면에 "사진 준비 중" 이 떴다(DB 연결 0행).
+  {
+    await R.close();
+    await R.tab('기본정보');
+    win.__pageSaveClicks = 0;
+    win.__pageSaveInvalid = false;
+    win.document.getElementById('toast-container').innerHTML = '';
+
+    // 모달 안에도 `id="save"` 인 저장 버튼을 두는 화면이 ERP 에 있다 — 페이지 머리 것을 골라야 한다
+    const pb = R.pageSaveButton();
+    ok(!!pb && !!pb.closest('.right_header'),
+      'pageSaveButton: 페이지 머리(.right_header)의 [저장] 을 고른다', pb && pb.outerHTML);
+    ok(!!pb && !pb.closest('.modal'),
+      'pageSaveButton: 모달 안의 같은 id 버튼은 고르지 않는다', pb && pb.outerHTML);
+
+    // 모달이 열려 있는 동안에는 누르지 않는다 — 사진이 화면에 붙기 전에 폼을 굳히면 안 된다
+    await R.open({ button: '이미지 직접등록' });
+    const blocked = await R.pageSave();
+    ok(blocked.status === 'blocked' && blocked.reason === 'modal',
+      'pageSave: 모달이 열려 있으면 누르지 않는다', blocked);
+    ok(win.__pageSaveClicks === 0, 'pageSave: 막혔으면 버튼을 아예 안 눌렀다', win.__pageSaveClicks);
+    ok(blocked.saved === false, 'pageSave: 막힌 것은 저장이 아니다', blocked.saved);
+
+    // 모달 헤더 [저장] 으로 사진을 화면에 붙인 뒤라야 폼 저장이 뜻을 갖는다
+    await R.submit('저장');
+    const ps = await R.pageSave();
+    ok(ps.status === 'settled' && ps.saved === true, 'pageSave: 폼 저장이 안내 띠로 끝났다', ps);
+    ok(win.__pageSaveClicks === 1, 'pageSave: 페이지 머리의 버튼을 한 번 눌렀다', win.__pageSaveClicks);
+    ok(/저장되었습니다/.test(ps.toast || ''), 'pageSave: 안내 띠 글자를 그대로 돌려준다', ps.toast);
+    ok((ps.errors || []).length === 0, 'pageSave: 성공 띠를 오류로 세지 않는다', ps.errors);
+
+    // 필수 칸이 비어 있으면 ERP 는 요청을 아예 보내지 않고 칸에 `.not-valid` 만 붙인다
+    // (`common/error.ts`). 안내 띠도 안 뜨므로 이것을 못 읽으면 저장된 줄로 오해한다.
+    win.__pageSaveInvalid = true;
+    win.document.getElementById('toast-container').innerHTML = '';
+    const inv = await R.pageSave();
+    ok(inv.status === 'invalid' && inv.saved === false,
+      'pageSave: 필수 칸이 비면 저장이 안 된 것으로 읽는다', inv);
+    ok((inv.invalid || []).some((x) => /상품명/.test(x)), 'pageSave: 어느 칸이 비었는지 알려 준다', inv.invalid);
+    win.__pageSaveInvalid = false;
+    [].slice.call(win.document.querySelectorAll('.not-valid')).forEach((el) => el.classList.remove('not-valid'));
+    win.document.getElementById('toast-container').innerHTML = '';
     await R.tab('객실');
   }
 
