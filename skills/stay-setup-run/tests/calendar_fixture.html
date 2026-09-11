@@ -87,6 +87,7 @@
 </div>
 
 <div class="stay-drawer"><div class="stay-drawer__title"></div><div id="stay_drawer_body"></div></div>
+<input type="hidden" name="csrfmiddlewaretoken" value="stale-token">
 <div id="toast-container"></div>
 
 <script>
@@ -221,10 +222,19 @@ function hxSwapped() {
    아무 데도 없으므로, 러너가 이 이벤트를 놓치면 그대로 성공으로 센다. */
 function hxFailed(code) {
   fire('htmx:before:request');
-  fire('htmx:before:response');
+  fire('htmx:before:response', { ctx: { response: { status: code || 500 } } });
   fire('htmx:after:request');
   fire('htmx:response:error', { ctx: { response: { status: code || 500 } } });
   fire('htmx:finally:request');
+}
+/* 오래 열려 있던 탭의 첫 저장이 CSRF 403 으로 거부되는 판. 뷰가 불리기 **전에** 끊기므로
+   저장은 일어나지 않는다 — 러너는 새 토큰을 읽어 딱 한 번 다시 보내야 한다. */
+window.__csrf403Once = false;
+function csrf403() {
+  if (!window.__csrf403Once) return false;
+  window.__csrf403Once = false;
+  hxFailed(403);
+  return true;
 }
 
 function openCell(day) {
@@ -235,6 +245,7 @@ function openCell(day) {
 }
 function closeCell() { document.getElementById('stay_cell_slot').innerHTML = ''; }
 function fakeAdd() {
+  if (csrf403()) return;
   if (window.__failNextSave) { window.__failNextSave = false; hxFailed(500); return; }
   document.getElementById('toast-container').innerHTML = '<div class="toast">추가했습니다</div>';
   hxSwapped();
@@ -244,6 +255,7 @@ function fakeAdd() {
    `window.__failNextSave` 는 서버 오류(500, 화면 그대로)다. */
 function fakeSave() {
   var day = (document.querySelector('#stay_cell_edit input[name=date]') || {}).value || '2026-01-03';
+  if (csrf403()) return;
   if (window.__failNextSave) { window.__failNextSave = false; hxFailed(500); return; }
   if (window.__refuseNextSave) {
     window.__refuseNextSave = false;
