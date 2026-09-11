@@ -191,6 +191,22 @@ const IMAGE_STEPS = {
   }]
 };
 
+//: CSRF 403 재시도 — 룸 드로어의 [저장] 하나만 있는 단계다(칸은 보지 않는다).
+const CSRF_STEPS = {
+  guide: { title: '시험 호텔' },
+  steps: [{
+    no: 1,
+    title: '룸 고치기 (스탠다드)',
+    kind: '룸 고치기',
+    head: {
+      tab: '객실', card: '객실 (룸 타입)', block: null, screen: null, notice: null,
+      buttons: ['`스탠다드` 행의 [편집]'],
+      buttons_parsed: [{ raw: '`스탠다드` 행의 [편집]', text: '편집', row: '스탠다드', card: null, group: null, drawer: false, times: 1 }]
+    },
+    fields: [], longtexts: [], photos: [], submit: '저장'
+  }]
+};
+
 const PHOTO_STEPS = {
   guide: { title: '시험 호텔' },
   steps: [{
@@ -495,6 +511,29 @@ const run = async () => {
      'runStep: 띠도 실패로 센다 — 완료로 세지 않는다', win.stayRun.progressState());
   win.progressReset();
   win.__stayRunHtmx.error = null;
+  win.__stayRunHtmx.errorStatus = null;
+
+  // 2-p) CSRF 403 은 **한 번만** 스스로 다시 보낸다 (2026-09-10 실측).
+  //      오래 열려 있던 탭의 첫 저장이 403 으로 거부되는데, 그것은 CsrfViewMiddleware 가
+  //      뷰를 부르기 **전에** 끊은 것이라 저장이 들어가지 않았다 — 그래서 다시 보내도
+  //      같은 값이 두 번 만들어지지 않는다. 가격 셀은 한 실행에 수백 번 저장하는 자리라
+  //      여기서 멈추면 실행이 통째로 선다.
+  win.__csrf403Once = true;
+  const rcsrf = await win.runCellStep(6);
+  ok(rcsrf.csrfRetried === true, 'runCellStep: 403 을 스스로 넘기고 저장했다', rcsrf);
+  ok(rcsrf.submit === 'settled', 'runCellStep: 재시도 뒤 정착까지 갔다', rcsrf.submit);
+  ok((rcsrf.errors || []).length === 0, 'runCellStep: 재시도가 통했으면 오류를 남기지 않는다', rcsrf.errors);
+  ok(win.stepFailed(rcsrf) === false, 'stepFailed: 재시도로 저장이 끝났으면 실패가 아니다', rcsrf);
+  ok(!!rcsrf.csrfRefresh, 'runCellStep: 새 토큰을 다시 읽었다는 것을 남긴다', rcsrf.csrfRefresh);
+
+  //      500 은 다시 보내지 않는다 — 저장이 들어간 뒤 났을 수 있어 두 번 만들면 안 된다
+  win.__failNextSave = true;
+  const rc500 = await win.runCellStep(6);
+  ok(rc500.submit === 'error', 'runCellStep: 500 은 그대로 error 다', rc500.submit);
+  ok(rc500.csrfRetried === undefined, 'runCellStep: 500 에는 재시도 표시가 붙지 않는다', rc500.csrfRetried);
+  win.progressReset();
+  win.__stayRunHtmx.error = null;
+  win.__stayRunHtmx.errorStatus = null;
 
   // 3) 룸 사진 올리기 — 지시서가 `→ [사진 추가]` 로 끝나는 단계(2026-09-04 합의).
   //    그 버튼은 파일 고르개이고 이 화면에는 저장 버튼이 없다. 러너가 대안(`저장`…)을 훑으면
@@ -583,6 +622,33 @@ const run = async () => {
     ok(wI.isImageStep({ kind: '대표이미지 올리기' }) === true, 'isImageStep: `대표이미지 올리기` 는 이미지 단계다');
     ok(wI.isImageStep({ kind: '상품상세 이미지 올리기' }) === true, 'isImageStep: `상품상세 이미지 올리기` 는 이미지 단계다');
     ok(wI.isImageStep({ kind: '룸 사진 올리기' }) === false, 'isImageStep: 룸 사진은 이미지 단계가 아니다 — 페이지 저장이 없다');
+  }
+
+  // 3d) CSRF 403 을 도우미가 넘겼으면 **로그에 남길 수 있게** 그 사실을 들고 나온다.
+  //     저장은 제대로 된 것이라 실패로 세지 않는다 — 첫 요청이 낡은 토큰으로 거부됐을 뿐이다.
+  {
+    const domC = new JSDOM(readFileSync(join(here, 'helper_fixture.html'), 'utf8'), {
+      url: 'https://example.test/stay/43900/#stay_tab_room_types',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true
+    });
+    const wC = domC.window;
+    wC.localStorage.setItem('staySteps', JSON.stringify(CSRF_STEPS));
+    wC.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+    wC.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+
+    wC.document.cookie = 'csrftoken=fresh-token; path=/';
+    wC.__csrfCheck = true;
+    wC.__hxRequests = 0;
+    const rc = await wC.runStep(1);
+    ok(rc.submitted === true && rc.submit === 'closed', 'runStep: 403 을 넘기고 드로어 저장까지 끝냈다', rc);
+    ok(rc.csrfRetried === true, 'runStep: 재시도했다는 사실을 결과에 싣는다', rc.csrfRetried);
+    ok((rc.warn || []).some((w) => /403 재시도 후 저장/.test(w)),
+      'runStep: 로그 비고에 적을 한 줄을 warn 으로 준다', rc.warn);
+    ok(wC.__hxRequests === 2, 'runStep: 요청은 딱 두 번 나갔다', wC.__hxRequests);
+    ok(wC.stepFailed(rc) === false, 'stepFailed: 재시도로 저장이 끝난 단계는 완료다', rc);
+    ok(wC.stayRun.progressState().done === 1 && wC.stayRun.progressState().failed === 0,
+      'runStep: 띠도 완료로 센다', wC.stayRun.progressState());
   }
 
   // 4) 여는 버튼 거르개 — 반복 행 추가만 걸러야 한다.

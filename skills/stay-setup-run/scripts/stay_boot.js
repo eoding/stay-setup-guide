@@ -460,8 +460,18 @@
     var save = rowBtns.find(function (b) { return tier(b.textContent, s.submit || '저장') >= 3; }) || rowBtns.find(function (b) { return tier(b.textContent, isNew ? '추가' : '저장') >= 3; });
     if (!save) { out.error = '행의 [' + (s.submit || '저장') + '] 버튼이 없습니다'; out.submitted = false; return out; }
     out.saveAs = clean(save.textContent);
-    hx.error = null;
+    hx.error = null; hx.errorStatus = null;
     await settled(function () { save.click(); }, 10000);
+    // CSRF 403 은 **딱 한 번** 다시 보낸다 — 뷰가 불리기 전에 끊긴 것이라 저장이 들어가지
+    // 않았고, 그냥 다시 누르면 페이지에 박힌 낡은 토큰이 또 나간다(`stayRun.refreshCsrf`).
+    // 가격 셀은 한 실행에 수백 번 저장하는 자리라 여기서 멈추면 실행이 통째로 선다.
+    if (hx.error && hx.errorStatus === 403) {
+      await waitFor(function () { return hx.pending === 0; }, 2000);
+      out.csrfRefresh = stayRun.refreshCsrf();
+      hx.error = null; hx.errorStatus = null;
+      await settled(function () { save.click(); }, 10000);
+      if (hx.error) out.csrfRetryFailed = true; else out.csrfRetried = true;
+    }
     out.submitted = true; out.submit = hx.error ? 'error' : 'settled'; out.errors = hx.error ? [hx.error] : [];
     var ed2 = document.getElementById('stay_cell_edit');
     // 저장 거부는 **배너 한 줄**로 돌아온다 — 이 표는 한 줄이 한 좌표인 컴팩트 표라 필드 오류를
@@ -710,6 +720,13 @@
       for (var k = 0; k < alts.length && sub.status === 'not-found'; k++) { sub = await stayRun.submit(alts[k]); if (sub.status !== 'not-found') out.submitAs = alts[k]; }
     }
     out.submit = sub.status; out.errors = sub.errors; out.toast = sub.toast; out.submitted = true;
+    // CSRF 403 을 도우미가 스스로 넘겼으면 로그 비고에 `403 재시도 후 저장` 을 남긴다.
+    // 실패로 세지 않는다 — 저장은 제대로 됐고, 다만 첫 요청이 낡은 토큰으로 거부됐을 뿐이다.
+    if (sub.csrfRetried) {
+      out.csrfRetried = true;
+      out.warn = (out.warn || []).concat(['CSRF 403 재시도 후 저장 — 로그 비고에 남기세요']);
+    }
+    if (sub.csrfRetryFailed) out.csrfRetryFailed = true;
     // 저장 뒤의 드로어·모달 상태를 그대로 들고 나온다 — `stayed`(정착했는데 안 닫힘)가
     // **드로어가 남은 것**인지 처음부터 드로어가 없는 전체 화면 폼인지 이것으로만 갈린다.
     out.drawer = sub.drawer; out.modal = sub.modal;
