@@ -2,7 +2,7 @@
  "meta": {
   "generated_on": "2026-09-15",
   "screen_count": 31,
-  "field_count": 215,
+  "field_count": 216,
   "currency_token": "공급 통화",
   "hotel_name_token": "〈호텔명〉",
   "erp_baseline": "운영 2026-09-15 배포판 화면 기준"
@@ -3504,7 +3504,7 @@
        "format": "",
        "help": "고르면 그 조건에서 고객이 뺄 수 없습니다 — 견적에 반드시 포함됩니다(갈라디너 등).",
        "checkbox_text": null,
-       "_note": null,
+       "_note": "날짜 네 종류가 실제로 의무가 된 것은 2026-09-15 배포부터다 — 그 전에는 「전 숙박일 의무」·「첫 숙박일 의무」·「마지막 숙박일 의무」·「지정 날짜 의무 (갈라 디너 등)」 를 골라 저장해도 고객 화면과 견적이 선택에 맡겼고, 배포 뒤부터는 그 날짜에 이 부가옵션을 고르지 않으면 견적·결제가 막힌다. 「기준 성인 초과 시 의무 (엑스트라베드)」·「총 인원 N명 이상일 때 의무」 두 종류는 아직 저장만 되고 강제되지 않는다. 의무 갈라디너·컴펄서리 디너의 정본은 그대로 부과금이다 — 부가옵션에는 연령별 단가 축이 없어 성인·소아 단가를 한 줄로 담을 수 없으므로 날짜 의무 부가옵션으로 바꾸지 않는다.",
        "visible_when": "",
        "same_row_as": null,
        "aliases": [],
@@ -4110,6 +4110,23 @@
        "options_note": null,
        "format": "64자까지",
        "help": "같은 이름을 적은 프로모션끼리는 하나만 고를 수 있습니다. 비우면 제한 없음.",
+       "checkbox_text": null,
+       "_note": null,
+       "visible_when": "",
+       "same_row_as": null,
+       "aliases": [],
+       "reject": []
+      },
+      {
+       "label": "프로모션 전용 취소 정책",
+       "kind": "선택",
+       "required": false,
+       "options": [
+        "(요금제·오퍼 정책을 따름)"
+       ],
+       "options_note": "이 여행사의 취소정책 목록 + 「(요금제·오퍼 정책을 따름)」",
+       "format": "",
+       "help": "이 프로모션으로 팔린 예약만의 규정. 비우면 요금제·오퍼 정책을 따릅니다.",
        "checkbox_text": null,
        "_note": null,
        "visible_when": "",
