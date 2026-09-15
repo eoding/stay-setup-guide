@@ -6,6 +6,7 @@
     (또는 pytest skills/stay-setup-guide/tests)
 """
 import datetime
+import json
 import os
 import re
 import sys
@@ -22,6 +23,8 @@ import check_manual as cm  # noqa: E402
 EXAMPLE_SHARE = os.path.join(SKILL, "examples", "우에노_토우가네야")
 EXAMPLE = os.path.join(EXAMPLE_SHARE, "_원고", "manual.md")
 DICTIONARY = os.path.join(SKILL, "references", "screen-dictionary.json")
+#: 참조 구간 해소 규약의 골든 표 — ERP `season._resolve_band` 의 입출력을 데이터로 잠근다.
+REF_BAND_FIXTURE = os.path.join(HERE, "fixtures", "ref_band_resolution.json")
 
 HEAD = """# 시험 호텔 — 입력 지시서
 
@@ -3891,3 +3894,285 @@ class StepKindListsAgreeTest(unittest.TestCase):
     def test_the_zero_steps_are_canonical_kinds(self):
         for want in ("환율 확인", "거래처 확인", "도시 확인"):
             self.assertIn(want, cm.STEP_KINDS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 프로모션 `진행기간` 세 칸 (2026-09-15 배포분)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: 사전 §22 차례대로 적은 `프로모션 추가` 단계의 칸 — 진행기간 셋은 `적용 숙박일 종료` 다음이다.
+PROMO_ROWS_BASE = [
+    ("프로모션명", "얼리버드"),
+    ("코드", "EARLY"),
+    ("발동 조건", "선택: 상시"),
+    ("혜택 방식", "선택: 정률 할인"),
+    ("적용 단위", "선택: 1박당"),
+    ("적용 숙박일 시작", "2026-01-01"),
+    ("적용 숙박일 종료", "2026-12-31"),
+]
+PROMO_ROWS_TAIL = [
+    ("시즌 한정", "비움"),
+    ("요금제 한정", "비움"),
+    ("다른 프로모션과 중복 적용", "해제"),
+    ("배타 그룹", "비움"),
+]
+
+
+def promotion_step(num, window, name="얼리버드", card="`2026 시즌 요금`"):
+    """`프로모션 추가` 단계 — `window` 는 진행기간 세 줄 `(제한, 시작, 종료)` 다."""
+    rows = list(PROMO_ROWS_BASE)
+    for field, value in zip(("진행기간 제한", "진행기간 시작", "진행기간 종료"), window):
+        if value is not None:
+            rows.append((field, value))
+    rows += PROMO_ROWS_TAIL
+    body = "".join(f"| {k} | {v} |\n" for k, v in rows)
+    return f"""
+## {num}. 프로모션 추가 (1번째, {name})
+탭: `프로모션`
+카드: {card}
+버튼: [프로모션 추가]
+
+| 칸 | 값 |
+|---|---|
+{body}
+→ [추가]
+"""
+
+
+class PromotionWindowTest(unittest.TestCase):
+    """`진행기간` 은 **예약하는 날** 축이고 제한을 켜면 두 날짜가 둘 다 필수다(`적용 숙박일` 과 다르다)."""
+
+    def problems(self, window):
+        md = HEAD + promotion_step(4, window)
+        return cm.find_promotion_window_gaps(steps_of(md))
+
+    def test_promotion_window_rows_accepted(self):
+        """세 줄을 적은 원고가 `사전에 없는 칸` 으로 떨어지지 않는다 — 사전 두 사본에 칸이 있다."""
+        md = HEAD + promotion_step(4, ("체크", "2026-01-01", "2026-03-31"))
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(md)
+            r = cm.check(path, dictionary_path=DICTIONARY)
+        # HEAD 의 `통화` 는 종전부터 사전 밖이다(0단계 확인 줄) — 진행기간 셋만 본다.
+        for field in ("진행기간 제한", "진행기간 시작", "진행기간 종료"):
+            self.assertNotIn(field, r["unknown_fields"])
+        self.assertEqual(r["check_value_classes"], [])
+        self.assertEqual(r["promotion_window_gaps"], [])
+
+    def test_promotion_window_off_is_ok(self):
+        """상시 진행 — 제한을 `해제` 로 두고 두 날짜를 비운다(`MANUAL-SPEC` 규약)."""
+        self.assertEqual(self.problems(("해제", "비움", "비움")), [])
+
+    def test_promotion_window_flag_on_requires_dates(self):
+        blank = self.problems(("체크", "2026-01-01", "비움"))
+        self.assertEqual(len(blank), 1, blank)
+        self.assertIn("4단계", blank[0])
+        self.assertIn("진행기간 종료", blank[0])
+        self.assertIn("진행기간 제한을 켜면 종료일이 필요합니다", blank[0])
+
+        missing = self.problems(("체크", None, None))
+        self.assertEqual(len(missing), 2, missing)
+        self.assertIn("진행기간 제한을 켜면 시작일이 필요합니다", missing[0])
+        self.assertIn("진행기간 제한을 켜면 종료일이 필요합니다", missing[1])
+
+    def test_promotion_window_reversed_dates(self):
+        problems = self.problems(("체크", "2026-03-31", "2026-01-01"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("종료일이 시작일보다 빠릅니다", problems[0])
+
+    def test_reversed_dates_are_not_checked_when_the_limit_is_off(self):
+        """제한이 꺼지면 화면이 두 날짜를 쓰지 않는다 — 없는 거부를 지어내지 않는다."""
+        self.assertEqual(self.problems(("해제", "2026-03-31", "2026-01-01")), [])
+
+    def test_a_manual_without_the_flag_row_is_left_alone(self):
+        """`진행기간 제한` 줄이 없으면 근거가 없다 — 칸 누락은 사전 검사가 본다."""
+        md = HEAD + promotion_step(4, (None, None, None))
+        self.assertEqual(cm.find_promotion_window_gaps(steps_of(md)), [])
+
+    def test_it_is_an_error_not_a_warning(self):
+        md = HEAD + promotion_step(4, ("체크", "2026-01-01", "비움"))
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(md)
+            r = cm.check(path)
+            self.assertEqual(len(r["promotion_window_gaps"]), 1, r["promotion_window_gaps"])
+            self.assertEqual(cm.main([path]), 1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 참조 구간(`타 밴드 요금과 동일`) 해소 — ERP `season._resolve_band` 와 같은 규약
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def ref_band_step(num, name, code, ref, low=0, high=4.99, card="`2026 시즌 요금`"):
+    """`타 밴드 요금과 동일` 구간 — `참조 밴드 코드` 는 **선택**이고 항목 글자가 `노출명 (연령 범위)` 다."""
+    return f"""
+## {num}. 연령 구간 만들기 ({num}번째, {name})
+탭: `오퍼`
+카드: {card}
+버튼: [연령 구간 추가]
+
+| 칸 | 값 |
+|---|---|
+| 밴드 코드 | {code} |
+| 노출명 | {name} |
+| 최소 연령 (만 나이) | {low} |
+| 최대 연령 (만 나이) | {high} |
+| 방 인원수에 포함 | 해제 |
+| 요금 기준 유형 | 선택: 타 밴드 요금과 동일 |
+| 참조 밴드 코드 | 선택: {ref} |
+| 상세(자유텍스트) | 비움 |
+
+→ [추가]
+"""
+
+
+#: 참조 칸에 적히는 글자 — 목록 표와 **같은 문장**이다(`age_band_service.age_range_text`).
+CHILD_REF_LABEL = "소아 (만 5세 이상 ~ 만 12세 미만)"
+INFANT_REF_LABEL = "유아 (만 0세 이상 ~ 만 5세 미만)"
+
+
+def ref_band_manual(target_kind, fill_rows, ref=CHILD_REF_LABEL):
+    """소아(CHD) 한 구간 + 그것을 가리키는 유아(INF) 참조 구간 + 시즌 채우기 한 회차."""
+    return (HEAD + offer_step(4)
+            + paid_band_step(5, name="소아", code="CHD", kind=target_kind)
+            + ref_band_step(6, "유아", "INF", ref)
+            + season_step(7, "Regular", "2026 시즌 요금", RANGE)
+            + price_fill_step(8, rows=fill_rows))
+
+
+AUTO = "자동 입력됨 · 그대로 둠"
+
+
+class RefBandResolutionTest(unittest.TestCase):
+    """`타 밴드 요금과 동일` 은 얼굴을 스스로 정하지 않는다 — 해소된 기준이 정한다."""
+
+    def test_ref_band_golden_table(self):
+        """골든 표 — ERP 가 규약을 바꾸면 표를 다시 뽑는 순간 갈라짐이 여기서 드러난다."""
+        with open(REF_BAND_FIXTURE, encoding="utf-8") as handle:
+            table = json.load(handle)
+        self.assertGreaterEqual(len(table["cases"]), 9, "갈래가 줄었다")
+        seen_faces = set()
+        null_basis_with_a_value = []
+        for case in table["cases"]:
+            bands = {code: tuple(row) for code, row in case["bands"].items()}
+            resolved = cm._resolve_age_band_basis(bands)
+            self.assertEqual(set(resolved), set(bands), case["name"])
+            for code, want in case["expected"].items():
+                with self.subTest(case=case["name"], code=code):
+                    basis, value = resolved[code]
+                    self.assertEqual([basis, value], want["resolved"])
+                    face = cm._age_band_face(basis, value, code)
+                    self.assertEqual(face, want["face"])
+                    seen_faces.add(face)
+                    if basis is None and value is not None:
+                        null_basis_with_a_value.append((case["name"], code))
+        self.assertEqual(seen_faces, {
+            cm.AGE_BAND_FACE_FREE, cm.AGE_BAND_FACE_AMOUNT, cm.AGE_BAND_FACE_PERCENT,
+            cm.AGE_BAND_FACE_PERCENT_BLANK, cm.AGE_BAND_FACE_UNRESOLVED,
+            cm.AGE_BAND_FACE_BAD_CODE,
+        }, "여섯 얼굴이 다 표에 있어야 한다")
+        self.assertTrue(null_basis_with_a_value,
+                        "NULL 기준 `(None, 값)` 갈래가 표에 없다 — 고리의 `(None, None)` 과 다른 상태다")
+
+    def test_the_resolver_does_not_import_erp(self):
+        """회귀 가드 — 이 스킬은 담당자 노트북에서 돈다(Django 가 없다)."""
+        with open(os.path.join(SKILL, "scripts", "check_manual.py"), encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertNotRegex(body, r"(?m)^\s*(from stay\.|import stay\b)")
+
+    def test_ref_band_resolves_to_percent(self):
+        """참조가 %면 칸이 읽기 전용이다 — `자동 입력됨` 이 정답이고 숫자가 오류다(종전 오탐)."""
+        ok = ref_band_manual("성인 요금의 %", [("아동 추가 금액 — 소아", AUTO),
+                                                ("아동 추가 금액 — 유아", AUTO)])
+        self.assertEqual(cm.find_child_extra_missing(steps_of(ok)), [])
+        self.assertEqual(cm.find_child_extra_value_gaps(steps_of(ok)), [])
+        self.assertEqual(cm.find_unresolved_ref_bands(steps_of(ok)), [])
+
+        bad = ref_band_manual("성인 요금의 %", [("아동 추가 금액 — 소아", AUTO),
+                                                 ("아동 추가 금액 — 유아", "23.18")])
+        problems = cm.find_child_extra_value_gaps(steps_of(bad))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("아동 추가 금액 — 유아", problems[0])
+        self.assertIn("읽기 전용", problems[0])
+
+    def test_ref_band_resolves_to_free(self):
+        """참조가 무료면 칸이 서지 않는다 — 줄이 없는 것이 정답이다(종전 오탐)."""
+        ok = ref_band_manual("무료", [("인원 조합(선택)", "A2")])
+        self.assertEqual(cm.find_child_extra_missing(steps_of(ok)), [])
+        self.assertEqual(cm.find_child_extra_value_gaps(steps_of(ok)), [])
+
+        bad = ref_band_manual("무료", [("아동 추가 금액 — 유아", "23.18")])
+        problems = cm.find_child_extra_value_gaps(steps_of(bad))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("줄을 적지 않는다", problems[0])
+
+    def test_ref_band_resolves_to_a_flat_amount(self):
+        """참조가 정액이면 금액 칸이 선다 — `자동 입력됨` 을 적으면 오류다."""
+        ok = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                       ("아동 추가 금액 — 유아", "12.00")])
+        self.assertEqual(cm.find_child_extra_value_gaps(steps_of(ok)), [])
+
+        bad = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                        ("아동 추가 금액 — 유아", AUTO)])
+        problems = cm.find_child_extra_value_gaps(steps_of(bad))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("담당자가 적는 숫자", problems[0])
+
+    def test_ref_band_unresolved_is_not_an_amount_field(self):
+        """고리·자기 참조·없는 코드 — 읽기 전용이라 `자동 입력됨` 이 정답이고, 경고로 알린다."""
+        # 자기 참조: 유아가 유아를 가리킨다
+        md = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                       ("아동 추가 금액 — 유아", AUTO)],
+                             ref=INFANT_REF_LABEL)
+        self.assertEqual(cm.find_child_extra_value_gaps(steps_of(md)), [])
+        warnings = cm.find_unresolved_ref_bands(steps_of(md))
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertIn("6단계", warnings[0])
+        self.assertIn("연령 구간에서 참조 대상을 먼저 고쳐주세요", warnings[0])
+
+        # 숫자를 적으면 오류다 — 담당자가 못 고치는 칸이다
+        numeric = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                            ("아동 추가 금액 — 유아", "12.00")],
+                                  ref=INFANT_REF_LABEL)
+        problems = cm.find_child_extra_value_gaps(steps_of(numeric))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("읽기 전용", problems[0])
+
+        # 없는 코드
+        gone = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                         ("아동 추가 금액 — 유아", AUTO)],
+                               ref="청소년 (만 12세 이상 ~ 만 18세 미만)")
+        self.assertEqual(cm.find_child_extra_value_gaps(steps_of(gone)), [])
+        self.assertEqual(len(cm.find_unresolved_ref_bands(steps_of(gone))), 1)
+
+    def test_the_warning_is_a_warning_not_an_error(self):
+        md = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                       ("아동 추가 금액 — 유아", AUTO)],
+                             ref=INFANT_REF_LABEL)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(md)
+            r = cm.check(path)
+            self.assertEqual(len(r["unresolved_ref_bands"]), 1, r["unresolved_ref_bands"])
+            self.assertEqual(r["child_extra_values"], [])
+
+    def test_a_reference_written_as_a_code_is_also_read(self):
+        """원고가 항목 글자 대신 코드를 적어도 같은 구간으로 읽는다."""
+        md = ref_band_manual("무료", [("인원 조합(선택)", "A2")], ref="CHD")
+        self.assertEqual(cm.find_child_extra_missing(steps_of(md)), [])
+        self.assertEqual(cm.find_child_extra_value_gaps(steps_of(md)), [])
+
+    def test_an_unpicked_reference_is_an_empty_code(self):
+        """`---------`(고르지 않음)은 빈 코드다 — 없는 코드와 같은 자리에서 멈춘다."""
+        md = ref_band_manual("정액", [("아동 추가 금액 — 소아", "23.18"),
+                                       ("아동 추가 금액 — 유아", AUTO)],
+                             ref="---------")
+        self.assertEqual(len(cm.find_unresolved_ref_bands(steps_of(md))), 1)
+
+    def test_the_example_manual_has_no_unresolved_bands(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            self.assertEqual(cm.find_unresolved_ref_bands(steps_of(handle.read())), [])

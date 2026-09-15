@@ -523,9 +523,12 @@ var DRAWER_HTML = [
   '  <button type="button" onclick="addBed()">침대 행 추가</button>',
   '</td></tr>',
   '<tr><th>어메니티</th><td>',
-  // 실제 화면 그대로다: 체크박스와 나란히 **이름 없는** 셀렉트가 하나 있고 첫 옵션이
-  // `다른 룸에서 복사…` 다(다른 룸의 어메니티를 베껴 오는 칸). 지시서의 칸이 아니다.
-  '  <select><option>다른 룸에서 복사…</option><option>슈페리어 룸</option><option>디럭스 룸</option></select>',
+  // 실제 화면 그대로다: 체크박스와 나란히 셀렉트가 하나 있고 첫 옵션이 `다른 룸에서 복사…` 다
+  // (다른 룸의 어메니티를 베껴 오는 칸). 지시서의 칸이 아니다.
+  // `name` 은 없지만 `aria-label` 이 붙어 있다(2026-09-15 배포분 실측) — 러너의 라벨 규칙에서
+  // `aria-label` 은 최우선(prio 5)이라 이 칸이 `어메니티` 로 읽히지 않는다. 그래도 걷어 내는
+  // 판정은 라벨이 아니라 **첫 옵션 글자**를 보므로(`isCopySelect`) 그 값이 바뀌어도 살아 있다.
+  '  <select aria-label="다른 룸에서 복사"><option>다른 룸에서 복사…</option><option>슈페리어 룸</option><option>디럭스 룸</option></select>',
   '  <label><input type="checkbox" name="amenities_code" value="bath"> 욕조</label>',
   '  <label><input type="checkbox" name="amenities_code" value="shower"> 샤워실</label>',
   '  <label><input type="checkbox" name="amenities_code" value="wifi"> 무료 Wi-Fi</label>',

@@ -151,6 +151,18 @@ MAX_SEASON_DAYS = 4000
 OVERWRITE_FIELD = "이미 값이 있는 날도 덮기"
 PROMO_COMMON_CARD = "전 오퍼 공통"
 
+# 프로모션 `진행기간` 세 칸(2026-09-15 배포분) — 축이 `적용 숙박일` 과 **다르다**:
+# `적용 숙박일 시작/종료` 는 고객이 **묵는 날**이고 `진행기간 시작/종료` 는 고객이 **예약하는 날**
+# 이다. 네 칸이 한 카드(`적용 범위와 조합`)에 나란히 서므로 원고는 라벨 그대로 옮긴다.
+#
+# 규칙도 다르다 — `적용 숙박일` 은 한쪽만 채워도 저장되지만 진행기간은 **제한을 켜면 두 날짜가
+# 둘 다 필수**다(ERP 거부 문구 「진행기간 제한을 켜면 시작일이 필요합니다」·「… 종료일이
+# 필요합니다」), 그리고 종료가 시작보다 빠르면 「종료일이 시작일보다 빠릅니다」 로 막힌다.
+PROMO_CREATE_TITLE = "프로모션 추가"
+PROMO_WINDOW_FLAG = "진행기간 제한"
+PROMO_WINDOW_START = "진행기간 시작"
+PROMO_WINDOW_END = "진행기간 종료"
+
 # 요일 규칙 시즌 — `적용 요일` 의 요일 글자를 파이썬 weekday(월=0)로 옮긴다
 WEEKDAYS = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
 WEEKDAY_TOKEN_RE = re.compile(r"[월화수목금토일](?:요일)?")
@@ -260,6 +272,45 @@ AGE_BAND_PERCENT_TYPE = "성인 요금의 %"
 AGE_BAND_AUTO_VALUE = "자동 입력됨"
 AGE_BAND_NAME_FIELD = "노출명"
 AGE_BAND_CODE_FIELD = "밴드 코드"
+AGE_BAND_FLAT_TYPE = "정액"
+#: `타 밴드 요금과 동일`(`RateBasisType.REF_BAND`) — 네 기준 중 **자기 얼굴을 스스로 정하지 않는**
+#: 유일한 것이다. 그 구간의 아동 금액 칸은 `참조 밴드 코드` 를 끝까지 따라간 **해소된 기준**이
+#: 정한다(ERP 주석 그대로: "칸의 종류는 해소된 뒤의 기준이 정한다").
+AGE_BAND_REF_TYPE = "타 밴드 요금과 동일"
+#: 화면은 **선택**이고 항목 글자가 `노출명 (연령 범위)` 다(`OfferAgeBandForm` 의 `choices` —
+#: 값은 코드, 보이는 글자는 이름). 그래서 원고에는 코드가 아니라 이름이 적히고
+#: `_ref_to_code` 가 그 글자를 코드로 되돌린다.
+AGE_BAND_REF_FIELD = "참조 밴드 코드"
+AGE_BAND_VALUE_FIELD = "요금 기준 값"
+
+# 아동 금액 칸의 **여섯 얼굴** — `시즌 가격 채우기` 드로어가 그 구간에 세우는 칸의 모양이고,
+# 원고에 적을 값이 여기서 갈린다(화면 사전 §16). 가지 순서는 ERP 그대로다(`_age_band_face`).
+AGE_BAND_FACE_FREE = "free"                    # 칸이 서지 않는다 — 줄을 적지 않는다
+AGE_BAND_FACE_AMOUNT = "amount"                # 편집 가능한 금액 칸 — 숫자를 적는다
+AGE_BAND_FACE_PERCENT = "percent"              # 읽기 전용 「성인 1인 추가분의 N% 로 계산됨」
+AGE_BAND_FACE_PERCENT_BLANK = "percent-blank"  # 읽기 전용 「… 비율이 비어 있습니다 …」
+AGE_BAND_FACE_UNRESOLVED = "unresolved"        # 읽기 전용 「참조 구간을 해소할 수 없어 …」
+AGE_BAND_FACE_BAD_CODE = "bad-code"            # 읽기 전용 「구간 코드를 … 실을 수 없어 …」
+#: 화면이 **읽기 전용**으로 세우는 얼굴들 — 원고 값은 셋 다 `자동 입력됨 · 그대로 둠` 이다.
+#: (`bad-code` 는 여기 없다 — 그 구간은 `find_band_code_format` 이 코드 자체를 오류로 잡으므로
+#: 값을 두 번 따지지 않는다.)
+AGE_BAND_READONLY_FACES = (
+    AGE_BAND_FACE_PERCENT,
+    AGE_BAND_FACE_PERCENT_BLANK,
+    AGE_BAND_FACE_UNRESOLVED,
+)
+#: 읽기 전용인 이유 — 원고에 숫자를 적었을 때 무엇을 먼저 고쳐야 하는지가 얼굴마다 다르다.
+AGE_BAND_READONLY_WHY = {
+    AGE_BAND_FACE_PERCENT:
+        "`성인 요금의 %` 로 해소된 구간이라 그 칸은 읽기 전용이다"
+        "(값의 정본은 연령 구간의 비율이다)",
+    AGE_BAND_FACE_PERCENT_BLANK:
+        "`성인 요금의 %` 구간인데 비율이 비어 있어 그 칸은 읽기 전용이다"
+        "(연령 구간에서 비율을 먼저 채운다)",
+    AGE_BAND_FACE_UNRESOLVED:
+        "참조 구간을 해소할 수 없어 그 칸은 읽기 전용이다"
+        "(연령 구간에서 참조 대상을 먼저 고쳐주세요)",
+}
 SEASON_FILL_TITLE = "시즌 가격 채우기"
 #: 시즌 가격 채우기의 1박 층 — `박수별 단가` 가 얹히는 바닥이다(폼에서 `required=True`).
 FILL_PRICE_FIELD = "판매 단가(공급 통화)"
@@ -788,6 +839,49 @@ def find_blank_booking_window(steps):
     return problems
 
 
+def find_promotion_window_gaps(steps):
+    """프로모션 `진행기간 제한` 을 켰으면 두 날짜가 **둘 다** 있어야 한다(오류).
+
+    이 세 칸은 고객이 **예약하는 날** 축이고(`적용 숙박일` 은 묵는 날) 규칙이 그 옆 칸과
+    다르다 — `적용 숙박일` 은 한쪽만 채워도 저장되지만 진행기간은 제한을 켠 순간 시작·종료가
+    둘 다 필수다(ERP 거부 문구 「진행기간 제한을 켜면 시작일이 필요합니다」·「… 종료일이
+    필요합니다」). 종료가 시작보다 빠르면 「종료일이 시작일보다 빠릅니다」 로 막힌다.
+
+    한 칸만 적힌 지시서는 담당자가 드로어를 다 채우고 [저장] 을 누른 뒤에야 막힌다 — 그때는
+    지시서에 없는 날짜를 스스로 지어내거나 되돌아와야 한다. 그래서 원고에서 잡는다.
+
+    `진행기간 제한` 줄이 아예 없는 단계는 건너뛴다 — 칸을 빠뜨린 것은 사전 검사가 본다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(PROMO_CREATE_TITLE):
+            continue
+        fields = step["fields"]
+        if PROMO_WINDOW_FLAG not in fields:
+            continue
+        if not strip_select(fields.get(PROMO_WINDOW_FLAG) or "").strip().startswith("체크"):
+            continue
+        for field, why in ((PROMO_WINDOW_START, "시작일이 필요합니다"),
+                           (PROMO_WINDOW_END, "종료일이 필요합니다")):
+            raw = fields.get(field)
+            if raw is None or _blank(raw):
+                problems.append(
+                    f"{step['num']}단계: `{PROMO_WINDOW_FLAG}` 가 체크인데 `{field}` 가 "
+                    f"{'없다' if raw is None else '비었다'} — 화면이 "
+                    f"「진행기간 제한을 켜면 {why}」 로 저장을 막는다"
+                    "(예약하는 날 기준이다 · 상시 진행이면 제한을 `해제` 로 두고 두 날짜를 비운다)"
+                )
+        start = _date_field(fields, PROMO_WINDOW_START)
+        end = _date_field(fields, PROMO_WINDOW_END)
+        if start and end and end < start:
+            problems.append(
+                f"{step['num']}단계: `{PROMO_WINDOW_END}` {end.isoformat()} 가 "
+                f"`{PROMO_WINDOW_START}` {start.isoformat()} 보다 빠르다 — "
+                "화면이 「종료일이 시작일보다 빠릅니다」 로 저장을 막는다"
+            )
+    return problems
+
+
 def find_past_seasons(steps, today):
     """`시즌 만들기` 의 기간 종료가 오늘보다 앞이면 오류 — 판매 구간 밖 시즌은 만들지 않는다."""
     problems = []
@@ -1061,6 +1155,196 @@ def _age_band_steps(steps):
         found.append((step, kind.strip(), label.strip()))
     return found
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 참조 구간(`타 밴드 요금과 동일` = `RateBasisType.REF_BAND`) 해소
+#
+# SYNC: 규약의 정본은 `stay/services/season.py` 의 두 함수다 —
+#   * `_resolve_band(band, by_code)` — 참조를 끝까지 따라가 `(기준, 값)` 을 돌려준다.
+#     아래 `_resolve_age_band` 가 그 코드 블록을 **줄 단위로 옮긴 것**이다: 반복 상한
+#     `len(by_code) + 1`, `seen` 집합, `빈 코드 · 이미 본 코드 · 없는 코드` → `(None, None)`.
+#     `rate_basis_type` 이 NULL 인 구간은 `(None, 값)` 이고 **`(None, None)` 과 다른 상태**다.
+#   * `is_paid_band(band, by_code)` — "끝까지 따라간 뒤 유료인가" 의 판정 한 곳. 이 파일에서
+#     그 짝은 `find_child_extra_missing`(줄이 있어야 하는 구간인가)이고, 설치기 쪽 짝은
+#     `stay_installer/precheck.py` 의 `_resolve_band_basis` + `_paid_fixed_bands` 다 —
+#     **세 곳이 같은 규약을 써야 한다. 규약을 바꿀 때는 셋을 같은 날 함께 바꾼다.**
+#
+#     같은 규약이지만 **요구하는 것이 다른 자리가 하나 있고 그것은 드리프트가 아니다**: 설치기는
+#     해소된 기준이 `정액` 인 구간에만 줄을 요구하고(그 칸에만 값을 쳐 넣을 수 있다), 이 검사기는
+#     `무료` 로 해소된 구간과 코드를 못 싣는 구간을 빼고 **전부** 줄을 요구한다 — 읽기 전용 칸도
+#     화면에 서므로 담당자가 그 줄을 보고 "이 칸은 그대로 둔다" 를 알아야 한다. 값이 다를 뿐이다
+#     (`자동 입력됨 · 그대로 둠`).
+#
+# **ERP 를 import 하지 않는다.** 이 스킬은 담당자 노트북에서 도는 공개 스킬이고 Django 가 없다
+# (ERP 자신은 `stay/forms.py` 가 `_resolve_band` 를 끌어와 정본을 하나로 뒀다 — 우리는 그 길이
+# 없다). 정본이 둘이 되는 비용은 골든 픽스처 `tests/fixtures/ref_band_resolution.json` 로 치른다:
+# ERP 가 규약을 바꾸면 그 표를 다시 뽑는 순간 갈라짐이 시험 실패로 드러난다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _age_band_basis(kind):
+    """`요금 기준 유형` 칸의 글자 → 네 기준 중 하나(못 읽으면 글자 그대로, 비었으면 `None`).
+
+    `None` 은 **기준을 모르는 구간**이다(ERP `_band_basis` 가 `rate_basis_type` NULL 에서
+    `None` 을 돌려주는 것과 같은 자리). 사전에 없는 글자는 그대로 돌려 종전 판정을 지킨다 —
+    `무료` 도 `%` 도 아니면 "그 밖의 유료" 로 다뤄 왔다.
+    """
+    text = strip_select(kind or "").strip()
+    if _blank(text):
+        return None
+    for basis in (AGE_BAND_FREE_TYPE, AGE_BAND_PERCENT_TYPE,
+                  AGE_BAND_REF_TYPE, AGE_BAND_FLAT_TYPE):
+        if text.startswith(basis):
+            return basis
+    return text
+
+
+def _ref_to_code(raw, by_code, by_name):
+    """`참조 밴드 코드` 칸의 값 → 구간 코드(못 짚으면 대문자로 굳힌 그 글자 = 없는 코드).
+
+    화면이 **선택**이고 항목 글자가 `노출명 (연령 범위)` 라(`OfferAgeBandForm`) 원고에는 대개
+    이름이 적힌다 — `선택: 소아 (만 5세 이상 ~ 만 12세 미만)`. 코드로 적은 원고도 받는다.
+    `---------` 와 `비움` 은 **고르지 않은 것**이라 빈 코드다.
+    """
+    text = strip_select(raw or "").strip()
+    if _blank(text) or not text.strip("-\u2014\u2013"):
+        return ""
+    head = text.split("(", 1)[0].strip() or text
+    if _fold(head) in by_name:
+        return by_name[_fold(head)]
+    for candidate in (text, head):
+        code = candidate.strip().upper()
+        if code in by_code:
+            return code
+    return head.strip().upper()
+
+
+def _age_band_defs(steps):
+    """오퍼마다 `{코드: (기준, 값, 참조 코드)}` — 참조 해소의 입력이다.
+
+    ERP `by_code` 와 같은 규약이다(`forms.py` `_build_child_extra_fields` ·
+    `season.child_band_rates`): 코드는 대문자·앞뒤 공백 제거이고 **코드가 빈 구간은 표에 넣지
+    않는다**. 참조는 같은 오퍼 안에서만 이어지므로(`age_band_service.sibling_bands`) 오퍼별로
+    표를 따로 만든다 — 다른 오퍼의 같은 코드를 가리켜 해소되면 화면과 갈린다.
+    """
+    raw = {}
+    for step in steps:
+        if not step["title"].startswith(AGE_BAND_TITLE):
+            continue
+        code = (step["fields"].get(AGE_BAND_CODE_FIELD) or "").strip().upper()
+        if _blank(code):
+            continue
+        raw.setdefault(card_name(step) or "", {})[code] = (
+            _age_band_basis(step["fields"].get(AGE_BAND_TYPE_FIELD)),
+            step["fields"].get(AGE_BAND_VALUE_FIELD),
+            step["fields"].get(AGE_BAND_REF_FIELD),
+            (step["fields"].get(AGE_BAND_NAME_FIELD) or "").strip(),
+        )
+    defs = {}
+    for offer, bands in raw.items():
+        by_name = {_fold(name): code for code, (_b, _v, _r, name) in bands.items() if name}
+        defs[offer] = {
+            code: (basis, value, _ref_to_code(ref, bands, by_name))
+            for code, (basis, value, ref, _name) in bands.items()
+        }
+    return defs
+
+
+def _resolve_age_band(band, by_code):
+    """`(기준, 값, 참조 코드)` 구간 하나를 끝까지 따라가 `(해소된 기준, 해소된 값)`.
+
+    `stay/services/season.py` `_resolve_band` 를 줄 단위로 옮긴 것이다 — 그 함수의 주석이
+    이 판정의 정본이다(고리 `A→B→A` 는 폼이 막지 못한다: 자기 참조와 없는 코드까지만 막고
+    두 번에 걸쳐 닫는 고리는 통과한다. 그 상태의 안전판이 여기다).
+
+    반복 상한이 `len(by_code) + 1` 인 것을 줄이지 않는다 — 구간 수만큼 따라가야 마지막 고리가
+    닫히는 자리를 보고, 한 번 더 돌아야 그것이 고리임을 안다.
+    """
+    seen = set()
+    current = band
+    for _ in range(len(by_code) + 1):
+        basis = current[0]
+        if basis != AGE_BAND_REF_TYPE:
+            return basis, current[1]
+        code = (current[2] or "").strip().upper()
+        if not code or code in seen or code not in by_code:
+            return None, None
+        seen.add(code)
+        current = by_code[code]
+    return None, None
+
+
+def _resolve_age_band_basis(bands):
+    """`{코드: (기준, 값, 참조 코드)}` → `{코드: (해소된 기준, 해소된 값)}`.
+
+    골든 픽스처(`tests/fixtures/ref_band_resolution.json`)가 이 함수의 입출력을 표로 잠근다.
+    """
+    return {code: _resolve_age_band(band, bands) for code, band in bands.items()}
+
+
+def _code_usable(code):
+    """그 코드를 가격 셀 좌표에 실을 수 있는가 — ERP `occupancy_key.validate_band_code` 와 같다.
+
+    빈 코드는 여기서 **실을 수 있는 것으로 본다** — ERP 는 빈 코드 구간에 칸을 아예 세우지
+    않지만(`if not code: continue`), 그 구간의 진짜 문제는 `find_band_code_format` 이
+    「필수 항목입니다.」로 이미 말한다. 여기서 얼굴까지 바꾸면 한 원고에 오류가 둘로 늘고
+    두 번째 오류는 담당자가 고칠 수 없는 말이 된다.
+    """
+    up = (code or "").strip().upper()
+    if not up:
+        return True
+    return bool(KEY_BAND_CODE_RE.match(up)) and not CHILD_HEAD_RE.match(up)
+
+
+def _age_band_face(basis, value, code):
+    """해소된 기준 → `시즌 가격 채우기` 의 아동 금액 칸이 갖는 **얼굴**(여섯 중 하나).
+
+    가지 순서는 ERP `SeasonPriceFillForm._build_child_extra_fields` 그대로다 —
+    **무료 → 코드 불가 → 기준 모름 → % → 정액**. 순서가 뒤집히면 무료를 가리키는 참조 구간에
+    못 쓰는 코드가 붙었을 때 화면은 칸을 세우지 않는데 검사기는 읽기 전용 칸을 기대한다.
+
+    `value` 가 `None` 인 것(= 원고에 `요금 기준 값` 줄이 아예 없다)과 비어 있는 것(`비움`)은
+    다르게 읽는다 — 줄이 없으면 비율이 비었는지 알 수 없으므로 아무 말도 하지 않는다.
+    """
+    if basis == AGE_BAND_FREE_TYPE:
+        return AGE_BAND_FACE_FREE
+    if not _code_usable(code):
+        return AGE_BAND_FACE_BAD_CODE
+    if basis is None:
+        return AGE_BAND_FACE_UNRESOLVED
+    if basis == AGE_BAND_PERCENT_TYPE:
+        if value is None:
+            return AGE_BAND_FACE_PERCENT
+        return AGE_BAND_FACE_PERCENT_BLANK if _blank(value) else AGE_BAND_FACE_PERCENT
+    return AGE_BAND_FACE_AMOUNT
+
+
+def _age_band_faces(steps):
+    """`연령 구간 만들기` 단계를 `(단계, 노출명, 얼굴, 해소된 기준, 해소된 값)` 으로.
+
+    `_age_band_steps` 와 같은 이유로 유형·이름을 못 읽은 구간은 뺀다(유료인지 모르고, 시즌
+    채우기의 어느 줄이 그 구간인지 이을 수 없다). 다른 점은 하나다 — `요금 기준 유형` 글자를
+    그대로 쓰지 않고 `참조 밴드 코드` 를 끝까지 따라간 **해소된 기준**으로 얼굴을 정한다.
+    """
+    defs = _age_band_defs(steps)
+    found = []
+    for step in steps:
+        if not step["title"].startswith(AGE_BAND_TITLE):
+            continue
+        kind = strip_select(step["fields"].get(AGE_BAND_TYPE_FIELD) or "")
+        label = (step["fields"].get(AGE_BAND_NAME_FIELD)
+                 or step["fields"].get(AGE_BAND_CODE_FIELD) or "")
+        if _blank(kind) or _blank(label):
+            continue
+        by_code = defs.get(card_name(step) or "", {})
+        code = (step["fields"].get(AGE_BAND_CODE_FIELD) or "").strip().upper()
+        band = by_code.get(code)
+        if band is None:
+            # 코드가 비어 표에 없는 구간 — 참조를 따라갈 길이 없으니 자기 기준으로 읽는다.
+            band = (_age_band_basis(kind), step["fields"].get(AGE_BAND_VALUE_FIELD), "")
+        basis, value = _resolve_age_band(band, by_code)
+        found.append((step, label.strip(), _age_band_face(basis, value, code), basis, value))
+    return found
+
 
 def _step_numbers(steps, limit=6):
     """`7·9단계` — 여럿이면 앞에서 `limit` 개까지만 적고 나머지는 `…` 로 접는다."""
@@ -1072,10 +1356,16 @@ def _step_numbers(steps, limit=6):
 def find_child_extra_missing(steps):
     """유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** 아동 금액 줄이 있어야 한다.
 
-    `요금 기준 유형` 이 `무료` 가 **아닌** 구간(정액 · 성인 요금의 % · 타 밴드 요금과 동일)은
+    칸이 서는가는 `요금 기준 유형` 글자가 아니라 **참조를 끝까지 따라간 뒤의 기준**이 정한다
+    (`_age_band_faces` · ERP `is_paid_band` 와 같은 축). 해소된 기준이 `무료` 가 아닌 구간은
     시즌 채우기 드로어에 아동 금액 칸을 하나 세우고, 그 칸이 성인 좌표 옆에 아동 좌표를 함께
     깐다(`A2` → `A2C1_CHD`). 줄이 빠지면 아이 1박 요금이 어디에도 실리지 않는다 — 그 돈을
     부가옵션으로 옮겨 적는 길은 2026-09-08 부로 막혔다(§D-1).
+
+    `타 밴드 요금과 동일` 구간을 글자로만 읽으면 여기가 **미탐과 오탐을 한꺼번에** 낸다:
+    참조가 무료를 가리키면 칸이 서지 않는데 줄을 요구하고(오탐), 참조가 정액을 가리키면
+    유료인데 글자만 보고 지나칠 여지가 생긴다. 코드를 좌표에 못 싣는 구간도 칸이 읽기 전용이라
+    줄을 요구하지 않는다 — 그 구간은 `find_band_code_format` 이 코드 자체를 오류로 잡는다.
 
     **회차마다 본다**(2026-09-09). 아동 금액은 그 회차가 깔 날짜에만 걸리므로, 한 회차에서
     빠지면 그 시즌의 날짜에만 아동 조합 셀이 없다 — 그 날짜의 그 조합은 통째로 마감으로 팔린다.
@@ -1095,8 +1385,8 @@ def find_child_extra_missing(steps):
     if not fills:
         return []
     problems = []
-    for step, kind, label in _age_band_steps(steps):
-        if kind.startswith(AGE_BAND_FREE_TYPE):
+    for step, label, face, _basis, _value in _age_band_faces(steps):
+        if face in (AGE_BAND_FACE_FREE, AGE_BAND_FACE_BAD_CODE):
             continue
         offer = card_name(step) or ""
         known = [fill for fill, own in fills if own is not None and own == offer]
@@ -1151,7 +1441,13 @@ def find_unmatched_fill_steps(steps):
 def find_child_extra_value_gaps(steps):
     """`아동 추가 금액 — <노출명>` 줄의 **값**이 그 구간의 `요금 기준 유형` 과 맞는지 본다.
 
-    넷 다 오류다:
+    판정의 축은 `요금 기준 유형` 글자가 아니라 **참조를 끝까지 따라간 뒤의 기준**이 세우는
+    칸의 **얼굴**이다(`_age_band_face` — 여섯 얼굴, 화면 사전 §16). 글자로만 갈랐던 동안
+    `타 밴드 요금과 동일` 은 늘 "그 밖의 유료" 로 떨어져 **오탐 셋**을 냈다: 참조가 %를
+    가리키면 `자동 입력됨` 이 정답인데 "담당자가 적는 숫자다" 로 막고, 참조가 무료를 가리키면
+    줄이 없는 것이 정답인데 줄이 없다고 막고, 해소 실패 구간은 죽은 칸이 서는 사실을 몰랐다.
+
+    다섯이 오류다:
 
     * **유료 구간인데 값이 비었다** — 그 구간의 아동 조합 셀이 아예 만들어지지 않는다
       (화면 사전 §16: "비우면 이 구간의 아동 조합 셀을 만들지 않습니다"). 그러면 소아 1명이 낀
@@ -1160,57 +1456,95 @@ def find_child_extra_value_gaps(steps):
     * **무료 구간인데 줄이 있다** — 그 칸은 화면에 서지 않는다
       (`SeasonPriceFillForm._build_child_extra_fields` 가 `FREE` 를 건너뛴다). 없는 칸을 채우라는
       단계라 담당자가 화면에서 그 줄을 찾다가 멈춘다.
-    * **`성인 요금의 %` 구간에 금액을 적었다** — 그 칸은 읽기 전용이고(`disabled=True`) 값의
-      정본은 연령 구간의 비율이다. 지시서는 `자동 입력됨 · 그대로 둠` 으로 적는다 — 숫자를
-      적어 두면 담당자가 못 고치는 칸 앞에서 멈춘다.
-    * **그 밖의 유료 구간에 `자동 입력됨` 을 적었다** — 반대 방향의 같은 사고다. 그 칸은
+    * **읽기 전용 칸에 금액을 적었다** — `성인 요금의 %` 로 해소된 구간, 비율이 빈 % 구간,
+      참조를 해소할 수 없는 구간 셋이다(`AGE_BAND_READONLY_FACES`). 그 칸은 `disabled=True`
+      이고 값의 정본은 연령 구간이다 — 지시서는 `자동 입력됨 · 그대로 둠` 으로 적는다.
+      숫자를 적어 두면 담당자가 못 고치는 칸 앞에서 멈춘다.
+    * **편집 가능한 금액 칸에 `자동 입력됨` 을 적었다** — 반대 방향의 같은 사고다. 그 칸은
       담당자가 실제로 채워야 하는 숫자인데 "그대로 둠" 이라고 적혀 있으면 빈 칸으로 지나간다.
 
     줄이 아예 없는 유료 구간은 `find_child_extra_missing` 이 말한다(두 번 알리지 않는다).
+    참조를 해소할 수 없는 구간 자체는 **오류가 아니라 경고**다 —
+    `find_unresolved_ref_bands` 가 말한다(원고 값은 `자동 입력됨 · 그대로 둠` 이 맞고, 고칠
+    자리는 연령 구간 단계다).
     """
     fills = _season_fill_steps(steps)
     if not fills:
         return []
     problems = []
-    for step, kind, label in _age_band_steps(steps):
-        free = kind.startswith(AGE_BAND_FREE_TYPE)
-        percent = kind.startswith(AGE_BAND_PERCENT_TYPE)
+    for step, label, face, basis, _value in _age_band_faces(steps):
         for fill in _fills_of_offer(fills, card_name(step) or ""):
             rows = _child_extra_rows(fill)
             if _fold(label) not in rows:
                 continue
+            if face == AGE_BAND_FACE_BAD_CODE:
+                continue
             value = str(rows[_fold(label)] or "").strip()
-            if free:
+            if face == AGE_BAND_FACE_FREE:
                 problems.append(
-                    f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} — {label}` 줄이 있는데 "
-                    f"그 구간({step['num']}단계)은 `{AGE_BAND_FREE_TYPE}` 다 — "
+                    f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} \u2014 {label}` 줄이 있는데 "
+                    f"그 구간({step['num']}단계)은 해소된 기준이 `{AGE_BAND_FREE_TYPE}` 다 — "
                     "무료 구간은 그 칸이 화면에 서지 않으므로 줄을 적지 않는다"
+                    f"(`{AGE_BAND_REF_TYPE}` 이 무료 구간을 가리키는 구간도 같다)"
                 )
                 continue
             auto = value.startswith(AGE_BAND_AUTO_VALUE)
-            if percent:
+            if face in AGE_BAND_READONLY_FACES:
                 if not auto:
                     problems.append(
-                        f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} — {label}` 이 `{value}` 다 — "
-                        f"`{AGE_BAND_PERCENT_TYPE}` 구간의 칸은 읽기 전용이라 "
-                        "`자동 입력됨 · 그대로 둠` 으로 적는다(값의 정본은 연령 구간의 비율이다)"
+                        f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} \u2014 {label}` 이 `{value}` 다 — "
+                        f"{AGE_BAND_READONLY_WHY[face]} · "
+                        "`자동 입력됨 · 그대로 둠` 으로 적는다"
                     )
                 continue
             if auto:
                 problems.append(
-                    f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} — {label}` 을 `자동 입력됨` 으로 "
-                    f"적었는데 그 구간({step['num']}단계)은 `{kind}` 다 — 그 칸은 담당자가 적는 숫자다"
+                    f"{fill['num']}단계: `{CHILD_EXTRA_FIELD} \u2014 {label}` 을 `자동 입력됨` 으로 "
+                    f"적었는데 그 구간({step['num']}단계)은 해소된 기준이 `{basis}` 다 — "
+                    "그 칸은 담당자가 적는 숫자다"
                 )
                 continue
             if _blank(value):
                 problems.append(
                     f"{fill['num']}단계: 유료 연령 구간 `{label}` 의 "
-                    f"`{CHILD_EXTRA_FIELD} — {label}` 이 비어 있다 — "
+                    f"`{CHILD_EXTRA_FIELD} \u2014 {label}` 이 비어 있다 — "
                     "비우면 그 구간의 아동 조합 셀을 만들지 않는다"
                     "(유료 아동인데 조합 셀이 없으면 성인 전용 좌표로 내려가지 않아 "
                     "그 조합이 통째로 마감으로 보인다 · 무료로 팔 생각이면 `0` 이 그 뜻이다)"
                 )
     return problems
+
+
+def find_unresolved_ref_bands(steps):
+    """참조를 해소할 수 없는 구간·비율이 빈 % 구간은 **경고** — 원고는 맞고 화면 설정이 틀렸다.
+
+    그 구간의 아동 금액 칸은 읽기 전용 안내 칸이라 원고에 적을 값은 `자동 입력됨 · 그대로 둠`
+    이 **맞다**(그래서 오류가 아니다 — James 결정 2026-09-15). 문제는 그 구간이 **깔리지
+    않는다**는 것이다: 화면이 「참조 구간을 해소할 수 없어 이 구간은 깔리지 않습니다」 를 띄우고
+    전개도 같은 판정으로 건너뛰므로(`season.child_band_rates`), 그 나이의 아이가 낀 조합 셀이
+    만들어지지 않는다. 지시서를 글자 그대로 입력해도 화면은 통과하니 여기서 알리지 않으면
+    아무도 모른다 — 고칠 자리는 `연령 구간 만들기` 단계다.
+    """
+    problems = []
+    for step, label, face, _basis, _value in _age_band_faces(steps):
+        if face == AGE_BAND_FACE_UNRESOLVED:
+            problems.append(
+                f"{step['num']}단계: 연령 구간 `{label}` 의 `{AGE_BAND_REF_FIELD}` 를 해소할 수 "
+                "없다(고리 · 자기 참조 · 없는 코드) — 화면이 「참조 구간을 해소할 수 없어 이 "
+                "구간은 깔리지 않습니다」 를 띄우고 그 구간의 아동 조합 셀이 만들어지지 않는다 · "
+                f"`{CHILD_EXTRA_FIELD}` 줄은 `자동 입력됨 · 그대로 둠` 이 맞고 "
+                "연령 구간에서 참조 대상을 먼저 고쳐주세요"
+            )
+        elif face == AGE_BAND_FACE_PERCENT_BLANK:
+            problems.append(
+                f"{step['num']}단계: 연령 구간 `{label}` 은 `{AGE_BAND_PERCENT_TYPE}` 인데 "
+                f"`{AGE_BAND_VALUE_FIELD}` 가 비었다 — 화면이 「성인 요금의 % 구간인데 비율이 "
+                "비어 있습니다 — 연령 구간에서 먼저 채워주세요」 를 띄운다 · "
+                f"`{CHILD_EXTRA_FIELD}` 줄은 `자동 입력됨 · 그대로 둠` 이 맞고 "
+                "비율을 먼저 채워주세요"
+            )
+    return problems
+
 
 
 def find_child_extra_without_occupancy(steps):
@@ -3045,6 +3379,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     guide_day = guide_date(lines, today)
     past_sale_starts = find_past_sale_starts(parsed, guide_day)
     blank_booking_window = find_blank_booking_window(parsed)
+    promotion_window_gaps = find_promotion_window_gaps(parsed)
     past_seasons = find_past_seasons(parsed, guide_day)
     season_overlaps = find_season_overlaps(parsed)
     needless_overwrite = find_needless_overwrite(parsed)
@@ -3058,6 +3393,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     age_band_overlaps = find_age_band_overlaps(parsed)
     band_code_formats = find_band_code_format(parsed)
     child_extra_missing = find_child_extra_missing(parsed)
+    unresolved_ref_bands = find_unresolved_ref_bands(parsed)
     child_extra_values = find_child_extra_value_gaps(parsed)
     unmatched_fills = find_unmatched_fill_steps(parsed)
     child_extra_no_occupancy = find_child_extra_without_occupancy(parsed)
@@ -3160,6 +3496,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "guide_date": guide_day,
         "past_sale_starts": past_sale_starts,
         "blank_booking_window": blank_booking_window,
+        "promotion_window_gaps": promotion_window_gaps,
         "past_seasons": past_seasons,
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
@@ -3171,6 +3508,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "band_code_formats": band_code_formats,
         "child_extra_missing": child_extra_missing,
         "child_extra_values": child_extra_values,
+        "unresolved_ref_bands": unresolved_ref_bands,
         "unmatched_fills": unmatched_fills,
         "child_extra_no_occupancy": child_extra_no_occupancy,
         "child_lodging_addons": child_lodging_addons,
@@ -3266,6 +3604,7 @@ def main(argv=None):
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]
               + r["child_extra_values"] + r["child_extra_no_occupancy"]
+              + r["promotion_window_gaps"]
               + r["child_lodging_addons"] + r["occupancy_key_legacy"]
               + r["occupancy_key_duplicates"] + r["occupancy_key_denormalized"]
               + r["plan_adjust_gaps"]
@@ -3296,6 +3635,8 @@ def main(argv=None):
     for w in r["needless_overwrite"]:
         warnings.append(w)
     for w in r["unmatched_fills"]:
+        warnings.append(w)
+    for w in r["unresolved_ref_bands"]:
         warnings.append(w)
     for w in r["child_policy_gaps"]:
         warnings.append(w)
