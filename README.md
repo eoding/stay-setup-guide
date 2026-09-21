@@ -110,7 +110,11 @@ yourself.
   room is an occupancy band; an add-on is only something bought separately. Add-on and surcharge names start with
   what is being sold, so `하프보드 소아 (만6~11세)`, not `소아 (만6~11세)`.
 - **Photo copyright is the user's responsibility**, stated in the final report and at the top of `changes.md`.
-- **The screen baseline is 운영 2026-09-04 배포판**, 27 screens. A new hotel starts empty: zero offers, zero rooms,
+- **Scope lives in the 적용 범위 card** at the bottom of the promotion, add-on, add-on price and surcharge drawers
+  (2026-09-21 release). One contract line such as "the breakfast rate plan on every room except the suite" is written
+  as a mode plus include/exclude lists on the rate-plan and room axes; exclude wins, and an explicit scope with an
+  empty include list sells nowhere and needs the confirmation row. A surcharge has no rate-plan axis.
+- **The screen baseline is 운영 2026-09-21 배포판**, 31 screens. A new hotel starts empty: zero offers, zero rooms,
   zero sale links, and the room-link drawer stays blocked until the first offer exists. When the ERP screens change,
   both skills must be re-audited and the screen dictionary regenerated; the runner refuses steps written for older
   screens rather than clicking the wrong row.

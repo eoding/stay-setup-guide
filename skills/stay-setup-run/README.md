@@ -25,7 +25,7 @@ this skill is the execution. The guide and the screens are Korean, so the skill 
 > `render_card.py` and get the checker to pass. Editing the draft after the render therefore invalidates
 > the guide by design.
 
-> **Screens as of the production release of 2026-09-04.**
+> **Screens as of the production release of 2026-09-21.**
 > A new hotel starts with **zero offers and zero rooms**: the first offer is created with [오퍼 추가]
 > and the first room with [룸 추가], and every room is linked to an offer in the `판매 연결` card.
 > Guides written for the older screens tell the runner to edit an existing offer or room row; the runner
@@ -36,6 +36,14 @@ this skill is the execution. The guide and the screens are Korean, so the skill 
 > The same release adds an **age-band panel** (`연령 구간`) to the offer tab and a conditional
 > **per-age rate** card (`연령별 단가`) inside the charge drawer. Both are supported. Age ranges of one
 > offer may not overlap, endpoints included, and `--check` blocks a guide where they do.
+>
+> The 2026-09-21 release adds the **적용 범위 card** at the bottom of the promotion, add-on, add-on price
+> and surcharge drawers. A guide writes the axis-prefixed rows `요금제 적용 범위` · `요금제 포함` ·
+> `요금제 제외` · `객실 적용 범위` · `객실 포함` · `객실 제외`, and the helper resolves each list from the
+> axis row above it — the screen headers are just `포함` and `제외`, once per axis. Include/exclude rows
+> only appear after the mode select changes, so a row missed on the first pass is picked up by the retry.
+> The deny-all confirmation row `범위를 비운 채 저장` carries the value `Y`, which the parser turns into a
+> checkbox tick.
 >
 > The pass mark before a hotel goes on sale is **zero red and zero yellow** banner items. A step that
 > dismisses a yellow item with a written reason is forbidden: the runner refuses it and `--check` blocks

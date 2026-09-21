@@ -225,6 +225,65 @@
   </div>
 </section>
 
+<!-- 프로모션 드로어 + 적용 범위 카드 (2026-09-21 배포).
+     적용 범위는 네 드로어가 함께 쓰는 조각(`stay/_scope_fields.html`)이고 드로어 **맨 아래**에 선다.
+     머리칸은 축마다 `<축> 적용 범위` 한 줄이고 그 아래 `포함`·`제외` 두 줄이 서는데,
+     **두 축이 같은 표에 이어 선다** — `포함` 이라는 글자만으로는 어느 축의 줄인지 가릴 수 없고
+     그 낱말은 요금제 이름(`조식 포함`)과도 겹친다. 그래서 도우미는 축 줄을 먼저 찾는다.
+     위쪽 옛 칸 `요금제 한정` 은 같은 이름을 옵션으로 들고 있는 셀렉트다 — 범위 줄이 그쪽으로
+     새면 할인이 엉뚱한 요금제에 걸린다.
+     실제 화면은 Alpine `x-show` 로 접었다 펴는데 여기서는 `lateShow` 로 같은 일을 흉내 낸다. -->
+<section id="stay_promotion_form" class="card"><h3 class="card-title">프로모션</h3>
+  <table class="bs-table"><tbody>
+    <tr><th>프로모션명</th><td><input type="text" name="promotion_name"></td></tr>
+    <tr><th>요금제 한정</th><td>
+      <select class="browser-default" name="rate_plan">
+        <option value="">(전 요금제)</option>
+        <option value="31">조식 포함</option>
+        <option value="32">룸온리</option>
+      </select>
+    </td></tr>
+  </tbody></table>
+  <div class="stay-card">
+    <div class="stay-card__head"><h4 class="stay-section-title">적용 범위</h4></div>
+    <table class="bs-table stay-table"><tbody>
+    <tr><th>요금제 적용 범위</th><td>
+      <select class="browser-default" name="scope_rate_plan_mode" onchange="scopeGate()">
+        <option value="0">기존 범위 그대로</option>
+        <option value="1">구조 적격 전체</option>
+        <option value="2">지정한 대상만</option>
+      </select>
+    </td></tr>
+    <tr class="scope_rate_row" style="display:none"><th>포함</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_rate_plan_include" value="21"><span>조식 포함</span></label>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_rate_plan_include" value="22"><span>룸온리</span></label>
+    </td></tr>
+    <tr class="scope_rate_row" style="display:none"><th>제외</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_rate_plan_exclude" value="21"><span>조식 포함</span></label>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_rate_plan_exclude" value="22"><span>룸온리</span></label>
+    </td></tr>
+    <tr><th>객실 적용 범위</th><td>
+      <select class="browser-default" name="scope_room_mode" onchange="scopeGate()">
+        <option value="0">기존 범위 그대로</option>
+        <option value="1">구조 적격 전체</option>
+        <option value="2">지정한 대상만</option>
+      </select>
+    </td></tr>
+    <tr class="scope_room_row" style="display:none"><th>포함</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_room_include" value="11"><span>가든 윙 · Deluxe Garden</span></label>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_room_include" value="12"><span>가든 윙 · Suite Ocean</span></label>
+    </td></tr>
+    <tr class="scope_room_row" style="display:none"><th>제외</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_room_exclude" value="11"><span>가든 윙 · Deluxe Garden</span></label>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_room_exclude" value="12"><span>가든 윙 · Suite Ocean</span></label>
+    </td></tr>
+    <tr id="scope_confirm_row" style="display:none"><th>확인</th><td>
+      <label class="check_form"><input class="filled-in" type="checkbox" name="scope_confirm_deny_all" id="id_scope_confirm_deny_all"><span>범위를 비운 채 저장 (어디서도 판매하지 않음)</span></label>
+    </td></tr>
+    </tbody></table>
+  </div>
+</section>
+
 <!-- 시즌 [가격] 드로어 — 가격 채우기 (2026-09-08 신설 칸 둘).
      ① `박수별 단가(선택)` — `3:100,5:90` 은 "3박부터 1박 100, 5박부터 1박 90" 이다.
      ② `아동 추가 금액 — <노출명>` 은 **유료 연령 구간마다 한 칸**이고, 구분자는
@@ -450,6 +509,21 @@ function chargeGate() {
   var per = document.querySelector('[name=per]').value;
   var basis = document.querySelector('[name=basis]').value;
   lateShow('age_rate_card', per === '2' && basis === '0');
+}
+
+/* 적용 범위 게이트 — 축이 `기존 범위 그대로`(0) 가 아닐 때만 그 축의 포함·제외 줄이 선다.
+   확인란은 어느 축이든 `지정한 대상만`(2) 일 때 선다. 실제 화면의 Alpine `x-show` 와 같은 판정. */
+function scopeGate() {
+  var rate = document.querySelector('[name=scope_rate_plan_mode]').value;
+  var room = document.querySelector('[name=scope_room_mode]').value;
+  var show = function (sel, on) {
+    setTimeout(function () {
+      document.querySelectorAll(sel).forEach(function (n) { n.style.display = on ? '' : 'none'; });
+    }, 200);
+  };
+  show('.scope_rate_row', rate !== '0');
+  show('.scope_room_row', room !== '0');
+  lateShow('scope_confirm_row', rate === '2' || room === '2');
 }
 
 /* 포함물 행 추가 — 열 제목이 없는 반복 행 */

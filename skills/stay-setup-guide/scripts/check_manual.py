@@ -51,6 +51,10 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `취소정책 만들기` 단계가 `→ [추가]` 로 끝나는지(새 정책은 [추가], [저장] 은 이미 있는 정책을 고칠 때다)
 - 반복 행 이름이 정본 형식(`<칸 이름> <N> · <하위 칸>`)인지 — 홑 빈칸, 가운뎃점은 빈칸으로 감싼 ` · `
 - `체크`/`해제` 를 체크박스가 아닌 칸(다중 체크·선택·라디오)에 썼는지(고른 것은 `선택: …`, 안 고르면 `비움`)
+- 적용 범위 줄이 화면과 맞는지(오류 — 모드 값이 정본 셋이 아님 · 부과금에 요금제 축 · `기존 범위 그대로` 인데 포함·제외를 적음 ·
+  포함이 빈 `지정한 대상만` 에 `범위를 비운 채 저장` 이 없음 · 필요 없는 확인란)
+- `포함`·`제외` 의 이름이 앞 단계에서 만든 요금제·룸·판매 연결인지(오류 — 화면 목록에 없는 이름은 고를 수 없다)
+- 같은 대상이 `포함` 과 `제외` 에 함께 있는지(⚠ — 화면에서는 제외가 이긴다)
 - `호텔 만들기` 단계의 `공급 통화` 가 USD 인지(아니면 경고만 — 막지 않는다)
 - 혜택의 `수량` 이 비었는데 `제공 주기` 를 체크했는지(오류 — 그 칸은 수량이 있어야 화면에 선다)
 
@@ -2800,6 +2804,249 @@ def find_adult_only_charge_names(steps):
     return problems
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 적용 범위 — 네 드로어(프로모션·부가옵션·가격행·부과금) 맨 아래 카드 (2026-09-21 배포)
+#
+# 축마다 셀렉트 한 줄(`<축> 적용 범위`)이고, `기존 범위 그대로` 가 아닐 때만 그 아래
+# `<축> 포함`·`<축> 제외` 줄이 화면에 선다(Alpine `x-show`). 줄이 아예 없는 것은
+# `기존 범위 그대로` 와 같은 뜻이다 — 그래서 없는 줄은 묻지 않고, **있는 줄만** 본다.
+#
+# 부과금에는 요금제 축이 아예 없다(`stay/enums.py` ScopeResource — 부과금의 룸 축은
+# 룸 타입이고 요금제 축은 저장 자체가 거부된다). 그 줄을 적은 지시서는 화면에 없는 칸을
+# 채우라고 시키는 것이라 담당자가 그 단계에서 멈춘다.
+SCOPE_MODE_SUFFIX = "적용 범위"
+SCOPE_MODE_LEGACY = "기존 범위 그대로"
+SCOPE_MODE_ALL = "구조 적격 전체"
+SCOPE_MODE_EXPLICIT = "지정한 대상만"
+SCOPE_MODES = (SCOPE_MODE_LEGACY, SCOPE_MODE_ALL, SCOPE_MODE_EXPLICIT)
+SCOPE_RATE_AXIS = "요금제"
+SCOPE_ROOM_AXIS = "객실"
+SCOPE_AXES = (SCOPE_RATE_AXIS, SCOPE_ROOM_AXIS)
+SCOPE_INCLUDE_SUFFIX = "포함"
+SCOPE_EXCLUDE_SUFFIX = "제외"
+SCOPE_CONFIRM_FIELD = "범위를 비운 채 저장"
+#: 확인란을 켠 표기 — 정본은 `Y` 다(설치 도구가 그 글자를 읽는다). `체크` 로 적어도 받는다.
+SCOPE_CONFIRM_ON = {"y", "체크"}
+#: 적용 범위 카드가 서는 단계 갈래.
+SCOPE_STEP_TITLES = ("프로모션 추가", "부가옵션 만들기", "부가옵션 가격 넣기", SURCHARGE_TITLE)
+#: 요금제 축이 없는 갈래 — 부과금 하나뿐이다.
+SCOPE_NO_RATE_TITLES = (SURCHARGE_TITLE,)
+#: 이름의 정본 — 요금제는 `요금제 고치기` 의 `요금제명`, 룸(룸 타입)은 `룸 만들기` 의 `룸 이름`,
+#: 판매 연결은 `판매 연결 한 번에 만들기` 가 오퍼 × 룸으로 만드는 `<오퍼 이름> · <룸 이름>` 이다.
+RATE_PLAN_NAME_FIELD = "요금제명"
+RATE_PLAN_STEP_TITLES = ("요금제 고치기", "요금제 만들기", "요금제 정본 만들기", "요금제 정본 고치기")
+ROOM_LINK_TITLE = "판매 연결 한 번에 만들기"
+ROOM_LINK_ROOMS_FIELD = "룸 카테고리"
+ROOM_LINK_OFFER_FIELD = "오퍼"
+SCOPE_TARGET_ROOMS_FIELD = "대상 룸"
+
+
+def _scope_targets(value):
+    """`선택: A, B` → `['A', 'B']` · `비움`·빈 칸 → `[]`."""
+    if _blank(value):
+        return []
+    return [part.strip() for part in strip_select(value).split(",") if part.strip()]
+
+
+def scope_rows(step):
+    """그 단계의 적용 범위 줄 — `{(축, 갈래): (칸 이름, 값)}` · 확인란은 키 `confirm`."""
+    found = {}
+    suffixes = (
+        (SCOPE_MODE_SUFFIX, "mode"),
+        (SCOPE_INCLUDE_SUFFIX, "include"),
+        (SCOPE_EXCLUDE_SUFFIX, "exclude"),
+    )
+    for name, value in step["rows"]:
+        n = norm_field(name)
+        if n == SCOPE_CONFIRM_FIELD:
+            found.setdefault("confirm", (name, value))
+            continue
+        for axis in SCOPE_AXES:
+            for suffix, key in suffixes:
+                if n == f"{axis} {suffix}":
+                    found.setdefault((axis, key), (name, value))
+    return found
+
+
+def scope_mode(found, axis):
+    """그 축의 모드 — 줄이 없으면 `기존 범위 그대로`, 셋 중 하나가 아니면 None."""
+    row = found.get((axis, "mode"))
+    if row is None:
+        return SCOPE_MODE_LEGACY
+    value = strip_select(row[1]).strip()
+    return value if value in SCOPE_MODES else None
+
+
+def _scope_confirm_on(value):
+    return (value or "").strip().casefold() in SCOPE_CONFIRM_ON
+
+
+def _scope_steps(steps):
+    """적용 범위 카드가 서는 단계만."""
+    return [step for step in steps if step_kind(step["title"]) in SCOPE_STEP_TITLES]
+
+
+def find_scope_row_gaps(steps):
+    """적용 범위 줄이 화면과 어긋나면 오류.
+
+    네 가지를 본다 — 모드 값이 정본 셋이 아닌 것, 부과금에 요금제 축을 적은 것, 모드가
+    `기존 범위 그대로` 인데 포함·제외를 적은 것(그 줄은 화면에 서지 않는다), 그리고 포함이 빈
+    `지정한 대상만`(전면 거부)을 확인란 없이 적은 것이다. 마지막 것은 화면이 저장을 막는 자리라
+    지시서대로 따라가면 담당자가 그 단계에서 멈춘다.
+    """
+    problems = []
+    for step in _scope_steps(steps):
+        kind = step_kind(step["title"])
+        found = scope_rows(step)
+        axes = (SCOPE_ROOM_AXIS,) if kind in SCOPE_NO_RATE_TITLES else SCOPE_AXES
+        if kind in SCOPE_NO_RATE_TITLES:
+            for key in ("mode", "include", "exclude"):
+                row = found.get((SCOPE_RATE_AXIS, key))
+                if row:
+                    problems.append(
+                        f"{step['num']}단계: 부과금에는 요금제 축이 없다 — `{row[0]}` 줄을 뺀다"
+                        "(부과금의 적용 범위는 `객실 …` 줄뿐이다)"
+                    )
+        explicit_empty = []
+        explicit_any = False
+        for axis in axes:
+            mode = scope_mode(found, axis)
+            if mode is None:
+                row = found[(axis, "mode")]
+                problems.append(
+                    f"{step['num']}단계: `{row[0]}` 값이 `{row[1]}` 이다 — "
+                    f"`선택: {SCOPE_MODE_LEGACY}` · `선택: {SCOPE_MODE_ALL}` · "
+                    f"`선택: {SCOPE_MODE_EXPLICIT}` 셋 중 하나로 적는다"
+                )
+                continue
+            include = found.get((axis, "include"))
+            exclude = found.get((axis, "exclude"))
+            if mode == SCOPE_MODE_LEGACY:
+                for row in (include, exclude):
+                    if row is not None:
+                        problems.append(
+                            f"{step['num']}단계: `{row[0]}` 줄이 있는데 "
+                            f"`{axis} {SCOPE_MODE_SUFFIX}` 가 `{SCOPE_MODE_LEGACY}` 다 — "
+                            "그 상태에서는 포함·제외 줄이 화면에 서지 않는다"
+                        )
+                continue
+            if mode == SCOPE_MODE_EXPLICIT:
+                explicit_any = True
+                if not _scope_targets(include[1] if include else ""):
+                    explicit_empty.append(axis)
+        confirm = found.get("confirm")
+        if explicit_empty and not (confirm and _scope_confirm_on(confirm[1])):
+            axes_text = " · ".join(f"`{axis} {SCOPE_MODE_SUFFIX}`" for axis in explicit_empty)
+            problems.append(
+                f"{step['num']}단계: {axes_text} 가 `{SCOPE_MODE_EXPLICIT}` 인데 포함이 비었다 — "
+                f"포함할 대상을 적거나, 아무 데서도 팔지 않으려면 `{SCOPE_CONFIRM_FIELD} | Y` 를 더한다"
+            )
+        if confirm and not explicit_any:
+            problems.append(
+                f"{step['num']}단계: `{confirm[0]}` 줄이 있는데 `{SCOPE_MODE_EXPLICIT}` 인 축이 없다 — "
+                "그 확인란은 어느 축이든 `지정한 대상만` 일 때만 화면에 선다"
+            )
+    return problems
+
+
+def _scope_known_names(steps):
+    """지시서가 만드는 이름 — `(요금제, 룸 타입, 판매 연결)` 각각 `{접은 이름: (단계, 이름)}`."""
+    plans, rooms, links = {}, {}, {}
+
+    def add(book, name, num):
+        key = _fold(name)
+        if key and key not in book:
+            book[key] = (num, name)
+
+    for step in steps:
+        kind = step_kind(step["title"])
+        num = step["num"]
+        if kind in RATE_PLAN_STEP_TITLES:
+            name = (step["fields"].get(RATE_PLAN_NAME_FIELD) or "").strip()
+            if name and not _blank(name):
+                add(plans, name, num)
+        if kind == ROOM_CREATE_TITLE:
+            name = (step["fields"].get(ROOM_NAME_FIELD) or "").strip()
+            if name and not _blank(name):
+                add(rooms, name, num)
+        if kind == ROOM_LINK_TITLE:
+            offer = strip_select(step["fields"].get(ROOM_LINK_OFFER_FIELD, "")).strip()
+            for room in _scope_targets(step["fields"].get(ROOM_LINK_ROOMS_FIELD, "")):
+                add(rooms, room, num)
+                if offer and not _blank(offer):
+                    add(links, f"{offer} · {room}", num)
+        # 시즌 가격 채우기의 `대상 룸` 도 연결행 이름이다 — 일괄 단계를 쓰지 않은 지시서까지 받는다.
+        for name in _scope_targets(step["fields"].get(SCOPE_TARGET_ROOMS_FIELD, "")):
+            add(links, name, num)
+    return plans, rooms, links
+
+
+def find_scope_target_gaps(steps):
+    """`포함`·`제외` 에 적은 이름이 앞 단계에서 만든 요금제·룸이 아니면 오류.
+
+    화면의 그 목록은 이 호텔에 **이미 만들어 둔** 요금제·판매 연결·룸 타입만 보여 준다 —
+    이름이 한 글자라도 다르거나 아직 만들지 않은 것이면 담당자가 고를 항목이 화면에 없다.
+    """
+    plans, rooms, links = _scope_known_names(steps)
+    room_or_link = dict(links)
+    for key, value in rooms.items():
+        if key not in room_or_link or value[0] < room_or_link[key][0]:
+            room_or_link[key] = value
+    problems = []
+    for step in _scope_steps(steps):
+        kind = step_kind(step["title"])
+        found = scope_rows(step)
+        for axis in SCOPE_AXES:
+            if axis == SCOPE_RATE_AXIS and kind in SCOPE_NO_RATE_TITLES:
+                # 부과금의 요금제 축은 `find_scope_row_gaps` 가 이미 잡는다 — 두 번 알리지 않는다
+                continue
+            if axis == SCOPE_RATE_AXIS:
+                known, what = plans, "요금제"
+            elif kind in SCOPE_NO_RATE_TITLES:
+                known, what = rooms, "객실(룸 타입)"
+            else:
+                known, what = room_or_link, "판매 연결(객실)"
+            for key in ("include", "exclude"):
+                row = found.get((axis, key))
+                if not row:
+                    continue
+                for name in _scope_targets(row[1]):
+                    hit = known.get(_fold(name))
+                    if hit is None:
+                        near = difflib.get_close_matches(_fold(name), list(known), n=1, cutoff=0.6)
+                        hint = f" — `{known[near[0]][1]}` 인가" if near else ""
+                        problems.append(
+                            f"{step['num']}단계: `{row[0]}` 의 `{name}` 은 이 지시서가 만드는 "
+                            f"{what} 이름이 아니다{hint}"
+                        )
+                    elif hit[0] > step["num"]:
+                        problems.append(
+                            f"{step['num']}단계: `{row[0]}` 의 `{name}` 은 {hit[0]}단계에서 만든다 — "
+                            "앞 단계에서 만든 것만 고를 수 있다"
+                        )
+    return problems
+
+
+def find_scope_target_overlaps(steps):
+    """같은 대상이 포함과 제외에 함께 있으면 경고 — 화면에서는 제외가 이긴다."""
+    problems = []
+    for step in _scope_steps(steps):
+        found = scope_rows(step)
+        for axis in SCOPE_AXES:
+            include = found.get((axis, "include"))
+            exclude = found.get((axis, "exclude"))
+            if not include or not exclude:
+                continue
+            excluded = {_fold(name) for name in _scope_targets(exclude[1])}
+            both = [name for name in _scope_targets(include[1]) if _fold(name) in excluded]
+            for name in both:
+                problems.append(
+                    f"{step['num']}단계: `{name}` 이 `{include[0]}` 과 `{exclude[0]}` 에 함께 있다 — "
+                    "화면에서는 제외가 이긴다(한쪽에서 지운다)"
+                )
+    return problems
+
+
 def _field_value(step, base):
     """`<base>` 또는 `<base> · <체크박스 문구>` 로 적힌 값을 하나 찾는다(없으면 None).
 
@@ -3420,6 +3667,9 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     gala_addons = find_gala_addons(parsed)
     gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
     adult_only_names = find_adult_only_charge_names(parsed)
+    scope_row_gaps = find_scope_row_gaps(parsed)
+    scope_target_gaps = find_scope_target_gaps(parsed)
+    scope_target_overlaps = find_scope_target_overlaps(parsed)
     benefit_frequency_gaps = find_benefit_frequency_without_quantity(parsed)
     create_only_fields = find_create_only_fields(parsed)
     room_photo_saves = find_room_photo_saves(parsed)
@@ -3534,6 +3784,9 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "gala_addons": gala_addons,
         "gala_surcharge_gaps": gala_surcharge_gaps,
         "adult_only_names": adult_only_names,
+        "scope_row_gaps": scope_row_gaps,
+        "scope_target_gaps": scope_target_gaps,
+        "scope_target_overlaps": scope_target_overlaps,
         "benefit_frequency_gaps": benefit_frequency_gaps,
         "create_only_fields": create_only_fields,
         "room_photo_saves": room_photo_saves,
@@ -3621,6 +3874,7 @@ def main(argv=None):
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["promo_common"] + r["season_saves"] + r["cancel_policy_saves"]
               + r["repeat_row_formats"] + r["check_value_classes"]
+              + r["scope_row_gaps"] + r["scope_target_gaps"]
               + r["benefit_frequency_gaps"]):
         problems.append(p)
     if r["dict_error"]:
@@ -3649,6 +3903,8 @@ def main(argv=None):
     for w in r["hangul_room_names"]:
         warnings.append(w)
     for w in r["extra_bed_rules"]:
+        warnings.append(w)
+    for w in r["scope_target_overlaps"]:
         warnings.append(w)
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]

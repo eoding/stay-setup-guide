@@ -59,6 +59,13 @@ FILE_RE = re.compile(r"^파일\s*:\s*(.*)$")
 #: **한 글자도 다르면 안 된다** — 한쪽만 반복 행으로 읽으면 N번째 행이 아니라 첫 행에 값이 들어간다.
 ROW_LABEL_RE = re.compile(r"^(\S(?:.*?\S)?) (\d+) · (.+)$")
 AUTO_MARKERS = ("자동 입력됨", "자동입력됨")
+#: 적용 범위 카드의 확인란(2026-09-21 배포). 화면은 체크박스인데 지시서의 정본 값은 `Y` 다 —
+#: 설치 도구가 그 글자로 읽기 때문이다(`MANUAL-SPEC.md` §표). 그대로 두면 `typed` 로 읽혀
+#: 도우미가 "글자를 넣을 칸이 아닙니다" 로 끝내므로, **이 칸에 한해** 체크로 옮긴다.
+#: `Y`·`체크` 만 켠 것으로 보고 나머지 글자는 손대지 않는다 — 뜻을 짐작해 조용히 끄면
+#: "어디서도 팔지 않는다" 를 의도한 원고가 아무 표시 없이 그냥 저장된다.
+SCOPE_CONFIRM_LABEL_RE = re.compile(r"^범위를\s*비운\s*채\s*저장(?:\s*\(.*\))?$")
+SCOPE_CONFIRM_ON = ("y", "체크")
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +449,13 @@ def build_step(raw):
             if norm is not None and norm != f.get("value"):
                 f["value"] = norm
                 f["normalized"] = True
+        # 적용 범위의 확인란은 화면이 체크박스다 — 정본 값 `Y` 를 체크로 옮긴다(위 상수 주석).
+        if (SCOPE_CONFIRM_LABEL_RE.match(label.strip()) and f.get("kind") == "typed"
+                and str(f.get("value", "")).strip().casefold() in SCOPE_CONFIRM_ON):
+            f.pop("value", None)
+            f.pop("unknown", None)
+            f["kind"] = "check"
+            f["normalized"] = True
         m = ROW_LABEL_RE.match(label)
         if m:
             f["row_group"] = m.group(1).strip()

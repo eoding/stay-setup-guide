@@ -4190,3 +4190,346 @@ def test_customer_notice_dictionary_is_optional_and_advisory():
     assert "가격·필수·배타 규칙은 바꾸지 않습니다" in field["help"]
     assert "customer_notice" in cm.load_dictionary(DICTIONARY)
     assert "customerNotice" in cm.load_dictionary(DICTIONARY)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 적용 범위 — 네 드로어(프로모션·부가옵션·가격행·부과금) 맨 아래 카드 (2026-09-21 배포)
+# ─────────────────────────────────────────────────────────────────────────────
+
+SCOPE_PLAN = "룸온리"            # catalog_step 이 만드는 요금제명
+SCOPE_ROOM = "Single"            # room_step 이 만드는 룸 타입
+SCOPE_LINK = "2026 시즌 요금 · Single"   # room_link_step 이 만드는 연결행
+
+
+def scope_base():
+    """범위가 고를 수 있는 이름을 앞 단계에서 만들어 둔다 — 오퍼 · 룸 · 판매 연결 · 요금제."""
+    return (HEAD + offer_step(4) + room_step(5) + room_link_step(6)
+            + catalog_step(7, "요금제 고치기 (1개)", "저장", with_apply_now=False))
+
+
+def scope_step(num, title, tab, card, button, rows, save="추가"):
+    body = "\n".join(f"| {k} | {v} |" for k, v in rows)
+    return f"""
+## {num}. {title}
+탭: `{tab}`
+카드: `{card}`
+버튼: [{button}]
+
+| 칸 | 값 |
+|---|---|
+{body}
+
+→ [{save}]
+"""
+
+
+def promo_step(rows, num=8):
+    return scope_step(num, "프로모션 추가 (1개, 얼리버드)", "프로모션", "전 오퍼 공통",
+                      "프로모션 추가", [("프로모션명", "얼리버드")] + list(rows))
+
+
+def charge_step(rows, num=8):
+    return scope_step(num, "부과금 추가 (1개, 리조트피)", "부과금", "2026 시즌 요금",
+                      "부과금 추가", [("종류", "선택: 기타"), ("이름", "리조트피")] + list(rows))
+
+
+def addon_step(rows, num=8):
+    return scope_step(num, "부가옵션 만들기 (1개, 엑스트라베드)", "부가옵션", "2026 시즌 요금",
+                      "부가옵션 추가", [("이름", "엑스트라베드")] + list(rows))
+
+
+def scope_steps_of(md):
+    return cm.parse_steps(md.splitlines())
+
+
+class ScopeRowTest(unittest.TestCase):
+    """적용 범위 줄이 화면과 어긋나면 오류 — 없는 칸을 채우라는 지시서는 그 단계에서 멈춘다."""
+
+    def rows(self, md):
+        return cm.find_scope_row_gaps(scope_steps_of(md))
+
+    def test_no_scope_rows_is_fine(self):
+        """줄이 아예 없으면 `기존 범위 그대로` 와 같은 뜻이다 — 묻지 않는다."""
+        self.assertEqual(self.rows(scope_base() + promo_step([])), [])
+
+    def test_legacy_rows_are_fine(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 기존 범위 그대로"),
+                                        ("객실 적용 범위", "선택: 기존 범위 그대로")])
+        self.assertEqual(self.rows(md), [])
+
+    def test_an_unknown_mode_value_is_an_error(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 전부")])
+        problems = self.rows(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("지정한 대상만", problems[0])
+
+    def test_an_empty_mode_value_is_an_error(self):
+        """`비움` 도 아니다 — 그 셀렉트는 언제나 셋 중 하나를 들고 있다."""
+        md = scope_base() + promo_step([("객실 적용 범위", "비움")])
+        self.assertEqual(len(self.rows(md)), 1)
+
+    def test_include_without_narrowing_is_an_error(self):
+        """`기존 범위 그대로` 에서는 포함·제외 줄이 화면에 서지 않는다."""
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 기존 범위 그대로"),
+                                        ("요금제 포함", f"선택: {SCOPE_PLAN}")])
+        problems = self.rows(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("요금제 포함", problems[0])
+
+    def test_include_without_a_mode_row_is_an_error(self):
+        """모드 줄을 빼면 기본값이 `기존 범위 그대로` 라 포함 줄이 갈 자리가 없다."""
+        md = scope_base() + promo_step([("객실 제외", f"선택: {SCOPE_LINK}")])
+        self.assertEqual(len(self.rows(md)), 1)
+
+    def test_a_charge_cannot_carry_the_rate_plan_axis(self):
+        md = scope_base() + charge_step([("요금제 적용 범위", "선택: 구조 적격 전체")])
+        problems = self.rows(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("부과금에는 요금제 축이 없다", problems[0])
+
+    def test_a_charge_keeps_the_room_axis(self):
+        md = scope_base() + charge_step([("객실 적용 범위", "선택: 구조 적격 전체"),
+                                         ("객실 포함", "비움"),
+                                         ("객실 제외", f"선택: {SCOPE_ROOM}")])
+        self.assertEqual(self.rows(md), [])
+
+    def test_explicit_with_an_empty_include_needs_the_confirm_row(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", "비움")])
+        problems = self.rows(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("범위를 비운 채 저장", problems[0])
+
+    def test_the_confirm_row_clears_the_deny_all_error(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", "비움"),
+                                        ("범위를 비운 채 저장", "Y")])
+        self.assertEqual(self.rows(md), [])
+
+    def test_the_confirm_row_also_takes_the_checkbox_wording(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", "비움"),
+                                        ("범위를 비운 채 저장", "체크")])
+        self.assertEqual(self.rows(md), [])
+
+    def test_a_blank_confirm_row_does_not_count_as_on(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", "비움"),
+                                        ("범위를 비운 채 저장", "비움")])
+        self.assertEqual(len(self.rows(md)), 1)
+
+    def test_a_confirm_row_without_an_explicit_axis_is_an_error(self):
+        """그 확인란은 어느 축이든 `지정한 대상만` 일 때만 화면에 선다."""
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 구조 적격 전체"),
+                                        ("객실 포함", "비움"),
+                                        ("객실 제외", f"선택: {SCOPE_LINK}"),
+                                        ("범위를 비운 채 저장", "Y")])
+        problems = self.rows(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("확인란", problems[0])
+
+    def test_explicit_with_targets_needs_no_confirm(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                                        ("요금제 포함", f"선택: {SCOPE_PLAN}"),
+                                        ("요금제 제외", "비움")])
+        self.assertEqual(self.rows(md), [])
+
+
+class ScopeTargetTest(unittest.TestCase):
+    """`포함`·`제외` 의 이름은 그 지시서가 **앞 단계에서 만든** 요금제·룸이어야 한다."""
+
+    def targets(self, md):
+        return cm.find_scope_target_gaps(scope_steps_of(md))
+
+    def test_a_known_rate_plan_passes(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                                        ("요금제 포함", f"선택: {SCOPE_PLAN}")])
+        self.assertEqual(self.targets(md), [])
+
+    def test_an_unknown_rate_plan_is_an_error(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                                        ("요금제 포함", "선택: 조식 포함")])
+        problems = self.targets(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("조식 포함", problems[0])
+
+    def test_a_near_miss_gets_the_right_name_in_the_message(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                                        ("요금제 포함", "선택: 룸온니")])
+        problems = self.targets(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(SCOPE_PLAN, problems[0])
+
+    def test_a_promotion_takes_the_link_name(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 구조 적격 전체"),
+                                        ("객실 제외", f"선택: {SCOPE_LINK}")])
+        self.assertEqual(self.targets(md), [])
+
+    def test_a_promotion_also_takes_the_bare_room_name(self):
+        """연결행 이름을 손으로 고친 호텔이 있어 룸 이름만 적은 것도 받는다."""
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 구조 적격 전체"),
+                                        ("객실 제외", f"선택: {SCOPE_ROOM}")])
+        self.assertEqual(self.targets(md), [])
+
+    def test_a_charge_takes_the_room_type_name(self):
+        md = scope_base() + charge_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                         ("객실 포함", f"선택: {SCOPE_ROOM}")])
+        self.assertEqual(self.targets(md), [])
+
+    def test_a_rate_plan_row_on_a_charge_is_not_reported_twice(self):
+        """부과금의 요금제 축은 줄 검사가 잡는다 — 이름 검사까지 같은 줄을 또 알리지 않는다."""
+        md = scope_base() + charge_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                                         ("요금제 포함", "선택: 없는 요금제")])
+        self.assertEqual(self.targets(md), [])
+        self.assertEqual(len(cm.find_scope_row_gaps(scope_steps_of(md))), 2)
+
+    def test_a_charge_does_not_take_a_link_name(self):
+        """부과금의 룸 축은 룸 타입이다 — 연결행 이름은 그 목록에 없다."""
+        md = scope_base() + charge_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                         ("객실 포함", f"선택: {SCOPE_LINK}")])
+        problems = self.targets(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("객실(룸 타입)", problems[0])
+
+    def test_a_name_made_later_is_an_error(self):
+        md = (HEAD + offer_step(4) + room_step(5) + room_link_step(6)
+              + promo_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                            ("요금제 포함", f"선택: {SCOPE_PLAN}")], num=7)
+              + catalog_step(8, "요금제 고치기 (1개)", "저장", with_apply_now=False))
+        problems = self.targets(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("8단계에서 만든다", problems[0])
+
+    def test_several_targets_are_read_one_by_one(self):
+        md = scope_base() + addon_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", f"선택: {SCOPE_LINK}, 없는 룸")])
+        problems = self.targets(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("없는 룸", problems[0])
+
+
+class ScopeOverlapTest(unittest.TestCase):
+    """같은 대상이 포함과 제외에 함께 있으면 ⚠ — 화면에서는 제외가 이긴다."""
+
+    def test_the_same_target_in_both_lists_warns(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", f"선택: {SCOPE_LINK}"),
+                                        ("객실 제외", f"선택: {SCOPE_LINK}")])
+        problems = cm.find_scope_target_overlaps(scope_steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("제외가 이긴다", problems[0])
+
+    def test_different_targets_do_not_warn(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 구조 적격 전체"),
+                                        ("객실 포함", "비움"),
+                                        ("객실 제외", f"선택: {SCOPE_ROOM}")])
+        self.assertEqual(cm.find_scope_target_overlaps(scope_steps_of(md)), [])
+
+
+class ScopeEndToEndTest(unittest.TestCase):
+    """main() 이 적용 범위 오류로 실패를 내고, 바른 원고는 그대로 통과한다."""
+
+    def run_on(self, md):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(md)
+            return cm.check(path, dictionary_path=DICTIONARY), cm.main([path])
+
+    def test_a_good_scope_manual_passes(self):
+        md = scope_base() + promo_step([("요금제 적용 범위", "선택: 지정한 대상만"),
+                                        ("요금제 포함", f"선택: {SCOPE_PLAN}"),
+                                        ("요금제 제외", "비움"),
+                                        ("객실 적용 범위", "선택: 구조 적격 전체"),
+                                        ("객실 포함", "비움"),
+                                        ("객실 제외", f"선택: {SCOPE_LINK}")])
+        r, code = self.run_on(md)
+        self.assertEqual(code, 0, r)
+        self.assertEqual(r["scope_row_gaps"] + r["scope_target_gaps"] + r["scope_target_overlaps"], [])
+
+    def test_a_deny_all_without_the_confirm_fails(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", "비움")])
+        r, code = self.run_on(md)
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["scope_row_gaps"]), 1)
+
+    def test_an_unknown_target_fails(self):
+        md = scope_base() + charge_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                         ("객실 포함", "선택: Suite Ocean")])
+        r, code = self.run_on(md)
+        self.assertEqual(code, 1)
+        self.assertEqual(len(r["scope_target_gaps"]), 1)
+
+    def test_an_overlap_only_warns(self):
+        md = scope_base() + promo_step([("객실 적용 범위", "선택: 지정한 대상만"),
+                                        ("객실 포함", f"선택: {SCOPE_LINK}"),
+                                        ("객실 제외", f"선택: {SCOPE_LINK}")])
+        r, code = self.run_on(md)
+        self.assertEqual(code, 0, r)
+        self.assertEqual(len(r["scope_target_overlaps"]), 1)
+
+    def test_the_new_rows_are_in_the_screen_dictionary(self):
+        """새 줄 이름이 사전에 없으면 `사전에 없는 칸 이름` 경고가 뜬다 — 네 화면 모두 대조한다."""
+        labels = cm.load_dictionary(DICTIONARY)
+        for label in ("요금제 적용 범위", "요금제 포함", "요금제 제외",
+                      "객실 적용 범위", "객실 포함", "객실 제외", "범위를 비운 채 저장"):
+            self.assertIn(label, labels, label)
+
+
+class ScopeDictionaryTest(unittest.TestCase):
+    """사전이 네 화면에 카드를 담고, 부과금에는 요금제 축이 없다."""
+
+    def setUp(self):
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            self.data = json.load(handle)
+        self.by_id = {s["id"]: s for s in self.data["screens"]}
+
+    def scope_labels(self, screen_id):
+        screen = self.by_id[screen_id]
+        block = [b for b in screen["blocks"] if b["name"] == "적용 범위"]
+        self.assertEqual(len(block), 1, screen_id)
+        return [f["label"] for f in block[0]["fields"]]
+
+    def test_the_three_drawers_carry_both_axes(self):
+        for screen_id in ("promotion", "addon", "addon-price"):
+            self.assertEqual(
+                self.scope_labels(screen_id),
+                ["요금제 적용 범위", "요금제 포함", "요금제 제외",
+                 "객실 적용 범위", "객실 포함", "객실 제외", "범위를 비운 채 저장"],
+                screen_id,
+            )
+
+    def test_the_charge_has_no_rate_plan_axis(self):
+        self.assertEqual(
+            self.scope_labels("charge"),
+            ["객실 적용 범위", "객실 포함", "객실 제외", "범위를 비운 채 저장"],
+        )
+
+    def test_the_mode_options_are_the_three_canonical_ones(self):
+        for screen_id in ("promotion", "addon", "addon-price", "charge"):
+            for field in [f for f in self.by_id[screen_id]["blocks"][-1]["fields"]
+                          if f["label"].endswith("적용 범위")]:
+                self.assertEqual(field["options"],
+                                 ["기존 범위 그대로", "구조 적격 전체", "지정한 대상만"], screen_id)
+
+    def test_the_card_is_listed_on_all_four_screens(self):
+        for screen_id in ("promotion", "addon", "addon-price", "charge"):
+            self.assertIn("적용 범위", self.by_id[screen_id]["cards"], screen_id)
+
+    def test_the_night_charge_note_is_in_both_copies(self):
+        """`박당` 부과금이 적용 날짜의 밤만 센다는 사실(2026-09-21)은 두 사본에 다 있어야 한다."""
+        note = [n for n in self.by_id["charge"]["notes"] if "박당" in n and "밤만" in n]
+        self.assertEqual(len(note), 1, self.by_id["charge"]["notes"])
+        with open(DICTIONARY_MD, encoding="utf-8") as handle:
+            self.assertIn(note[0], handle.read())
+
+    def test_the_meta_says_the_new_baseline(self):
+        self.assertEqual(self.data["meta"]["generated_on"], "2026-09-21")
+        self.assertEqual(self.data["meta"]["erp_baseline"], "운영 2026-09-21 배포판 화면 기준")
+
+    def test_the_meta_field_count_matches(self):
+        counted = sum(len(b.get("fields") or [])
+                      for s in self.data["screens"] for b in (s.get("blocks") or []))
+        counted += sum(len(b.get("fields") or []) for b in (self.data["validation"]["blocks"] or []))
+        self.assertEqual(self.data["meta"]["field_count"], counted)

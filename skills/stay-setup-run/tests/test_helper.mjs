@@ -722,6 +722,63 @@ const run = async () => {
   ok(!strip(), 'progressHide: 지운 뒤에는 다시 붙지 않는다');
   ok(win.stayRun.progressHide().done === 1, 'progressHide: 이미 지웠어도 지금 값을 돌려준다');
 
+  // 14. 적용 범위 카드 (2026-09-21 배포) — 축마다 `포함`·`제외` 줄이 있고 **두 축이 같은 표에** 선다.
+  //     지시서는 `요금제 포함` 처럼 축을 앞에 붙여 적는데 화면 머리칸은 `포함` 한 낱말이라,
+  //     이름만으로 찾으면 ① 어느 축인지 못 가리고 ② `조식 포함` 같은 체크박스 글자에 걸린다.
+  win.openFragment('stay_promotion_form', '프로모션 추가 — 2026 계약');
+  const promo = { card: '프로모션' };
+  const r14 = await R.fill([
+    { label: '프로모션명', kind: 'typed', value: '얼리버드' },
+    { label: '요금제 한정', kind: 'empty' },
+    { label: '요금제 적용 범위', kind: 'select', value: '지정한 대상만' },
+    { label: '요금제 포함', kind: 'multi', values: ['조식 포함', '룸온리'] },
+    { label: '요금제 제외', kind: 'empty' },
+    { label: '객실 적용 범위', kind: 'select', value: '구조 적격 전체' },
+    { label: '객실 포함', kind: 'empty' },
+    // 값이 하나뿐인 줄은 파서가 `select` 로 낸다(`선택: A`) — 체크 묶음에서도 같은 길로 켜져야 한다
+    { label: '객실 제외', kind: 'select', value: '가든 윙 · Suite Ocean' }
+  ], promo);
+  // `비움` 줄이 `skipped` 로 끝나는 것은 정상이다 — 그 줄이 아직 접혀 있으면 비울 것도 없다
+  // (이 픽스처는 일부러 200ms 늦게 펼친다 — 실제 화면의 Alpine 은 같은 틱에 편다).
+  const bad14 = r14.filter((x) => x.status !== 'ok' && x.status !== 'skipped');
+  ok(bad14.length === 0, 'fill: 적용 범위 줄이 모두 ok', bad14);
+  ok(q('[name=scope_rate_plan_mode]').value === '2', 'DOM: 요금제 축 = 지정한 대상만', q('[name=scope_rate_plan_mode]').value);
+  ok(q('[name=scope_room_mode]').value === '1', 'DOM: 객실 축 = 구조 적격 전체', q('[name=scope_room_mode]').value);
+  const on = (name) => [].slice.call(win.document.querySelectorAll('[name=' + name + ']'))
+    .filter((b) => b.checked).map((b) => b.parentElement.textContent.trim());
+  ok(JSON.stringify(on('scope_rate_plan_include')) === JSON.stringify(['조식 포함', '룸온리']),
+    'DOM: 요금제 포함에 고른 둘이 켜졌다', on('scope_rate_plan_include'));
+  ok(on('scope_rate_plan_exclude').length === 0, 'DOM: 요금제 제외는 비었다', on('scope_rate_plan_exclude'));
+  ok(JSON.stringify(on('scope_room_exclude')) === JSON.stringify(['가든 윙 · Suite Ocean']),
+    'DOM: 객실 제외에 스위트만 켜졌다', on('scope_room_exclude'));
+  ok(on('scope_room_include').length === 0, 'DOM: 객실 포함은 비었다', on('scope_room_include'));
+  // 옛 칸(`요금제 한정`)으로 새지 않았는지 — 그 셀렉트는 `조식 포함` 을 옵션으로 들고 있다
+  ok(q('[name=rate_plan]').value === '', 'DOM: 옛 칸 `요금제 한정` 은 그대로 비어 있다', q('[name=rate_plan]').value);
+  // 포함·제외 줄은 모드를 고친 **뒤에** 서므로 1차에서 못 찾고 2차 재시도가 잡는다
+  ok(r14[3].retried === true, 'fill: `요금제 포함` 은 2차 재시도에서 잡혔다', r14[3]);
+  const rb14 = R.readback([
+    { label: '요금제 포함', kind: 'multi', values: ['조식 포함', '룸온리'] },
+    { label: '객실 제외', kind: 'multi', values: ['가든 윙 · Suite Ocean'] }
+  ], promo);
+  ok(rb14.mismatch.length === 0, 'readback: 적용 범위 줄을 같은 자리에서 되읽는다', rb14.mismatch);
+
+  // 14b. 전면 거부 확인란 — 지시서가 `Y` 로 적고 파서가 체크로 옮긴 칸이다.
+  const r14b = await R.fill([
+    { label: '객실 적용 범위', kind: 'select', value: '지정한 대상만' },
+    { label: '범위를 비운 채 저장', kind: 'check' }
+  ], promo);
+  ok(r14b.every((x) => x.status === 'ok'), 'fill: 확인란까지 ok', r14b);
+  ok(q('[name=scope_confirm_deny_all]').checked === true, 'DOM: 범위를 비운 채 저장이 켜졌다');
+
+  // 14c. 축이 `기존 범위 그대로` 면 그 줄은 화면에 없다 — 도우미는 찾지 못했다고 말해야 한다.
+  await R.fill([{ label: '요금제 적용 범위', kind: 'select', value: '기존 범위 그대로' }], promo);
+  await R.sleep(300);   // 이 픽스처는 200ms 뒤에 접는다(실제 화면은 같은 틱에 접힌다)
+  const before14c = on('scope_rate_plan_include').join(',');
+  const r14c = await R.fill([{ label: '요금제 포함', kind: 'multi', values: ['조식 포함'] }], promo);
+  ok(r14c[0].status === 'not-found', 'fill: 접힌 축의 포함 줄은 찾지 못한다(조용히 다른 칸에 쓰지 않는다)', r14c[0]);
+  ok(on('scope_rate_plan_include').join(',') === before14c, 'DOM: 접힌 줄의 체크는 그대로다', on('scope_rate_plan_include'));
+  ok(q('[name=rate_plan]').value === '', 'DOM: 접힌 줄의 값이 옛 칸으로 새지 않았다', q('[name=rate_plan]').value);
+
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
 };

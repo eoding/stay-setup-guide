@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.6.2'; // 운영 2026-09-09 배포판 화면 기준(빈 상태 안내문 제외 · 비움+칸 없음 · 모달 재열기 · 페이지 [저장])
+  var VERSION = '0.7.0'; // 운영 2026-09-21 배포판 화면 기준(적용 범위 카드의 축별 포함·제외 묶음)
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
   var TICK = 100;
 
@@ -1456,6 +1456,46 @@
     if (!out.length) { var sec = findSection(scope, label); if (sec) out = [].slice.call(sec.querySelectorAll('input[type=checkbox],input[type=radio]')).filter(usable); }
     return out.map(function (b) { return { el: b, tier: 3, prio: 3, matched: label }; });
   }
+
+  /* ─────────────── 적용 범위 카드의 포함·제외 묶음 (2026-09-21 배포) ─────────────── */
+  // 네 드로어(프로모션·부가옵션·가격행·부과금) 맨 아래 카드다. 지시서는 축을 앞에 붙여
+  // `요금제 포함` · `객실 제외` 로 적는데 **화면 머리칸은 `포함` · `제외` 한 낱말**이고, 그 두
+  // 낱말이 카드 안에 축마다 한 번씩 선다 — 이름만으로는 어느 축의 줄인지 가를 수 없다.
+  // 그래서 축 줄(`<축> 적용 범위`)을 먼저 찾고 **바로 뒤따르는 줄들**에서 묶음을 집는다.
+  //
+  // 축이 아직 `기존 범위 그대로` 면 그 두 줄은 Alpine `x-show` 로 접혀 있어 `usable()` 이
+  // 거른다 — 빈 목록을 돌려주고, 모드 셀렉트를 고친 뒤 `fill` 의 2차 시도가 다시 부른다.
+  var SCOPE_LABEL_RE = /^(요금제|객실)\s+(포함|제외)$/;
+  var SCOPE_MODE_SUFFIX = ' 적용 범위';
+  function splitScopeLabel(label) {
+    var m = nfc(label).replace(/\s+/g, ' ').trim().match(SCOPE_LABEL_RE);
+    return m ? { axis: m[1], effect: m[2] } : null;
+  }
+  function scopeBoxes(scope, label) {
+    var s = splitScopeLabel(label);
+    if (!s) return [];
+    var want = s.axis + SCOPE_MODE_SUFFIX;
+    var rows = [].slice.call(scope.querySelectorAll('tr'));
+    for (var i = 0; i < rows.length; i++) {
+      var th = rows[i].querySelector('th');
+      if (!th || tier(textOf(th), want) < 3) continue;
+      var node = rows[i].nextElementSibling, hops = 0;
+      while (node && hops++ < 4) {
+        var head = node.querySelector('th');
+        var text = head ? textOf(head) : '';
+        // 다음 축의 셀렉트 줄이나 확인 줄을 만나면 이 축은 끝이다
+        if (text !== '포함' && text !== '제외') break;
+        if (text === s.effect) {
+          return [].slice.call(node.querySelectorAll('input[type=checkbox],input[type=radio]'))
+            .filter(usable)
+            .map(function (b) { return { el: b, tier: 4, prio: 4, matched: label }; });
+        }
+        node = node.nextElementSibling;
+      }
+    }
+    return [];
+  }
+
   // 같은 이름의 칸이 여럿일 때 값으로 가른다: select 면 그 값이 옵션에 있는 칸, 글자면 글자 칸(select 아님)
   function disambiguate(list, kind, values) {
     var v = values && values.length ? values[0] : '';
@@ -1494,7 +1534,10 @@
     var ix = splitIndex(name);
     if (ix) { name = ix.label; idx = ix.n - 1; }
 
-    var cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
+    // 적용 범위의 `<축> 포함`·`<축> 제외` 는 축 줄을 기준으로 잡는다 — 이름만으로는 어느 축인지
+    // 가를 수 없고, `포함` 은 `조식 포함` 같은 체크박스 글자와도 겹친다.
+    var cands = rep ? [] : scopeBoxes(scope, name);
+    if (!cands.length) cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
     if (!cands.length && target !== scope) cands = findControls(scope, name);
     if (!cands.length && /^(multi|select|check|uncheck|empty)$/.test(f.kind)) cands = groupBoxes(scope, name);
     if (!cands.length && /[·・‧∙]/.test(name)) { // `제공 주기 · 1박당 제공 (…)` 처럼 두 조각 이름은 뒤 조각(화면 라벨)으로 다시 찾는다
@@ -1852,7 +1895,8 @@
     }
     var ix = splitIndex(name); var idx = 0;
     if (ix) { name = ix.label; idx = ix.n - 1; }
-    var cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
+    var cands = rep ? [] : scopeBoxes(scope, name);   // 적용 범위의 포함·제외는 축 줄로 잡는다
+    if (!cands.length) cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
     if (!cands.length && target !== scope) cands = findControls(scope, name);
     if (!cands.length && /^(multi|select|check|uncheck|empty)$/.test(f.kind)) cands = groupBoxes(scope, name);
     // 두 조각 이름(`연령별 단가 · 초등학생` · `제공 주기 · 1박당 제공 (…)`)은 뒤 조각이 화면 라벨이다.

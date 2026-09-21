@@ -1180,5 +1180,87 @@ class TestDraftLayoutGate(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
+SCOPE_MD = """# 시험 호텔 — 입력 지시서
+
+## 1. 프로모션 추가 (1개, 얼리버드)
+탭: `프로모션`
+카드: `전 오퍼 공통`
+버튼: [프로모션 추가]
+
+| 칸 | 값 |
+|---|---|
+| 프로모션명 | 얼리버드 |
+| 요금제 적용 범위 | 선택: 지정한 대상만 |
+| 요금제 포함 | 선택: 조식 포함, 룸온리 |
+| 요금제 제외 | 비움 |
+| 객실 적용 범위 | 선택: 구조 적격 전체 |
+| 객실 제외 | 선택: 가든 윙 · Suite Ocean |
+| 범위를 비운 채 저장 | Y |
+
+→ [추가]
+"""
+
+
+class TestScopeRows(unittest.TestCase):
+    """적용 범위 줄(2026-09-21 배포) — 다중 체크·셀렉트는 그대로, 확인란만 `Y` 를 체크로 옮긴다."""
+
+    @classmethod
+    def setUpClass(cls):
+        _, raws = parse_guide.parse_markdown(SCOPE_MD)
+        cls.steps = [parse_guide.build_step(r) for r in raws]
+        cls.step = cls.steps[0]
+
+    def test_the_mode_row_is_a_select(self):
+        f = field_by_label(self.step, "요금제 적용 범위")
+        self.assertEqual((f["kind"], f["value"]), ("select", "지정한 대상만"))
+
+    def test_the_include_row_is_a_multi_check(self):
+        f = field_by_label(self.step, "요금제 포함")
+        self.assertEqual(f["kind"], "multi")
+        self.assertEqual(f["values"], ["조식 포함", "룸온리"])
+
+    def test_a_blank_list_stays_empty(self):
+        self.assertEqual(field_by_label(self.step, "요금제 제외")["kind"], "empty")
+
+    def test_a_target_name_with_a_middle_dot_is_one_value(self):
+        """연결행 이름은 `<오퍼> · <룸>` 이라 가운뎃점이 들어간다 — 쪼개면 없는 항목을 찾는다."""
+        f = field_by_label(self.step, "객실 제외")
+        self.assertEqual((f["kind"], f["value"]), ("select", "가든 윙 · Suite Ocean"))
+
+    def test_the_confirm_row_becomes_a_check(self):
+        """화면은 체크박스인데 지시서의 정본 값은 `Y` 다 — 글자로 두면 도우미가 거절한다."""
+        f = field_by_label(self.step, "범위를 비운 채 저장")
+        self.assertEqual(f["kind"], "check")
+        self.assertNotIn("value", f)
+        self.assertEqual(f["raw_value"], "Y")
+        self.assertTrue(f["normalized"])
+
+    def test_the_checkbox_wording_still_works(self):
+        md = SCOPE_MD.replace("| 범위를 비운 채 저장 | Y |", "| 범위를 비운 채 저장 | 체크 |")
+        _, raws = parse_guide.parse_markdown(md)
+        step = parse_guide.build_step(raws[0])
+        self.assertEqual(field_by_label(step, "범위를 비운 채 저장")["kind"], "check")
+
+    def test_a_blank_confirm_row_is_empty_not_a_check(self):
+        md = SCOPE_MD.replace("| 범위를 비운 채 저장 | Y |", "| 범위를 비운 채 저장 | 비움 |")
+        _, raws = parse_guide.parse_markdown(md)
+        step = parse_guide.build_step(raws[0])
+        self.assertEqual(field_by_label(step, "범위를 비운 채 저장")["kind"], "empty")
+
+    def test_an_unknown_confirm_value_is_left_alone(self):
+        """뜻을 짐작해 조용히 끄지 않는다 — 글자로 남겨 도우미가 그 자리에서 멈추게 한다."""
+        md = SCOPE_MD.replace("| 범위를 비운 채 저장 | Y |", "| 범위를 비운 채 저장 | 예 |")
+        _, raws = parse_guide.parse_markdown(md)
+        step = parse_guide.build_step(raws[0])
+        f = field_by_label(step, "범위를 비운 채 저장")
+        self.assertEqual((f["kind"], f["value"]), ("typed", "예"))
+
+    def test_preflight_is_clean(self):
+        pre = parse_guide.preflight(self.steps)
+        self.assertEqual(pre["unknown_kinds"], [])
+        self.assertEqual(pre["charge_order"], [])
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
