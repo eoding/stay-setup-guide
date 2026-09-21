@@ -12,10 +12,16 @@
 같은 사전으로 두 번 돌리면 **바이트까지 같은 파일**이 나온다(오늘 날짜를 찍지 않고 사전의
 `generated_on` 만 쓴다).
 
+`--impact <영향지도.json>` 을 주면 칸마다 **그 칸이 고객 웹 어디에 어떻게 나오는지**가
+두 칸(「웹에 나오는 곳」·「효과」) 더 붙고, 앞머리에 「한눈에」 절이 선다. 영향 지도는
+이 저장소에 담지 않는다(내부 표·컬럼 이름이 들어 있다) — 파일을 받아 옆에 두고 쓴다.
+주지 않으면 **예전과 바이트까지 같은 파일**이 나온다.
+
 사용법:
     python3 render_screen_guide.py                      # 사전 → docs/화면-안내.html
     python3 render_screen_guide.py -o /tmp/미리보기.html
     python3 render_screen_guide.py --dictionary <다른 사전.json> --no-font
+    python3 render_screen_guide.py --impact <영향지도.json> -o /tmp/영향지도.html
 """
 
 import argparse
@@ -47,6 +53,27 @@ _TAB_RE = re.compile(r'편집 화면 탭 `([^`]+)`')
 
 #: 탭이 없는 화면을 모으는 묶음 이름 (사전의 `tabs` 에는 없다).
 OUTSIDE_TABS = '탭 밖 화면'
+
+#: 영향 지도에서 칸이 하는 일(`downstream`) → 작은 꼬리표. `표시` 는 꼬리표를 달지 않는다.
+IMPACT_ROLE_TAGS = {
+    '미사용': ('tag-muted', '웹 미사용'),
+    '게이트': ('tag-gate', '게이트'),
+    '키·로직': ('tag-key', '키·로직'),
+    '내부전용': ('tag-internal', '내부 전용'),
+}
+
+#: 영향 지도의 판정(`confidence`) → 꼬리표. `확인` 은 꼬리표 없이 글자만 둔다.
+IMPACT_CONFIDENCE_TAGS = {
+    '미사용': ('tag-muted', '웹 미사용'),
+    '부분': ('tag-partial', '일부 확인'),
+}
+
+#: 「한눈에」 절이 뽑아 모으는 두 갈래 (`downstream` 값 그대로).
+ROLE_UNUSED = '미사용'
+ROLE_GATE = '게이트'
+
+#: 웹에 나오는 자리가 하나도 없는 칸에 적는 말.
+WEB_NONE_TEXT = '고객 화면에 안 나옴'
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +136,34 @@ HOWTO_ITEMS = [
 
 
 # ---------------------------------------------------------------------------
+# 「한눈에」 절의 머리글 — 손으로 쓴 상수다 (영향 지도를 줄 때만 쓴다).
+# ---------------------------------------------------------------------------
+
+IMPACT_OVERVIEW_TITLE = '이 칸이 고객에게 어디에 보이나 — 한눈에'
+
+IMPACT_OVERVIEW_INTRO = (
+    '아래 화면 절의 칸마다 「웹에 나오는 곳」과 「효과」 두 칸이 더 붙는다 — '
+    '그 칸을 채우면 고객 화면 **어디에** 무엇이 바뀌는지다. '
+    '코드를 따라가 적은 것이고 화면을 띄워 본 것은 아니다.'
+)
+
+IMPACT_UNUSED_TITLE = '고객에게 안 닿는 칸'
+IMPACT_UNUSED_NOTE = (
+    'ERP 에 칸은 있는데 고객 화면 어디에도 안 나오는 칸이다. '
+    '채워도 고객은 못 보므로, 고객에게 알려야 하는 값이면 **고객 화면에 나오는 다른 칸**에 문장으로 적는다.'
+)
+
+IMPACT_GATE_TITLE = '다른 것을 가리는(게이트) 칸'
+IMPACT_GATE_NOTE = (
+    '글자로는 안 나오지만 **조건에 안 맞는 방·요금제·할인·옵션을 화면에서 통째로 지우는** 칸이다. '
+    '틀려도 오류가 안 뜨고 조용히 사라지니 값을 두 번 본다.'
+)
+
+IMPACT_SUMMARY_TITLE = '화면마다 — 이 화면을 안 채우면'
+IMPACT_SUMMARY_NOTE = '화면 하나를 통째로 건너뛰면 고객 화면에서 무엇이 빠지는지다.'
+
+
+# ---------------------------------------------------------------------------
 # 인라인 표기 (사전 글자에 섞여 있는 `코드` 와 **굵게**)
 # ---------------------------------------------------------------------------
 
@@ -130,6 +185,44 @@ def attr(text):
     return html.escape(str(text or ''), quote=True)
 
 
+#: 한국어 문장 끝(`…다.`) 뒤의 공백 — 「한눈에」 목록에서 첫 문장만 쓸 때 자르는 자리.
+_SENTENCE_END_RE = re.compile(r'(?<=다\.)\s')
+
+
+def drop_stray_code_quote(text):
+    """짝 없는 ` 하나를 뗀다 — 글자는 그대로 두고 따옴표만 지운다.
+
+    영향 지도 쪽 글이 `…` 로 잘려 오는 일이 있어(따옴표를 연 채로 끝난다),
+    그대로 두면 반쪽 따옴표가 글자로 찍힌다.
+    """
+    text = str(text or '')
+    if text.count('`') % 2:
+        where = text.rfind('`')
+        text = text[:where] + text[where + 1:]
+    return text
+
+
+def impact_inline(text):
+    """영향 지도 글자 → HTML (짝 없는 따옴표를 떼고 나서 보통 표기로)."""
+    return inline(drop_stray_code_quote(text))
+
+
+def one_line(text, limit=180):
+    """긴 설명에서 **첫 문장만**. 문장 끝이 안 보이면 길이로 자르고 `…` 를 붙인다."""
+    text = str(text or '').strip()
+    if not text:
+        return ''
+    found = _SENTENCE_END_RE.search(text)
+    if found and found.start() <= limit:
+        return drop_stray_code_quote(text[:found.start()])
+    if len(text) <= limit:
+        return drop_stray_code_quote(text)
+    cut = text.rfind(' ', 0, limit)
+    if cut < limit // 2:
+        cut = limit
+    return drop_stray_code_quote(text[:cut].rstrip(' ,·—-')) + '…'
+
+
 # ---------------------------------------------------------------------------
 # 사전 읽기
 # ---------------------------------------------------------------------------
@@ -137,6 +230,102 @@ def attr(text):
 def load_dictionary(path):
     with open(path, encoding='utf-8') as fp:
         return json.load(fp)
+
+
+class ImpactMismatch(ValueError):
+    """영향 지도와 화면 사전이 어긋났다 — 한쪽만 고치고 다른 쪽을 안 고친 상태다."""
+
+
+def load_impact(path):
+    with open(path, encoding='utf-8') as fp:
+        return json.load(fp)
+
+
+def as_list(value):
+    """None · 한 줄 · 여러 줄을 모두 리스트로 (지도 쪽 칸이 둘 다로 온다)."""
+    if not value:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [v for v in value if v]
+    return [value]
+
+
+def impact_key(screen_id, block_name, label):
+    return (str(screen_id), str(block_name or ''), str(label or ''))
+
+
+def build_impact(screens, impact):
+    """영향 지도를 (화면 id, 블록, 칸) 색인으로. 사전과 어긋나면 ImpactMismatch 를 던진다.
+
+    사전과 지도는 **같은 칸 목록**이어야 한다 — 한쪽에만 있는 칸이 하나라도 있으면
+    문서를 만들지 않는다(틀린 안내를 내보내는 것보다 안 내보내는 쪽이 낫다).
+    """
+    rows = {}
+    problems = []
+    for screen in impact.get('screens') or []:
+        for field in screen.get('fields') or []:
+            key = impact_key(screen.get('id'), field.get('block'), field.get('label'))
+            if key in rows:
+                problems.append('영향 지도에 같은 칸이 두 번 있다: %s / %s / %s'
+                                % (key[0], key[1] or '(블록 없음)', key[2]))
+            rows[key] = field
+
+    summaries = {}
+    for screen in impact.get('screens') or []:
+        summaries[str(screen.get('id'))] = screen.get('summary') or ''
+
+    used = set()
+    for screen in screens:
+        sid = str(screen.get('id'))
+        if sid not in summaries:
+            problems.append('영향 지도에 화면이 없다: %s' % sid)
+        for block, field in field_rows(screen):
+            key = impact_key(sid, block.get('name'), field.get('label'))
+            if key in rows:
+                used.add(key)
+            else:
+                problems.append('영향 지도에 칸이 없다: %s / %s / %s'
+                                % (key[0], key[1] or '(블록 없음)', key[2]))
+    for key in rows:
+        if key not in used:
+            problems.append('사전에 없는 칸이 영향 지도에 있다: %s / %s / %s'
+                            % (key[0], key[1] or '(블록 없음)', key[2]))
+    dict_ids = {str(s.get('id')) for s in screens}
+    for sid in summaries:
+        if sid not in dict_ids:
+            problems.append('사전에 없는 화면이 영향 지도에 있다: %s' % sid)
+
+    meta = impact.get('meta') or {}
+    if meta.get('screen_count') is not None and meta['screen_count'] != len(screens):
+        problems.append('영향 지도 meta.screen_count %s ≠ 화면 %d'
+                        % (meta['screen_count'], len(screens)))
+    fields_total = count_fields(screens)
+    if meta.get('field_count') is not None and meta['field_count'] != fields_total:
+        problems.append('영향 지도 meta.field_count %s ≠ 입력 칸 %d'
+                        % (meta['field_count'], fields_total))
+
+    if problems:
+        shown = problems[:10]
+        more = len(problems) - len(shown)
+        text = '영향 지도가 화면 사전과 어긋난다 (%d건):' % len(problems)
+        for line in shown:
+            text += '\n  - ' + line
+        if more > 0:
+            text += '\n  - …외 %d건' % more
+        raise ImpactMismatch(text)
+
+    return {'rows': rows, 'summaries': summaries, 'meta': meta}
+
+
+def impact_lookup(bundle, screen_id):
+    """그 화면의 (블록, 칸) → 영향 줄 을 찾아 주는 함수를 만든다."""
+    if not bundle:
+        return None
+
+    def find(block_name, label):
+        return bundle['rows'].get(impact_key(screen_id, block_name, label))
+
+    return find
 
 
 def resolve_screen(screen, data):
@@ -367,11 +556,76 @@ footer code{font-size:13px;}
 """
 
 
-def build_style_css(font_b64):
+#: 영향 지도를 줄 때만 뒤에 붙이는 CSS. 안 주면 한 글자도 안 붙어 예전 파일과 바이트가 같다.
+#: 칸이 일곱이라 좁은 화면에서는 표를 칸별 카드로 세운다(글자 크기를 줄이는 대신 쌓는다).
+_IMPACT_CSS = """
+.fields.with-impact td.c-name{width:13%;}
+.fields.with-impact td.c-kind{width:8%;}
+.fields.with-impact td.c-req{width:5%;}
+.fields.with-impact td.c-opt{width:16%;}
+.fields.with-impact td.c-help{width:18%;}
+.fields.with-impact td.c-web{width:24%;}
+.fields.with-impact td.c-effect{width:16%;}
+.web-line{display:block;margin:0 0 5px;font-size:14px;}
+.web-line:last-child{margin-bottom:0;}
+.web-line .w-how{color:var(--muted);}
+.web-none{color:var(--muted);font-size:14px;}
+.tag{
+  display:inline-block;margin:0 5px 3px 0;padding:0 8px;
+  border:1px solid var(--rule);border-radius:999px;
+  font-size:12px;line-height:1.6;white-space:nowrap;vertical-align:middle;
+}
+.tag-muted,.tag-key,.tag-internal,.tag-partial{color:var(--muted);}
+.tag-gate{color:var(--warn);border-color:var(--warn);}
+.effect-text{display:block;}
+.screen-summary{
+  margin:8px 0 12px;padding:10px 14px;
+  background:var(--panel);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;
+  font-size:15px;
+}
+.impact-overview{margin:0 0 34px;padding:0 0 4px;border-bottom:1px solid var(--rule);}
+.impact-overview h3{margin:20px 0 4px;}
+.impact-overview .ov-note{font-size:15px;color:var(--muted);margin:2px 0 10px;}
+.impact-overview .ov-count{color:var(--muted);font-weight:400;font-size:16px;}
+.ov-group{margin:0 0 10px;}
+.ov-group .ov-screen{font-weight:700;font-size:15px;}
+.ov-group ul{margin:2px 0 0;padding-left:20px;font-size:15px;}
+.ov-group li{margin:0 0 4px;}
+.ov-group .ov-why{color:var(--muted);}
+table.gates td.c-screen,table.summaries td.c-screen{width:20%;}
+table.gates td.c-field{width:18%;}
+@media (max-width: 700px){
+  table,thead,tbody,tr,td{display:block;width:auto;}
+  table{border:0;margin-bottom:14px;}
+  thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+  tr{border:1px solid var(--rule);border-radius:8px;padding:6px 2px;margin:0 0 10px;}
+  td{border:0;border-bottom:1px solid var(--rule-soft);padding:6px 10px;width:auto !important;text-align:left !important;}
+  tr td:last-child{border-bottom:0;}
+  td:empty{display:none;}
+  td::before{
+    content:attr(data-label);
+    display:block;font-size:13px;color:var(--muted);margin-bottom:2px;
+  }
+  .toc-tab li{display:list-item;margin-left:16px;}
+  .toc-tab li::after{content:"";}
+}
+@media print{
+  .impact-overview{page-break-after:always;break-after:page;}
+  .ov-group li{page-break-inside:avoid;break-inside:avoid;}
+  .screen-summary{page-break-inside:avoid;break-inside:avoid;}
+}
+"""
+
+
+def build_style_css(font_b64, with_impact=False):
     """Pretendard 가변 폰트를 base64 로 넣으면 @font-face 를 CSS 맨 앞에 붙인다.
-    (`render_card.py` 와 같은 방식 — 바깥으로 나가는 요청이 없는 단일 파일을 만든다.)"""
+    (`render_card.py` 와 같은 방식 — 바깥으로 나가는 요청이 없는 단일 파일을 만든다.)
+
+    `with_impact` 면 영향 지도용 CSS 를 뒤에 덧붙인다.
+    """
+    body = _STYLE_CSS_BODY + (_IMPACT_CSS if with_impact else '')
     if not font_b64:
-        return _STYLE_CSS_BODY
+        return body
     font_face = (
         '@font-face{'
         'font-family:"Pretendard";'
@@ -380,7 +634,7 @@ def build_style_css(font_b64):
         'font-display:swap;'
         '}\n'
     )
-    return font_face + _STYLE_CSS_BODY
+    return font_face + body
 
 
 # ---------------------------------------------------------------------------
@@ -438,15 +692,65 @@ def render_help_cell(field):
     return ''.join(parts)
 
 
-def render_block(block):
+def render_web_cell(row):
+    """「웹에 나오는 곳」 — `페이지 › 섹션 › 요소 — 어떻게` 를 줄마다 하나씩."""
+    parts = []
+    entries = row.get('web') or []
+    if entries:
+        for entry in entries:
+            where = ' › '.join(
+                impact_inline(entry.get(k)) for k in ('page', 'section', 'element') if entry.get(k)
+            )
+            how = entry.get('how')
+            if how:
+                where += ' — <span class="w-how">%s</span>' % impact_inline(how)
+            parts.append('<span class="web-line">%s</span>' % where)
+    else:
+        parts.append('<span class="web-none">%s</span>' % inline(WEB_NONE_TEXT))
+
+    for line in as_list(row.get('web_not_shown')):
+        parts.append('<span class="sub">코드에 자리는 있으나 지금은 안 보인다 — %s</span>'
+                     % impact_inline(line))
+    if row.get('erp_reservation'):
+        parts.append('<span class="sub">ERP 직원 예약: %s</span>'
+                     % impact_inline(row['erp_reservation']))
+    return ''.join(parts)
+
+
+def impact_tags(row):
+    """칸이 하는 일 · 판정 꼬리표. 같은 글자는 한 번만 단다."""
+    picked = []
+    for table, key in ((IMPACT_ROLE_TAGS, 'downstream'), (IMPACT_CONFIDENCE_TAGS, 'confidence')):
+        found = table.get(row.get(key))
+        if found and found[1] not in [t[1] for t in picked]:
+            picked.append(found)
+    return ''.join(
+        '<span class="tag %s">%s</span>' % (cls, inline(text)) for cls, text in picked
+    )
+
+
+def render_effect_cell(row):
+    """「효과」 — 꼬리표를 앞에 달고 지도의 `effect` 글자를 그대로."""
+    return impact_tags(row) + '<span class="effect-text">%s</span>' % impact_inline(row.get('effect'))
+
+
+def render_block(block, impact_of=None):
     out = []
     if block.get('name'):
         out.append(f'<h4>블록 <code>{inline(block["name"])}</code></h4>')
-    out.append('<table class="fields">')
-    out.append(
-        '<thead><tr><th>칸</th><th>종류</th><th>필수</th>'
-        '<th>선택지 / 형식</th><th>도움말</th></tr></thead>'
-    )
+    if impact_of is None:
+        out.append('<table class="fields">')
+        out.append(
+            '<thead><tr><th>칸</th><th>종류</th><th>필수</th>'
+            '<th>선택지 / 형식</th><th>도움말</th></tr></thead>'
+        )
+    else:
+        out.append('<table class="fields with-impact">')
+        out.append(
+            '<thead><tr><th>칸</th><th>종류</th><th>필수</th>'
+            '<th>선택지 / 형식</th><th>도움말</th>'
+            '<th>웹에 나오는 곳</th><th>효과</th></tr></thead>'
+        )
     out.append('<tbody>')
     for field in block.get('fields') or []:
         required = '<span class="req-yes">예</span>' if field.get('required') else ''
@@ -456,6 +760,10 @@ def render_block(block):
         out.append(f'<td class="c-req" data-label="필수">{required}</td>')
         out.append(f'<td class="c-opt" data-label="선택지 / 형식">{render_options_cell(field)}</td>')
         out.append(f'<td class="c-help" data-label="도움말">{render_help_cell(field)}</td>')
+        if impact_of is not None:
+            row = impact_of(block.get('name'), field.get('label')) or {}
+            out.append(f'<td class="c-web" data-label="웹에 나오는 곳">{render_web_cell(row)}</td>')
+            out.append(f'<td class="c-effect" data-label="효과">{render_effect_cell(row)}</td>')
         out.append('</tr>')
     out.append('</tbody></table>')
     return '\n'.join(out)
@@ -476,12 +784,15 @@ def render_rules(rules):
     return '\n'.join(out)
 
 
-def render_screen(no, screen, tab):
+def render_screen(no, screen, tab, summary='', impact_of=None):
     out = [f'<section class="screen" id="{attr(anchor_of(screen))}">']
     badge = f'<span class="tab-badge">{inline(tab)}</span>' if tab else ''
     out.append(
         f'<h2><span class="screen-no">{no}.</span> {inline(screen.get("name", ""))}{badge}</h2>'
     )
+
+    if summary:
+        out.append(f'<p class="screen-summary">{impact_inline(summary)}</p>')
 
     opens = screen.get('opens') or []
     if opens:
@@ -494,7 +805,7 @@ def render_screen(no, screen, tab):
         out.append(f'<p class="cards"><span class="k">화면 안 카드</span>{names}</p>')
 
     for block in screen.get('blocks') or []:
-        out.append(render_block(block))
+        out.append(render_block(block, impact_of))
 
     if screen.get('rules'):
         out.append(render_rules(screen['rules']))
@@ -546,12 +857,26 @@ def render_howto():
     return '\n'.join(out)
 
 
-def render_head_block(meta, screen_count, field_count):
+def impact_baseline_line(impact_meta):
+    """「고객 웹 영향」 줄 — 어느 커밋의 코드를 따라간 것인지."""
+    parts = []
+    for name, key in (('ERP', 'erp_ref'), ('엔진', 'engine_ref'), ('웹', 'web_ref')):
+        ref = (impact_meta or {}).get(key)
+        if ref:
+            parts.append(f'{name} {ref}')
+    if not parts:
+        return ''
+    return ' · '.join(parts) + ' 기준 (코드 정적 추적, 실행 확인 아님)'
+
+
+def render_head_block(meta, screen_count, field_count, impact_meta=None):
     rows = [
         ('화면 기준', meta.get('erp_baseline', '')),
         ('사전 뽑은 날', meta.get('generated_on', '')),
         ('담은 것', f'화면 {screen_count}개 · 입력 칸 {field_count}개'),
     ]
+    if impact_meta is not None:
+        rows.append(('고객 웹 영향', impact_baseline_line(impact_meta)))
     dl = ''.join(
         f'<dt>{inline(k)}</dt><dd>{inline(v)}</dd>' for k, v in rows if v
     )
@@ -564,6 +889,112 @@ def render_head_block(meta, screen_count, field_count):
         f'<div class="baseline"><dl>{dl}</dl></div>'
         '</header>'
     )
+
+
+def impact_rows_by_role(screens, bundle, role):
+    """그 역할(`downstream`)인 칸을 사전 순서 그대로 — (화면, 칸, 영향 줄)."""
+    out = []
+    for screen in screens:
+        find = impact_lookup(bundle, str(screen.get('id')))
+        for block, field in field_rows(screen):
+            row = find(block.get('name'), field.get('label')) or {}
+            if row.get('downstream') == role:
+                out.append((screen, field, row))
+    return out
+
+
+def render_impact_overview(screens, bundle):
+    """「이 칸이 고객에게 어디에 보이나 — 한눈에」 — 지도에서 세 가지만 뽑아 앞에 세운다."""
+    out = ['<section class="impact-overview" id="impact-overview">']
+    out.append(f'<h2>{inline(IMPACT_OVERVIEW_TITLE)}</h2>')
+    out.append(f'<p>{inline(IMPACT_OVERVIEW_INTRO)}</p>')
+
+    # (가) 고객에게 안 닿는 칸 — 화면별로 묶는다.
+    unused = impact_rows_by_role(screens, bundle, ROLE_UNUSED)
+    out.append(
+        f'<h3>{inline(IMPACT_UNUSED_TITLE)} '
+        f'<span class="ov-count">{len(unused)}개</span></h3>'
+    )
+    out.append(f'<p class="ov-note">{inline(IMPACT_UNUSED_NOTE)}</p>')
+    if unused:
+        grouped = []
+        for screen, field, row in unused:
+            if not grouped or grouped[-1][0] is not screen:
+                grouped.append((screen, []))
+            grouped[-1][1].append((field, row))
+        for screen, items in grouped:
+            lis = ''.join(
+                '<li><span class="fname">%s</span> — <span class="ov-why">%s</span></li>'
+                % (inline(field.get('label')), impact_inline(one_line(row.get('effect'))))
+                for field, row in items
+            )
+            out.append(
+                '<div class="ov-group">'
+                f'<span class="ov-screen"><a href="#{attr(anchor_of(screen))}">'
+                f'{inline(screen.get("name", ""))}</a></span>'
+                f'<ul>{lis}</ul></div>'
+            )
+
+    # (나) 다른 것을 가리는 칸.
+    gates = impact_rows_by_role(screens, bundle, ROLE_GATE)
+    out.append(
+        f'<h3>{inline(IMPACT_GATE_TITLE)} '
+        f'<span class="ov-count">{len(gates)}개</span></h3>'
+    )
+    out.append(f'<p class="ov-note">{inline(IMPACT_GATE_NOTE)}</p>')
+    if gates:
+        out.append('<table class="gates">')
+        out.append('<thead><tr><th>화면</th><th>칸</th><th>틀리면 생기는 일</th></tr></thead><tbody>')
+        for screen, field, row in gates:
+            out.append('<tr>')
+            out.append(
+                f'<td class="c-screen" data-label="화면">'
+                f'<a href="#{attr(anchor_of(screen))}">{inline(screen.get("name", ""))}</a></td>'
+            )
+            out.append(
+                f'<td class="c-field" data-label="칸">'
+                f'<span class="fname">{inline(field.get("label"))}</span></td>'
+            )
+            out.append(f'<td data-label="틀리면 생기는 일">{impact_inline(row.get("effect"))}</td>')
+            out.append('</tr>')
+        out.append('</tbody></table>')
+
+    # (다) 화면마다 한 줄.
+    out.append(f'<h3>{inline(IMPACT_SUMMARY_TITLE)}</h3>')
+    out.append(f'<p class="ov-note">{inline(IMPACT_SUMMARY_NOTE)}</p>')
+    out.append('<table class="summaries">')
+    out.append('<thead><tr><th>화면</th><th>이 화면을 안 채우면</th></tr></thead><tbody>')
+    for screen in screens:
+        summary = bundle['summaries'].get(str(screen.get('id')), '')
+        out.append('<tr>')
+        out.append(
+            f'<td class="c-screen" data-label="화면">'
+            f'<a href="#{attr(anchor_of(screen))}">{inline(screen.get("name", ""))}</a></td>'
+        )
+        out.append(f'<td data-label="이 화면을 안 채우면">{impact_inline(summary)}</td>')
+        out.append('</tr>')
+    out.append('</tbody></table>')
+
+    out.append('</section>')
+    return '\n'.join(out)
+
+
+def impact_counts(screens, bundle):
+    """CLI 가 찍는 숫자 — 웹에 나오는 칸 · 안 나오는 칸 · 웹 미사용 · 게이트."""
+    shown = none = unused = gate = 0
+    for screen in screens:
+        find = impact_lookup(bundle, str(screen.get('id')))
+        for block, field in field_rows(screen):
+            row = find(block.get('name'), field.get('label')) or {}
+            if row.get('web'):
+                shown += 1
+            else:
+                none += 1
+            if row.get('downstream') == ROLE_UNUSED:
+                unused += 1
+            elif row.get('downstream') == ROLE_GATE:
+                gate += 1
+    return {'shown': shown, 'none': none, 'unused': unused, 'gate': gate}
 
 
 def render_not_covered(items):
@@ -602,7 +1033,7 @@ def stamp_meta(meta, screen_count, field_count):
 # 한 장으로 조립
 # ---------------------------------------------------------------------------
 
-def render_guide(data, font_b64=None, version=''):
+def render_guide(data, font_b64=None, version='', impact=None):
     meta = data.get('meta') or {}
     tabs = data.get('tabs') or []
     screens = [resolve_screen(s, data) for s in data.get('screens') or []]
@@ -619,13 +1050,25 @@ def render_guide(data, font_b64=None, version=''):
     screen_count = len(screens)
     field_count = count_fields(screens)
 
+    bundle = build_impact(screens, impact) if impact else None
+
     body = [
-        render_head_block(meta, screen_count, field_count),
+        render_head_block(meta, screen_count, field_count,
+                          bundle['meta'] if bundle else None),
         render_howto(),
-        render_toc(tabs, by_tab, numbers),
     ]
+    if bundle:
+        body.append(render_impact_overview(screens, bundle))
+    body.append(render_toc(tabs, by_tab, numbers))
     for idx, screen in enumerate(screens, 1):
-        body.append(render_screen(idx, screen, tab_of[screen['id']]))
+        sid = str(screen['id'])
+        body.append(render_screen(
+            idx,
+            screen,
+            tab_of[screen['id']],
+            bundle['summaries'].get(sid, '') if bundle else '',
+            impact_lookup(bundle, sid) if bundle else None,
+        ))
     body.append(render_not_covered(data.get('not_covered') or []))
     body.append(render_footer(version))
 
@@ -638,7 +1081,7 @@ def render_guide(data, font_b64=None, version=''):
         f'<title>{inline(PAGE_TITLE)}</title>',
         stamp_meta(meta, screen_count, field_count),
         '<style>',
-        build_style_css(font_b64),
+        build_style_css(font_b64, bundle is not None),
         '</style>',
         '</head>',
         '<body>',
@@ -655,6 +1098,7 @@ def render_guide(data, font_b64=None, version=''):
         'tabs': len(tabs),
         'meta_screens': meta.get('screen_count'),
         'meta_fields': meta.get('field_count'),
+        'impact': impact_counts(screens, bundle) if bundle else None,
     }
     return page, stats
 
@@ -667,6 +1111,9 @@ def main(argv=None):
                     help=f'화면 사전 JSON (기본: {DEFAULT_DICTIONARY.name})')
     ap.add_argument('-o', '--output', default=str(DEFAULT_OUTPUT),
                     help='출력 HTML 경로 (기본: docs/화면-안내.html)')
+    ap.add_argument('--impact', default=None,
+                    help='칸 → 고객 웹 영향 지도 JSON (주면 「웹에 나오는 곳」·「효과」 칸과 '
+                         '「한눈에」 절이 붙는다. 안 주면 예전과 같은 파일이다)')
     ap.add_argument('--font', default=str(DEFAULT_FONT),
                     help='임베드할 Pretendard 가변 woff2 (기본: scripts/fonts/PretendardVariable.woff2)')
     ap.add_argument('--no-font', action='store_true',
@@ -679,6 +1126,14 @@ def main(argv=None):
         return 1
     data = load_dictionary(dict_path)
 
+    impact = None
+    if args.impact:
+        impact_path = Path(args.impact)
+        if not impact_path.is_file():
+            print(f'영향 지도를 찾을 수 없다: {impact_path}', file=sys.stderr)
+            return 1
+        impact = load_impact(impact_path)
+
     font_b64 = None
     font_note = '넣지 않음 (시스템 고딕 폴백)'
     if not args.no_font:
@@ -690,7 +1145,11 @@ def main(argv=None):
         else:
             print(f'경고: 폰트 파일을 찾을 수 없다: {font_path} (시스템 폰트로 대체)', file=sys.stderr)
 
-    page, stats = render_guide(data, font_b64, skill_version())
+    try:
+        page, stats = render_guide(data, font_b64, skill_version(), impact)
+    except ImpactMismatch as err:
+        print(str(err), file=sys.stderr)
+        return 1
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -701,6 +1160,10 @@ def main(argv=None):
     print(f'  화면: {stats["screens"]}개 · 입력 칸: {stats["fields"]}개 · 탭: {stats["tabs"]}개')
     print(f'  크기: {size / 1024:.1f} KB ({size:,} bytes)')
     print(f'  폰트: {font_note}')
+    if stats['impact']:
+        got = stats['impact']
+        print('  고객 웹 영향: 나오는 칸 {shown}개 · 안 나오는 칸 {none}개 · '
+              '웹 미사용 {unused}개 · 게이트 {gate}개'.format(**got))
 
     mismatch = []
     if stats['meta_screens'] is not None and stats['meta_screens'] != stats['screens']:

@@ -8,6 +8,8 @@
 2. 사전의 탭·화면·여는 길·카드가 하나도 빠지지 않는다.
 3. 같은 사전이면 몇 번을 돌려도 **바이트까지 같은** 파일이 나온다(날짜를 찍지 않는다).
 4. 바깥으로 나가는 요청이 하나도 없다 — 인터넷 없이 여는 단일 파일이다.
+5. `--impact` 를 주면 칸마다 「웹에 나오는 곳」·「효과」 가 붙고, 안 주면 예전과 같은 바이트다.
+   사전과 지도의 칸이 한 줄이라도 어긋나면 문서를 만들지 않는다.
 
 실행:
     python3 -m pytest -q skills/stay-setup-guide/tests/test_render_screen_guide.py
@@ -48,6 +50,40 @@ def section_of(page, screen_id):
         re.S,
     )
     return found.group(0) if found else ""
+
+
+def tag_balance(page):
+    """여닫는 태그가 맞는지 — (어긋난 자리, 안 닫힌 태그)."""
+    from html.parser import HTMLParser
+
+    void = {
+        "meta", "br", "hr", "img", "link", "input", "area",
+        "base", "col", "embed", "source", "track", "wbr",
+    }
+
+    class Balance(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.stack = []
+            self.errors = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag not in void:
+                self.stack.append(tag)
+
+        def handle_endtag(self, tag):
+            if tag in void:
+                return
+            if not self.stack:
+                self.errors.append("여는 태그 없이 </%s>" % tag)
+            elif self.stack[-1] != tag:
+                self.errors.append("</%s> 자리에 <%s>" % (tag, self.stack[-1]))
+            else:
+                self.stack.pop()
+
+    parser = Balance()
+    parser.feed(page)
+    return parser.errors, parser.stack
 
 
 #: 작은 가짜 사전 — 사전 구조가 바뀌어도 렌더러가 최소 한 벌은 그려 내는지 본다.
@@ -290,37 +326,9 @@ class ScreenGuideSelfContainedTest(unittest.TestCase):
         self.assertTrue(self.page.rstrip().endswith("</html>"))
 
     def test_tags_are_balanced(self):
-        from html.parser import HTMLParser
-
-        void = {
-            "meta", "br", "hr", "img", "link", "input", "area",
-            "base", "col", "embed", "source", "track", "wbr",
-        }
-
-        class Balance(HTMLParser):
-            def __init__(self):
-                super().__init__(convert_charrefs=True)
-                self.stack = []
-                self.errors = []
-
-            def handle_starttag(self, tag, attrs):
-                if tag not in void:
-                    self.stack.append(tag)
-
-            def handle_endtag(self, tag):
-                if tag in void:
-                    return
-                if not self.stack:
-                    self.errors.append("여는 태그 없이 </%s>" % tag)
-                elif self.stack[-1] != tag:
-                    self.errors.append("</%s> 자리에 <%s>" % (tag, self.stack[-1]))
-                else:
-                    self.stack.pop()
-
-        parser = Balance()
-        parser.feed(self.page)
-        self.assertEqual(parser.errors, [])
-        self.assertEqual(parser.stack, [])
+        errors, left_open = tag_balance(self.page)
+        self.assertEqual(errors, [])
+        self.assertEqual(left_open, [])
 
     def test_font_is_embedded_as_data_url_when_given(self):
         page, _ = render_once(font_b64="QUJD")
@@ -465,6 +473,419 @@ class SyntheticDictionaryTest(unittest.TestCase):
     def test_version_and_not_covered(self):
         self.assertIn("9.9.9", self.page)
         self.assertIn("가짜 사전이라 담지 않은 것.", self.page)
+
+
+#: 작은 가짜 영향 지도 — 위 가짜 사전과 칸이 **정확히 같아야** 한다(화면 2·칸 3).
+SYNTHETIC_IMPACT = {
+    "meta": {
+        "generated_on": "2026-01-02",
+        "erp_baseline": "시험용 배포판 화면 기준",
+        "screen_count": 2,
+        "field_count": 3,
+        "erp_ref": "aaaa1111",
+        "engine_ref": "bbbb2222",
+        "web_ref": "cccc3333",
+    },
+    "screens": [
+        {
+            "id": "synth-one",
+            "name": "시험 화면 하나",
+            "summary": "이 화면을 안 채우면 고객 화면의 제목 줄이 빈다.",
+            "fields": [
+                {
+                    "label": "이름",
+                    "block": "",
+                    "erp_column": "fake.Model.name",
+                    "engine": "FakeDto.name",
+                    "web": [
+                        {
+                            "page": "호텔 상세 /stay/<id>",
+                            "section": "히어로 상단",
+                            "element": "h1 제목",
+                            "how": "두 줄까지 흘리고 자른다",
+                        },
+                        {
+                            "page": "예약 /stay/<id>/reserve",
+                            "section": "우측 요약 카드",
+                            "element": "이름 줄",
+                            "how": "그대로",
+                        },
+                    ],
+                    "web_not_shown": None,
+                    "erp_reservation": None,
+                    "downstream": "표시",
+                    "effect": "고객 웹 호텔 상세의 히어로에 제목으로 나온다.",
+                    "confidence": "확인",
+                    "evidence": ["fake:one.py:1"],
+                },
+                {
+                    "label": "고르기",
+                    "block": "",
+                    "erp_column": "fake.Model.pick",
+                    "engine": None,
+                    "web": [],
+                    "web_not_shown": ["FakeCard.pick: 레일이 꺼져 있다. 코드상 자리는 카드 하단"],
+                    "erp_reservation": None,
+                    "downstream": "미사용",
+                    "effect": "ERP 안에서만 쓰인다 — 엔진이 이 컬럼을 아예 읽지 않아 고객 웹 어디에도 영향이 없다. 뒷문장은 목록에서 잘린다.",
+                    "confidence": "미사용",
+                    "evidence": ["fake:two.py:2"],
+                },
+                {
+                    "label": "줄 넣기",
+                    "block": "반복 블록",
+                    "erp_column": "fake.Model.rows",
+                    "engine": "FakeRow",
+                    "web": [],
+                    "web_not_shown": None,
+                    "erp_reservation": "2. 객실·요금제 — 요금 행에서 확인",
+                    "downstream": "게이트",
+                    "effect": "웹에 글자로는 안 나온다 — 조건에 안 맞는 줄을 응답에서 지운다.",
+                    "confidence": "부분",
+                    "evidence": ["fake:three.py:3"],
+                },
+            ],
+        },
+        {
+            "id": "synth-two",
+            "name": "탭 밖 화면 하나",
+            "summary": "값을 넣는 칸이 없는 화면이다.",
+            "fields": [],
+        },
+    ],
+}
+
+
+def write_json(path, data):
+    with open(path, "w", encoding="utf-8") as fp:
+        json.dump(data, fp, ensure_ascii=False)
+
+
+class ImpactMapTest(unittest.TestCase):
+    """`--impact` 를 주면 칸마다 「웹에 나오는 곳」·「효과」 가 붙는다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.plain, cls.plain_stats = rsg.render_guide(SYNTHETIC, None, "9.9.9")
+        cls.page, cls.stats = rsg.render_guide(SYNTHETIC, None, "9.9.9", SYNTHETIC_IMPACT)
+
+    def test_page_without_impact_is_unchanged(self):
+        again, _ = rsg.render_guide(SYNTHETIC, None, "9.9.9", None)
+        self.assertEqual(self.plain, again)
+        self.assertNotIn("웹에 나오는 곳", self.plain)
+        self.assertNotIn("impact-overview", self.plain)
+        self.assertNotIn("screen-summary", self.plain)
+        self.assertNotEqual(self.plain, self.page)
+        self.assertIsNone(self.plain_stats["impact"])
+
+    def test_field_table_has_seven_columns(self):
+        self.assertIn(
+            "<thead><tr><th>칸</th><th>종류</th><th>필수</th>"
+            "<th>선택지 / 형식</th><th>도움말</th>"
+            "<th>웹에 나오는 곳</th><th>효과</th></tr></thead>",
+            self.page,
+        )
+        self.assertIn('<table class="fields with-impact">', self.page)
+        self.assertIn(
+            "<thead><tr><th>칸</th><th>종류</th><th>필수</th>"
+            "<th>선택지 / 형식</th><th>도움말</th></tr></thead>",
+            self.plain,
+        )
+        self.assertNotIn("with-impact", self.plain)
+
+    def test_counts_still_match_the_dictionary_head(self):
+        self.assertEqual(self.stats["screens"], SYNTHETIC["meta"]["screen_count"])
+        self.assertEqual(self.stats["fields"], SYNTHETIC["meta"]["field_count"])
+        self.assertEqual(len(re.findall(r'<tr class="field">', self.page)), 3)
+
+    def test_web_places_are_one_line_each(self):
+        block = section_of(self.page, "synth-one")
+        self.assertIn(
+            '<span class="web-line">호텔 상세 /stay/&lt;id&gt; › 히어로 상단 › h1 제목 — '
+            '<span class="w-how">두 줄까지 흘리고 자른다</span></span>',
+            block,
+        )
+        self.assertIn("예약 /stay/&lt;id&gt;/reserve › 우측 요약 카드 › 이름 줄", block)
+        self.assertEqual(block.count('class="web-line"'), 2)
+
+    def test_field_with_no_web_place_says_so(self):
+        block = section_of(self.page, "synth-one")
+        self.assertEqual(block.count('<span class="web-none">고객 화면에 안 나옴</span>'), 2)
+
+    def test_unused_field_gets_the_muted_tag(self):
+        block = section_of(self.page, "synth-one")
+        self.assertIn('<span class="tag tag-muted">웹 미사용</span>', block)
+        self.assertEqual(block.count("웹 미사용"), 1)
+
+    def test_gate_and_partial_tags(self):
+        block = section_of(self.page, "synth-one")
+        self.assertIn('<span class="tag tag-gate">게이트</span>', block)
+        self.assertIn('<span class="tag tag-partial">일부 확인</span>', block)
+
+    def test_shown_field_has_no_tag_but_keeps_its_effect(self):
+        row = re.search(
+            r'<tr class="field">(?:(?!</tr>).)*?이름(?:(?!</tr>).)*?</tr>',
+            section_of(self.page, "synth-one"),
+            re.S,
+        )
+        self.assertIsNotNone(row, "「이름」 줄을 못 찾았다")
+        self.assertNotIn('class="tag', row.group(0))
+        self.assertIn("고객 웹 호텔 상세의 히어로에 제목으로 나온다.", row.group(0))
+
+    def test_erp_reservation_and_not_shown_lines(self):
+        block = section_of(self.page, "synth-one")
+        self.assertIn(
+            '<span class="sub">ERP 직원 예약: 2. 객실·요금제 — 요금 행에서 확인</span>', block
+        )
+        self.assertIn("코드에 자리는 있으나 지금은 안 보인다 — FakeCard.pick", block)
+
+    def test_internal_columns_are_not_printed(self):
+        self.assertNotIn("fake.Model.name", self.page)
+        self.assertNotIn("FakeDto.name", self.page)
+        self.assertNotIn("fake:one.py:1", self.page)
+
+    def test_each_screen_carries_its_summary(self):
+        for screen_id, summary in (
+            ("synth-one", "이 화면을 안 채우면 고객 화면의 제목 줄이 빈다."),
+            ("synth-two", "값을 넣는 칸이 없는 화면이다."),
+        ):
+            block = section_of(self.page, screen_id)
+            self.assertIn('<p class="screen-summary">%s</p>' % summary, block)
+
+    def test_overview_section_sits_right_after_the_howto(self):
+        overview = re.search(
+            r'<section class="impact-overview".*?</section>', self.page, re.S
+        )
+        self.assertIsNotNone(overview, "「한눈에」 절이 없다")
+        self.assertIn(rsg.IMPACT_OVERVIEW_TITLE, overview.group(0))
+        howto_end = self.page.index("</section>", self.page.index('<section class="howto">'))
+        self.assertLess(howto_end, self.page.index('<section class="impact-overview"'))
+        self.assertLess(
+            self.page.index('<section class="impact-overview"'),
+            self.page.index('<nav class="toc">'),
+        )
+
+    def test_overview_counts_and_lists_the_unused_fields(self):
+        overview = re.search(
+            r'<section class="impact-overview".*?</section>', self.page, re.S
+        ).group(0)
+        self.assertIn(
+            '<h3>%s <span class="ov-count">1개</span></h3>' % rsg.IMPACT_UNUSED_TITLE, overview
+        )
+        self.assertIn('<a href="#screen-synth-one">시험 화면 하나</a>', overview)
+        self.assertIn('<span class="fname">고르기</span>', overview)
+        # 목록의 이유는 `effect` 의 첫 문장만이다.
+        self.assertIn("엔진이 이 컬럼을 아예 읽지 않아 고객 웹 어디에도 영향이 없다.", overview)
+        self.assertNotIn("뒷문장은 목록에서 잘린다.", overview)
+
+    def test_overview_gate_table(self):
+        overview = re.search(
+            r'<section class="impact-overview".*?</section>', self.page, re.S
+        ).group(0)
+        self.assertIn(
+            '<h3>%s <span class="ov-count">1개</span></h3>' % rsg.IMPACT_GATE_TITLE, overview
+        )
+        self.assertIn(
+            "<thead><tr><th>화면</th><th>칸</th><th>틀리면 생기는 일</th></tr></thead>", overview
+        )
+        self.assertIn("조건에 안 맞는 줄을 응답에서 지운다.", overview)
+
+    def test_overview_summary_table_has_every_screen(self):
+        overview = re.search(
+            r'<section class="impact-overview".*?</section>', self.page, re.S
+        ).group(0)
+        self.assertIn(
+            "<thead><tr><th>화면</th><th>이 화면을 안 채우면</th></tr></thead>", overview
+        )
+        table = overview[overview.index('<table class="summaries">'):]
+        for summary in ("이 화면을 안 채우면 고객 화면의 제목 줄이 빈다.", "값을 넣는 칸이 없는 화면이다."):
+            self.assertIn(summary, table)
+        self.assertEqual(table.count('<td class="c-screen"'), 2)
+
+    def test_header_carries_the_three_refs(self):
+        head = re.search(r'<header class="page-head">.*?</header>', self.page, re.S).group(0)
+        self.assertIn("<dt>고객 웹 영향</dt>", head)
+        self.assertIn(
+            "<dd>ERP aaaa1111 · 엔진 bbbb2222 · 웹 cccc3333 기준 (코드 정적 추적, 실행 확인 아님)</dd>",
+            head,
+        )
+        self.assertNotIn("고객 웹 영향", self.plain)
+
+    def test_impact_counts_are_reported(self):
+        self.assertEqual(
+            self.stats["impact"], {"shown": 1, "none": 2, "unused": 1, "gate": 1}
+        )
+
+    def test_phone_width_stacks_the_seven_columns(self):
+        self.assertIn("@media (max-width: 700px){", self.page)
+        for label in ("웹에 나오는 곳", "효과", "틀리면 생기는 일", "이 화면을 안 채우면"):
+            self.assertIn('data-label="%s"' % label, self.page)
+        self.assertNotIn("@media (max-width: 700px){", self.plain)
+
+    def test_impact_page_tags_are_balanced(self):
+        errors, left_open = tag_balance(self.page)
+        self.assertEqual(errors, [])
+        self.assertEqual(left_open, [])
+
+    def test_impact_page_stays_offline_and_deterministic(self):
+        self.assertEqual(re.findall(r"https?://", self.page), [])
+        self.assertNotIn("<script", self.page)
+        again, _ = rsg.render_guide(SYNTHETIC, None, "9.9.9", SYNTHETIC_IMPACT)
+        self.assertEqual(self.page, again)
+
+    def test_a_truncated_quote_in_the_map_does_not_reach_the_page(self):
+        data = json.loads(json.dumps(SYNTHETIC_IMPACT))
+        data["screens"][0]["fields"][0]["effect"] = "푸터에 `{checkIn} ~ {checkOut} · {…"
+        page, _ = rsg.render_guide(SYNTHETIC, None, "9.9.9", data)
+        self.assertNotIn("`", page)
+        self.assertIn("{checkIn} ~ {checkOut}", page)
+
+    def test_escaping_survives_the_new_columns(self):
+        data = json.loads(json.dumps(SYNTHETIC_IMPACT))
+        data["screens"][0]["fields"][0]["web"][0]["how"] = '<img src=x onerror="boom">'
+        page, _ = rsg.render_guide(SYNTHETIC, None, "9.9.9", data)
+        self.assertNotIn("<img", page)
+        self.assertIn("&lt;img src=x onerror=&quot;boom&quot;&gt;", page)
+
+
+class ImpactOneLineTest(unittest.TestCase):
+    def test_first_sentence_only(self):
+        self.assertEqual(rsg.one_line("앞 문장이다. 뒷 문장이다."), "앞 문장이다.")
+
+    def test_short_text_is_kept_whole(self):
+        self.assertEqual(rsg.one_line("짧은 글"), "짧은 글")
+        self.assertEqual(rsg.one_line(""), "")
+        self.assertEqual(rsg.one_line(None), "")
+
+    def test_long_text_without_a_sentence_end_is_cut(self):
+        text = "가 " * 200
+        cut = rsg.one_line(text, limit=40)
+        self.assertTrue(cut.endswith("…"))
+        self.assertLessEqual(len(cut), 41)
+
+    def test_a_half_open_code_quote_loses_only_the_quote(self):
+        cut = rsg.one_line("여기는 길게 이어지는 설명이고 `열린코드", limit=200)
+        self.assertNotIn("`", cut)
+        self.assertIn("열린코드", cut)
+
+    def test_impact_inline_drops_a_dangling_quote(self):
+        self.assertEqual(rsg.impact_inline("앞 `코드` 와 잘린 `조각"), "앞 <code>코드</code> 와 잘린 조각")
+        self.assertEqual(rsg.impact_inline("`짝이` 맞으면 그대로"), "<code>짝이</code> 맞으면 그대로")
+
+
+class ImpactMismatchTest(unittest.TestCase):
+    """사전과 지도가 한 줄이라도 어긋나면 문서를 만들지 않는다."""
+
+    def render_with(self, mutate):
+        impact = json.loads(json.dumps(SYNTHETIC_IMPACT))
+        mutate(impact)
+        with self.assertRaises(rsg.ImpactMismatch) as caught:
+            rsg.render_guide(SYNTHETIC, None, "9.9.9", impact)
+        return str(caught.exception)
+
+    def test_a_renamed_label_is_caught(self):
+        def rename(impact):
+            impact["screens"][0]["fields"][1]["label"] = "고르기(바뀜)"
+
+        message = self.render_with(rename)
+        self.assertIn("어긋난다", message)
+        self.assertIn("영향 지도에 칸이 없다: synth-one / (블록 없음) / 고르기", message)
+        self.assertIn("사전에 없는 칸이 영향 지도에 있다", message)
+
+    def test_a_moved_block_is_caught(self):
+        def move(impact):
+            impact["screens"][0]["fields"][2]["block"] = "다른 블록"
+
+        self.assertIn("줄 넣기", self.render_with(move))
+
+    def test_a_missing_screen_is_caught(self):
+        def drop(impact):
+            impact["screens"] = impact["screens"][:1]
+            impact["meta"]["screen_count"] = 1
+
+        message = self.render_with(drop)
+        self.assertIn("영향 지도에 화면이 없다: synth-two", message)
+
+    def test_impact_head_counts_must_agree(self):
+        def bend(impact):
+            impact["meta"]["field_count"] = 99
+
+        self.assertIn("meta.field_count", self.render_with(bend))
+
+
+class ImpactCliTest(unittest.TestCase):
+    def render(self, tmp, dictionary, impact=None, out="out.html"):
+        dict_path = os.path.join(tmp, "dict.json")
+        write_json(dict_path, dictionary)
+        out_path = os.path.join(tmp, out)
+        argv = [sys.executable, RENDER, "--dictionary", dict_path, "-o", out_path, "--no-font"]
+        if impact is not None:
+            impact_path = os.path.join(tmp, "impact.json")
+            write_json(impact_path, impact)
+            argv += ["--impact", impact_path]
+        done = subprocess.run(argv, capture_output=True, text=True)
+        return done, out_path
+
+    def test_cli_renders_the_impact_columns_and_reports_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            done, out_path = self.render(tmp, SYNTHETIC, SYNTHETIC_IMPACT)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("고객 웹 영향: 나오는 칸 1개 · 안 나오는 칸 2개", done.stdout)
+            self.assertIn("웹 미사용 1개 · 게이트 1개", done.stdout)
+            with open(out_path, encoding="utf-8") as fp:
+                page = fp.read()
+            self.assertIn("<th>웹에 나오는 곳</th><th>효과</th>", page)
+            self.assertIn(rsg.IMPACT_OVERVIEW_TITLE, page)
+
+    def test_cli_writes_the_same_bytes_twice_with_impact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first, one = self.render(tmp, SYNTHETIC, SYNTHETIC_IMPACT, out="one.html")
+            second, two = self.render(tmp, SYNTHETIC, SYNTHETIC_IMPACT, out="two.html")
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            with open(one, "rb") as fp:
+                a = fp.read()
+            with open(two, "rb") as fp:
+                b = fp.read()
+            self.assertEqual(a, b)
+
+    def test_cli_fails_when_a_label_disagrees(self):
+        impact = json.loads(json.dumps(SYNTHETIC_IMPACT))
+        impact["screens"][0]["fields"][0]["label"] = "이름(바뀜)"
+        with tempfile.TemporaryDirectory() as tmp:
+            done, out_path = self.render(tmp, SYNTHETIC, impact)
+            self.assertEqual(done.returncode, 1)
+            self.assertIn("영향 지도가 화면 사전과 어긋난다", done.stderr)
+            self.assertIn("이름", done.stderr)
+            self.assertFalse(os.path.exists(out_path), "어긋났는데 파일을 썼다")
+
+    def test_cli_fails_when_the_impact_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dict_path = os.path.join(tmp, "dict.json")
+            write_json(dict_path, SYNTHETIC)
+            done = subprocess.run(
+                [
+                    sys.executable, RENDER,
+                    "--dictionary", dict_path,
+                    "-o", os.path.join(tmp, "out.html"),
+                    "--no-font",
+                    "--impact", os.path.join(tmp, "없는지도.json"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(done.returncode, 1)
+            self.assertIn("영향 지도를 찾을 수 없다", done.stderr)
+
+    def test_cli_without_impact_writes_the_same_bytes_as_before(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plain, plain_path = self.render(tmp, SYNTHETIC, None, out="plain.html")
+            self.assertEqual(plain.returncode, 0, plain.stderr)
+            with open(plain_path, encoding="utf-8") as fp:
+                page = fp.read()
+            self.assertNotIn("웹에 나오는 곳", page)
+            self.assertNotIn("impact-overview", page)
+            self.assertNotIn("고객 웹 영향", plain.stdout)
 
 
 if __name__ == "__main__":
