@@ -1,5 +1,5 @@
 /*!
- * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.9.3)
+ * stay_helper.js — ERP Stay 화면 도우미 (stay-setup-run v0.11.0)
  *
  * 브라우저의 자바스크립트 실행 도구로 이 파일 전체를 페이지에서 실행하면 `window.stayRun` 이 생긴다.
  * 두 번 실행해도 안전하다(멱등). 페이지가 새로 뜨거나 주소가 바뀌면 다시 실행한다.
@@ -21,8 +21,8 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.7.0'; // 운영 2026-09-21 배포판 화면 기준(적용 범위 카드의 축별 포함·제외 묶음)
-  var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초)
+  var VERSION = '0.8.1'; // 운영 2026-09-21 배포판 화면 기준 + 상태 대기(`settleOr`) + 안내 띠를 마디로 가리기(`toastSnap`·`netWatch`)
+  var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초) — 기본값이다. 느린 서버에서는 `stayRun.config({waitMs})` 로 올린다
   var TICK = 100;
 
   /* ─────────────────────────── 공통 유틸 ─────────────────────────── */
@@ -176,6 +176,65 @@
     try { return !!fn(); } catch (e) { return false; }
   }
 
+  /* @config:start — 시험(tests/test_helper.mjs)이 이 표시 사이만 떼어 내 따로 돌린다. 지우지 말 것. */
+  // ── 저장·열기 천장을 화면에서 바꾼다 ────────────────────────────────────────
+  // `WAIT_MS` 는 `waitFor` 의 기본값이자 `open`·`submit`·`pageSave` 의 천장이다. 기본 10초는
+  // **운영 서버** 기준이다 — 로컬처럼 느린 서버에서는 큰 채우기 한 번(176일 × 좌표 6)이 28초쯤
+  // 걸려, 저장이 실제로 들어가 드로어가 닫혔는데도 `submit: 'timeout'` 으로 러너가 섰다
+  // (2026-09-21 실측). 그럴 때만 `stayRun.config({waitMs: 40000})` 으로 올린다.
+  // **기본값은 바꾸지 않는다** — 천장을 늘리면 진짜로 막힌 자리에서 그만큼 오래 매달린다.
+  //   stayRun.config()                  → {ok:true, waitMs}      (지금 값 읽기)
+  //   stayRun.config({waitMs: 40000})   → {ok:true, waitMs:40000}
+  function config(patch) {
+    if (patch && typeof patch === 'object' && patch.waitMs !== undefined) {
+      var v = Number(patch.waitMs);
+      if (!isFinite(v) || v < 1000) {
+        return { ok: false, waitMs: WAIT_MS, error: 'waitMs 는 1000 이상의 숫자여야 합니다 (받은 값: ' + String(patch.waitMs) + ')' };
+      }
+      WAIT_MS = Math.round(v);
+    }
+    return { ok: true, waitMs: WAIT_MS };
+  }
+  /* @config:end */
+
+  /* @settleOr:start — 시험(tests/test_helper.mjs)이 이 표시 사이만 떼어 내 따로 돌린다. 지우지 말 것. */
+  // ── 고정 대기 대신 상태 대기 ──────────────────────────────────────────────────
+  // 종전에는 클릭 뒤에 `sleep(900)` 처럼 **무조건 쉬었다**. 화면이 0.05초에 끝나도 0.9초를
+  // 버리므로, 65단계 호텔이면 그 낭비만으로 분 단위가 샌다.
+  // `settleOr(cond, maxMs)` 는 `cond()` 가 참이 되는 **즉시** 끝나고, 끝내 참이 아니면
+  // `maxMs` 에서 끝난다. `maxMs` 는 종전의 고정 대기 값 그대로 둔다 — 그래서 **최악의 경우가
+  // 종전과 똑같고**, 흔한 경우만 빨라진다. 조건을 댈 수 없는 자리는 `sleep` 그대로 둔다.
+  //
+  // 바탕은 **워커 타이머**(`sleep`)다 — 뒤로 간 탭에서도 늦춰지지 않는다. 탭이 앞에 있을 때만
+  // 화면 프레임(rAF)을 함께 걸어 더 당긴다(가속기일 뿐, 없어도 돈다). rAF 는 뒤로 간 탭에서
+  // 아예 멈추므로 **절대 바탕으로 쓰지 않는다.**
+  var FAST_TICK = 30;
+  function rafTick() {
+    try {
+      if (typeof requestAnimationFrame !== 'function') return null;
+      if (typeof document === 'undefined' || !document) return null;
+      if (document.visibilityState && document.visibilityState !== 'visible') return null;
+      return new Promise(function (r) {
+        requestAnimationFrame(function () { requestAnimationFrame(function () { r(true); }); });
+      });
+    } catch (e) { return null; }
+  }
+  async function settleOr(cond, maxMs) {
+    var ms = (maxMs === undefined || maxMs === null) ? TICK : maxMs;
+    if (typeof cond !== 'function') { await sleep(ms); return false; }   // 조건이 없으면 종전과 같다
+    var test = function () { try { return !!cond(); } catch (e) { return false; } };
+    if (test()) return true;
+    var t0 = Date.now(), left;
+    while ((left = ms - (Date.now() - t0)) > 0) {
+      var tick = sleep(left < FAST_TICK ? left : FAST_TICK);
+      var raf = rafTick();
+      await (raf ? Promise.race([tick, raf]) : tick);
+      if (test()) return true;
+    }
+    return test();
+  }
+  /* @settleOr:end */
+
   /* ─────────────────────────── htmx 감시 ─────────────────────────── */
   // 저장 뒤 응답이 끝났는지, 그리고 **서버가 거부했는지**를 알려면 htmx 이벤트를 세어야 한다.
   // 재주입해도 한 번만 붙인다.
@@ -209,7 +268,11 @@
     if (window.__stayRunHtmx) return window.__stayRunHtmx;
     // `errorStatus` 는 `error` 를 낸 응답의 코드다 — CSRF 403 만 골라 재시도하려면 이것이 있어야 한다
     // (다른 4xx·5xx 는 재시도하지 않는다: 저장이 실제로 들어간 뒤 난 오류일 수 있다).
-    var st = { pending: 0, requests: 0, settles: 0, swaps: 0, error: null, errorStatus: null, lastStatus: null, unloading: false };
+    // `xhrPending`·`xhrDone`·`xhrLast` 는 htmx 가 **아닌** ajax(기본정보 폼의 저장)를 센다 — 아래 `netWatch`.
+    var st = {
+      pending: 0, requests: 0, settles: 0, swaps: 0, error: null, errorStatus: null, lastStatus: null, unloading: false,
+      xhrPending: 0, xhrDone: 0, xhrLast: null
+    };
     var on = function (names, f) {
       names.forEach(function (n) { document.addEventListener(n, f, true); });
     };
@@ -257,7 +320,129 @@
     window.__stayRunHtmx = st;
     return st;
   }
+  /* @netWatch:start — 시험(tests/test_helper.mjs)이 이 표시 사이만 떼어 내 따로 돌린다. 지우지 말 것. */
+  /* ─────────────────────── htmx 아닌 ajax 감시(그물) ───────────────────────
+     기본정보 폼의 [저장] 은 htmx 가 아니라 제 손으로 쓴 ajax 다(`/fit/master/<id>/change/`
+     → 302 → GET). 그래서 `hx.pending`·`swaps`·`settles` 가 **한 번도 안 움직인다** —
+     끝을 알 길이 안내 띠뿐이었고, 앞 단계의 띠가 안 사라지면 그마저 못 봤다(위 `toastSnap`).
+     여기서 오가는 요청의 **수와 주소·응답 코드만** 세어 둔다.
+     · 몸통(요청·응답 본문)은 **절대 건드리지 않는다** — 읽지도, 복사하지도 않는다.
+     · `window.fetch` 와 `XMLHttpRequest.prototype.send` 를 **한 번만** 감싼다(도우미를 다시
+       주입해도 두 겹이 되지 않는다 — 두 겹이면 한 요청이 두 번 세어진다).
+     · 못 감싸는 환경(속성이 잠겼거나 접근이 던지는 곳)이면 조용히 넘어간다.
+     셈은 감시자(`hx`)에 얹는다: `xhrPending`(도는 중) · `xhrDone`(끝난 수) · `xhrLast`({url,status}). */
+  function netWatch(st) {
+    if (!st) return null;
+    var hub = window.__stayRunNet;
+    if (hub) { hub.st = st; return hub; }          // 이미 감쌌다 — 셈 그릇만 지금 것으로 잇는다
+    hub = { st: st };
+    var done = function (url, status) {
+      var s = hub.st;
+      if (!s) return;
+      s.xhrPending = Math.max(0, (s.xhrPending || 0) - 1);
+      s.xhrDone = (s.xhrDone || 0) + 1;
+      s.xhrLast = { url: trunc(String(url || ''), 200), status: Number(status) || 0 };
+    };
+    var start = function () { var s = hub.st; if (s) s.xhrPending = (s.xhrPending || 0) + 1; };
+
+    try {
+      var of = window.fetch;
+      if (typeof of === 'function' && !of.__stayRunWrapped) {
+        var wrapped = function (input) {
+          var url = '';
+          try { url = (input && typeof input === 'object' && input.url) ? input.url : String(input); } catch (e) { url = ''; }
+          start();
+          var p;
+          try { p = of.apply(this, arguments); } catch (e) { done(url, 0); throw e; }
+          if (!p || typeof p.then !== 'function') { done(url, 0); return p; }
+          return p.then(
+            function (r) { done(url, r && r.status); return r; },
+            function (e) { done(url, 0); throw e; }
+          );
+        };
+        wrapped.__stayRunWrapped = true;
+        window.fetch = wrapped;
+      }
+    } catch (e) { /* 못 감싸면 그냥 넘어간다 — 안내 띠로도 끝을 안다 */ }
+
+    try {
+      var XHR = window.XMLHttpRequest;
+      var proto = XHR && XHR.prototype;
+      if (proto && typeof proto.send === 'function' && !proto.send.__stayRunWrapped) {
+        var oOpen = proto.open, oSend = proto.send;
+        if (typeof oOpen === 'function') {
+          var wOpen = function (method, url) {
+            try { this.__stayRunUrl = String(url || ''); } catch (e) { }
+            return oOpen.apply(this, arguments);
+          };
+          wOpen.__stayRunWrapped = true;
+          proto.open = wOpen;
+        }
+        var wSend = function () {
+          var self = this, settled = false;
+          var fin = function () {
+            if (settled) return;
+            settled = true;
+            var u = '';
+            try { u = self.__stayRunUrl || ''; } catch (e) { }
+            var code = 0;
+            try { code = self.status; } catch (e) { }
+            done(u, code);
+          };
+          start();
+          try {
+            if (typeof self.addEventListener === 'function') self.addEventListener('loadend', fin);
+            else {
+              var prev = self.onreadystatechange;
+              self.onreadystatechange = function () {
+                try { if (self.readyState === 4) fin(); } catch (e) { }
+                if (typeof prev === 'function') return prev.apply(this, arguments);
+              };
+            }
+          } catch (e) { /* 끝을 못 들으면 `xhrPending` 이 남는다 — 판정이 보수적이 될 뿐이다 */ }
+          try { return oSend.apply(this, arguments); } catch (e) { fin(); throw e; }
+        };
+        wSend.__stayRunWrapped = true;
+        proto.send = wSend;
+      }
+    } catch (e) { /* 위와 같다 */ }
+
+    window.__stayRunNet = hub;
+    return hub;
+  }
+  /* @netWatch:end */
+
   var hx = htmxWatch();
+  netWatch(hx);
+
+  /* ─────────────────── 조각이 다 그려졌는가 (저장 뒤 다시 그리기) ─────────────────── */
+  // 드로어를 닫는 저장 뒤에 ERP 는 그 탭을 htmx 조각 여러 벌로 **다시 그린다** — 2026-09-21
+  // 운영 실측에서 한 번의 저장이 아홉 벌(룸·검증·부가옵션·연령 구간·가격 캘린더·시즌·부과금·
+  // 프로모션·혜택)의 GET 을 냈다. 드로어가 사라지는 것만 보고 곧바로 돌아가면 **다음 단계가
+  // 아직 안 그려진 화면을 읽는다**: [연령 구간 추가] 가 `not-found` 로 나고(12단계), 갓 만든
+  // 오퍼의 목록이 비어 보여 **옆 오퍼 카드**의 행을 보고 「이미 있음」 으로 건너뛴다(15·16단계).
+  // 종전 묶음 실행은 고정 대기와 에이전트 왕복이 이 틈을 가려 주었을 뿐이다.
+  //
+  // `quietCond()` 는 **한 틱 전과 견주는** 조건이다 — 처음 부를 때는 견줄 것이 없어 거짓이고,
+  // 다음 틱에 스왑·정착 수가 그대로면 참이다. 요청이 도는 동안에는 견준 값을 버린다.
+  function quietCond() {
+    var mark = null;
+    return function () {
+      if (hx.pending !== 0) { mark = null; return false; }
+      var now = hx.swaps + ':' + hx.settles;
+      if (mark === now) return true;
+      mark = now;
+      return false;
+    };
+  }
+  // 요청이 다 비고(`idleMs`) 한 틱 더 조용할 때까지(`quietMs`) 기다리고 **걸린 밀리초**를 준다.
+  // 돌고 있는 요청이 없으면 `waitFor` 가 그 자리에서 참이라 조용한 틱 하나(30ms 안쪽)만 쓴다.
+  async function settleRefresh(idleMs, quietMs) {
+    var t0 = Date.now();
+    await waitFor(function () { return hx.pending === 0; }, idleMs === undefined ? 5000 : idleMs);
+    await settleOr(quietCond(), quietMs === undefined ? 500 : quietMs);
+    return Date.now() - t0;
+  }
 
   /* ─────────────────────────── 범위(스코프) ─────────────────────────── */
 
@@ -832,8 +1017,10 @@
       while (rows.length < n && guard++ < 30) {
         var btn = findButton(sec, text) || findButton(scope, text) || findButton(baseScope(), text);
         if (!btn) return { error: true, status: 'not-found', detail: '행 추가 버튼 [' + text + '] 을 찾지 못했습니다' };
+        var had = rows.length, sec0 = sec;
         btn.click();
-        await sleep(150);
+        // 기다리는 것은 **행이 하나 늘어나는 것**이다(150ms 고정 대기였다)
+        await settleOr(function () { return sectionRows(findSection(scope, group) || sec0).length > had; }, 150);
         sec = findSection(scope, group) || sec;
         rows = sectionRows(sec);
       }
@@ -941,17 +1128,25 @@
     if (hit.status !== 'ok') return setNativeSelect(sel, text); // 옵션 자체가 없거나 모호하면 그대로 알림
     var wrap = sel.closest('.select-wrapper');
     var trig = wrap ? wrap.querySelector('input.select-dropdown') : null;
+    var listOf = function () {
+      return (wrap && wrap.querySelector('ul.select-dropdown')) || document.querySelector('ul.select-dropdown.dropdown-content');
+    };
     if (trig) {
       trig.click();
-      await sleep(180);
-      var ul = (wrap && wrap.querySelector('ul.select-dropdown')) || document.querySelector('ul.select-dropdown.dropdown-content');
+      // 기다리는 것은 **목록이 펼쳐지는 것**이다(180ms 고정 대기였다)
+      await settleOr(function () {
+        var u = listOf();
+        return !!(u && shown(u) && u.querySelector('li:not(.disabled)'));
+      }, 180);
+      var ul = listOf();
       var li = null;
       if (ul) {
         var items = [].slice.call(ul.querySelectorAll('li')).filter(function (l) { return !l.classList.contains('disabled'); });
         var r = pick(items, textOf, text, 3);
         if (r.status === 'ok') li = r.el;
       }
-      if (li) { li.click(); await sleep(180); }
+      // 기다리는 것은 **숨은 select 값이 고른 항목으로 바뀌는 것**이다(180ms 고정 대기였다)
+      if (li) { li.click(); await settleOr(function () { return tier(selectedText(sel), text) >= 3; }, 180); }
       else { pressEsc(); }
       if (tier(selectedText(sel), text) >= 3) return { status: 'ok', detail: selectedText(sel) };
     }
@@ -968,18 +1163,27 @@
     if (!trig) return { status: 'not-found', detail: '자동완성 위젯을 찾지 못했습니다' };
     // 다른 자동완성 목록이 열려 있으면 먼저 닫는다 — 검색어가 엉뚱한 칸에 들어가는 것을 막는다
     closeSelect2All();
-    await sleep(120);
+    // 기다리는 것은 **열린 목록이 하나도 없는 것**이다(120ms 고정 대기였다)
+    await settleOr(function () { return !document.querySelector('.select2-container--open'); }, 120);
     trig.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-    await sleep(200);
+    // 기다리는 것은 **검색 칸이 열리는 것**이다(200ms 고정 대기였다)
+    await settleOr(function () { return !!openSelect2Field(); }, 200);
     var field = openSelect2Field();
     if (!field) return { status: 'not-found', detail: '자동완성 검색 칸이 열리지 않았습니다' };
     // 검색어는 전체 → 괄호 앞 → 괄호 안 순서로 시도한다. 화면 옵션은 `다낭(DAD)` 처럼
     // 한글명+공항코드 꼴이라, 지시서의 `푸꾸옥 (PHU QUOC)` 을 통째로 치면 안 걸린다.
     var terms = [text], m = nfc(text).match(/^(.*?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
     if (m) { if (m[1].trim()) terms.push(m[1].trim()); if (m[2].trim()) terms.push(m[2].trim()); }
+    var resultItems = function () {
+      return [].slice.call(document.querySelectorAll('.select2-results__option')).filter(function (o) {
+        return !o.classList.contains('loading-results') && !o.classList.contains('select2-results__message') &&
+          o.getAttribute('aria-disabled') !== 'true';
+      });
+    };
     var opt = null, amb = 0;
     for (var ti = 0; ti < terms.length && !opt && !amb; ti++) {
       field = openSelect2Field() || field;
+      var seen = resultItems().length;   // 치기 전 목록 — 이것이 바뀌는 것이 검색이 끝났다는 표시다
       setNativeValue(field, terms[ti]);
       field.dispatchEvent(new Event('input', { bubbles: true }));
       ['keydown', 'keyup'].forEach(function (n) {
@@ -987,11 +1191,12 @@
       });
       var t0 = Date.now();
       while (Date.now() - t0 < 3500) {
-        await sleep(200);
-        var items = [].slice.call(document.querySelectorAll('.select2-results__option')).filter(function (o) {
-          return !o.classList.contains('loading-results') && !o.classList.contains('select2-results__message') &&
-            o.getAttribute('aria-disabled') !== 'true';
-        });
+        // 기다리는 것은 **검색 결과가 갈리는 것**이다(200ms 마다 무조건 다시 보던 자리다).
+        // 목록이 그대로면 다시 봐야 소용이 없으므로 종전과 같은 200ms 에서 끊고 한 번 더 본다.
+        var was = seen;
+        await settleOr(function () { return resultItems().length !== was; }, 200);
+        var items = resultItems();
+        seen = items.length;
         if (!items.length) continue;
         var r = pick(items, textOf, text, 2);
         if (r.status === 'ambiguous') { amb = r.count; break; }
@@ -1001,8 +1206,9 @@
     if (amb) { pressEsc(); return { status: 'ambiguous', detail: '`' + text + '` 에 맞는 검색 결과가 ' + amb + '개입니다' }; }
     if (!opt) { pressEsc(); return { status: 'not-found', detail: '`' + text + '` 이(가) 검색 결과에 없습니다' }; }
     opt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-    await sleep(300);
-    if (!sel.value) { opt.click(); await sleep(300); }
+    // 기다리는 것은 **고른 값이 숨은 select 에 들어오는 것**이다(300ms 고정 대기 두 번이었다)
+    await settleOr(function () { return !!sel.value; }, 300);
+    if (!sel.value) { opt.click(); await settleOr(function () { return !!sel.value; }, 300); }
     if (!sel.value) return { status: 'not-found', detail: '고른 값이 화면에 반영되지 않았습니다' };
     closeSelect2All();
     return { status: 'ok', detail: selectedText(sel) || sel.value };
@@ -1181,6 +1387,75 @@
     var t = document.querySelector('#toast-container .toast');
     return t && shown(t) ? trunc(textOf(t), 200) : '';
   }
+
+  /* ── 안내 띠가 **새로 떴는가** — 글자로는 못 가린다 (2026-09-21 운영 실측 결함) ──────────
+     종전에는 저장 전후의 띠 **글자**를 견주어 "달라졌으면 저장이 끝난 것" 으로 읽었다.
+     그런데 지금 ERP 의 Materialize 띠("저장되었습니다.")는 `display:flex` 로 60초 넘게
+     화면에 남는다 — 앞 단계의 띠가 아직 떠 있으면 다음 저장의 띠는 **글자가 똑같아서**
+     끝내 달라지지 않는다. 그래서 POST 가 302 로 잘 끝났는데도 `pageSave:'timeout'` 이
+     났다(운영 실행에서 두 번). 혼자 부를 때만(앞 띠가 없을 때) 멀쩡했다.
+     그래서 글자가 아니라 **마디(노드)로 가린다** — 스냅 때 없던 `.toast` 마디가 보이거나,
+     있던 마디의 글자가 갈리면 새 띠다. 바탕은 `MutationObserver`(띠가 떴다 사라져도 남는다),
+     못 걸리는 자리를 대비해 **훑어보기도 그대로 둔다.**
+       var s = toastSnap();  … 클릭 …  s.fresh() → 새 띠 글자('' 면 아직)   s.stop() 으로 끝낸다 */
+  function toastNodes() {
+    try { return [].slice.call(document.querySelectorAll('#toast-container .toast')); }
+    catch (e) { return []; }                      // 조각 교체 중
+  }
+  function toastSnap() {
+    var seen = toastNodes();
+    var wasText = seen.map(function (n) { return trunc(textOf(n), 200); });
+    var added = [], obs = null;
+    // 컨테이너가 있으면 그것만 본다(싸다). 아직 없으면 body 를 훑어본다 — 나중에 생겨도 잡힌다.
+    try {
+      if (typeof MutationObserver === 'function') {
+        var root = document.getElementById('toast-container') || document.body;
+        if (root) {
+          obs = new MutationObserver(function (recs) {
+            for (var i = 0; i < recs.length && added.length < 20; i++) {
+              var ns = recs[i].addedNodes || [];
+              for (var j = 0; j < ns.length && added.length < 20; j++) {
+                var n = ns[j];
+                if (!n || n.nodeType !== 1) continue;
+                if (n.classList && n.classList.contains('toast')) { added.push(n); continue; }
+                if (typeof n.querySelectorAll !== 'function') continue;
+                var inner = n.querySelectorAll('.toast');
+                for (var k = 0; k < inner.length && added.length < 20; k++) added.push(inner[k]);
+              }
+            }
+          });
+          obs.observe(root, { childList: true, subtree: true });
+        }
+      }
+    } catch (e) { obs = null; }                   // 관찰자를 못 걸어도 훑어보기로 돈다
+    var freshOf = function (n) {
+      if (!n) return '';
+      var at = seen.indexOf(n);
+      var t = trunc(textOf(n), 200);
+      if (!t) return '';
+      if (at < 0) return t;                       // 스냅 때 없던 마디 — 새 띠다
+      return wasText[at] !== t ? t : '';          // 있던 마디의 글자가 갈렸다
+    };
+    return {
+      // 새로 뜬 띠의 글자('' 면 아직 못 봤다)
+      fresh: function () {
+        for (var i = 0; i < added.length; i++) {  // 관찰자가 본 것이 먼저다
+          var t = freshOf(added[i]);
+          if (t) return t;
+        }
+        var now = toastNodes();
+        for (var j = 0; j < now.length; j++) {
+          if (!shown(now[j])) continue;
+          var t2 = freshOf(now[j]);
+          if (t2) return t2;
+        }
+        return '';
+      },
+      // 관찰자를 뗀다. 뗀 뒤에도 `fresh()` 는 훑어보기로 그대로 돈다.
+      stop: function () { try { if (obs) obs.disconnect(); } catch (e) { } obs = null; }
+    };
+  }
+
   // 요소를 줄 단위로 읽는다. innerText 가 있으면 그것을, 없으면 덩어리 요소마다 한 줄로 모은다.
   function blockLines(root) {
     if (typeof root.innerText === 'string' && root.innerText.trim()) {
@@ -1319,7 +1594,8 @@
     if (r.status !== 'ok') return remember({ status: r.status, detail: '탭 `' + name + '` 을 찾지 못했습니다', tabs: links.map(textOf) });
     r.el.click();
     await waitFor(function () { return tier(textOf(currentTabLink()), name) >= 2 && paneRoot(); }, 5000);
-    await sleep(150);
+    // 기다리는 것은 **그 탭 조각이 서고 요청이 비는 것**이다(150ms 고정 대기였다)
+    await settleOr(function () { return hx.pending === 0 && !!paneRoot(); }, 150);
     return remember({ status: 'ok', tab: textOf(currentTabLink()), hash: location.hash, scope: describe(baseScope()) });
   }
 
@@ -1339,18 +1615,47 @@
 
   async function open(spec) {
     var s = spec || {};
-    var root = s.within && s.within.querySelectorAll ? s.within : (s.inDrawer === true ? baseScope('drawer') : baseScope('pane'));
-    var scope = s.within ? narrow(root, { row: s.row }) : narrow(root, s);
-    if (s.row && narrowState.rowMissing) {
-      var d0 = drawerRoot(), scope2 = d0 ? narrow(d0, s) : null;
-      if (!scope2 || narrowState.rowMissing) return remember({ status: 'not-found', reason: 'row', detail: '`' + s.row + '` 행을 찾지 못했습니다', scope: describe(scope), rows: rowsIn(root) });
-      scope = scope2;
+    var root = null, scope = null, rowMissing = false;
+    // 범위와 버튼을 **그때그때 다시** 찾는다 — 조각이 갈리면 앞서 잡아 둔 마디는 떨어져 나간다
+    var resolve = function () {
+      root = s.within && s.within.querySelectorAll ? s.within : (s.inDrawer === true ? baseScope('drawer') : baseScope('pane'));
+      scope = s.within ? narrow(root, { row: s.row }) : narrow(root, s);
+      rowMissing = !!(s.row && narrowState.rowMissing);
+      if (rowMissing) {
+        var d0 = drawerRoot(), sc2 = d0 ? narrow(d0, s) : null;
+        if (sc2 && !narrowState.rowMissing) { scope = sc2; rowMissing = false; }
+      }
+      if (rowMissing) return null;
+      var b = s.button ? findButton(scope, s.button) : null;
+      if (!b && s.inDrawer !== true) {
+        var d = drawerRoot();
+        if (d) b = findButton(narrow(d, s), s.button);
+      }
+      return b;
+    };
+    var btn = resolve();
+    // ── 「아직 안 그려졌다」 와 「진짜로 없다」 를 가른다 (2026-09-21 운영 실측) ──────
+    // 앞 단계의 저장이 부른 조각 다시 그리기가 끝나기 전에 읽으면 버튼도 행도 아직 없다 —
+    // 12단계 [연령 구간 추가] 가 `not-found` 로 났고, 2초 뒤 같은 단계를 다시 부르니 됐다.
+    // 요청이 돌고 있거나 범위가 **통째로 비어 있으면** 최대 3초까지 다시 찾아본다. 화면이
+    // 잠잠해지고도 없으면 그 자리에서 `not-found` 다 — 없는 버튼을 3초씩 기다리지 않는다.
+    // 빈 범위는 htmx 가 이 페이지에서 **요청을 낸 적이 있을 때만** 「그리는 중」 으로 본다
+    // (요청이 한 번도 없었으면 그리다 만 화면이 아니라 원래 그런 화면이다).
+    if (!btn) {
+      var loading = function () {
+        if (hx.pending > 0) return true;
+        if (!hx.requests) return false;
+        var sc = scope;
+        if (!sc || !sc.querySelectorAll) return true;
+        if (sc.nodeType === 1 && sc.isConnected === false) return true;
+        return !sc.querySelector(BTN_SEL) && !sc.querySelector('tbody tr');
+      };
+      if (loading()) {
+        await waitFor(function () { btn = resolve(); return !!btn || !loading(); }, 3000);
+        if (!btn) btn = resolve();
+      }
     }
-    var btn = s.button ? findButton(scope, s.button) : null;
-    if (!btn && s.inDrawer !== true) {
-      var d = drawerRoot();
-      if (d) btn = findButton(narrow(d, s), s.button);
-    }
+    if (rowMissing) return remember({ status: 'not-found', reason: 'row', detail: '`' + s.row + '` 행을 찾지 못했습니다', scope: describe(scope), rows: rowsIn(root) });
     if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + s.button + '] 을 찾지 못했습니다', scope: describe(scope), buttons: buttonsIn(scope) });
     var no = refusal(btn, s.button);
     if (no && !s.force) return remember({ status: 'refused', reason: no.reason, detail: no.detail });
@@ -1380,7 +1685,8 @@
       if (d2 && before.drawer && hx.pending === 0 && d2.innerHTML.length !== before.body) return true;
       return false;
     }, WAIT_MS);
-    await sleep(200);
+    // 기다리는 것은 **열린 드로어·모달이 서고 요청이 비는 것**이다(200ms 고정 대기였다)
+    await settleOr(function () { return hx.pending === 0 && !!(drawerRoot() || modalRoot()); }, 200);
     var st = readState();
     if (st.loginPage) return remember({ status: 'login', detail: '로그인 화면이 나타났습니다 — 사용자가 로그인해야 합니다', url: st.url });
     // 무엇이 이 버튼으로 열렸는지 적어 둔다 — 같은 단계를 다시 부를 때 위 갈래가 이것으로 갈린다.
@@ -1419,8 +1725,10 @@
     for (var i = 0; i < times; i++) {
       var btn = findButton(scope, buttonText) || findButton(baseScope(), buttonText);
       if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + buttonText + '] 을 찾지 못했습니다', clicked: done });
+      var n0 = scope.querySelectorAll(CTRL_SEL).length;
       btn.click(); done++;
-      await sleep(150);
+      // 기다리는 것은 **칸이 늘어나는 것**(행이 하나 섰다)이다(150ms 고정 대기였다)
+      await settleOr(function () { return scope.querySelectorAll(CTRL_SEL).length !== n0; }, 150);
     }
     return remember({ status: 'ok', clicked: done });
   }
@@ -1670,6 +1978,8 @@
     var list = (fields || []).map(normalizeField);
     var res = [], els = [];
     for (var i = 0; i < list.length; i++) {
+      // 이 60ms 는 **고정 대기 그대로 둔다** — 앞 칸의 `change` 를 받은 Alpine 이 다음 칸을 세우거나
+      // 접는 한 틱을 주는 것이라 그 자리에서 볼 상태가 없다(무엇이 설지 아직 모른다).
       try { res.push(await applyOne(scope, list[i], o)); await sleep(60); }
       catch (e) { res.push({ label: list[i].label, kind: list[i].kind, status: 'error', detail: String(e && e.message || e) }); }
       els.push(res[i]._el || null); delete res[i]._el;
@@ -1682,7 +1992,23 @@
     var retry = [];
     for (var m0 = 0; m0 < list.length; m0++) if (res[m0].status === 'not-found') retry.push(m0);
     if (retry.length) {
-      await sleep(300);
+      // 기다리는 것은 **접혀 있던 칸이 서는 것**이다(300ms 고정 대기였다) — 쓸 수 있는 칸의 수가
+      // 달라지면 Alpine 이 폈다는 뜻이다. 끝내 안 달라지면 종전과 같은 300ms 에서 끊는다.
+      var usableCount = function () {
+        var sc = narrow(baseScope(), o);
+        return [].slice.call(sc.querySelectorAll(CTRL_SEL)).filter(function (e) { return isCtrl(e) && usable(e); }).length;
+      };
+      // 한 번 달라진 뒤 **한 틱 더 잠잠해야** 넘어간다 — 칸이 두 번에 나눠 서는 화면에서
+      // 첫 번째만 보고 넘어가면 나머지를 또 못 찾는다(그러면 3차의 순서 찾기로 떨어진다).
+      var n1 = usableCount(), moved = false, still = 0;
+      await settleOr(function () {
+        if (hx.pending !== 0) return false;
+        var now = usableCount();
+        if (now !== n1) { moved = true; still = 0; n1 = now; return false; }
+        if (!moved) return false;
+        still++;
+        return still >= 1;
+      }, 300);
       scope = narrow(baseScope(), o);
       for (var m1 = 0; m1 < retry.length; m1++) {
         var j1 = retry[m1];
@@ -1693,7 +2019,7 @@
         again.retried = true;
         els[j1] = again._el || null; delete again._el;
         res[j1] = again;
-        await sleep(60);
+        await sleep(60);   // 위와 같은 Alpine 한 틱 — 볼 상태가 없어 고정 대기 그대로다
       }
     }
     // 3차: 그래도 이름으로 못 찾은 칸을 순서로
@@ -1706,7 +2032,7 @@
       try { out2 = await applyToEl(el, f, values, out2); } catch (e) { out2.status = 'error'; out2.detail = String(e && e.message || e); }
       out2.byOrder = true; out2.matched = '(순서로 찾음: ' + (labelsOf(el)[0] || {}).text + ')';
       els[k] = out2._el || el; delete out2._el;
-      res[k] = out2; await sleep(60);
+      res[k] = out2; await sleep(60);   // 위와 같은 Alpine 한 틱 — 볼 상태가 없어 고정 대기 그대로다
     }
     return remember(res);
   }
@@ -1793,6 +2119,8 @@
     if (no && (no.reason === 'sale-start' || !o.force)) return remember({ status: 'refused', reason: no.reason, detail: no.detail, errors: [], url: location.href });
 
     var before = { drawer: !!drawerRoot(), modal: !!modalRoot(), url: location.href, path: location.pathname, settles: hx.settles, swaps: hx.swaps };
+    // 안내 띠는 **마디로 가린다** — 앞 단계의 띠가 안 사라지면 글자로는 새 띠를 못 본다(`toastSnap` 주석)
+    var tSnap = toastSnap();
     hx.error = null; hx.errorStatus = null;
     var origConfirm = null;
     // 옛 ERP(2026-09-08 이전)는 `hx-confirm` 을 브라우저 네이티브 confirm 으로 띄운다 —
@@ -1829,7 +2157,19 @@
       await sleep(TICK);
       if (hx.unloading || location.pathname !== before.path) { status = 'navigated'; break; }
       if (hx.error) { status = 'settled'; break; }
-      if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) { await sleep(250); status = 'settled'; break; }
+      if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) {
+        // 정착한 뒤 화면이 자리를 잡는 짬이었다(250ms 고정 대기). 기다리는 것은
+        // **열려 있던 드로어·모달이 닫히는 것**이다 — `closed`/`stayed` 판정이 그 상태로 갈리므로
+        // 여기서 일찍 끊으면 닫힌 드로어를 `stayed`(=실패)로 읽는다. 드로어가 처음부터 없는
+        // 전체 화면 폼이면 안내 띠가 뜨는 것을 본다. 둘 다 안 보이면 종전과 같은 250ms 다.
+        await settleOr(function () {
+          if (before.drawer && !drawerRoot()) return true;
+          if (before.modal && !modalRoot()) return true;
+          if (!before.drawer && !before.modal) return !!tSnap.fresh();
+          return false;
+        }, 250);
+        status = 'settled'; break;
+      }
       if (before.drawer && !drawerRoot()) { status = 'settled'; break; }
       if (before.modal && !modalRoot()) { status = 'settled'; break; }
     }
@@ -1844,6 +2184,7 @@
       // 대기 고리는 `hx.error` 를 보는 순간 끊는다 — 거부된 요청의 `finally:request` 가
       // 아직 안 왔을 수 있다. 그대로 다시 보내면 `pending` 이 0 으로 안 떨어져 재시도가
       // 통째로 `timeout` 이 된다. 잠깐 비는 것을 보고 간다.
+      tSnap.stop();                                   // 다시 보내는 쪽이 제 스냅을 새로 뜬다
       await waitFor(function () { return hx.pending === 0; }, 2000);
       var fix = refreshCsrf();
       hx.error = null; hx.errorStatus = null;
@@ -1857,13 +2198,34 @@
       return remember(again);
     }
 
+    // ── 저장 뒤 **조각 다시 그리기**를 기다린다 (2026-09-21 운영 실측) ───────────
+    // 드로어·모달이 닫히면 ERP 가 그 탭을 조각 여러 벌로 다시 그린다(위 `settleRefresh`).
+    // 여기서 바로 돌아가면 다음 단계가 아직 안 그려진 화면을 읽는다.
+    // 드로어가 그대로 남은 자리(`stayed`)는 기다리지 않는다 — 다시 그릴 것이 없고, 드로어 안의
+    // 오류 문구를 조각 교체가 지우기 전에 읽어야 한다. 요청이 도는 것이 없으면 한 틱뿐이다.
+    var closedNow = (before.drawer && !drawerRoot()) || (before.modal && !modalRoot());
+    var fullPage = !before.drawer && !before.modal;
+    var refreshWaitMs = null;
+    // 안내 띠는 **다시 그리기 전에** 읽어 둔다 — 조각이 갈리면 띠가 지워질 수 있다.
+    // 새로 뜬 띠가 있으면 그것이 이번 저장의 대답이다(앞 단계의 묵은 띠가 위에 남아 있을 수 있다).
+    var toastFresh = tSnap.fresh();
+    var toastPre = toastFresh || toastText();
+    if (status === 'settled' && !hx.error && (closedNow || fullPage)) {
+      refreshWaitMs = await settleRefresh(5000, 500);
+    }
+
     var st = readState();
+    tSnap.stop();
+    if (toastFresh) st.toast = toastFresh;
+    else if (!st.toast && toastPre) st.toast = toastPre;
     var after = narrow(baseScope(), o);
     var errors = collectErrors(after);
     // 안내 띠는 실패로 읽힐 때만 오류로 센다 — 성공 띠("저장되었습니다.")는 `toast` 로만 간다
     if (failToast(st.toast) && errors.indexOf(clean(st.toast)) < 0) errors.push(trunc(clean(st.toast), 200));
     if (hx.error) errors.unshift(hx.error);
     var out = { status: status, errors: errors, toast: st.toast, url: st.url, banner: st.banner };
+    // 이번 저장으로 **새로 뜬** 띠였는가 — 묵은 띠를 보고 성공으로 읽지 않았다는 표시다
+    if (toastFresh) out.toastNew = true;
     // 오류로 세지 않고 넘긴 배경 안내문(빈 상태 카드 등) — 있으면 참고로만 싣는다
     if (pageNotes.length) out.pageNotes = pageNotes.slice();
     // 페이지 안 확인창이 떠서 러너가 [확인] 을 대신 눌렀으면 그 문구를 돌려준다.
@@ -1878,6 +2240,8 @@
       var closed = (before.drawer && !st.drawer.open) || (before.modal && !st.modal.open);
       out.status = closed ? 'closed' : 'stayed';
     }
+    // 조각 다시 그리기를 얼마나 기다렸는지 — 로그에 그대로 남는다(흔한 경우 한 틱, 30ms 안쪽)
+    if (refreshWaitMs !== null) out.refreshWaitMs = refreshWaitMs;
     out.drawer = st.drawer; out.modal = st.modal;
     return remember(out);
   }
@@ -2053,10 +2417,19 @@
     // 고르는 즉시 올라간다). 그런 칸은 뒤에 [저장] 을 누르면 안 된다.
     var auto = /(^|[\s,])change([\s,]|$)/.test(target.getAttribute('hx-trigger') || '');
     var swaps0 = hx.swaps, settles0 = hx.settles;
+    var previewBox = function () { return modalRoot() || scope; };
+    var imgs0 = (previewBox().querySelectorAll ? previewBox().querySelectorAll('img').length : 0);
     target.files = dt.files;
     fire(target, ['input', 'change']);
-    // 화면이 파일을 읽어 미리보기를 만들 시간을 준다(이미지 모달은 이걸 기다리지 않으면 "등록해주세요" 가 뜬다)
-    await sleep(spec.wait === undefined ? 900 : spec.wait);
+    // 화면이 파일을 읽어 미리보기를 만들 시간을 준다(이미지 모달은 이걸 기다리지 않으면 "등록해주세요" 가 뜬다).
+    // 종전에는 900ms 를 무조건 쉬었다 — 기다리는 것은 **미리보기 그림이 한 장 서는 것**이고,
+    // 고르는 즉시 올라가는 칸(`hx-trigger="change"`)이면 **올리는 요청이 뜨는 것**이다.
+    // 둘 다 안 보이면 종전과 같은 값(기본 900ms)에서 끊는다.
+    await settleOr(function () {
+      if (hx.pending > 0 || hx.swaps > swaps0 || hx.settles > settles0) return true;
+      var box = previewBox();
+      return !!(box && box.querySelectorAll && box.querySelectorAll('img').length > imgs0);
+    }, spec.wait === undefined ? 900 : spec.wait);
     var out = { status: 'ok', moved: moved, target: target.name || target.id || '(file)', targetMultiple: !!target.multiple, autoUpload: auto };
     if (auto) {
       // 올리는 요청이 끝날 때까지 기다린다 — 끝나면 목록이 제자리에서 갈린다(패널 outerHTML 스왑)
@@ -2124,41 +2497,88 @@
 
     var before = {
       url: location.href, path: location.pathname,
-      settles: hx.settles, swaps: hx.swaps, toast: toastText()
+      settles: hx.settles, swaps: hx.swaps,
+      xhrDone: hx.xhrDone || 0
+    };
+    // 안내 띠를 **마디로 가린다** — 앞 저장의 띠가 60초 넘게 남아 글자가 같으면 종전 판정은
+    // 새 띠를 영영 못 봤다(2026-09-21 운영 실측, `toastSnap` 주석).
+    var tSnap = toastSnap();
+    // 저장 요청의 주소 — 기본정보 폼은 `/fit/master/<id>/change/` 로 간다. 폼의 `action` 도 같이 본다.
+    var saveUrls = ['/change/'];
+    try {
+      var frm = (btn.form || (btn.closest && btn.closest('form'))) || document.querySelector('form');
+      var act = frm && frm.getAttribute('action');
+      if (act && saveUrls.indexOf(act) < 0) saveUrls.push(act);
+    } catch (e) { /* 폼을 못 찾아도 `/change/` 만으로 가린다 */ }
+    // 그물로 본 저장 — 클릭 뒤에 끝난 요청이 있고, 그 주소가 저장 주소이며, 2xx·3xx 로 답했고,
+    // 지금 도는 요청이 없다. 띠를 못 보는 판(묵은 띠)에서도 이것으로 끝을 안다.
+    var netSaved = function () {
+      if ((hx.xhrDone || 0) <= before.xhrDone) return null;
+      if ((hx.xhrPending || 0) !== 0) return null;
+      var l = hx.xhrLast;
+      if (!l || !l.url) return null;
+      if (!(l.status >= 200 && l.status < 400)) return null;
+      for (var i = 0; i < saveUrls.length; i++) if (l.url.indexOf(saveUrls[i]) >= 0) return l;
+      return null;
     };
     hx.error = null; hx.errorStatus = null;
     btn.click();
 
-    var status = 'timeout', t0 = Date.now();
+    var status = 'timeout', t0 = Date.now(), toastNow = '', xhrHit = null;
     while (Date.now() - t0 < WAIT_MS) {
       await sleep(TICK);
       if (hx.unloading || location.pathname !== before.path) { status = 'navigated'; break; }
       if (hx.error) { status = 'error'; break; }
       // ajax 저장은 안내 띠로만 끝을 알린다("저장되었습니다.")
-      var tNow = toastText();
-      if (tNow && tNow !== before.toast) { await sleep(200); status = 'settled'; break; }
+      toastNow = tSnap.fresh();
+      // 이 200ms 는 **고정 대기 그대로 둔다** — ajax 저장의 콜백이 화면을 마저 고치는 짬이고,
+      // 요청이 htmx 가 아니라서 `pending` 도 이미 0 이다(그 자리에서 볼 상태가 없다).
+      if (toastNow) { await sleep(200); status = 'settled'; break; }
+      // 띠가 안 갈려도 **요청이 끝난 것**으로 안다 — 묵은 띠에 가려 저장이 timeout 으로 나던 자리다.
+      xhrHit = netSaved();
+      if (xhrHit) {
+        // 응답이 끝난 뒤 화면이 마저 고쳐지는 짬 — 새 띠나 필수 칸 표시가 오면 곧바로 끊는다
+        await settleOr(function () { return !!tSnap.fresh() || invalidFields().length > 0; }, 400);
+        toastNow = tSnap.fresh();
+        status = 'settled'; break;
+      }
       // htmx 로 저장하는 화면(Stay 쪽 전체 화면 폼)도 있으니 그 신호도 같이 본다
-      if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) { await sleep(250); status = 'settled'; break; }
+      if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) {
+        // 기다리는 것은 **끝을 알리는 표시**다 — 안내 띠가 새로 뜨거나 필수 칸 표시가 붙는 것
+        // (250ms 고정 대기였다). 둘 다 안 오면 종전과 같은 250ms 에서 끊는다.
+        await settleOr(function () {
+          return !!tSnap.fresh() || invalidFields().length > 0;
+        }, 250);
+        toastNow = tSnap.fresh();
+        status = 'settled'; break;
+      }
       // 필수 칸이 비어 있으면 요청 자체가 안 나간다 — 표시가 붙는 즉시 끊는다
       if (invalidFields().length) { status = 'invalid'; break; }
     }
 
     var st = readState();
+    tSnap.stop();
+    // 새로 뜬 띠가 있으면 그것이 이번 저장의 대답이다 — 묵은 띠가 위에 남아 있을 수 있다
+    var toastOut = toastNow || st.toast;
     var errors = collectErrors(baseScope());
-    if (failToast(st.toast) && errors.indexOf(clean(st.toast)) < 0) errors.push(trunc(clean(st.toast), 200));
+    if (failToast(toastOut) && errors.indexOf(clean(toastOut)) < 0) errors.push(trunc(clean(toastOut), 200));
     if (hx.error) { errors.unshift(hx.error); status = 'error'; }
     var bad = invalidFields();
     if (bad.length && status !== 'navigated') status = 'invalid';
     var out = {
       status: status,
       saved: (status === 'navigated' || status === 'settled') && !errors.length,
-      errors: errors, toast: st.toast, url: st.url, banner: st.banner
+      errors: errors, toast: toastOut, url: st.url, banner: st.banner
     };
+    // 이번 저장으로 **새로 뜬** 띠였는가 — 묵은 띠를 보고 성공으로 읽지 않았다는 표시다
+    if (toastNow) out.toastNew = true;
+    // 띠 대신 그물로 끝을 본 자리 — 로그에 그대로 남는다
+    if (xhrHit) out.xhr = { status: xhrHit.status, url: xhrHit.url };
     if (bad.length) {
       out.invalid = bad;
       out.detail = '필수 칸이 비어 저장 요청이 나가지 않았습니다: ' + bad.join(' · ');
     }
-    if (status === 'timeout') out.detail = '저장이 끝난 표시(안내 띠·화면 갈림)를 못 봤습니다 — 스크린샷으로 확인하세요';
+    if (status === 'timeout') out.detail = '저장이 끝난 표시(새 안내 띠·오간 요청·화면 갈림)를 못 봤습니다 — 스크린샷으로 확인하세요';
     if (st.loginPage) out.status = 'login';
     return remember(out);
   }
@@ -2346,6 +2766,15 @@
     refreshCsrf: refreshCsrf,
     pageSaveButton: pageSaveButton,
     sleep: sleep, waitFor: waitFor, tier: tier, findButton: findButton,
+    // 저장·열기 천장 읽기·바꾸기 — 느린 서버에서 `stayRun.config({waitMs: 40000})`
+    config: config,
+    // 고정 대기 대신 상태 대기 — 부트(`stay_boot.js`)의 가격 셀 단계도 같은 것을 쓴다
+    settleOr: settleOr,
+    // 저장 뒤 조각 다시 그리기 기다리기 — 부트의 고리가 단계 앞에서 같은 것을 쓴다
+    settleRefresh: settleRefresh,
+    // htmx 감시자(`{pending, swaps, settles, error, unloading, …}`) — 부트가 읽는다.
+    // `window.__stayRunHtmx` 와 **같은 객체**다(두 벌이 되면 한쪽만 늘어난다).
+    hx: hx,
     // 부트(`stay_boot.js`)의 가격 셀 단계가 같은 격자를 쓴다 — 두 벌이 되면 한쪽만 고쳐진다.
     rowCells: rowCells
   };

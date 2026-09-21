@@ -14,21 +14,406 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
-
-let JSDOM = null;
-try { ({ JSDOM } = require('jsdom')); } catch (e) {
-  console.log('SKIP — jsdom 이 없어 브라우저 시험을 건너뜁니다 (설치하지 않습니다).');
-  process.exit(0);
-}
 
 let pass = 0, fail = 0;
 const ok = (cond, name, extra) => {
   if (cond) { pass++; console.log('  ok   ' + name); }
   else { fail++; console.log('  FAIL ' + name + (extra !== undefined ? ' — ' + JSON.stringify(extra) : '')); }
 };
+
+/* ────────────────────────────────────────────────────────────────────────────
+   jsdom 없이 도는 부분 — 떼어 놓고 도는 실행 고리 (`runAll` · `runStatus` · `runStop`)
+
+   고리가 하는 일은 **차례와 멈춤 판정**이지 화면 조작이 아니다. `runStep` 을 가짜로 바꾸면
+   DOM 없이도 그대로 볼 수 있다 — 그래서 이 대목은 jsdom 이 없는 곳에서도 돈다.
+   멈춤 판정만은 가짜로 바꾸지 않는다: 진짜 `stepFailed` 를 그대로 쓴다.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const BOOT_SRC = readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8');
+const HELPER_SRC_FOR_BOOT = readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8');
+
+// 도우미의 `config({waitMs})` 를 표시 사이만 떼어 낸다 — `runAll({waitMs})` 가 **진짜 그 함수**에
+// 닿는지 보려는 것이다(흉내를 세우면 닿지 않아도 통과한다).
+function loadHelperConfig() {
+  const a = HELPER_SRC_FOR_BOOT.indexOf('/* @config:start');
+  const b = HELPER_SRC_FOR_BOOT.indexOf('/* @config:end');
+  if (a < 0 || b <= a) return null;
+  return new Function('var WAIT_MS = 10000;\n' + HELPER_SRC_FOR_BOOT.slice(a, b) +
+    '\nreturn { config: config, waitMs: function () { return WAIT_MS; } };')();
+}
+
+function bootSandbox(steps) {
+  const store = {};
+  const cfgHolder = { value: null };
+  const ctx = vm.createContext({
+    console,
+    setTimeout, clearTimeout,
+    localStorage: {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: (k) => { delete store[k]; }
+    },
+    document: {
+      getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+      addEventListener: () => {}, body: null, documentElement: { getAttribute: () => null }
+    },
+    location: { hash: '', href: 'https://example.test/stay/43900/', pathname: '/stay/43900/' }
+  });
+  ctx.window = ctx;
+  ctx.addEventListener = () => {};
+  // 도우미(`stayRun`) 가운데 고리가 쓰는 것만 세운다
+  ctx.stayRun = {
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    // 고리가 **무엇을 기다리는지** 보려면 흉내도 조건을 봐야 한다 — 참이 될 때까지 짧게 돈다
+    settleOr: async (cond, ms) => {
+      if (typeof cond !== 'function') { await new Promise((r) => setTimeout(r, ms || 0)); return false; }
+      const t0 = Date.now();
+      for (;;) {
+        try { if (cond()) return true; } catch (e) { /* 교체 중 */ }
+        if (Date.now() - t0 >= (ms === undefined ? 100 : ms)) { try { return !!cond(); } catch (e) { return false; } }
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    },
+    waitFor: async (fn, ms) => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < (ms || 10000)) {
+        try { if (fn()) return true; } catch (e) { /* 교체 중 */ }
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      try { return !!fn(); } catch (e) { return false; }
+    },
+    config: (cfgHolder.value = loadHelperConfig()) ? cfgHolder.value.config : undefined,
+    tier: () => 0,
+    findButton: () => null,
+    progress: () => ({}),
+    progressState: () => ({ done: 0, skipped: 0, failed: 0, total: 0, current: '', note: '', status: 'idle' })
+  };
+  ctx.localStorage.setItem('staySteps', JSON.stringify(steps));
+  ctx.__cfg = cfgHolder.value;        // 시험이 지금 천장을 읽는 자리
+  vm.runInContext(BOOT_SRC, ctx);
+  return ctx;
+}
+
+const stepOf = (no, kind, extra) => Object.assign({
+  no, title: kind + ' (' + no + ')', kind,
+  head: { tab: null, card: null, block: null, screen: null, buttons: [], buttons_parsed: [] },
+  fields: [], longtexts: [], photos: [], submit: '저장'
+}, extra || {});
+
+const okResult = (n) => ({ no: n, submit: 'closed', submitted: true, drawer: { open: false }, modal: { open: false } });
+
+// 고리가 설 때까지 기다린다(시험용 — 실제 에이전트는 30초에 한 번 `runStatus()` 를 읽는다)
+async function waitLoop(ctx, ms) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < (ms || 4000)) {
+    if (!ctx.runStatus().running) return ctx.runStatus();
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return ctx.runStatus();
+}
+
+async function loopTests() {
+  console.log('stay_boot 시험 — 떼어 놓고 도는 고리 (jsdom 없이)');
+
+  const steps = { guide: { title: '시험 호텔' }, steps: [1, 2, 3, 4, 5].map((n) => stepOf(n, '룸 만들기')) };
+
+  // 1. 끝까지 돈다
+  {
+    const ctx = bootSandbox(steps);
+    const seen = [];
+    ctx.runStep = async (n) => { seen.push(n); return okResult(n); };
+    const started = ctx.runAll();
+    ok(started.started === true && started.from === 1 && started.to === 5, 'runAll: 곧바로 돌아온다', started);
+    ok(!!started.token, 'runAll: 표(token)를 준다', started.token);
+    ok(ctx.runStatus().running === true, 'runStatus: 도구 호출이 끝나도 고리는 돌고 있다');
+    const st = await waitLoop(ctx);
+    ok(st.running === false && st.reason === 'done', 'runAll: 마지막 단계까지 가면 reason=done', st.reason);
+    ok(seen.join(',') === '1,2,3,4,5', 'runAll: 번호 차례대로 한 단계씩 부른다', seen);
+    ok(st.results.length === 5 && st.results[0].no === 1, 'runStatus: results 는 차례대로 쌓인다', st.results.map((r) => r.no));
+    ok(st.lastResult.no === 5, 'runStatus: lastResult 는 마지막 단계다', st.lastResult);
+    ok(st.doneCount === 5, 'runStatus: doneCount', st.doneCount);
+    ok(st.cursor.lastDone === 5 && !st.cursor.pending, 'runAll: 이어서 하기 자리가 5로 올라갔다', st.cursor);
+    ok(st.elapsedMs >= 0 && st.startedAt, 'runStatus: 걸린 시간을 준다', { e: st.elapsedMs, s: st.startedAt });
+    ok(st.marks.length === 5 && st.marks[0].status === '완료', 'runStatus: 지시서 탭에 넘길 줄을 모아 둔다', st.marks[0]);
+  }
+
+  // 2. 실패하면 그 단계에서 선다 — 판정은 진짜 `stepFailed` 가 한다
+  {
+    const ctx = bootSandbox(steps);
+    const seen = [];
+    ctx.runStep = async (n) => { seen.push(n); return n === 3 ? { no: n, bad: ['판매가: not-found'] } : okResult(n); };
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(st.reason === 'failed' && st.stoppedAt === 3, 'runAll: 실패하면 그 단계에서 선다', { r: st.reason, at: st.stoppedAt });
+    ok(seen.join(',') === '1,2,3', 'runAll: 실패 뒤 단계는 부르지 않는다', seen);
+    ok(st.cursor.lastDone === 2 && st.cursor.pending === 3, 'runAll: 실패한 단계는 이어서 하기 자리에 남는다', st.cursor);
+    ok(ctx.runAll().from === 3, 'runAll: 다시 부르면 실패한 단계부터다', ctx.runStatus().from);
+    ctx.runStop();
+    await waitLoop(ctx);
+  }
+
+  // 3. 옛 화면·금지된 단계(`refused`+`fatal`)는 fatal 로 선다
+  {
+    const ctx = bootSandbox(steps);
+    ctx.runStep = async (n) => (n === 2 ? { no: n, refused: true, fatal: true, error: '금지된 단계' } : okResult(n));
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(st.reason === 'fatal' && st.stoppedAt === 2, 'runAll: refused+fatal 은 fatal 로 선다', st);
+  }
+
+  // 4. 사진 단계는 **파일 다리를 기다리는 넘김**이지 실패가 아니다 — files 로 서고,
+  //    파일을 올린 뒤 `runAll()` 을 다시 부르면 그 단계를 `{uploaded:true}` 로 이어 부른다.
+  {
+    const photoSteps = { guide: {}, steps: [stepOf(1, '룸 만들기'), stepOf(2, '룸 사진 올리기', { photos: ['a.jpg'] }), stepOf(3, '룸 만들기')] };
+    const ctx = bootSandbox(photoSteps);
+    const calls = [];
+    ctx.runStep = async (n, o) => {
+      calls.push([n, (o && o.uploaded) ? 'uploaded' : '']);
+      if (n === 2 && !(o && o.uploaded)) return { no: n, submitted: false, uploads: ['사진 추가'] };
+      return okResult(n);
+    };
+    ctx.runAll();
+    const st1 = await waitLoop(ctx);
+    ok(st1.reason === 'files' && st1.stoppedAt === 2, 'runAll: 사진 단계는 files 로 선다(실패가 아니다)', st1.reason);
+    ok(st1.cursor.files === 2 && st1.cursor.lastDone === 1, 'runAll: 기다리는 사진 단계를 자리에 적어 둔다', st1.cursor);
+    ctx.runAll();                                   // 파일을 다리에 올린 뒤 다시 부른다
+    const st2 = await waitLoop(ctx);
+    ok(calls.map((c) => c.join('')).join(' ') === '1 2 2uploaded 3',
+       'runAll: 같은 사진 단계를 {uploaded:true} 로 한 번만 다시 부른다', calls);
+    ok(st2.reason === 'done' && st2.cursor.lastDone === 3, 'runAll: 사진 뒤 단계까지 이어서 끝낸다', st2.cursor);
+  }
+
+  // 5. 화면이 통째로 넘어가는 단계에서 선다(페이지 JS 가 곧 죽는다)
+  {
+    const ctx = bootSandbox(steps);
+    ctx.runStep = async (n) => (n === 2 ? { no: n, submit: 'navigated', submitted: true } : okResult(n));
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(st.reason === 'navigated' && st.stoppedAt === 2, 'runAll: 화면이 넘어가면 navigated 로 선다', st.reason);
+    ok(st.cursor.lastDone === 2, 'runAll: 넘어간 단계는 마친 것으로 적는다 — 다시 부르면 3단계부터다', st.cursor);
+    const again = ctx.runAll();
+    ok(again.from === 3, 'runAll: 새 화면에서 다시 부르면 그다음 단계부터다', again);
+    ctx.runStop(); await waitLoop(ctx);
+  }
+
+  // 6. `runStop()` 은 지금 단계까지만 끝내고 선다
+  {
+    const ctx = bootSandbox(steps);
+    const seen = [];
+    ctx.runStep = async (n) => { seen.push(n); await new Promise((r) => setTimeout(r, 30)); return okResult(n); };
+    ctx.runAll();
+    await new Promise((r) => setTimeout(r, 45));
+    const s0 = ctx.runStop();
+    ok(s0.stopping === true, 'runStop: 멈추라고 적는다', s0);
+    const st = await waitLoop(ctx);
+    ok(st.reason === 'stopped', 'runStop: 고리가 stopped 로 선다', st.reason);
+    ok(seen.length < 5 && seen.length >= 1, 'runStop: 남은 단계는 부르지 않는다', seen);
+    ok(ctx.runStop().running === false, 'runStop: 돌고 있지 않으면 그렇다고 말한다', ctx.runStop());
+  }
+
+  // 7. [판매 시작] 은 사람이 누른다 — 고리는 그 단계를 열지도 않는다
+  {
+    const saleSteps = { guide: {}, steps: [stepOf(1, '룸 만들기'), stepOf(2, '판매 시작')] };
+    const ctx = bootSandbox(saleSteps);
+    const seen = [];
+    ctx.runStep = async (n) => { seen.push(n); return okResult(n); };
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(st.reason === 'sale-start' && st.stoppedAt === 2, 'runAll: [판매 시작] 앞에서 선다', st.reason);
+    ok(seen.join(',') === '1', 'runAll: [판매 시작] 단계는 부르지도 않는다', seen);
+  }
+
+  // 8. 한 단계가 끝나지 않아도 고리가 매달리지 않는다
+  {
+    const ctx = bootSandbox(steps);
+    ctx.runStep = () => new Promise(() => {});          // 영영 끝나지 않는다
+    ctx.runAll({ from: 1, to: 2, stepTimeoutMs: 120 });
+    const st = await waitLoop(ctx, 3000);
+    ok(st.running === false && st.reason === 'failed', 'runAll: 단계 제한에서 끊고 선다', st.reason);
+    ok(st.lastResult && st.lastResult.timeout === true, 'runAll: 끊긴 단계를 timeout 으로 적는다', st.lastResult);
+  }
+
+  // 9. `runStep` 이 던져도 고리는 매달리지 않는다
+  {
+    const ctx = bootSandbox(steps);
+    ctx.runStep = async (n) => { if (n === 2) throw new Error('터졌다'); return okResult(n); };
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(st.reason === 'failed' && /터졌다/.test(String(st.lastResult.error)), 'runAll: 던진 것은 실패로 적는다', st.lastResult);
+  }
+
+  // 10. 이미 돌고 있으면 두 번 시작하지 않는다
+  {
+    const ctx = bootSandbox(steps);
+    ctx.runStep = async (n) => { await new Promise((r) => setTimeout(r, 25)); return okResult(n); };
+    const a = ctx.runAll();
+    const b = ctx.runAll();
+    ok(a.started === true && b.started === false && b.running === true, 'runAll: 두 번 부르면 두 번째는 시작하지 않는다', b);
+    await waitLoop(ctx);
+  }
+
+  // 11. 이어서 하기 자리는 JSON 으로 오간다 — 새 화면에서 부트를 다시 eval 해도 살아 있다
+  {
+    const ctx = bootSandbox(steps);
+    ctx.runStep = async (n) => (n === 3 ? { no: n, submit: 'navigated' } : okResult(n));
+    ctx.runAll();
+    await waitLoop(ctx);
+    const saved = JSON.parse(ctx.localStorage.getItem('stayRunCursor'));
+    ok(saved.lastDone === 3 && Array.isArray(saved.results) && saved.results.length === 3,
+       '이어서 하기: 단계마다 자리와 결과를 적어 둔다', { lastDone: saved.lastDone, n: saved.results.length });
+    ok(saved.results.every((r) => r.fields === undefined && r.drawer === undefined),
+       '이어서 하기: DOM 이 실릴 수 있는 칸은 빼고 적는다', saved.results[0]);
+    ok(ctx.progressReset && ctx.progressReset() && ctx.localStorage.getItem('stayRunCursor') === null,
+       'progressReset: 앞 호텔의 자리를 지운다', ctx.localStorage.getItem('stayRunCursor'));
+  }
+
+  // 12. `stayRun` 에도 얹는다 — SKILL.md 가 그 이름으로 적는다
+  {
+    const ctx = bootSandbox(steps);
+    ok(typeof ctx.stayRun.runAll === 'function' && typeof ctx.stayRun.runStatus === 'function' &&
+       typeof ctx.stayRun.runStop === 'function', 'stayRun.runAll · runStatus · runStop 이 선다');
+  }
+
+  // 13. 지시서 탭에 넘길 줄의 판정 — SKILL.md 「지시서 HTML 탭의 체크」 그대로다
+  {
+    const ctx = bootSandbox(steps);
+    const m = (r) => ctx.guideMark(r);
+    ok(m({ no: 1, skipped: true, reason: '이미 있음: 디럭스' }).status === '건너뜀', 'guideMark: skipped → 건너뜀');
+    ok(m({ no: 2, bad: ['카드 없음'] }).status === '실패', 'guideMark: bad → 실패');
+    ok(m({ no: 3, mismatch: ['판매가'], submitted: false }).status === '확인 필요', 'guideMark: mismatch 만 → 확인 필요');
+    ok(m({ no: 4, mismatch: ['판매가'], errors: ['서버 거부'] }).status === '실패', 'guideMark: 다른 실패가 같이 있으면 실패');
+    const done = m({ no: 5, submit: 'closed', drawer: { open: false }, modal: { open: false }, mismatchWarn: ['설명'] });
+    ok(done.status === '완료' && done.note === '되읽기만', 'guideMark: 되읽기 한계뿐이면 완료 · 되읽기만', done);
+  }
+
+  // 14. 0단계 확인이 확인을 못 마쳤으면 **마친 것으로 적지 않는다** — 이어서 할 때 건너뛰면 안 된다
+  {
+    const checkSteps = { guide: {}, steps: [stepOf(1, '환율 확인'), stepOf(2, '룸 만들기')] };
+    const ctx = bootSandbox(checkSteps);
+    ctx.onHotelForm = () => true;                       // 폼은 이미 서 있다(다시 부르기가 곧바로 돈다)
+    const calls = [];
+    ctx.runStep = async (n) => { calls.push(n); return n === 1 ? { no: 1, checked: false, found: [], navigated: true } : okResult(n); };
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(calls.join(',') === '1,1', '확인 단계: navigated 면 그 자리에서 **한 번만** 다시 부른다', calls);
+    ok(st.reason === 'navigated' && st.stoppedAt === 1, '확인 단계: 다시 불러도 navigated 면 그때 선다', { r: st.reason, at: st.stoppedAt });
+    ok(st.cursor.pending === 1 && !st.cursor.lastDone, '확인 단계: checked:false 는 자리에 pending 으로 남는다', st.cursor);
+    ok(ctx.runAll().from === 1, '확인 단계: 다시 부르면 **그 단계부터** 다시 한다');
+    ctx.runStop(); await waitLoop(ctx);
+  }
+
+  // 15. 폼이 뜬 뒤 다시 부른 것이 되면 그대로 이어간다(고리가 서지 않는다)
+  {
+    const checkSteps = { guide: {}, steps: [stepOf(1, '도시 확인'), stepOf(2, '룸 만들기')] };
+    const ctx = bootSandbox(checkSteps);
+    let formUp = false;
+    ctx.onHotelForm = () => formUp;
+    setTimeout(() => { formUp = true; }, 60);           // 폼은 조금 뒤에 선다(htmx 로 화면만 갈린다)
+    const calls = [];
+    ctx.runStep = async (n) => {
+      calls.push(n);
+      if (n !== 1) return okResult(n);
+      return formUp ? { no: 1, checked: true, found: ['도시: 서울'], left: true } : { no: 1, checked: false, found: [], navigated: true };
+    };
+    ctx.runAll();
+    const st = await waitLoop(ctx);
+    ok(calls.join(',') === '1,1,2', '확인 단계: 폼이 설 때까지 기다렸다 다시 부르고 이어간다', calls);
+    ok(st.reason === 'done' && st.cursor.lastDone === 2, '확인 단계: 확인을 마치면 자리가 올라간다', { r: st.reason, c: st.cursor });
+    ok(st.doneCount === 2 && st.results.length === 2, '확인 단계: 다시 부른 것은 한 단계로 센다', { d: st.doneCount, n: st.results.length });
+    ok(st.results[0].rerun === true && st.results[0].checked === true, '확인 단계: 마지막 판정 하나만 남는다', st.results[0]);
+  }
+
+  // 16. 단계를 시작하기 전에 **조각 다시 그리기**가 끝나기를 기다린다
+  //     (알맹이 `runStepCore` 를 가짜로 바꾼다 — 기다림은 껍데기 `runStep` 에 있다)
+  {
+    const ctx = bootSandbox({ guide: {}, steps: [stepOf(1, '룸 만들기')] });
+    const hx = { pending: 1, requests: 9, swaps: 0, settles: 0, unloading: false };
+    ctx.__stayRunHtmx = hx;
+    const marks = [];
+    const t0 = Date.now();
+    ctx.runStepCore = async (n) => { marks.push(Date.now() - t0); return okResult(n); };
+    setTimeout(() => { hx.pending = 0; }, 120);         // 아홉 벌의 조각이 그때 다 온다
+    ctx.runAll();
+    const st = await waitLoop(ctx, 5000);
+    ok(marks.length === 1 && marks[0] >= 110, '고리: 요청이 빌 때까지 기다렸다 단계를 시작한다', marks);
+    ok(st.reason === 'done', '고리: 기다린 뒤 그대로 끝낸다', st.reason);
+    ok(st.results[0].waitedMs >= 110, '고리: 기다린 시간을 결과에 적는다', st.results[0].waitedMs);
+  }
+
+  // 16b. 돌고 있는 요청이 없으면 **거의 공짜다**(조용한 틱 하나)
+  {
+    const ctx = bootSandbox({ guide: {}, steps: [stepOf(1, '룸 만들기')] });
+    ctx.__stayRunHtmx = { pending: 0, requests: 9, swaps: 3, settles: 3, unloading: false };
+    ctx.runStepCore = async (n) => okResult(n);
+    const t0 = Date.now();
+    ctx.runAll();
+    const st = await waitLoop(ctx, 4000);
+    ok(st.reason === 'done' && Date.now() - t0 < 300, '고리: 잠잠하면 기다림이 한 틱뿐이다', Date.now() - t0);
+  }
+
+  // 17. `runAll({waitMs})` 는 **도우미의 천장**까지 간다 — 느린 서버(로컬)에서 쓴다
+  {
+    const ctx = bootSandbox(steps);
+    ok(!!ctx.__cfg, 'config: 도우미에서 `@config:start`…`@config:end` 를 떼어 냈다');
+    ok(ctx.__cfg.waitMs() === 10000, 'config: 기본 천장은 10초 그대로다', ctx.__cfg.waitMs());
+    ctx.runStep = async (n) => okResult(n);
+    const a = ctx.runAll({ waitMs: 40000 });
+    ok(a.started === true && a.waitMs === 40000 && ctx.__cfg.waitMs() === 40000,
+       'runAll({waitMs}): 도우미의 `config` 까지 닿는다', { a: a.waitMs, cfg: ctx.__cfg.waitMs() });
+    await waitLoop(ctx);
+    ok(ctx.runStatus().waitMs === 40000, 'runStatus: 올린 천장을 그대로 보여 준다', ctx.runStatus().waitMs);
+    const bad = ctx.runAll({ waitMs: 10 });
+    ok(bad.started === false && /1000/.test(String(bad.error)) && ctx.__cfg.waitMs() === 40000,
+       'runAll({waitMs}): 너무 작은 값이면 시작하지 않고 값을 지킨다', bad);
+  }
+
+  // 18. 「같은 이름이면 건너뜀」 은 **고른 카드 안에서만** 본다 (2026-09-21 실측 결함)
+  {
+    const ctx = bootSandbox(steps);
+    ctx.stayRun.tier = (x, y) => {
+      const n = (t) => String(t || '').replace(/\s+/g, '').toLowerCase();
+      if (!n(x) || !n(y)) return 0;
+      if (n(x) === n(y)) return 4;
+      return n(x).indexOf(n(y)) >= 0 ? 2 : 0;
+    };
+    const row = (t) => ({ innerText: t, querySelector: () => null, closest: () => null });
+    const card = (head, rows) => ({
+      querySelector: (sel) => (/stay-card__head|stay-card__title/.test(sel) ? { textContent: head } : null),
+      querySelectorAll: () => rows.map(row)
+    });
+    const cards = [card('홀리데이 NRF 2026-12', ['유아  0~3세', '소아  4~11세']), card('기본 오퍼 2026', [])];
+    const bodyWith = (list) => ({ querySelectorAll: (sel) => (sel === '.stay-card' ? list : []) });
+    ctx.document.body = bodyWith(cards);
+    ok(ctx.existsInList('유아', '홀리데이 NRF 2026-12') === true, 'existsInList: 그 카드 안에 있으면 「이미 있음」');
+    ok(ctx.existsInList('유아', '기본 오퍼 2026') === false, 'existsInList: **옆 카드**의 행은 건너뛸 근거가 아니다');
+    ok(ctx.existsInList('유아', '아직 안 그려진 오퍼') === false,
+       'existsInList: 카드를 못 찾으면 「없음」 이다 — 탭 전체로 넓혀 보지 않는다');
+    // 카드가 늦게 그려지면 기다렸다 본다(요청이 도는 사이에 「없음」 으로 읽고 또 만들지 않는다)
+    ctx.document.body = bodyWith([]);
+    setTimeout(() => { ctx.document.body = bodyWith([card('늦은 오퍼', ['유아  0~3세'])]); }, 80);
+    const tL = Date.now();
+    const late = await ctx.existsInListWait('유아', '늦은 오퍼', null, 1500);
+    ok(late === true && Date.now() - tL >= 70, 'existsInListWait: 카드가 늦게 그려지면 기다렸다 본다', { late, ms: Date.now() - tL });
+    ctx.document.body = bodyWith(cards);
+    const tQ = Date.now();
+    ok((await ctx.existsInListWait('없는 이름', '홀리데이 NRF 2026-12', null, 1500)) === false && Date.now() - tQ < 200,
+       'existsInListWait: 카드가 이미 있으면 기다리지 않는다', Date.now() - tQ);
+  }
+
+  console.log('  — 고리 시험 ' + pass + ' 통과 · ' + fail + ' 실패\n');
+}
+
+await loopTests();
+
+let JSDOM = null;
+try { ({ JSDOM } = require('jsdom')); } catch (e) {
+  console.log('SKIP — jsdom 이 없어 화면 시험(가격 셀·열기·거부·0단계 확인)은 건너뜁니다 (설치하지 않습니다).');
+  process.exit(fail ? 1 : 0);
+}
 
 const STEPS = {
   guide: { title: '시험 호텔' },
@@ -977,6 +1362,23 @@ const run = async () => {
     ok(w8.readbackTrusted(pair[0]) === pair[1],
        'readbackTrusted: `' + pair[0] + '` → ' + (pair[1] ? '믿는다' : '경고만'), w8.readbackTrusted(pair[0]));
   });
+
+  // 9) 떼어 놓고 도는 고리를 **진짜 화면 위에서** — 1단계는 저장되고, 2단계는 믿을 수 있는 칸이
+  //    어긋나 저장 전에 선다. 고리는 그 판정을 그대로 물려받아 `failed` 로 멈춘다.
+  w8.progressReset();
+  const started9 = w8.stayRun.runAll({ from: 1, to: 2 });
+  ok(started9.started === true && started9.from === 1, 'runAll: 화면 위에서도 곧바로 돌아온다', started9);
+  const t9 = Date.now();
+  while (w8.stayRun.runStatus().running && Date.now() - t9 < 20000) await new Promise((r) => setTimeout(r, 20));
+  const st9 = w8.stayRun.runStatus();
+  ok(st9.running === false && st9.reason === 'failed' && st9.stoppedAt === 2,
+     'runAll: 되읽기 불일치 단계에서 선다', { r: st9.reason, at: st9.stoppedAt });
+  ok(st9.results.length === 2 && st9.results[1].stoppedBy === 'mismatch',
+     'runStatus: results 에 runStep 이 돌려준 것이 그대로 들어 있다', st9.lastResult);
+  ok(st9.cursor.lastDone === 1 && st9.cursor.pending === 2,
+     'runAll: 1단계까지 마치고 2단계를 자리에 남긴다', st9.cursor);
+  ok(st9.marks.length === 2 && st9.marks[0].status === '완료' && st9.marks[1].status === '확인 필요',
+     'runStatus: 지시서 탭에 넘길 줄도 같은 판정이다', st9.marks);
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);

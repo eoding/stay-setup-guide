@@ -58,7 +58,9 @@ the standard `SKILL.md` format **and can drive a browser**.
 - A tool that can drive the browser. The runner asks any browser agent for exactly three things, and the
   tool's name does not matter: **run JavaScript inside the logged-in ERP tab and get the value back**,
   **put a local file into a file input on that page**, and **take a screenshot**. Budget one JS call at
-  45 seconds and one upload at 10MB.
+  45 seconds and one upload at 10MB. The step loop itself is not bound by that 45 seconds: `stayRun.runAll()`
+  detaches the loop inside the page and returns at once, and the agent polls `stayRun.runStatus()` every
+  30 seconds. A tool with a shorter per-call limit therefore still runs whole hotels.
   - **Claude Code (the Claude in Chrome extension) is the measured path** — seven hotels ran end to end on
     `javascript_tool`, `file_upload`, `computer` and the tab tools. The extension grants permission per site,
     so allow the ERP domain first.
@@ -107,6 +109,19 @@ cannot render, or overlapping age ranges. Nothing opens a browser until `--check
 To continue an interrupted run, leave the hotel's edit screen open and say "continue this hotel" — the skill
 reads `run-log.md` and resumes after the last `완료` step.
 
+### Running it
+
+The steps run in a loop **detached inside the page**. `stayRun.runAll()` starts it and returns immediately
+with `{started, from, to, token}`; the agent then reads `stayRun.runStatus()` about every 30 seconds until
+`running` is false. The loop calls the same `runStep` one step at a time, so the verdict per step
+(`stepFailed`) and the progress strip are exactly what they were. It stops at one of seven places and says
+which in `reason`: `done`, `failed`, `fatal` (a refused step), `files` (a photo step waiting for the file
+bridge), `navigated` (the screen was replaced), `sale-start` (the next step is 판매 시작, which only a person
+presses) and `stopped` (`stayRun.runStop()`). A cursor in `localStorage` is written before and after every
+step, so a full-page navigation that kills the page JS does not lose the place — re-evaluate the two boot
+lines on the new screen and call `runAll()` again. The old 3–10-step batch loop remains documented in
+SKILL.md as the fallback for stepping through a single step by hand.
+
 ### Watching it go
 
 The helper draws a small strip in the **top-right corner of the ERP page** and `runStep` keeps it current, so
@@ -114,8 +129,9 @@ anyone looking at the screen sees `12 / 77 · 지금: 룸 만들기 (2번째, �
 green while running, red with the failing step's title when a step breaks, grey `끝` when done. It never
 intercepts a click and re-attaches itself when the page swaps its body; the ✕ dismisses it.
 
-Open the guide HTML in a second tab of the same browser and the ticks rise there too: the agent calls
-`stayGuide.mark([{no, status, note}, …])` after each batch, which fills the sticky 진행 현황 header and the
+Open the guide HTML in a second tab of the same browser and the ticks rise there too: the loop cannot touch
+another tab, so it accumulates one `{no, status, note}` row per step in `runStatus().marks` and the agent
+passes them to `stayGuide.mark([…])` in that tab, which fills the sticky 진행 현황 header and the
 per-step badge (대기 / 진행 중 / 완료 / 건너뜀 / 실패 / 확인 필요). Ticking a box by hand still works and is
 recorded as `완료 (수동)`. `stayGuide.export()` returns the whole state as JSON for the run log. If the guide
 tab is not open the agent skips this silently. Neither display changes the run.
@@ -132,8 +148,8 @@ guide in the share folder.
 |---|---|
 | `SKILL.md` | Entry point: inputs → parse → inject helper → step loop → failure handling → rules → report |
 | `scripts/parse_guide.py` | Stamped guide HTML → `steps.json` (the run plan), checking the stamp, photo files, value kinds, line order and age-band overlap |
-| `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input, draw the progress strip |
-| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runStepCore`, `runCellStep`, `runCheckStep`, `progressReset` |
+| `scripts/stay_helper.js` | In-page helper `stayRun`: find fields by label, set values by kind, add repeat rows, press a button and wait for the response, read values back, move uploaded files into the right file input, draw the progress strip. Waits are state waits (`settleOr`), never fixed sleeps, and are timed on a worker timer so a background tab keeps running |
+| `scripts/stay_boot.js` | In-page runner built on the helper: `step`, `stepFields`, `titleHint`, `existsInList`, `checkGuide`, `runStep`, `runStepCore`, `runCellStep`, `runCheckStep`, `progressReset`, and the detached loop `runAll` / `runStatus` / `runStop` with its `localStorage` cursor |
 | `references/screen-mechanics.md` | Step kind → screen map, how each screen opens and saves, traps |
 | `references/run-log-spec.md` | `run-log.md` format, result words, resuming |
 | `tests/test_parse_guide.py` | Parser tests — the stamp gate, refusals, photo and value checks |
@@ -146,8 +162,11 @@ node tests/test_helper.mjs                       # helper
 node tests/test_boot.mjs                         # boot
 ```
 
-The two browser tests skip themselves with exit code 0 when `jsdom` is not installed; nothing is installed
-for you. To borrow a jsdom from elsewhere, set `NODE_PATH` to the `node_modules` that has it.
+The two browser tests skip their **screen** half with exit code 0 when `jsdom` is not installed; nothing is
+installed for you. To borrow a jsdom from elsewhere, set `NODE_PATH` to the `node_modules` that has it. The
+half that needs no DOM always runs: `settleOr` (the state wait) in `test_helper.mjs`, and the detached loop
+(`runAll` / `runStatus` / `runStop`, driven with a stubbed `runStep` in a `node:vm` sandbox) in
+`test_boot.mjs`.
 
 ## Disclaimer
 

@@ -16,18 +16,262 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 
-let JSDOM = null;
-try { ({ JSDOM } = require('jsdom')); } catch (e) {
-  console.log('SKIP — jsdom 이 없어 브라우저 시험을 건너뜁니다 (설치하지 않습니다).');
-  console.log('       손으로 보려면 tests/helper_fixture.html 을 크롬에서 열고 콘솔에 scripts/stay_helper.js 를 붙여 넣으세요.');
-  process.exit(0);
-}
-
 let pass = 0, fail = 0;
 const ok = (cond, name, extra) => {
   if (cond) { pass++; console.log('  ok   ' + name); }
   else { fail++; console.log('  FAIL ' + name + (extra !== undefined ? ' — ' + JSON.stringify(extra) : '')); }
 };
+
+/* ────────────────────────────────────────────────────────────────────────────
+   jsdom 없이 도는 부분 — 고정 대기를 상태 대기로 바꾼 `settleOr`
+
+   `settleOr(cond, maxMs)` 는 DOM 이 필요 없다(조건은 부르는 쪽이 준다). 그래서 도우미에서
+   그 대목만(`@settleOr:start`…`@settleOr:end`) 떼어 내 `sleep` 을 가짜로 물려 돌린다 —
+   jsdom 이 없는 곳에서도 **이 시험은 돈다.** 지켜야 할 약속은 둘이다:
+     ① 조건이 참이 되면 곧바로 끝난다. ② 끝내 참이 아니면 **종전의 고정 대기 값**에서 끝난다.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const HELPER_SRC = readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8');
+const SETTLE_BLOCK = (() => {
+  const a = HELPER_SRC.indexOf('/* @settleOr:start');
+  const b = HELPER_SRC.indexOf('/* @settleOr:end');
+  return (a >= 0 && b > a) ? HELPER_SRC.slice(a, b) : null;
+})();
+
+// `sleep` 과 `document` 를 가짜로 물린 settleOr. `calls` 에 어떤 대기를 걸었는지 남는다.
+function loadSettleOr(env) {
+  const e = env || {};
+  const calls = [];
+  const sleep = (ms) => { calls.push(ms); return new Promise((r) => setTimeout(r, ms)); };
+  const doc = { visibilityState: e.visibility || 'hidden' };
+  const make = new Function('sleep', 'TICK', 'document', 'requestAnimationFrame',
+    SETTLE_BLOCK + '\nreturn { settleOr: settleOr, rafTick: rafTick, FAST_TICK: FAST_TICK };');
+  const mod = make(sleep, 100, doc, e.raf);
+  mod.calls = calls;
+  return mod;
+}
+
+async function settleOrTests() {
+  console.log('stay_helper 시험 — settleOr (jsdom 없이)');
+  if (!SETTLE_BLOCK) {
+    ok(false, 'settleOr: 도우미에서 `@settleOr:start`…`@settleOr:end` 표시를 찾지 못했습니다');
+    return;
+  }
+  const M = loadSettleOr();
+
+  // ① 이미 참이면 한 번도 쉬지 않는다
+  let t = Date.now();
+  let r = await M.settleOr(() => true, 900);
+  ok(r === true && Date.now() - t < 30 && M.calls.length === 0,
+     'settleOr: 조건이 이미 참이면 기다리지 않는다', { ms: Date.now() - t, calls: M.calls });
+
+  // ② 참이 되는 즉시 끝난다 — 종전 고정 대기(900ms)의 몇 분의 일이다
+  const M2 = loadSettleOr();
+  let flag = false;
+  setTimeout(() => { flag = true; }, 80);
+  t = Date.now();
+  r = await M2.settleOr(() => flag, 900);
+  const early = Date.now() - t;
+  ok(r === true && early >= 60 && early < 300, 'settleOr: 조건이 참이 되면 곧바로 끝난다', early);
+
+  // ③ 끝내 참이 아니면 **종전과 같은 값**에서 끝난다 (최악이 나빠지지 않는다)
+  const M3 = loadSettleOr();
+  t = Date.now();
+  r = await M3.settleOr(() => false, 250);
+  const late = Date.now() - t;
+  ok(r === false && late >= 230 && late < 450, 'settleOr: 끝내 아니면 종전 고정 대기 값에서 끝난다', late);
+  ok(M3.calls.every((ms) => ms <= M3.FAST_TICK), 'settleOr: 바탕은 짧은 워커 타이머 틱이다', M3.calls);
+
+  // ④ 조건이 터져도 삼키고 기다린다 — 화면이 갈리는 중에는 조건이 던질 수 있다
+  const M4 = loadSettleOr();
+  t = Date.now();
+  r = await M4.settleOr(() => { throw new Error('교체 중'); }, 120);
+  ok(r === false && Date.now() - t >= 100, 'settleOr: 조건이 던지면 거짓으로 보고 계속 기다린다', Date.now() - t);
+
+  // ⑤ 조건이 없으면 종전 그대로 한 번 쉰다
+  const M5 = loadSettleOr();
+  r = await M5.settleOr(null, 80);
+  ok(r === false && M5.calls.length === 1 && M5.calls[0] === 80,
+     'settleOr: 조건이 없으면 종전처럼 통째로 쉰다', M5.calls);
+
+  // ⑥ 뒤로 간 탭에서는 화면 프레임(rAF)을 쓰지 않는다 — rAF 는 멈춰 있어 바탕으로 쓸 수 없다
+  let rafCalls = 0;
+  const rafStub = (fn) => { rafCalls++; setTimeout(fn, 1); };
+  const hidden = loadSettleOr({ visibility: 'hidden', raf: rafStub });
+  await hidden.settleOr(() => false, 90);
+  ok(rafCalls === 0 && hidden.calls.length > 0, 'settleOr: 뒤로 간 탭은 워커 타이머로만 잰다', { rafCalls, calls: hidden.calls });
+
+  // ⑦ 앞에 있는 탭에서는 프레임을 가속기로 함께 건다(바탕은 그대로 워커 타이머다)
+  rafCalls = 0;
+  const visible = loadSettleOr({ visibility: 'visible', raf: rafStub });
+  await visible.settleOr(() => false, 90);
+  ok(rafCalls > 0 && visible.calls.length > 0, 'settleOr: 앞에 있는 탭은 프레임을 함께 건다', { rafCalls, calls: visible.calls });
+
+  console.log('  — settleOr 시험 ' + pass + ' 통과 · ' + fail + ' 실패\n');
+}
+
+await settleOrTests();
+
+/* ────────────────────────────────────────────────────────────────────────────
+   jsdom 없이 도는 부분 ② — 저장·열기 천장 `config({waitMs})`
+
+   기본 10초는 **운영 서버** 기준이다. 로컬처럼 느린 서버에서는 큰 채우기 한 번이 28초쯤 걸려
+   저장이 실제로 들어갔는데도 `submit:'timeout'` 으로 러너가 섰다(2026-09-21 실측).
+   지켜야 할 약속은 셋이다: ① 기본값은 그대로 10초다 ② 올린 값이 곧바로 먹는다
+   ③ 말이 안 되는 값(1000 미만·숫자 아님)은 거부하고 지금 값을 지킨다.
+   ──────────────────────────────────────────────────────────────────────────── */
+const CONFIG_BLOCK = (() => {
+  const a = HELPER_SRC.indexOf('/* @config:start');
+  const b = HELPER_SRC.indexOf('/* @config:end');
+  return (a >= 0 && b > a) ? HELPER_SRC.slice(a, b) : null;
+})();
+function loadConfig() {
+  return new Function('var WAIT_MS = 10000;\n' + CONFIG_BLOCK +
+    '\nreturn { config: config, waitMs: function () { return WAIT_MS; } };')();
+}
+
+async function configTests() {
+  console.log('stay_helper 시험 — config({waitMs}) (jsdom 없이)');
+  if (!CONFIG_BLOCK) {
+    ok(false, 'config: 도우미에서 `@config:start`…`@config:end` 표시를 찾지 못했습니다');
+    return;
+  }
+  const M = loadConfig();
+  ok(M.config().waitMs === 10000 && M.waitMs() === 10000, 'config: 기본 천장은 10초다 (바뀌지 않았다)', M.config());
+  const up = M.config({ waitMs: 40000 });
+  ok(up.ok === true && up.waitMs === 40000 && M.waitMs() === 40000, 'config: 느린 서버용으로 올린다', up);
+  const small = M.config({ waitMs: 900 });
+  ok(small.ok === false && M.waitMs() === 40000, 'config: 1000 보다 작으면 거부하고 지금 값을 지킨다', small);
+  const nan = M.config({ waitMs: '느리게' });
+  ok(nan.ok === false && M.waitMs() === 40000, 'config: 숫자가 아니면 거부한다', nan);
+  ok(M.config().waitMs === 40000 && M.config({}).waitMs === 40000,
+     'config: 값을 안 주면 읽기만 한다', M.config());
+  ok(M.config({ waitMs: '20000' }).waitMs === 20000, 'config: 글자로 온 숫자도 받는다', M.config());
+  ok(loadConfig().waitMs() === 10000, 'config: 기본값 자체는 그대로다(다음 페이지는 10초로 시작한다)');
+  console.log('  — config 시험 끝\n');
+}
+
+await configTests();
+
+/* ────────────────────────────────────────────────────────────────────────────
+   jsdom 없이 도는 부분 ③ — htmx 아닌 ajax 감시 `netWatch`
+
+   기본정보 폼의 [저장] 은 htmx 가 아니라 제 손으로 쓴 ajax 다 — `hx.pending` 도 `swaps` 도
+   안 움직여서 끝을 알 길이 안내 띠뿐이었고, 앞 저장의 띠가 안 사라지면 그마저 못 봤다
+   (2026-09-21 운영 실측, `pageSave:'timeout'`). 그래서 오가는 요청의 **수와 주소·응답 코드**를
+   세어 둔다. 지켜야 할 약속은 넷이다:
+     ① fetch 가 끝나면 `xhrPending` 이 0 으로 내려오고 `xhrDone`·`xhrLast` 가 선다
+     ② XHR 도 같다(주소는 `open`, 코드는 `status`)
+     ③ **한 번만 감싼다** — 도우미를 다시 주입해도 두 겹이 되지 않는다(두 겹이면 두 번 세어진다)
+     ④ 못 감싸는 환경(속성이 잠겨 던지는 곳)이면 **조용히** 넘어간다
+   몸통(요청·응답 본문)은 건드리지 않는다 — 감싼 함수가 인자를 그대로 넘기는지도 함께 본다.
+   ──────────────────────────────────────────────────────────────────────────── */
+const NET_BLOCK = (() => {
+  const a = HELPER_SRC.indexOf('/* @netWatch:start');
+  const b = HELPER_SRC.indexOf('/* @netWatch:end');
+  return (a >= 0 && b > a) ? HELPER_SRC.slice(a, b) : null;
+})();
+// 도우미 본체는 `'use strict'` 안에서 돈다 — 잠긴 속성에 넣으면 **던진다**. 그 조건을 그대로 흉내 낸다.
+function loadNetWatch() {
+  return new Function('window', 'trunc',
+    "'use strict';\n" + NET_BLOCK + '\nreturn { netWatch: netWatch };');
+}
+// 가짜 XMLHttpRequest — `loadend` 를 들려주고 `status` 를 내놓는다.
+function makeFakeXHR(status, delay) {
+  function FakeXHR() { this.__ls = {}; this.status = 0; this.readyState = 0; }
+  FakeXHR.prototype.open = function (m, u) { this.method = m; this.url = u; this.readyState = 1; };
+  FakeXHR.prototype.addEventListener = function (n, f) { (this.__ls[n] = this.__ls[n] || []).push(f); };
+  FakeXHR.prototype.send = function (body) {
+    const self = this;
+    self.sentBody = body;                                   // 몸통을 **건드리지 않고** 그대로 넘기는지 본다
+    setTimeout(() => {
+      self.status = status; self.readyState = 4;
+      (self.__ls.loadend || []).forEach((f) => f());
+    }, delay === undefined ? 20 : delay);
+  };
+  return FakeXHR;
+}
+
+async function netWatchTests() {
+  console.log('stay_helper 시험 — netWatch (jsdom 없이)');
+  if (!NET_BLOCK) {
+    ok(false, 'netWatch: 도우미에서 `@netWatch:start`…`@netWatch:end` 표시를 찾지 못했습니다');
+    return;
+  }
+  const make = loadNetWatch();
+  const trunc = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : (s || ''));
+
+  // ① fetch — 끝나면 셈이 선다
+  const fetchCalls = [];
+  const win = {
+    fetch(input, init) { fetchCalls.push([input, init]); return Promise.resolve({ status: 200 }); },
+    XMLHttpRequest: makeFakeXHR(302)
+  };
+  const M = make(win, trunc);
+  const st = { xhrPending: 0, xhrDone: 0, xhrLast: null };
+  M.netWatch(st);
+  const wrappedFetch = win.fetch;
+  const p = win.fetch('/fit/master/43900/change/', { method: 'POST', body: 'x=1' });
+  ok(st.xhrPending === 1, 'netWatch: fetch 가 나가면 도는 요청으로 센다', st.xhrPending);
+  await p;
+  await new Promise((r) => setTimeout(r, 5));
+  ok(st.xhrPending === 0 && st.xhrDone === 1, 'netWatch: fetch 가 끝나면 도는 수가 0 으로 내려온다', st);
+  ok(st.xhrLast && st.xhrLast.status === 200 && /\/change\/$/.test(st.xhrLast.url),
+     'netWatch: 끝난 요청의 주소와 응답 코드를 남긴다', st.xhrLast);
+  ok(fetchCalls.length === 1 && fetchCalls[0][1] && fetchCalls[0][1].body === 'x=1',
+     'netWatch: 요청 몸통은 그대로 넘긴다 (건드리지 않는다)', fetchCalls[0][1]);
+
+  // ② XHR — 주소는 open, 코드는 status
+  const x = new win.XMLHttpRequest();
+  x.open('POST', '/fit/master/43900/change/');
+  x.send('name=값');
+  ok(st.xhrPending === 1, 'netWatch: XHR 도 도는 요청으로 센다', st.xhrPending);
+  await new Promise((r) => setTimeout(r, 60));
+  ok(st.xhrPending === 0 && st.xhrDone === 2, 'netWatch: XHR 이 끝나면 셈이 선다', st);
+  ok(st.xhrLast && st.xhrLast.status === 302 && st.xhrLast.url === '/fit/master/43900/change/',
+     'netWatch: XHR 의 주소는 open 에서, 코드는 status 에서 읽는다', st.xhrLast);
+  ok(x.sentBody === 'name=값', 'netWatch: XHR 몸통도 그대로 넘긴다', x.sentBody);
+
+  // ③ 다시 불러도 **두 겹이 되지 않는다** — 도우미를 다시 주입하는 자리다
+  M.netWatch(st);
+  make(win, trunc).netWatch(st);                            // 아예 다른 벌로 불러도 같다
+  ok(win.fetch === wrappedFetch, 'netWatch: 다시 불러도 fetch 를 두 번 감싸지 않는다');
+  await win.fetch('/fit/master/43900/change/');
+  await new Promise((r) => setTimeout(r, 5));
+  ok(st.xhrDone === 3, 'netWatch: 두 겹이 아니므로 한 요청은 한 번만 세어진다', st.xhrDone);
+  const x2 = new win.XMLHttpRequest();
+  x2.open('GET', '/fit/master/43900/');
+  x2.send();
+  await new Promise((r) => setTimeout(r, 60));
+  ok(st.xhrDone === 4 && st.xhrPending === 0, 'netWatch: XHR 도 한 번만 세어진다', st);
+
+  // ④ 못 감싸는 환경 — 조용히 넘어간다(터지지 않는다)
+  const locked = { __stayRunNet: null };
+  Object.defineProperty(locked, 'fetch', {
+    configurable: true,
+    get() { return function () { return Promise.resolve({ status: 200 }); }; },
+    set() { throw new Error('잠긴 속성'); }
+  });
+  Object.defineProperty(locked, 'XMLHttpRequest', {
+    configurable: true,
+    get() { throw new Error('닿을 수 없음'); }
+  });
+  let threw = null;
+  try { make(locked, trunc).netWatch({ xhrPending: 0, xhrDone: 0, xhrLast: null }); }
+  catch (e) { threw = e; }
+  ok(threw === null, 'netWatch: 감싸다 터지는 환경이면 조용히 넘어간다', threw && threw.message);
+
+  console.log('  — netWatch 시험 끝\n');
+}
+
+await netWatchTests();
+
+let JSDOM = null;
+try { ({ JSDOM } = require('jsdom')); } catch (e) {
+  console.log('SKIP — jsdom 이 없어 화면 시험(칸 찾기·값 넣기·저장)은 건너뜁니다 (설치하지 않습니다).');
+  console.log('       손으로 보려면 tests/helper_fixture.html 을 크롬에서 열고 콘솔에 scripts/stay_helper.js 를 붙여 넣으세요.');
+  process.exit(fail ? 1 : 0);
+}
 
 const dom = new JSDOM(readFileSync(join(here, 'helper_fixture.html'), 'utf8'), {
   url: 'https://example.test/stay/43900/',
@@ -658,6 +902,77 @@ const run = async () => {
     ok(win.__pageSaveClicks === 1, 'pageSave: 페이지 머리의 버튼을 한 번 눌렀다', win.__pageSaveClicks);
     ok(/저장되었습니다/.test(ps.toast || ''), 'pageSave: 안내 띠 글자를 그대로 돌려준다', ps.toast);
     ok((ps.errors || []).length === 0, 'pageSave: 성공 띠를 오류로 세지 않는다', ps.errors);
+    ok(ps.toastNew === true, 'pageSave: 이번 저장으로 새로 뜬 띠임을 toastNew 로 알려 준다', ps.toastNew);
+
+    // 12k-2. **앞 저장의 띠가 안 사라진 판** — 2026-09-21 운영 실행에서 두 번 났다.
+    //        지금 ERP 의 Materialize 띠는 `display:flex` 로 60초 넘게 화면에 남는다. 그 뒤의
+    //        저장은 띠 **글자**가 똑같아서(`저장되었습니다.`) 종전 판정(글자 견주기)은 새 띠를
+    //        영영 못 봤고, POST(`/fit/master/<id>/change/` → 302 → GET)가 잘 끝났는데도
+    //        `pageSave:'timeout'` 으로 러너가 섰다. 혼자 부를 때만(앞 띠가 없을 때) 멀쩡했다.
+    //        그래서 글자가 아니라 **마디(노드)** 로 가린다.
+    win.document.getElementById('toast-container').innerHTML =
+      '<div class="toast">저장되었습니다.</div>';                 // 앞 단계의 묵은 띠
+    const staleToast = win.document.querySelector('#toast-container .toast');
+    ok(/저장되었습니다/.test(R.state().toast || ''),
+       'fixture: 묵은 띠가 화면에 그대로 떠 있다(글자가 새 띠와 같다)', R.state().toast);
+    win.__pageSaveClicks = 0;
+    const t2k = Date.now();
+    const ps2 = await R.pageSave();
+    ok(ps2.status === 'settled' && ps2.saved === true,
+       'pageSave: 앞 띠와 글자가 같아도 새 띠를 알아본다 (종전에는 timeout 이었다)', ps2);
+    ok(ps2.toastNew === true, 'pageSave: 마디가 갈렸음을 toastNew 로 알려 준다', ps2.toastNew);
+    ok(win.document.querySelector('#toast-container .toast') !== staleToast,
+       'fixture: 저장이 띠 마디를 새로 갈아 끼웠다 — 글자만 같다');
+    ok(Date.now() - t2k < 3000, 'pageSave: 묵은 띠에 걸려 천장(10초)까지 매달리지 않는다', Date.now() - t2k);
+    ok(win.__pageSaveClicks === 1, 'pageSave: 그래도 버튼은 한 번만 누른다', win.__pageSaveClicks);
+
+    // 12k-3. 띠가 **아예 안 갈리는** 판 — 그물(끝난 요청)로 끝을 안다.
+    //        폼 저장은 htmx 가 아니라 제 손으로 쓴 ajax 라 `hx.pending`·`swaps`·`settles` 가
+    //        한 번도 안 움직인다. `netWatch` 가 세어 둔 `xhrPending`·`xhrDone`·`xhrLast` 를
+    //        여기서 읽는다(위 jsdom 없는 절이 `netWatch` 자체를 따로 시험한다).
+    const pbtn3 = R.pageSaveButton();
+    const origClick = pbtn3.onclick;
+    win.__pageSaveClicks = 0;
+    pbtn3.onclick = () => {
+      win.__pageSaveClicks++;
+      const h = R.hx;                                            // `window.__stayRunHtmx` 와 같은 객체다
+      h.xhrPending = (h.xhrPending || 0) + 1;
+      win.setTimeout(() => {                                     // 302 를 따라간 뒤 200 으로 끝난다
+        h.xhrPending = 0;
+        h.xhrDone = (h.xhrDone || 0) + 1;
+        h.xhrLast = { url: '/fit/master/43900/change/', status: 200 };
+      }, 120);
+    };
+    const t3k = Date.now();
+    const ps3 = await R.pageSave();
+    pbtn3.onclick = origClick;
+    ok(ps3.status === 'settled' && ps3.saved === true,
+       'pageSave: 띠가 안 갈려도 끝난 요청으로 저장을 읽는다', ps3);
+    ok(ps3.xhr && ps3.xhr.status === 200 && /\/change\//.test(ps3.xhr.url),
+       'pageSave: 그물로 본 응답 코드와 주소를 xhr 로 돌려준다', ps3.xhr);
+    ok(!ps3.toastNew, 'pageSave: 새 띠가 없었으면 toastNew 를 달지 않는다', ps3.toastNew);
+    ok(Date.now() - t3k < 3000, 'pageSave: 그물로 보면 천장까지 기다리지 않는다', Date.now() - t3k);
+    ok(win.__pageSaveClicks === 1, 'pageSave: 버튼을 한 번 눌렀다', win.__pageSaveClicks);
+
+    // 엉뚱한 주소로 끝난 요청은 저장으로 세지 않는다 — 배경 조회가 저장을 흉내 내면 안 된다
+    win.__pageSaveClicks = 0;
+    pbtn3.onclick = () => {
+      win.__pageSaveClicks++;
+      const h = R.hx;
+      h.xhrPending = (h.xhrPending || 0) + 1;
+      win.setTimeout(() => {
+        h.xhrPending = 0;
+        h.xhrDone = (h.xhrDone || 0) + 1;
+        h.xhrLast = { url: '/common/ping/', status: 200 };
+      }, 120);
+    };
+    R.config({ waitMs: 1200 });                                  // 천장까지 가는 시험이라 잠깐 낮춘다
+    const ps4 = await R.pageSave();
+    R.config({ waitMs: 10000 });
+    pbtn3.onclick = origClick;
+    ok(ps4.status === 'timeout' && ps4.saved === false,
+       'pageSave: 저장 주소가 아닌 요청은 끝난 표시로 세지 않는다', ps4);
+    ok(!ps4.xhr, 'pageSave: 그러면 xhr 도 달지 않는다', ps4.xhr);
 
     // 필수 칸이 비어 있으면 ERP 는 요청을 아예 보내지 않고 칸에 `.not-valid` 만 붙인다
     // (`common/error.ts`). 안내 띠도 안 뜨므로 이것을 못 읽으면 저장된 줄로 오해한다.
@@ -778,6 +1093,58 @@ const run = async () => {
   ok(r14c[0].status === 'not-found', 'fill: 접힌 축의 포함 줄은 찾지 못한다(조용히 다른 칸에 쓰지 않는다)', r14c[0]);
   ok(on('scope_rate_plan_include').join(',') === before14c, 'DOM: 접힌 줄의 체크는 그대로다', on('scope_rate_plan_include'));
   ok(q('[name=rate_plan]').value === '', 'DOM: 접힌 줄의 값이 옛 칸으로 새지 않았다', q('[name=rate_plan]').value);
+
+  // 15. settleOr 가 도우미 밖으로도 서 있다 — 부트의 가격 셀 단계가 같은 것을 쓴다
+  ok(typeof R.settleOr === 'function', 'stayRun.settleOr 이 선다');
+  let t15 = Date.now();
+  ok((await R.settleOr(() => true, 900)) === true && Date.now() - t15 < 60,
+     'settleOr: 화면 위에서도 참이면 기다리지 않는다', Date.now() - t15);
+  t15 = Date.now();
+  ok((await R.settleOr(() => false, 200)) === false && Date.now() - t15 >= 180,
+     'settleOr: 화면 위에서도 끝내 아니면 종전 값에서 끊는다', Date.now() - t15);
+  // 화면 상태를 조건으로 준 꼴 — 칸이 서는 것을 보고 끝낸다
+  const box15 = win.document.createElement('div');
+  win.setTimeout(() => { box15.id = 'stay_test_late'; win.document.body.appendChild(box15); }, 60);
+  t15 = Date.now();
+  const hit15 = await R.settleOr(() => !!win.document.getElementById('stay_test_late'), 1000);
+  ok(hit15 === true && Date.now() - t15 < 400, 'settleOr: 칸이 서는 것을 보고 끝낸다', Date.now() - t15);
+  box15.remove();
+
+  // 16. 저장·열기 천장 — 화면 위에서도 `stayRun.config({waitMs})` 로 바꾼다
+  ok(typeof R.config === 'function', 'stayRun.config 이 선다');
+  ok(R.config().waitMs === 10000, 'config: 화면 위에서도 기본은 10초다', R.config());
+  ok(R.config({ waitMs: 40000 }).waitMs === 40000 && R.config().waitMs === 40000, 'config: 천장을 올린다');
+  ok(R.config({ waitMs: 10 }).ok === false && R.config().waitMs === 40000, 'config: 너무 작은 값은 거부한다');
+
+  // 17. 조각이 아직 안 그려졌으면 버튼을 다시 찾아본다 (2026-09-21 운영 실측 결함)
+  //     — 드로어를 닫는 저장 뒤 ERP 가 탭을 조각 아홉 벌로 다시 그리는 사이에 다음 단계가
+  //       [연령 구간 추가] 를 찾다가 `open:'not-found'` 로 났다. 2초 뒤에 부르니 그대로 됐다.
+  ok(typeof R.settleRefresh === 'function', 'stayRun.settleRefresh 이 선다');
+  const hx17 = win.__stayRunHtmx;
+  hx17.pending = 0; hx17.requests = 0;
+  const tRef = Date.now();
+  const ref17 = await R.settleRefresh(5000, 300);
+  ok(typeof ref17 === 'number' && Date.now() - tRef < 400,
+     'settleRefresh: 잠잠하면 한 틱만 쓰고 걸린 시간을 돌려준다', ref17);
+  R.config({ waitMs: 1000 });          // 아래 두 시험이 빨리 끝나도록 잠깐 낮춘다
+  const tMiss = Date.now();
+  const miss17 = await R.open({ button: '있지도 않은 버튼 ZZZ' });
+  ok(miss17.status === 'not-found' && Date.now() - tMiss < 600,
+     'open: 화면이 잠잠하면 없는 버튼은 그 자리에서 not-found 다', { ms: Date.now() - tMiss, st: miss17.status });
+  let clicked17 = 0;
+  hx17.pending = 1; hx17.requests = 1;   // 조각이 아직 오는 중이다
+  win.setTimeout(() => {
+    const b = win.document.createElement('button');
+    b.textContent = '늦게 오는 버튼';
+    b.addEventListener('click', () => { clicked17++; });
+    win.document.body.appendChild(b);
+    hx17.pending = 0;
+  }, 150);
+  const late17 = await R.open({ button: '늦게 오는 버튼' });
+  ok(late17.status !== 'not-found' && clicked17 === 1,
+     'open: 그리는 중이면 최대 3초까지 다시 찾아 누른다', { st: late17.status, clicked: clicked17 });
+  hx17.pending = 0; hx17.requests = 0;
+  R.config({ waitMs: 10000 });
 
   console.log('\n' + pass + ' 통과 · ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);

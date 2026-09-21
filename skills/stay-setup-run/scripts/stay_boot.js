@@ -61,16 +61,26 @@
     return null;
   };
 
+  // 목록을 볼 범위 — 카드(오퍼)를 지정했으면 **그 카드**, 아니면 지금 탭 전체.
+  // 카드를 지정했는데 화면에 그 카드가 없으면 `null` 이다(넓혀 보지 않는다).
+  window.listScope = function (card) {
+    var pane = document.getElementById((location.hash || '').slice(1)) || document.body;
+    if (!card) return pane;
+    var norm = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var hit = Array.from(pane.querySelectorAll('.stay-card')).find(function (c) { var h = c.querySelector('.stay-card__head,.stay-card__title'); return h && stayRun.tier(norm(h.textContent).split('#')[0], card) >= 2; });
+    return hit || null;
+  };
+
   window.existsInList = function (name, card, mustContain) {
     if (!name) return false;
-    var pane = document.getElementById((location.hash || '').slice(1)) || document.body;
     var norm = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
-    // 카드(오퍼)가 있으면 그 카드 안에서만 본다 — 같은 이름이 다른 오퍼에 있어도 이 오퍼에는 새로 만든다
-    var scope = pane;
-    if (card) {
-      var hit = Array.from(pane.querySelectorAll('.stay-card')).find(function (c) { var h = c.querySelector('.stay-card__head,.stay-card__title'); return h && stayRun.tier(norm(h.textContent).split('#')[0], card) >= 2; });
-      if (hit) scope = hit;
-    }
+    // 카드(오퍼)가 있으면 **그 카드 안에서만** 본다 — 같은 이름이 다른 오퍼에 있어도 이 오퍼에는 새로 만든다.
+    // 그 카드를 못 찾으면 「없음」 이다(2026-09-21 운영 실측). 종전에는 탭 전체로 넓혀 봤는데,
+    // 갓 만든 오퍼의 카드가 아직 안 그려진 사이에 **옆 오퍼 카드**의 연령 구간 행을 보고
+    // 15·16단계를 「이미 있음: 유아 (홀리데이 NRF 2026-12)」 으로 건너뛰었다 — 그 오퍼에는
+    // 연령 구간이 하나도 안 생겼다. 카드 밖의 행은 어떤 경우에도 「이미 있음」 의 근거가 아니다.
+    var scope = window.listScope(card);
+    if (!scope) return false;
     var rows = Array.from(scope.querySelectorAll('tbody tr, .stay-card, li')).filter(function (r) { return r.querySelector && !r.closest('.stay-drawer'); });
     // 오퍼 칸이 있는 단계면 같은 오퍼가 적힌 항목만 "이미 있음"으로 본다 (부가옵션처럼 카드가 오퍼별이 아닐 때)
     if (mustContain) rows = rows.filter(function (r) { return norm(r.innerText).indexOf(norm(mustContain)) >= 0; });
@@ -79,6 +89,23 @@
       var t = norm(r.innerText);
       return t.indexOf(norm(name)) === 0 || t.split(/\s{2,}|\n/)[0] === norm(name) || new RegExp('(^|\\s)' + esc + '(\\s|$)').test(t);
     });
+  };
+
+  // 같은 판정이되, **아직 그리는 중이면 기다렸다** 본다(기본 3초).
+  // 그리는 중으로 보는 것은 둘뿐이다 — htmx 요청이 돌고 있거나, 지정한 카드가 아직 없거나.
+  // 행이 없는 것은 그리는 중이 아니다: 처음 만드는 목록은 원래 비어 있다(기다리면 단계마다 3초를 버린다).
+  window.LIST_WAIT_MS = 3000;
+  window.existsInListWait = async function (name, card, mustContain, ms) {
+    if (!name) return false;
+    var hx = window.__stayRunHtmx;
+    var drawing = function () {
+      if (hx && hx.pending > 0) return true;
+      return !!(card && !window.listScope(card));
+    };
+    if (drawing() && window.stayRun && typeof stayRun.waitFor === 'function') {
+      await stayRun.waitFor(function () { return !drawing(); }, ms === undefined ? window.LIST_WAIT_MS : ms);
+    }
+    return window.existsInList(name, card, mustContain);
   };
 
   // 제목 "(3번째, QUOTATION 2026-2027 · 씨뷰 빌라)" 에서 실제 이름을 뽑는다 — 화면에서 이미 이름이 바뀐 행을 찾을 때 쓴다
@@ -153,6 +180,8 @@
     opt = opt || {};
     var s = window.step(n), out = { no: n, title: s.title, kind: s.kind };
     var sleep = stayRun.sleep, waitFor = stayRun.waitFor, tier = stayRun.tier, hx = window.__stayRunHtmx;
+    // 고정 대기 대신 상태 대기 — 옛 도우미가 깔린 페이지에서도 돌도록 없으면 종전대로 쉰다
+    var settleOr = stayRun.settleOr || function (cond, ms) { return sleep(ms); };
     var nfc = function (t) { return String(t || '').normalize('NFC'); };
     var clean = function (t) { return nfc(t).replace(/\s+/g, ' ').trim(); };
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
@@ -225,7 +254,16 @@
       hx.error = null;
       fn();
       await waitFor(function () { return hx.error || (hx.pending === 0 && (hx.settles > sw || hx.swaps > sp || pane.innerHTML.length !== len)); }, ms || 6000);
-      await sleep(250);
+      // 정착 뒤 화면이 자리를 잡는 짬이었다(250ms 고정 대기). 기다리는 것은 **조각이 더 갈리지
+      // 않는 것**이다 — 요청이 비고 화면 길이가 두 번 잇달아 같으면 그린 것이 끝났다는 뜻이다.
+      // 끝내 잠잠해지지 않으면 종전과 같은 250ms 에서 끊는다.
+      var last = -1, stable = 0;
+      await settleOr(function () {
+        if (hx.pending !== 0) { stable = 0; return false; }
+        var now = pane.innerHTML.length;
+        if (now === last) stable++; else { stable = 0; last = now; }
+        return stable >= 1;
+      }, 250);
     };
     // 1) 오퍼 줄
     var chips = [].slice.call(pane.querySelectorAll('.stay-offer-btn'));
@@ -279,7 +317,9 @@
         var chip2 = coordBtns().find(function (x) { var tt = clean(x.textContent); return tier(tt.split(/\s+[·・‧∙]\s+/)[0], display) >= 3 && (!ratePlan || tt.indexOf(ratePlan) >= 0); });
         if (!chip2) break;
         chip2.click();
-        await waitFor(function () { return hx.pending === 0 && onCoord(); }, 6000); await sleep(300);
+        await waitFor(function () { return hx.pending === 0 && onCoord(); }, 6000);
+        // 기다리는 것은 **그 룸의 날짜 칸이 그려지는 것**이다(300ms 고정 대기였다)
+        await settleOr(function () { return hx.pending === 0 && !!pane.querySelector('button.stay-cal-cell'); }, 300);
       }
       if (!(await goMonth())) { out.error = '룸 화면에서 달을 ' + target + ' 로 옮기지 못했습니다'; return out; }
       if (!onCoord()) { out.error = '룸별 입력 화면으로 바뀌지 않았습니다'; return out; }
@@ -294,10 +334,18 @@
       var c0 = findCell(); if (!c0) return false;
       await settled(function () { c0.click(); });
       await waitFor(function () { var e0 = document.getElementById('stay_cell_edit'); return e0 && e0.querySelector('table') && hx.pending === 0; }, 6000);
-      await sleep(200);
+      // 기다리는 것은 **편집창의 행에 채울 칸이 서는 것**이다(200ms 고정 대기였다)
+      await settleOr(function () {
+        var e0 = document.getElementById('stay_cell_edit');
+        return hx.pending === 0 && !!(e0 && e0.querySelector('tbody tr input, tbody tr select'));
+      }, 200);
       var e1 = document.getElementById('stay_cell_edit'); return !!(e1 && e1.querySelector('table'));
     };
-    if (!(await openCell())) { await sleep(800); await openCell(); } // 화면이 다시 그려져 칸이 바뀌었을 수 있어 한 번 더
+    // 화면이 다시 그려져 칸이 바뀌었을 수 있어 한 번 더 — 기다리는 것은 **그 날짜 칸이 다시 서는 것**이다(800ms 고정 대기였다)
+    if (!(await openCell())) {
+      await settleOr(function () { return hx.pending === 0 && !!findCell(); }, 800);
+      await openCell();
+    }
     var ed = document.getElementById('stay_cell_edit');
     if (!ed || !ed.querySelector('table')) { out.error = '날짜 칸 편집창이 열리지 않았습니다'; return out; }
     // 5) 인원 조합 행 (기존 행 표 → 없으면 `인원별 가격 추가` 표의 새 행)
@@ -503,7 +551,8 @@
       })).join(' ');
     }).filter(function (x) { return occ === '무관' ? /^occupancy_key=(0)?\s/.test(x) : x.indexOf('occupancy_key=' + occ + ' ') === 0; }) : [];
     var closeBtn = ed2 && [].slice.call(ed2.querySelectorAll('button')).find(function (b) { return tier(b.textContent, '닫기') >= 3; });
-    if (closeBtn) { closeBtn.click(); await sleep(300); }
+    // 기다리는 것은 **편집창이 사라지는 것**이다(300ms 고정 대기였다)
+    if (closeBtn) { closeBtn.click(); await settleOr(function () { return !document.getElementById('stay_cell_edit'); }, 300); }
     return out;
   };
 
@@ -557,6 +606,7 @@
     opt = opt || {};
     var s = window.step(n), out = { no: n, title: s.title, kind: s.kind, checked: false, found: [] };
     var sleep = stayRun.sleep, waitFor = stayRun.waitFor;
+    var settleOr = stayRun.settleOr || function (cond, ms) { return sleep(ms); };
     var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
     var onForm = window.onHotelForm;
     // 폼이 화면에 없으면 목록의 [호텔 만들기] 로 연다. 그 이동은 **전체 화면 이동**이라 JS 호출이
@@ -589,7 +639,9 @@
     if (opt.back === false || sameForm || out.bad.length) { out.stayOnForm = true; return out; }
     var back = stayRun.findButton(document.body, s.submit || '목록') || stayRun.findButton(document.body, '목록');
     if (!back) { out.stayOnForm = true; out.note = '[목록] 버튼을 찾지 못했습니다 — 폼에 그대로 있습니다'; return out; }
-    back.click(); await sleep(300);
+    // 기다리는 것은 **폼을 떠나는 것**이다(300ms 고정 대기였다)
+    back.click();
+    await settleOr(function () { return !window.onHotelForm(); }, 300);
     out.left = true;
     return out;
   };
@@ -610,7 +662,7 @@
       var nm = window.nameOf(s);
       var offerF = (s.fields || []).find(function (x) { return x.label === '오퍼' && x.kind === 'select' && x.value; });
       var offerV = offerF ? offerF.value : null;
-      if (nm && window.existsInList(nm, s.head.card, offerV)) return { no: n, title: s.title, skipped: true, reason: '이미 있음: ' + nm + (s.head.card || offerV ? ' (' + (s.head.card || offerV) + ')' : '') };
+      if (nm && await window.existsInListWait(nm, s.head.card, offerV)) return { no: n, title: s.title, skipped: true, reason: '이미 있음: ' + nm + (s.head.card || offerV ? ' (' + (s.head.card || offerV) + ')' : '') };
     }
 
     // 여는 버튼만 고른다 — 드로어 안 버튼과 행 추가류(행/구간/단/요율 행 추가)는 칸을 채우면서 도우미가 누른다
@@ -720,6 +772,8 @@
       for (var k = 0; k < alts.length && sub.status === 'not-found'; k++) { sub = await stayRun.submit(alts[k]); if (sub.status !== 'not-found') out.submitAs = alts[k]; }
     }
     out.submit = sub.status; out.errors = sub.errors; out.toast = sub.toast; out.submitted = true;
+    // 저장 뒤 조각 다시 그리기를 도우미가 얼마나 기다렸는지 — 로그에 그대로 남는다
+    if (sub.refreshWaitMs !== undefined && sub.refreshWaitMs !== null) out.refreshWaitMs = sub.refreshWaitMs;
     // CSRF 403 을 도우미가 스스로 넘겼으면 로그 비고에 `403 재시도 후 저장` 을 남긴다.
     // 실패로 세지 않는다 — 저장은 제대로 됐고, 다만 첫 요청이 낡은 토큰으로 거부됐을 뿐이다.
     if (sub.csrfRetried) {
@@ -825,12 +879,48 @@
     return false;
   };
 
+  /* ── 단계를 시작하기 전에 화면이 다 그려졌는지 본다 (2026-09-21 운영 실측) ───────────
+     드로어를 닫는 저장 뒤에 ERP 는 그 탭을 htmx 조각 아홉 벌로 다시 그린다. 그 사이에 다음
+     단계를 시작하면 아직 없는 버튼을 찾고(12단계 [연령 구간 추가] → `open:'not-found'`),
+     아직 비어 있는 목록을 보고 엉뚱한 카드의 행을 「이미 있음」 으로 읽는다(15·16단계).
+     기다리는 자리는 **`runStep` 껍데기 하나**다 — 고리(`runAll`)로 돌리든 손으로 한 단계씩
+     부르든 같은 자리를 지난다. 알맹이(`runStepCore`)는 손대지 않는다.
+     돌고 있는 요청이 없으면 조용한 틱 하나(30ms 안쪽)로 끝난다. */
+  window.LOOP_IDLE_WAIT_MS = 8000;   // 요청이 빌 때까지 기다리는 천장
+  window.LOOP_QUIET_MS = 500;        // 그 뒤 한 틱 더 조용해질 때까지의 천장
+  window.waitQuiet = async function (idleMs, quietMs) {
+    var hx = window.__stayRunHtmx;
+    if (!hx || !window.stayRun) return 0;
+    var idle = idleMs === undefined ? window.LOOP_IDLE_WAIT_MS : idleMs;
+    var quiet = quietMs === undefined ? window.LOOP_QUIET_MS : quietMs;
+    // 새 도우미는 같은 기다림을 이미 지녔다(`stayRun.settleRefresh`) — 두 벌로 두지 않는다
+    if (typeof stayRun.settleRefresh === 'function') {
+      try { return await stayRun.settleRefresh(idle, quiet); } catch (e) { return 0; }
+    }
+    if (typeof stayRun.waitFor !== 'function') return 0;
+    var t0 = Date.now();
+    await stayRun.waitFor(function () { return hx.pending === 0; }, idle);
+    if (typeof stayRun.settleOr === 'function') {
+      var mark = null;
+      await stayRun.settleOr(function () {
+        if (hx.pending !== 0) { mark = null; return false; }
+        var now = hx.swaps + ':' + hx.settles;
+        if (mark === now) return true;
+        mark = now; return false;
+      }, quiet);
+    }
+    return Date.now() - t0;
+  };
+
   window.runStep = async function (n, opt) {
     opt = opt || {};
     var s = null;
     try { s = window.step(n); } catch (e) { s = null; }
     var title = (s && s.title) || (n + '단계');
     progSafe({ current: title, total: d.steps.length });
+    // 앞 단계가 부른 조각 다시 그리기가 끝난 뒤에 화면을 읽는다(`{waitQuiet:false}` 로 끌 수 있다)
+    var waited = 0;
+    if (opt.waitQuiet !== false) { try { waited = await window.waitQuiet(); } catch (e) { waited = 0; } }
     var r;
     try {
       r = await window.runStepCore(n, opt);
@@ -843,6 +933,7 @@
     // 시험 삼아 돌린 단계(dry)도 마찬가지다. 다시 부르면 그때 판정이 덮인다.
     // 판정은 `submit` 글자와 `dry` 로만 가른다 — `runCheckStep` 은 저장이 없는 정상 단계라
     // `submitted:false` 에 `submit` 칸이 아예 없다(그것으로 가르면 확인 단계가 통째로 안 세어진다).
+    if (waited && r && typeof r === 'object') r.waitedMs = waited;
     if (opt.dry || (r && r.submit === 'upload-label')) progMark(n, 'pending', { current: title, note: '' });
     // 실패한 단계는 제목을 그대로 남긴다 — 지켜보는 사람이 어느 단계에서 깨졌는지 띠만 보고 안다
     else if (window.stepFailed(r)) progMark(n, 'failed', { current: title, note: progReason(r) });
@@ -851,12 +942,382 @@
     return r;
   };
 
-  // 실행을 시작하기 전에 한 번 부른다 — 단계별 판정과 숫자를 0 으로 되돌리고 전체 단계 수를 넣는다
+  // 실행을 시작하기 전에 한 번 부른다 — 단계별 판정과 숫자를 0 으로 되돌리고 전체 단계 수를 넣는다.
+  // 고리의 이어서 하기 자리(`stayRunCursor`)도 함께 지운다 — 앞 호텔의 자리가 남아 있으면
+  // `runAll()` 이 엉뚱한 단계부터 시작한다.
   window.progressReset = function (total) {
     window.__stayRunStatus = {};
+    try { localStorage.removeItem(LOOP_KEY); } catch (e) { /* 지우지 못해도 막지 않는다 */ }
+    if (window.__stayRunLoop) window.__stayRunLoop = null;
     return progSafe({
       done: 0, skipped: 0, failed: 0, current: '', note: '',
       total: total === undefined ? d.steps.length : total, status: 'idle'
     });
   };
+
+  /* ───────────── 떼어 놓고 도는 실행 고리 (runAll · runStatus · runStop) ─────────────
+     브라우저 JS 도구는 한 호출이 **45초**에서 끊긴다. 종전에는 그 45초에 맞춰 에이전트가
+     3~10 단계씩 묶어 부르고 묶음마다 왕복(도구 호출 + 모델 차례)을 냈다 — 65단계 호텔의
+     12분 가운데 큰 몫이 그 왕복이었다.
+
+     `runAll` 은 고리를 **페이지 안에 떼어 놓는다.** 부르면 곧바로 `{started:true}` 로 돌아오고
+     고리는 도구 호출이 끝난 뒤에도 계속 돈다 — 45초 제한이 고리에 걸리지 않는다. 에이전트는
+     30초에 한 번 `runStatus()` 만 읽는다. 고리가 부르는 것은 **같은 `runStep`** 이라 판정도
+     (`stepFailed`) 진행 띠도 한 단계씩 부를 때와 똑같다.
+
+     멈추는 자리는 여섯이다 — `fatal`(옛 화면·금지된 단계) · `files`(사진 단계가 파일 다리를
+     기다린다) · `failed`(`stepFailed`) · `navigated`(화면이 통째로 넘어갔다) · `sale-start`
+     ([판매 시작] 앞) · `stopped`(`runStop`). 어디서 멈췄든 `runStatus()` 의 `reason` ·
+     `stoppedAt` · `results` 에 그대로 남는다. */
+
+  var LOOP_KEY = 'stayRunCursor';
+  window.LOOP_STEP_TIMEOUT_MS = 90000;   // 한 단계가 이보다 오래 걸리면 끊는다(도구의 45초와 무관하다)
+
+  function loopNfc(t) { return String(t === undefined || t === null ? '' : t).normalize('NFC'); }
+
+  function loopState() {
+    if (!window.__stayRunLoop) {
+      window.__stayRunLoop = {
+        running: false, stop: false, token: null, from: null, to: null, current: null,
+        results: [], doneCount: 0, reason: null, stoppedAt: null, startedAt: null, endedAt: null
+      };
+    }
+    return window.__stayRunLoop;
+  }
+
+  /* ── 이어서 하기 자리 (localStorage) ──────────────────────────────────────────
+     `{lastDone, pending, files, results, at}`. 화면이 통째로 넘어가면 페이지 JS 가 죽으므로
+     **단계마다 두 번** 적는다 — 시작 전(`pending`)과 끝난 뒤(`lastDone`). 새 화면에서 부트를
+     다시 eval 하고 `runAll()` 을 부르면 이 자리를 읽어 이어간다.
+     `results` 는 단계 번호마다 **마지막 판정 하나**만 남긴다(진행 띠와 같은 규칙). 한 단계를
+     두 번 돌린 자취는 실행 로그가 지닌다 — 로그의 앞 줄은 고치지 않는다. */
+  function cursorRead() {
+    try {
+      var j = JSON.parse(localStorage.getItem(LOOP_KEY) || 'null');
+      if (j && typeof j === 'object') {
+        return {
+          lastDone: parseInt(j.lastDone, 10) || 0,
+          pending: parseInt(j.pending, 10) || null,
+          files: parseInt(j.files, 10) || null,
+          results: Array.isArray(j.results) ? j.results : [],
+          at: j.at || null
+        };
+      }
+    } catch (e) { /* 값이 깨졌으면 처음부터 */ }
+    return { lastDone: 0, pending: null, files: null, results: [], at: null };
+  }
+  function cursorWrite(c) {
+    try { localStorage.setItem(LOOP_KEY, JSON.stringify(c)); return true; } catch (e) { return false; }
+  }
+  // 남길 칸 — 화면이 넘어가도 로그를 쓸 수 있을 만큼만이다. DOM 조각이 실릴 수 있는 칸
+  // (`fields`·`after`·`drawer`·`modal`·`buttons`·`rows`)은 뺀다: JSON 으로 오가야 하고 커서도 작아야 한다.
+  var LOOP_KEEP = ['no', 'title', 'kind', 'skipped', 'reason', 'refused', 'fatal', 'error', 'bad', 'errors',
+    'warn', 'mismatch', 'mismatchWarn', 'stoppedBy', 'submit', 'submitAs', 'submitted', 'readback',
+    'uploads', 'open', 'openDetail', 'cardPick', 'rowHint', 'csrfRetried', 'csrfRetryFailed',
+    'pageSave', 'pageSaved', 'navigated', 'timeout', 'note', 'tab', 'left', 'checked', 'found',
+    'saveAs', 'newRow', 'wantLos', 'display', 'month', 'occSet',
+    'refreshWaitMs', 'waitedMs', 'rerun'];
+  function loopCut(v, n) { return typeof v === 'string' && v.length > n ? v.slice(0, n) + '…' : v; }
+  function compactResult(r) {
+    if (!r || typeof r !== 'object') return { no: null };
+    var out = {};
+    LOOP_KEEP.forEach(function (k) {
+      var v = r[k];
+      if (v === undefined || v === null) return;
+      if (Array.isArray(v)) v = v.slice(0, 20).map(function (x) { return loopCut(x, 200); });
+      out[k] = loopCut(v, 400);
+    });
+    out.failed = loopFailed(r);
+    try { JSON.stringify(out); } catch (e) { return { no: r.no, title: String(r.title || ''), failed: out.failed }; }
+    return out;
+  }
+  function loopFailed(r) { try { return !!window.stepFailed(r); } catch (e) { return true; } }
+  function cursorPut(patch, r) {
+    var c = cursorRead();
+    Object.keys(patch || {}).forEach(function (k) { c[k] = patch[k]; });
+    if (r && r.no !== undefined && r.no !== null) {
+      c.results = (c.results || []).filter(function (x) { return !x || x.no !== r.no; });
+      c.results.push(compactResult(r));
+      c.results.sort(function (a, b) { return ((a && a.no) || 0) - ((b && b.no) || 0); });
+      if (c.results.length > 300) c.results = c.results.slice(-300);
+    }
+    c.at = new Date().toISOString();
+    return cursorWrite(c);
+  }
+  window.runCursor = cursorRead;
+  window.runCursorClear = function () {
+    try { localStorage.removeItem(LOOP_KEY); } catch (e) { /* 무시 */ }
+    return cursorRead();
+  };
+
+  // 화면이 통째로 넘어가면(호텔 만들기 · 기본정보 저장) 페이지 JS 가 그 자리에서 죽어 끝난 뒤
+  // 적을 기회가 없다. 떠나기 직전에 **지금 돌던 단계를 마친 것으로** 적어 둔다 — 그 이동 자체가
+  // 저장이 들어갔다는 표시다(SKILL.md 「화면이 통째로 바뀌는 단계」).
+  var loopUnloadHooked = false;
+  function loopHookUnload() {
+    if (loopUnloadHooked) return;
+    loopUnloadHooked = true;
+    var mark = function () {
+      var st = window.__stayRunLoop;
+      if (!st || !st.running || !st.current) return;
+      var c = cursorRead();
+      c.lastDone = Math.max(c.lastDone || 0, st.current);
+      c.pending = null; c.files = null;
+      c.at = new Date().toISOString();
+      cursorWrite(c);
+    };
+    try { window.addEventListener('pagehide', mark); } catch (e) { /* 무시 */ }
+    try { window.addEventListener('beforeunload', mark); } catch (e) { /* 무시 */ }
+  }
+
+  // 지시서 탭(`stayGuide.mark`)에 그대로 넘길 한 줄 — SKILL.md 「지시서 HTML 탭의 체크」 의 판정 그대로다.
+  // 고리는 **다른 탭을 만질 수 없으므로** 여기 모아 두고, 에이전트가 `runStatus().marks` 를
+  // 그 탭에서 한 번에 넘긴다. ERP 화면의 진행 띠는 `runStep` 이 단계마다 이미 갱신한다.
+  window.guideMark = function (r) {
+    if (!r || r.no === undefined || r.no === null) return null;
+    if (r.skipped) return { no: r.no, status: '건너뜀', note: String(r.reason || '') };
+    if (loopFailed(r)) {
+      // 되읽기 불일치 **하나뿐**이면 「확인 필요」 다 — 화면을 눈으로 보고 넘길 수 있는 자리다.
+      // 다른 실패 표시가 하나라도 같이 있으면 그냥 「실패」 다.
+      var onlyMismatch = (r.mismatch || []).length && !r.refused && !r.error &&
+        !(r.bad || []).length && !(r.errors || []).length &&
+        r.open !== 'not-found' && r.open !== 'ambiguous' && r.pageSaved !== false;
+      if (onlyMismatch) return { no: r.no, status: '확인 필요', note: '되읽기 불일치: ' + r.mismatch.join(' · ') };
+      return { no: r.no, status: '실패', note: progReason(r) };
+    }
+    return { no: r.no, status: '완료', note: (r.mismatchWarn || []).length ? '되읽기만' : '' };
+  };
+
+  // 사진 단계가 **파일 다리를 기다리며** 멈춘 것인가. `runStepCore` 는 올릴 파일이 있는데 아직
+  // 안 올라왔으면 `submitted:false` 로 돌아오고(`uploads` 에 파일 칸 이름이 실린다), 룸 사진처럼
+  // 저장 버튼이 없는 칸은 `submit:'upload-label'` 로 끊는다. 둘 다 실패가 아니라 **에이전트에게
+  // 넘기는 자리**다 — 고리는 그 단계를 다시 부르지 않고(모달을 또 열지 않는다) 여기서 멈춘다.
+  function loopWaitingFiles(s, r) {
+    if (!r) return false;
+    if (r.submit === 'upload-label') return true;
+    if (r.submitted !== false) return false;
+    if ((r.bad || []).length || r.stoppedBy || r.error || r.refused) return false;
+    if ((r.uploads || []).length) return true;
+    return !!(s && s.photos && s.photos.length);
+  }
+
+  // 0단계 확인처럼 **저장이 없는 단계**가 아직 확인을 못 마쳤는가.
+  // `runCheckStep` 은 폼이 아직 안 떴으면 `{navigated:true, checked:false}` 로 돌아온다 —
+  // 종전 고리는 그것을 **마친 것**으로 적어(`lastDone`) 이어서 할 때 그 단계를 건너뛰었다
+  // (2026-09-21 운영 실측: 확인하지 않은 환율·거래처·도시로 그대로 넘어갔다).
+  // 확인을 못 마쳤으면 자리를 `pending` 으로 적어 `runAll()` 이 **그 단계부터** 다시 시작한다.
+  function loopUnchecked(r) {
+    if (!r || r.checked === undefined || r.checked === null) return false;   // 확인 단계가 아니다
+    if (r.checked === false) return true;
+    return !(r.found && r.found.length);
+  }
+  function loopCheckStep(s) {
+    try { return !!(s && window.CHECK_KIND_RE.test(String(s.kind || '').normalize('NFC'))); }
+    catch (e) { return false; }
+  }
+  // 페이지가 진짜로 떠나는 중인가 — 도우미가 `pagehide`·`beforeunload` 에서 적어 둔다
+  function loopUnloading() {
+    var hx = window.__stayRunHtmx;
+    return !!(hx && hx.unloading);
+  }
+
+  // 한 단계를 시간 제한을 걸고 돌린다 — 던져도, 결과가 없어도 반드시 결과 객체를 돌려준다
+  async function loopOne(n, s, o, timeout) {
+    var r = null;
+    try {
+      // 한 단계가 끝나지 않아도 고리가 통째로 서지 않게 넉넉한 제한을 건다
+      r = await Promise.race([
+        window.runStep(n, o),
+        stayRun.sleep(timeout).then(function () {
+          return { no: n, title: s.title, timeout: true, submitted: false,
+            error: '단계가 ' + Math.round(timeout / 1000) + '초 안에 끝나지 않았습니다 — 화면을 보고 이어 가세요' };
+        })
+      ]);
+    } catch (e) {
+      // `runStep` 이 던진 것은 실패로 적고 고리를 세운다 — 매달린 채 두지 않는다
+      r = { no: n, title: s.title, error: String((e && e.message) || e) };
+    }
+    if (!r || typeof r !== 'object') r = { no: n, title: s.title, error: '단계가 결과를 돌려주지 않았습니다' };
+    if (r.no === undefined || r.no === null) r.no = n;
+    return r;
+  }
+
+  function loopFinish(st, reason, at) {
+    st.running = false;
+    st.stop = false;
+    st.reason = reason;
+    st.stoppedAt = (at === undefined ? null : at);
+    st.endedAt = new Date().toISOString();
+    st.current = null;
+    // 띠에 한 줄 — 실패는 `runStep` 이 이미 사유를 적어 두었으므로 덮지 않는다
+    if (reason && reason !== 'done' && reason !== 'failed' && reason !== 'fatal') {
+      progSafe({ note: '고리 멈춤 — ' + reason + (at ? ' (' + at + '단계)' : '') });
+    }
+    return st;
+  }
+
+  async function loopRun(st, opt, list, firstOpt) {
+    var timeout = parseInt(opt.stepTimeoutMs, 10);
+    if (isNaN(timeout) || timeout <= 0) timeout = window.LOOP_STEP_TIMEOUT_MS;
+    var base = (opt.stepOpt && typeof opt.stepOpt === 'object') ? opt.stepOpt : {};
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      if (st.stop) return loopFinish(st, 'stopped', n);
+      var s = null;
+      try { s = window.step(n); } catch (e) { s = null; }
+      if (!s) {
+        var miss = { no: n, error: '실행 계획에 ' + n + '단계가 없습니다' };
+        st.results.push(miss); st.doneCount++;
+        cursorPut({ pending: n, files: null }, miss);
+        return loopFinish(st, 'failed', n);
+      }
+      // [판매 시작] 은 사람이 누른다 — 고리는 그 단계를 열지도 않고 앞에서 멈춘다
+      if (/^판매\s*시작/.test(loopNfc(s.kind).trim()) || /^판매\s*시작/.test(loopNfc(s.title).trim())) {
+        return loopFinish(st, 'sale-start', n);
+      }
+      st.current = n;
+      cursorPut({ pending: n });                      // 시작 전에 적는다
+      var o = {};
+      Object.keys(base).forEach(function (k) { o[k] = base[k]; });
+      if (i === 0 && firstOpt) Object.keys(firstOpt).forEach(function (k) { o[k] = firstOpt[k]; });
+      var r = await loopOne(n, s, o, timeout);
+      // ── 0단계 확인의 `navigated` 는 대개 **페이지 안 이동**이다 (2026-09-21 운영 실측) ──
+      // [호텔 만들기] 는 htmx 로 화면만 갈아끼운다 — 페이지 JS 도 도우미도 그대로 살아 있다.
+      // 그 단계의 `navigated` 는 "폼이 아직 안 떴다" 는 뜻일 뿐이라, 폼이 설 때까지 기다렸다
+      // **한 번만** 다시 부르면 그대로 이어간다. 종전에는 여기서 고리를 세워, 사람이 화면을
+      // 보고 부트를 다시 eval 할 때까지 실행이 통째로 멈췄다.
+      // 페이지가 진짜로 떠나는 중이면(`hx.unloading`) 기다리지 않는다 — 새 화면에서 이어간다.
+      if (loopCheckStep(s) && r && r.navigated === true && !r.rerun && !loopUnloading()) {
+        var tw = Date.now();
+        await window.waitQuiet(8000);
+        var left = 8000 - (Date.now() - tw);
+        if (left > 0 && window.stayRun && typeof stayRun.waitFor === 'function') {
+          try { await stayRun.waitFor(function () { return window.onHotelForm(); }, left); } catch (e) { /* 안 서도 한 번은 다시 부른다 */ }
+        }
+        if (!loopUnloading()) {
+          var r2 = await loopOne(n, s, o, timeout);
+          if (r2) { r2.rerun = true; r = r2; }
+        }
+      }
+      st.results.push(r);
+      st.doneCount++;
+      var fatal = !!(r.refused && r.fatal);
+      var files = loopWaitingFiles(s, r);
+      var failed = loopFailed(r);
+      // 확인을 못 마친 단계는 **마친 것으로 적지 않는다**(위 `loopUnchecked`)
+      var unchecked = loopUnchecked(r);
+      cursorPut(files ? { pending: n, files: n }
+        : (failed || fatal || unchecked) ? { pending: n, files: null }
+        : { lastDone: n, pending: null, files: null }, r);
+      if (fatal) return loopFinish(st, 'fatal', n);
+      if (files) return loopFinish(st, 'files', n);
+      if (failed) return loopFinish(st, 'failed', n);
+      // 화면이 통째로 넘어갔다 — 페이지 JS 는 곧 죽는다. 새 화면에서 부트를 다시 eval 하고 이어간다.
+      if (r.submit === 'navigated' || r.navigated === true) return loopFinish(st, 'navigated', n);
+      if (st.stop) return loopFinish(st, 'stopped', n);
+    }
+    return loopFinish(st, 'done', list.length ? list[list.length - 1] : null);
+  }
+
+  // 남은 단계를 **떼어 놓고** 돈다. 곧바로 `{started:true, from, to, token}` 으로 돌아온다.
+  //   opt.from            시작 단계(기본: 이어서 하기 자리의 다음 단계)
+  //   opt.to              끝 단계(기본: 실행 계획의 마지막 단계)
+  //   opt.stepTimeoutMs   한 단계 제한(기본 90000)
+  //   opt.stepOpt         단계마다 `runStep(n, opt)` 로 넘길 값(예 `{ignoreMismatch:true}`)
+  //   opt.waitMs          저장·열기 천장(기본 10000) — 느린 서버에서만 올린다. `stayRun.config` 로 간다
+  window.runAll = function (opt) {
+    opt = opt || {};
+    var st = loopState();
+    if (st.running) {
+      return { started: false, running: true, token: st.token, from: st.from, to: st.to,
+        current: st.current, note: '이미 돌고 있습니다 — 멈추려면 stayRun.runStop()' };
+    }
+    // 느린 서버(로컬)에서 저장이 10초를 넘기면 도우미가 `submit:'timeout'` 으로 끊는다 —
+    // 저장은 들어갔는데 러너만 선다. 그때만 천장을 올려 돌린다(`runAll({waitMs: 40000})`).
+    var cfg = null;
+    if (opt.waitMs !== undefined) {
+      try { cfg = (window.stayRun && typeof stayRun.config === 'function') ? stayRun.config({ waitMs: opt.waitMs }) : null; }
+      catch (e) { cfg = null; }
+      if (cfg && cfg.ok === false) return { started: false, running: false, error: cfg.error, waitMs: cfg.waitMs };
+    }
+    st.waitMs = cfg ? cfg.waitMs : null;
+    var nos = d.steps.map(function (x) { return x.no; })
+      .filter(function (x) { return typeof x === 'number' && !isNaN(x); })
+      .sort(function (a, b) { return a - b; });
+    if (!nos.length) return { started: false, running: false, note: '실행 계획에 단계가 없습니다' };
+    var cur = cursorRead();
+    var num = function (v) { var i = parseInt(v, 10); return isNaN(i) ? null : i; };
+    var from = num(opt.from);
+    if (from === null) {
+      // 마치지 못한 단계가 있으면 그 단계부터, 아니면 마지막으로 마친 단계의 다음부터
+      var want = (cur.pending && cur.pending > (cur.lastDone || 0)) ? cur.pending : (cur.lastDone || 0) + 1;
+      var next = nos.filter(function (x) { return x >= want; });
+      from = next.length ? next[0] : nos[nos.length - 1] + 1;
+    }
+    var to = num(opt.to);
+    if (to === null) to = nos[nos.length - 1];
+    var list = nos.filter(function (x) { return x >= from && x <= to; });
+    st.running = true; st.stop = false;
+    st.token = 'run' + Date.now().toString(36);
+    st.from = from; st.to = to; st.current = null;
+    st.reason = null; st.stoppedAt = null; st.endedAt = null;
+    st.startedAt = new Date().toISOString();
+    st.doneCount = 0;
+    // 앞 화면(넘어가기 전)에서 돌린 것까지 이어 붙인다 — 로그가 끊기지 않는다
+    st.results = (cur.results || []).slice();
+    loopHookUnload();
+    if (!list.length) { loopFinish(st, 'done', null); return { started: false, running: false, from: from, to: to, reason: 'done', note: '할 단계가 없습니다' }; }
+    // 파일 다리를 기다리던 단계로 되돌아왔으면 그 단계만 `{uploaded:true}` 로 부른다 —
+    // 그러지 않으면 같은 자리에서 또 `submitted:false` 로 서서 고리가 제자리를 돈다.
+    var firstOpt = (cur.files && cur.files === list[0]) ? { uploaded: true } : null;
+    // **기다리지 않는다** — 고리는 도구 호출 밖에서 계속 돈다.
+    // 고리 자체가 터져도 `running:true` 인 채로 매달려 두지 않는다 — 섰다고 적고 사유를 남긴다.
+    loopRun(st, opt, list, firstOpt).catch(function (e) {
+      st.results.push({ no: st.current, error: '고리가 터졌습니다: ' + String((e && e.message) || e) });
+      loopFinish(st, 'failed', st.current);
+    });
+    return { started: true, from: list[0], to: list[list.length - 1], token: st.token,
+      steps: list.length, uploaded: !!firstOpt, waitMs: st.waitMs || null };
+  };
+
+  // 지금 상태 — **기다리지 않는다**(동기). 30초에 한 번 읽어 `running:false` 가 되면 멈춘 것이다.
+  window.runStatus = function () {
+    var st = loopState(), cur = cursorRead();
+    var marks = [];
+    st.results.forEach(function (r) { var m = window.guideMark(r); if (m) marks.push(m); });
+    var band = null;
+    try { band = stayRun.progressState(); } catch (e) { band = null; }
+    var t0 = st.startedAt ? Date.parse(st.startedAt) : 0;
+    var t1 = st.endedAt ? Date.parse(st.endedAt) : Date.now();
+    return {
+      running: !!st.running, token: st.token, from: st.from, to: st.to, current: st.current,
+      doneCount: st.doneCount || 0,
+      results: st.results,
+      lastResult: st.results.length ? st.results[st.results.length - 1] : null,
+      stoppedAt: st.stoppedAt, reason: st.reason,
+      startedAt: st.startedAt, elapsedMs: t0 ? Math.max(0, t1 - t0) : 0,
+      cursor: { lastDone: cur.lastDone, pending: cur.pending, files: cur.files },
+      waitMs: st.waitMs || null,
+      marks: marks, progress: band
+    };
+  };
+
+  // 지금 도는 단계까지만 끝내고 선다
+  window.runStop = function () {
+    var st = loopState();
+    if (!st.running) return { running: false, reason: st.reason, stoppedAt: st.stoppedAt, note: '돌고 있지 않습니다' };
+    st.stop = true;
+    return { running: true, stopping: true, current: st.current, token: st.token };
+  };
+
+  // SKILL.md 가 `stayRun.runAll()` 로 적는다 — 도우미를 다시 eval 하면 `stayRun` 이 새로 나므로
+  // 부트도 함께 다시 eval 한다(SKILL.md 「페이지에 도우미 올리기」 5번).
+  try {
+    window.stayRun.runAll = window.runAll;
+    window.stayRun.runStatus = window.runStatus;
+    window.stayRun.runStop = window.runStop;
+    window.stayRun.runStep = window.runStep;
+    window.stayRun.runCursor = window.runCursor;
+    window.stayRun.runCursorClear = window.runCursorClear;
+  } catch (e) { /* 도우미가 없으면 전역 이름으로만 쓴다 */ }
 })();

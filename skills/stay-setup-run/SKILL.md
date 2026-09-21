@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.10.0
+version: 0.11.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -21,6 +21,19 @@ metadata:
 
 화면의 동작(탭·드로어·모달·배너·위젯)은 `references/screen-mechanics.md`, 로그 형식은 `references/run-log-spec.md` 가 정본이다.
 
+> **0.11.0 에서 바뀐 것** (2026-09-21 · 빠르기만 손봤다. 단계가 하는 일·칸을 찾는 규칙·되읽기
+> 판정·위험 버튼 거부·사진 단계 규약은 **하나도 바뀌지 않았다**):
+> - **단계 반복이 `stayRun.runAll()` 로 바뀌었다.** 고리를 페이지 안에 떼어 놓고 돌려 JS 호출의
+>   45초 제한을 벗어난다 — 에이전트는 30초에 한 번 `runStatus()` 만 읽는다. 묶음마다 내던 왕복
+>   비용이 사라진다. 종전의 3~10 단계 묶음 반복문은 「묶음 실행 — 예비」 로 남겨 두었다.
+>   고리는 여섯 자리에서 선다: `done`·`failed`·`fatal`·`files`(사진)·`navigated`·`sale-start`·`stopped`.
+> - **고정 대기가 상태 대기로 바뀌었다**(`stayRun.settleOr`). 클릭 뒤 무조건 쉬던 스무 곳이
+>   "목록이 펼쳐졌나 · 값이 들어왔나 · 드로어가 닫혔나 · 미리보기가 섰나" 를 보고 **되는 즉시**
+>   넘어간다. 못 보면 **종전과 똑같은 값**에서 끊으므로 최악은 나빠지지 않는다.
+> - **이어서 하기 자리**(`localStorage.stayRunCursor`)가 생겼다. 단계마다 시작 전·끝난 뒤 두 번
+>   적어 두어, 화면이 통째로 넘어가 페이지 JS 가 죽어도 새 화면에서 그다음 단계부터 이어간다.
+>   `progressReset()` 이 그 자리를 지우므로 **새 호텔은 그것부터 부른다.**
+>
 > **0.9.3 에서 고친 것** (2026-09-10 운영 호텔 44000 실측):
 > - 이미지 모달 단계(`대표이미지 올리기`·`상품상세 이미지 올리기`)가 모달 [저장] 뒤에
 >   **기본정보 폼의 [저장] 까지** 누른다(`stayRun.pageSave()`). 모달 [저장] 은 이미지 행만
@@ -166,9 +179,22 @@ npx esbuild scripts/stay_boot.js   --minify --outfile=<실행 폴더>/_inject/st
 2. **그 페이지의 파일 칸에 로컬 파일 넣기** — 파일 다리(`input#stay_file_bridge`)에 올린다.
 3. **스크린샷** — 화면이 통째로 넘어간 뒤 컨텍스트를 다시 맞출 때, 그리고 사람에게 보일 때 쓴다.
 
-**시간·크기 예산** — 한 번의 JS 호출이 **45초**에서 끊긴다고 보고 한 호출에 3~10 단계, 단계마다
-9~15초 제한, 누적 **30초**에서 끊는다. 파일 업로드는 한 번에 **10MB** 까지다. 탭이 뒤에 있어도
-도우미는 워커 타이머로 대기를 재므로 돌아가지만, **스크린샷만은 탭이 앞에 있어야** 찍힌다.
+**시간·크기 예산** — 한 번의 JS 호출은 **45초**에서 끊긴다. 그래서 단계 실행을 호출 안에서 하지 않고
+**페이지 안에 떼어 놓은 고리**(`stayRun.runAll()`)에 맡기고 30초에 한 번 `runStatus()` 만 읽는다 —
+고리에는 그 45초가 걸리지 않는다(한 단계 제한은 90초다). 예비로 쓰는 묶음 실행은 45초를 그대로 받으므로
+한 호출에 3~10 단계, 단계마다 9~15초, 누적 **30초**에서 끊는다. 파일 업로드는 한 번에 **10MB** 까지다.
+탭이 뒤에 있어도 도우미는 워커 타이머로 대기를 재므로 돌아가지만, **스크린샷만은 탭이 앞에 있어야** 찍힌다.
+
+**저장·열기 천장은 기본 10초**다(`stayRun.config()` 로 읽는다). 운영 서버 기준 값이다 — 로컬처럼
+느린 서버에서는 큰 채우기 한 번(176일 × 좌표 6)이 30초 가까이 걸려, **저장이 실제로 들어가 드로어가
+닫혔는데도** `submit: 'timeout'` 으로 러너가 선다(2026-09-21 실측). 그럴 때만 올린다:
+
+```js
+stayRun.config({waitMs: 40000})        // 느린 서버(로컬). 고리째면 stayRun.runAll({waitMs: 40000})
+```
+
+**기본값은 바꾸지 않는다** — 천장을 늘리면 진짜로 막힌 자리에서도 그만큼 오래 매달린다.
+1000 보다 작거나 숫자가 아닌 값은 거부하고 지금 값을 지킨다(`{ok:false, error}`).
 
 ### Claude Code (Claude in Chrome 확장) — 실측 완료
 
@@ -196,7 +222,8 @@ ERP 도메인을 미리 허용해 두어야 한다.
 
 1. 로그인된 탭에서 **임의의 JS 를 평가하고 값을 돌려받는지** — `(0,eval)(…)` 로 도우미를 올릴 수 있는지, `await` 되는 표현식의 결과가 오는지.
 2. **사이트별 파일 넣기 권한** — 페이지의 `input[type=file]` 에 로컬 파일을 넣을 수 있는지, 그 권한을 도메인마다 따로 받아야 하는지.
-3. **한 호출의 시간 제한** — 45초보다 짧으면 단계 묶음을 그만큼 줄인다.
+3. **한 호출의 시간 제한** — 45초보다 짧아도 페이지 안에 떼어 놓은 고리(`runAll`)는 그 제한을 받지 않는다.
+   예비로 쓰는 묶음 실행만 그만큼 줄인다.
 
 셋 중 하나라도 안 되면 그 부분은 사람이 한다 — 파일을 못 넣으면 사진 단계는
 `건너뜀 · 사용자 업로드 필요` 로 남기고 이어서 간다.
@@ -214,6 +241,7 @@ ERP 도메인을 미리 허용해 두어야 한다.
 ```js
 (0,eval)(localStorage.getItem('stayHelperSrc'));   // window.stayRun
 (0,eval)(localStorage.getItem('stayBoot'));        // step · stepFields · titleHint · existsInList · checkGuide · runStep · runCellStep · runCheckStep
+                                                   //   + 고리: runAll · runStatus · runStop (stayRun 에도 얹힌다)
 checkGuide();                                      // [] 면 진행. 비어 있지 않으면 러너가 거부하는 단계다 — 멈추고 보고한다
 ```
 
@@ -244,7 +272,13 @@ stayRun.pageSave()                 // 페이지 우상단(.right_header)의 [저
                                    // 모달·드로어가 열려 있으면 누르지 않고 blocked 로 돌아온다
 stayRun.readback(fields) · stayRun.fileInputs() · stayRun.takeFiles({label, index, names, wait})
 stayRun.bridge() · stayRun.clearBridge() · stayRun.sleep(ms) · stayRun.waitFor(fn, ms) · stayRun.findButton(scope, "저장")
+stayRun.settleOr(fn, maxMs)        // 조건이 참이 되면 곧바로, 아니면 maxMs 에서 — 고정 대기 자리를 이것으로 바꿨다
 stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progressState() · stayRun.progressHide()
+
+stayRun.runAll({from, to, stepTimeoutMs, stepOpt})   // 남은 단계를 **떼어 놓고** 돈다 — 곧바로 {started, from, to, token}
+stayRun.runStatus()                // {running, reason, stoppedAt, current, doneCount, results, lastResult, marks, progress, cursor, elapsedMs}
+stayRun.runStop()                  // 지금 도는 단계까지만 끝내고 선다
+stayRun.runCursor()                // 이어서 하기 자리 {lastDone, pending, files, results}
 ```
 
 ## 단계 반복
@@ -254,7 +288,74 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
 **한 단계도 실행하지 말고** 걸린 단계 번호와 이유를 사용자에게 보고한다 — 지시서를 다시 만들어야
 한다(옛 화면이면 러너 v0.2.x). 그냥 `runStep` 을 불러도 그 단계는 `refused: true · fatal: true` 로 되돌아온다.
 
-실행 계획(`steps.json`)의 단계를 **번호 순서대로** 돈다. 한 번의 JS 호출에 **3~10 단계**, 단계마다 시간 제한을 걸고 누적 **30초** 예산에서 끊는다.
+실행 계획(`steps.json`)의 단계를 **번호 순서대로** 돈다. 고리는 **페이지 안에 떼어 놓고** 돌린다 —
+`stayRun.runAll()` 한 번으로 시작하고, 에이전트는 **30초에 한 번** `stayRun.runStatus()` 만 읽는다.
+고리가 도구 호출 밖에서 돌기 때문에 **JS 호출의 45초 제한이 고리에 걸리지 않는다.** 고리가 부르는 것은
+같은 `runStep` 이라 판정도(`stepFailed`) 진행 띠도 한 단계씩 부를 때와 똑같다.
+
+**1) 시작** — `progressReset()` 을 한 번 부른 뒤(총 단계 수를 넣고 이어서 하기 자리를 지운다):
+
+```js
+stayRun.runAll()        // {started:true, from, to, token} — 곧바로 돌아온다
+```
+
+- `from` 의 기본값은 **이어서 할 자리**다(마지막으로 마친 단계의 다음, 못 마친 단계가 있으면 그 단계).
+- 범위를 정하려면 `stayRun.runAll({from: 12, to: 40})`.
+- 한 단계 제한은 `{stepTimeoutMs: 90000}`(기본 90초 — 도구의 45초와 무관하다).
+- 단계마다 넘길 값이 있으면 `{stepOpt: {ignoreMismatch: true}}`.
+- 느린 서버(로컬)에서 저장이 10초를 넘겨 `submit: 'timeout'` 이 나면 `{waitMs: 40000}` 으로 천장을 올린다
+  (위 「시간·크기 예산」). 말이 안 되는 값이면 시작하지 않고 `{started:false, error}` 로 돌아온다.
+
+**2) 지켜보기** — **30초마다** 한 번 읽는다. `running: false` 면 멈춘 것이다.
+
+```js
+(() => { const s = stayRun.runStatus();
+  return {running: s.running, reason: s.reason, at: s.stoppedAt, now: s.current,
+          ran: s.doneCount, band: s.progress, last: s.lastResult}; })()
+```
+
+`results` 를 통째로 읽는 것은 **멈춘 뒤 한 번**이다 — 단계마다 한 덩이라 길다.
+`doneCount` 는 이 고리가 **돌린** 단계 수다(실패한 것도 센다) — 완료·건너뜀·실패 수는 `progress`(진행 띠)가 지닌다.
+
+**3) 멈춘 자리(`reason`)에 따라:**
+
+| `reason` | 무슨 일인가 | 무엇을 하나 |
+|---|---|---|
+| `done` | `to` 까지 다 했다 | 로그를 쓴다 |
+| `failed` | `stepFailed` 가 참인 단계다 | 아래 「단계가 실패했을 때」 그대로 판단한다. 고친 뒤 `stayRun.runAll()` — **그 단계부터** 다시 시작한다 |
+| `fatal` | 옛 화면 기준 단계·금지된 단계(`refused`+`fatal`) | 멈추고 보고한다. 지시서를 다시 만들어야 한다 |
+| `files` | 사진 단계가 파일 다리를 기다린다 | 「사진 단계」 2~6번(드로어 제목 확인 · 파일 올리기 · `takeFiles` · `clearBridge`)을 하고 `stayRun.runAll()` — 그 단계를 `{uploaded:true}` 로 **한 번만** 이어 부르고 다음으로 간다 |
+| `navigated` | 화면이 통째로 넘어갔다(호텔 만들기 · 기본정보 저장) | 스크린샷으로 컨텍스트를 맞추고 부트 두 줄을 다시 eval 한 뒤 `stayRun.runAll()` — 넘어간 단계는 마친 것으로 적혀 있어 **그다음 단계부터** 간다 |
+| `sale-start` | 다음이 `판매 시작` 단계다 | 누르지 않는다. 배너를 확인하고 사용자에게 넘긴다 |
+| `stopped` | `stayRun.runStop()` 으로 세웠다 | 이어가려면 `stayRun.runAll()` |
+
+**4) 로그** — `runStatus().results` 에 `runStep` 이 돌려준 것이 **그대로 차례대로** 들어 있다. 한 줄
+적는 규칙은 종전과 같다(`references/run-log-spec.md`). 지시서 탭을 열어 두었으면 `runStatus().marks`
+(단계마다 `{no, status, note}`)를 그 탭에서 `stayGuide.mark(…)` 에 통째로 넘긴다.
+
+- 고리는 단계마다 **이어서 하기 자리**(`localStorage.stayRunCursor`)를 **시작 전과 끝난 뒤 두 번** 적는다.
+  화면이 통째로 넘어가 페이지 JS 가 죽어도 그 자리가 남아 새 화면에서 이어간다.
+  `stayRun.runCursor()` 로 읽고 `progressReset()` 이 지운다 — **새 호텔을 시작할 때 꼭 한 번 부른다**(앞 호텔의 자리가 남으면 엉뚱한 단계부터 시작한다).
+- **단계를 시작하기 전에 화면이 다 그려졌는지 본다**(0.11.0). 드로어를 닫는 저장 뒤에 ERP 는 그 탭을
+  htmx 조각 아홉 벌(룸·검증·부가옵션·연령 구간·가격 캘린더·시즌·부과금·프로모션·혜택)로 **다시 그린다** —
+  그 사이에 다음 단계를 시작하면 아직 없는 버튼을 찾고(`open: 'not-found'`), 비어 있는 목록을 보고
+  **옆 오퍼 카드**의 행을 「이미 있음」 으로 읽는다(2026-09-21 실측 결함 2건). 그래서 요청이 빌 때까지
+  (최대 8초) 그리고 한 틱 더 조용해질 때까지 기다린 뒤에 화면을 읽는다. **잠잠하면 한 틱(30ms 안쪽)뿐이고**,
+  기다린 시간은 결과의 `waitedMs`(단계 앞)·`refreshWaitMs`(저장 뒤)에 남는다. 손으로 `runStep(n)` 을
+  불러도 같은 자리를 지난다(꼭 꺼야 하면 `runStep(n, {waitQuiet:false})`).
+- **0단계 확인은 확인을 마쳐야 마친 것이다**(0.11.0). `checked: false` 면 자리를 `pending` 으로 적어
+  `runAll()` 이 **그 단계부터** 다시 한다 — 종전에는 확인하지 않은 환율·거래처·도시를 마친 것으로 적어
+  이어서 할 때 통째로 건너뛰었다. 그 단계의 `navigated` 는 대개 **페이지 안 이동**이라(htmx 로 화면만
+  갈리고 페이지 JS 는 살아 있다) 폼이 설 때까지 기다렸다 **한 번만 스스로 다시 부르고**, 그래도
+  `navigated` 면 그때 고리를 세운다(페이지가 진짜로 떠나는 중이면 기다리지 않는다).
+- 진행 띠는 `runStep` 이 단계마다 스스로 갱신한다 — 고리에 따로 넣을 것이 없다.
+- `stayRun.runStop()` 은 **지금 도는 단계까지만** 끝내고 선다. 고리가 도는 중에 `runAll()` 을 또 불러도 두 번 돌지 않는다(`{started:false, running:true}`).
+
+### 묶음 실행 — 예비
+
+한 단계를 손으로 들여다볼 때, 또는 고리가 이유 없이 죽었을 때(`runStatus()` 가 `running:false` 인데
+`reason` 이 `null` 이다) 쓰는 종전 길이다. 한 번의 JS 호출에 **3~10 단계**, 단계마다 시간 제한을 걸고
+누적 **30초** 예산에서 끊는다(이쪽은 JS 호출의 45초 제한을 받는다).
 
 ```js
 (async () => {
@@ -269,7 +370,7 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
 ```
 
 - 뒤로 간 탭은 크롬이 페이지 타이머를 늦춘다. 도우미의 대기는 워커 타이머로 재므로 탭을 앞에 두지 않아도 되지만, **스크린샷은 탭이 앞에 있어야** 찍힌다.
-- `runStep` 이 돌려주는 키: `open`·`openDetail`·`fill`·`bad`·`warn`·`mismatch`·`mismatchWarn`·`stoppedBy`·`submit`·`submitAs`·`skipped`·`cardPick`·`rowHint`·`uploads`·`refused`.
+- `runStep` 이 돌려주는 키: `open`·`openDetail`·`fill`·`bad`·`warn`·`mismatch`·`mismatchWarn`·`stoppedBy`·`submit`·`submitAs`·`skipped`·`cardPick`·`rowHint`·`uploads`·`refused`·`waitedMs`·`refreshWaitMs`.
 - `open: 'already'` 는 **성공**이다(0.9.2) — 이 버튼이 연 모달이 아직 열려 있어 다시 누르지 않은 것이다.
   사진 단계처럼 같은 단계를 다시 부르는 경우에 나온다. 실패로 세지 않는다.
 - **0단계 확인**(`환율 확인`·`거래처 확인`·`도시 확인`)은 저장이 없는 단계다. `runStep` 이
@@ -277,12 +378,17 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
   [호텔 만들기] 폼의 목록에 지시서 값이 뜨는지만 보고,
   폼을 떠나는 마지막 단계에서 `→ [목록]` 으로 돌아온다(`left: true`). 값이 목록에 없으면 `bad` 에
   담고 폼에 남는다 — 비슷한 값을 대신 고르지 않는다.
+  폼이 아직 안 떴으면 `{navigated: true, checked: false}` 로 돌아온다 — **마친 단계가 아니다.**
+  고리는 그것을 자리에 `pending` 으로 남기고 한 번 더 부른다(위 「단계 반복」 4번).
 - `refused: true` · `fatal: true` 는 옛 화면 기준 단계이거나 금지된 단계(`경고 넘어가기`)다 — 실행 전체를 멈춘다.
   `fatal` 없는 `refused: true` 는 **그 단계 하나**를 거부한 것이다(아래 「가격 셀 단계가 거부하는 것」). 그 단계를 고치고 다시 부른다.
 - `bad`(칸 못 찾음·후보 여럿)가 하나라도 있으면 **저장하지 않고** 그 단계에서 멈춘다.
 - `submit` 이 `closed` 가 아니면 화면을 보고 판단한다. 가격 셀 단계(`runCellStep`)는 저장해도
   모달을 닫지 않으므로 성공이 `settled` 다 — 그 단계에서 멈추는 것이 정상이고, `refused` 면
-  화면의 `.stay-banner--blocking` 사유가 `errors` 에 담겨 온다. `skipped: true` 는 같은 이름이 이미 목록에 있어 건너뛴 것이다(정상).
+  화면의 `.stay-banner--blocking` 사유가 `errors` 에 담겨 온다. `skipped: true` 는 같은 이름이 이미 목록에 있어 건너뛴 것이다(정상) — 그 판정은 **지시서가 가리킨
+  카드 안에서만** 본다(0.11.0). 카드가 화면에 아직 없으면 「없음」 으로 읽고 새로 만든다: 옆 오퍼 카드의
+  행은 어떤 경우에도 건너뛸 근거가 아니다(2026-09-21 실측: 갓 만든 오퍼의 연령 구간 두 단계가
+  「이미 있음」 으로 건너뛰어져 그 오퍼에 연령 구간이 하나도 안 생겼다).
 - **한 단계가 깨끗하게 끝났는지는 `stepFailed(r)` 하나가 정한다** — 진행 띠도 로그도 이 판정을 쓴다.
   실패로 보는 것: `refused` · `error` · `bad` · `errors`(서버가 거부한 사유) ·
   `mismatch`(**믿을 수 있는 칸**의 되읽기 불일치 — 아래) ·
@@ -350,7 +456,9 @@ stayRun.progress({done, total, current, skipped, failed, note}) · stayRun.progr
 
 1. 시작할 때 사용자에게 지시서를 옆 탭에 열어 달라고 부탁한다. 브라우저 도구가 로컬 파일(`file://…`)을
    열 수 있으면 에이전트가 직접 연다. **못 열면 그냥 넘어간다** — 있으면 좋은 것이지 없으면 안 되는 것이 아니다.
-2. 한 묶음(3~10 단계)을 끝낼 때마다 **그 탭에서** 한 번 부른다. 방금 끝낸 단계를 목록으로 통째로 넘긴다.
+2. 고리가 멈출 때마다(또는 폴링 중에 가끔) **그 탭에서** 한 번 부른다. `stayRun.runStatus().marks` 가
+   단계마다 `{no, status, note}` 로 이미 모아 둔 것이라 그대로 넘기면 된다 — 고리는 ERP 탭 안에서 도므로
+   지시서 탭을 직접 만지지 못한다. 예비로 쓰는 묶음 실행에서는 방금 끝낸 묶음을 목록으로 넘긴다.
 
 ```js
 stayGuide.mark([
@@ -386,6 +494,10 @@ stayGuide.current(15);   // 지금 하는 단계 — 그 자리로 스크롤된�
 - **`캠페인` 은 화면에 없다**(2026-09-04). 지시서에 캠페인 단계나 `캠페인` 줄이 보이면 실행하지 말고 멈춰서 보고한다.
 
 ## 사진 단계
+
+고리로 돌면 1번은 저절로 끝나 있다 — `runAll` 이 그 단계를 부르면 드로어·모달이 열리고 값까지 찬
+채로 `submitted:false` 가 되어 `reason: 'files'` 로 서기 때문이다. 2번부터 이어서 하고, 끝나면
+`stayRun.runAll()` 한 번으로 그 단계를 `{uploaded:true}` 로 마치고 다음 단계로 간다.
 
 1. `runStep(n, {dry:true})` — 드로어·모달만 열고 값까지만 채운다.
 2. 드로어 제목이 **대상 룸인지 확인**한다.
