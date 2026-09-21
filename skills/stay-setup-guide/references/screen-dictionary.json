@@ -2,7 +2,7 @@
  "meta": {
   "generated_on": "2026-09-15",
   "screen_count": 31,
-  "field_count": 216,
+  "field_count": 217,
   "currency_token": "공급 통화",
   "hotel_name_token": "〈호텔명〉",
   "erp_baseline": "운영 2026-09-15 배포판 화면 기준"
@@ -3444,6 +3444,24 @@
        "reject": [
         "애드온 이름을 입력해주세요"
        ]
+      },
+      {
+       "label": "고객 안내 문구",
+       "kind": "여러 줄 글",
+       "required": false,
+       "options": null,
+       "options_note": null,
+       "format": "정규화 후 2000자까지",
+       "help": "선택 전에 보여주는 안내입니다. 가격·필수·배타 규칙은 바꾸지 않습니다.",
+       "checkbox_text": null,
+       "_note": "Stay 안내 기능 배포 후 사용. 줄바꿈 유지, 빈 값은 삭제, 생략은 기존 값 유지.",
+       "visible_when": "",
+       "same_row_as": null,
+       "aliases": [
+        "customer_notice",
+        "customerNotice"
+       ],
+       "reject": []
       },
       {
        "label": "적용 방식",

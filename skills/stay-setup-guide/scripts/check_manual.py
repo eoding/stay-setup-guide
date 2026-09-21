@@ -3216,6 +3216,8 @@ def load_dictionary(path):
                     value = field.get(key)
                     if value:
                         add(value)
+                for alias in field.get("aliases") or []:
+                    add(alias)
                 # 체크박스 칸은 지시서에서 `<칸 이름> · <체크박스 문구>` 로도 쓴다
                 checkbox_text = field.get("checkbox_text")
                 if checkbox_text:
@@ -3254,6 +3256,8 @@ def load_dictionary_kinds(path):
                     value = field.get(key)
                     if value:
                         kinds.setdefault(norm_field(value), set()).add(kind)
+                for alias in field.get("aliases") or []:
+                    kinds.setdefault(norm_field(alias), set()).add(kind)
     return kinds
 
 

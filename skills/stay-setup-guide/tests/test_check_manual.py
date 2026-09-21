@@ -4176,3 +4176,17 @@ class RefBandResolutionTest(unittest.TestCase):
     def test_the_example_manual_has_no_unresolved_bands(self):
         with open(EXAMPLE, encoding="utf-8") as handle:
             self.assertEqual(cm.find_unresolved_ref_bands(steps_of(handle.read())), [])
+
+
+def test_customer_notice_dictionary_is_optional_and_advisory():
+    with open(DICTIONARY, encoding="utf-8") as stream:
+        dictionary = json.load(stream)
+    screen = next(s for s in dictionary["screens"] if s["id"] == "addon")
+    field = next(f for b in screen["blocks"] for f in b["fields"] if f["label"] == "고객 안내 문구")
+    assert field["kind"] == "여러 줄 글"
+    assert not field["required"]
+    assert field["aliases"] == ["customer_notice", "customerNotice"]
+    assert "2000" in field["format"]
+    assert "가격·필수·배타 규칙은 바꾸지 않습니다" in field["help"]
+    assert "customer_notice" in cm.load_dictionary(DICTIONARY)
+    assert "customerNotice" in cm.load_dictionary(DICTIONARY)
