@@ -73,8 +73,9 @@ python3 scripts/check_manual.py examples/우에노_토우가네야/_원고/manua
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |
 | `scripts/check_manual.py` | 원고 형식 검사 — 단계=저장 1:1, 번호 연속, 금지어·원문자·좌표·절대경로 0, 사진 파일 존재, 같은 오퍼의 시즌 날짜 겹침 0, 오퍼의 `기본 취소 정책` 지정, 금지 단계(`경고 넘어가기`·`오퍼 고치기`·`캠페인 만들기`) 0, `룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 뒤, 연령 구간 나이 범위 겹침 0, 부가옵션·부과금 이름이 대상만 적히지 않았는지, 단계 갈래별 마지막 줄, 판매 구간이 지시서 만든 날부터인지(과거 투숙 시작·과거 시즌 오류, 예약 시작·종료 비움 ⚠), 룸 이름에 한글(⚠), 엑스트라베드 의무 규칙(⚠), 공급 통화 USD 여부(⚠), 적용 범위 줄(모드 값·부과금의 요금제 축·접힌 축에 적은 포함/제외·확인 없는 전면 거부는 오류, 포함/제외 이름이 앞 단계에서 만든 요금제·룸인지, 같은 대상이 양쪽에 있으면 ⚠) |
 | `scripts/render_card.py` | 원고 → 지시서 HTML(표 셀마다 복사 버튼, 목차, `진행 현황` 띠와 단계별 상태 표, 검사 도장, 폰트 임베드). 러너가 옆 탭에서 `stayGuide.mark(...)` 로 체크를 올릴 수 있다 |
+| `scripts/render_screen_guide.py` | 화면 사전(`references/screen-dictionary.json`) → 직원용 화면 안내 HTML 한 장(`docs/화면-안내.html`). 손으로 까는 담당자가 읽는 문서라 스크린샷 없이 사전에서만 만들고, 사전의 머리 숫자와 그린 수가 다르면 종료 코드 1 로 막는다 — 사전을 고치면 이 명령을 다시 돌린다(`python3 scripts/render_screen_guide.py`) |
 | `scripts/fonts/PretendardVariable.woff2` | HTML 지시서에 임베드하는 한글 폰트(라이선스: 같은 폴더 `LICENSE-Pretendard.txt`, SIL OFL) |
-| `tests/test_check_manual.py` · `tests/test_render_card.py` | 검사기 시험(화면 사전 JSON 을 그대로 읽어 칸 이름·값 종류를 대조하고 예시 원고가 ALL OK 인지 본다)과 렌더러의 검사 도장 시험 |
+| `tests/test_check_manual.py` · `tests/test_render_card.py` · `tests/test_render_screen_guide.py` | 검사기 시험(화면 사전 JSON 을 그대로 읽어 칸 이름·값 종류를 대조하고 예시 원고가 ALL OK 인지 본다), 렌더러의 검사 도장 시험, 화면 안내 시험(사전의 화면·칸 수와 같은지, 탭·여는 길·카드가 빠지지 않는지, 두 번 돌려 같은 바이트인지, 바깥 요청이 없는지) |
 
 ```
 python3 -m unittest discover -s tests
