@@ -2776,7 +2776,12 @@
     // `window.__stayRunHtmx` 와 **같은 객체**다(두 벌이 되면 한쪽만 늘어난다).
     hx: hx,
     // 부트(`stay_boot.js`)의 가격 셀 단계가 같은 격자를 쓴다 — 두 벌이 되면 한쪽만 고쳐진다.
-    rowCells: rowCells
+    rowCells: rowCells,
+    // 셀렉트 항목 고르기 — `fill` 이 쓰는 바로 그 판정이다(앞 조각 폴백 포함).
+    // 부트의 가격 셀 단계도 이것을 쓴다: 두 벌로 두었더니 한쪽에만 폴백이 있어,
+    // `인원 조합` 을 항목 글자(`선택: A2 · 성인 2`)로 적은 단계가 칸은 이미 맞춰 놓고도
+    // `not-found` 로 끝나 저장까지 못 갔다(2026-09-22 운영 실행).
+    pickOption: pickOption
   };
 
   window.stayRun = api;

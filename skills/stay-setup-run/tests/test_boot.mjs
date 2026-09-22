@@ -187,6 +187,44 @@ async function loopTests() {
     ok(st2.reason === 'done' && st2.cursor.lastDone === 3, 'runAll: 사진 뒤 단계까지 이어서 끝낸다', st2.cursor);
   }
 
+  // 4b. **룸 사진**에는 누를 저장 버튼이 없다 — 파일을 옮기는 것이 곧 `→ [사진 추가]` 줄의
+  //     실행이라, `{uploaded:true}` 로 이어 부르면 도우미가 `submit:'upload-label'` 로 돌려준다.
+  //     종전에는 그것을 **또** 「파일 기다림」 으로 읽어 고리가 같은 단계에서 영영 섰고
+  //     (`files` → `runAll` → `files` …), 진행 띠는 그 단계를 어느 숫자에도 세지 않은 채
+  //     실행 로그·지시서 탭에는 `stepFailed` 가 참이라 **실패**로 적혔다 — 사진은 멀쩡히
+  //     올라간 채로(2026-09-22 운영 실행: 66단계 호텔이 `50 완료 / 5 실패` 로 보였다).
+  {
+    const photoSteps = { guide: {}, steps: [stepOf(1, '룸 만들기'),
+      stepOf(2, '룸 사진 올리기', { photos: ['a.jpg'], submit: '사진 추가' }), stepOf(3, '룸 만들기')] };
+    const ctx = bootSandbox(photoSteps);
+    const calls = [];
+    // `runStepCore` 의 규약 그대로 흉내 낸다 — 파일 전에는 기다림, 파일 뒤에는 이미 실행된 줄이다
+    ctx.runStep = async (n, o) => {
+      calls.push([n, (o && o.uploaded) ? 'uploaded' : '']);
+      if (n !== 2) return okResult(n);
+      return (o && o.uploaded)
+        ? { no: n, submit: 'upload-label', submitted: false, uploadDone: true }
+        : { no: n, submit: 'upload-label', submitted: false, waitingFiles: true };
+    };
+    ctx.runAll();
+    const st1 = await waitLoop(ctx);
+    ok(st1.reason === 'files' && st1.stoppedAt === 2, 'runAll: 룸 사진도 파일 앞에서는 files 로 선다', st1.reason);
+    ctx.runAll();                                   // 파일을 옮긴 뒤 다시 부른다
+    const st2 = await waitLoop(ctx);
+    ok(calls.map((c) => c.join('')).join(' ') === '1 2 2uploaded 3',
+       'runAll: 룸 사진 단계를 {uploaded:true} 로 한 번만 부르고 다음으로 간다', calls);
+    ok(st2.reason === 'done' && st2.cursor.lastDone === 3,
+       'runAll: 올린 뒤의 `upload-label` 은 끝난 것이다 — 같은 자리에 다시 서지 않는다', st2.cursor);
+    ok(ctx.stepFailed({ submit: 'upload-label', submitted: false, uploadDone: true }) === false,
+       'stepFailed: 파일을 올린 뒤의 `upload-label` 은 실패가 아니다');
+    ok(ctx.stepFailed({ submit: 'upload-label', submitted: false, waitingFiles: true }) === false,
+       'stepFailed: 파일을 기다리는 `upload-label` 도 실패가 아니다(넘김이다)');
+    ok((ctx.guideMark({ no: 2, submit: 'upload-label', submitted: false, uploadDone: true }) || {}).status === '완료',
+       'guideMark: 올린 뒤의 룸 사진 단계는 지시서 탭에 완료로 넘긴다');
+    ok(ctx.guideMark({ no: 2, submit: 'upload-label', submitted: false, waitingFiles: true }) === null,
+       'guideMark: 아직 파일을 기다리는 단계는 넘기지 않는다 — 완료로 체크하면 안 된다');
+  }
+
   // 5. 화면이 통째로 넘어가는 단계에서 선다(페이지 JS 가 곧 죽는다)
   {
     const ctx = bootSandbox(steps);
@@ -550,6 +588,45 @@ const STEPS = {
         { label: '판매가', kind: 'typed', value: '999' }
       ],
       longtexts: [], photos: [], submit: '저장'
+    },
+    {
+      // 셀렉트 칸을 **항목 글자 그대로** 적은 원고(`선택: 판매`). 파서는 `선택:` 을 벗겨 두지만
+      // 손으로 만든 원고·옛 산출물에는 그대로 남아 있고, 러너의 `keyOfValue` 도 그 꼴을
+      // 벗기려고 있다. 칸 채우기 고리만 그 꼴을 못 읽어 멀쩡한 항목을 `not-found` 로 적었다.
+      no: 12,
+      title: '가격 셀 만들기 (2026-01-02)',
+      kind: '가격 셀 만들기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원별 · 박수별 가격 추가', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '상태', kind: 'select', value: '선택: 판매' },
+        { label: '판매가', kind: 'typed', value: '160' }
+      ],
+      longtexts: [], photos: [], submit: '추가'
+    },
+    {
+      // 그러면서도 **진짜 없는 값**은 여전히 `not-found` 여야 한다 — 느슨해진 맞추기가
+      // 아무 항목이나 고르면 화면에 없는 값이 조용히 다른 항목으로 저장된다.
+      no: 13,
+      title: '가격 셀 만들기 (2026-01-02)',
+      kind: '가격 셀 만들기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원별 · 박수별 가격 추가', buttons: [], buttons_parsed: [] },
+      fields: [
+        { label: '상태', kind: 'select', value: '선택: 없는 상태' },
+        { label: '판매가', kind: 'typed', value: '161' }
+      ],
+      longtexts: [], photos: [], submit: '추가'
+    },
+    {
+      // 새 행의 `인원 조합` 셀렉트를 **항목 값이 아니라 항목 글자**로만 맞춰야 하는 판.
+      // 화면이 항목 값에 내부 번호를 싣고 좌표는 글자에만 두면(`<option value="77">A2 · 성인 2`),
+      // 값끼리 견주는 갈래는 `A2` 를 못 찾아 "목록에 `A2` 이(가) 없습니다" 로 단계를 세운다 —
+      // 화면에는 `A2 · 성인 2` 가 버젓이 있는데도.
+      no: 14,
+      title: '가격 셀 만들기 (2026-01-02)',
+      kind: '가격 셀 만들기',
+      head: { tab: '가격 캘린더', card: '2026 계약 · Single × 기본 요금제 의 인원 조합 A2 행', buttons: [], buttons_parsed: [] },
+      fields: [{ label: '판매가', kind: 'typed', value: '170' }],
+      longtexts: [], photos: [], submit: '추가'
     }
   ]
 };
@@ -758,6 +835,39 @@ const run = async () => {
   ok(!r2c.error, 'runCellStep: 새 행 카드 + 인원 조합 칸도 읽는다', r2c.error);
   ok(r2c.want && r2c.want.occ === 'A2',
      'runCellStep: 카드가 좌표를 안 부르면 `인원 조합` 칸(`선택: A2 · 성인 2`)에서 읽는다', r2c.want);
+  //      그리고 **그 칸을 못 찾은 칸으로 세지 않는다.** 셀렉트를 이미 `A2` 로 맞춰 놓고도
+  //      칸 채우기 고리가 글자(`선택: A2 · 성인 2`)를 항목(`A2 · 성인 2`)과 맞추지 못해
+  //      `not-found` 를 적으면, `bad` 가 차서 그 단계는 **저장까지 못 간다** — 값은 이미
+  //      맞는데 러너만 못 찾았다고 하는 자리다(2026-09-22 운영 실행에서 가격 셀 3단계).
+  ok((r2c.bad || []).length === 0,
+     'runCellStep: 이미 맞춘 `인원 조합` 을 not-found 로 세지 않는다', r2c.bad);
+  ok(((r2c.fields || []).find((f) => f.label === '인원 조합') || {}).status === 'ok',
+     'runCellStep: 항목 글자(`A2 · 성인 2`)로 적은 값도 그 항목에 닿는다', r2c.fields);
+  ok(r2c.occSet === 'A2', 'runCellStep: 새 행 셀렉트가 그 좌표로 서 있다', r2c.occSet);
+
+  // 2-c-2) 같은 일이 `인원 조합` 만의 것이 아니다 — 아무 셀렉트 칸이나 항목 글자 그대로 적으면
+  //        (`선택: 판매`) 종전 맞추기는 멀쩡한 항목을 `not-found` 로 적었다.
+  const rsel = await win.runCellStep(12, { dry: true });
+  ok((rsel.bad || []).length === 0, 'runCellStep: `선택: 판매` 를 not-found 로 세지 않는다', rsel.bad);
+  ok(((rsel.fields || []).find((f) => f.label === '상태') || {}).detail === '판매',
+     'runCellStep: 그 항목을 골랐다', rsel.fields);
+
+  // 2-c-3) 그러면서도 **진짜 없는 값**은 그대로 not-found 다 — 느슨해진 맞추기가 아무 항목이나
+  //        고르면 화면에 없는 값이 조용히 다른 항목으로 저장된다.
+  const rselx = await win.runCellStep(13, { dry: true });
+  ok((rselx.bad || []).some((b) => /^상태: not-found/.test(b)),
+     'runCellStep: 화면에 없는 값은 그대로 not-found 다', rselx.bad);
+
+  // 2-c-4) 새 행의 `인원 조합` 이 항목 **값**에는 내부 번호를, 글자에만 좌표를 싣는 판.
+  //        값끼리만 견주면 `A2 · 성인 2` 가 화면에 버젓이 있는데도 "목록에 `A2` 이(가) 없습니다" 로 선다.
+  {
+    const CELL_EDIT_ORIG = win.CELL_EDIT;
+    win.CELL_EDIT = CELL_EDIT_ORIG.replace('value="A2">', 'value="77">');
+    const rkey = await win.runCellStep(14, { dry: true });
+    ok(!rkey.error, 'runCellStep: 항목 글자에만 좌표가 있어도 그 항목을 찾는다', rkey.error);
+    ok(rkey.occSet === '77', 'runCellStep: 화면이 쓰는 항목 값으로 맞춘다', rkey.occSet);
+    win.CELL_EDIT = CELL_EDIT_ORIG;
+  }
 
   // 2-d) 좌표 묶음(2026-09-09 배포판) — `A2` 묶음의 둘째 층은 `인원 조합` 칸이 rowspan 에
   //      덮여 `<td>` 가 하나 적다. 자리로 세면 `판매가` 값이 `정가` 칸에 들어간다.
@@ -940,14 +1050,48 @@ const run = async () => {
   ok(w2.stayRun.state().drawer.open === true, 'runStep: 드로어가 닫히지 않았다 — 룸 폼 [저장] 을 누르지 않았다');
   ok(!/저장|추가|만들기|등록|확인/.test(r3.submitAs || ''), 'runStep: 대안 버튼을 훑지 않았다', r3.submitAs);
 
-  //    그 단계는 파일을 올린 뒤 다시 부른다 — 아직 끝난 것이 아니므로 어느 숫자에도 세지 않는다
+  //    이 호출은 **파일을 옮긴 뒤**(`{uploaded:true}`)다 — `→ [사진 추가]` 줄은 이미 실행됐고
+  //    이 화면에는 더 누를 저장 버튼이 없다. 그러므로 이것이 그 단계의 끝이다.
+  //    종전에는 `upload-label` 을 무조건 넘김으로 읽어 띠에서 어느 숫자에도 세지 않았고
+  //    (`pending`), 같은 결과를 `stepFailed` 는 **실패**로 읽어 지시서 탭·실행 로그에
+  //    `실패` 로 적혔다 — 사진은 멀쩡히 올라간 채로(2026-09-22 운영 실행).
+  ok(r3.uploadDone === true, 'runStep: 파일 줄을 이미 실행했다는 것을 결과에 싣는다', r3);
+  ok(w2.stepFailed(r3) === false, 'stepFailed: 올린 뒤의 `upload-label` 은 실패가 아니다', r3);
+  ok((w2.guideMark(r3) || {}).status === '완료', 'guideMark: 지시서 탭에도 완료로 넘긴다', w2.guideMark(r3));
   const p3 = w2.stayRun.progressState();
-  ok(p3.done === 0 && p3.skipped === 0 && p3.failed === 0,
-    'runStep: `사진 추가` 로 넘긴 단계는 아직 어느 숫자에도 세지 않는다', p3);
-  ok(p3.current === PHOTO_STEPS.steps[0].title, 'runStep: 넘긴 단계 제목이 띠에 그대로 있다', p3);
-  ok(p3.status === 'running', 'runStep: 넘긴 단계를 실패로 물들이지 않는다', p3);
+  ok(p3.done === 1 && p3.skipped === 0 && p3.failed === 0,
+    'runStep: 파일을 올린 룸 사진 단계는 완료로 센다', p3);
+  ok(p3.current === PHOTO_STEPS.steps[0].title, 'runStep: 그 단계 제목이 띠에 그대로 있다', p3);
+  ok(p3.status !== 'failed', 'runStep: 그 단계를 실패로 물들이지 않는다', p3);
   ok(w2.__pageSaveClicks === 0,
     'runStep: 룸 사진 단계는 페이지 머리의 [저장] 을 누르지 않는다 — 룸 폼이지 기본정보 폼이 아니다', w2.__pageSaveClicks);
+
+  // 3a) 그 앞 호출 — 고리가 사진 단계를 처음 부르면 드로어를 열고 값까지 채운 뒤
+  //     **파일 다리를 기다리며** `submitted:false` 로 돌아온다. 아직 아무 사진도 안 올라갔다.
+  //     종전에는 이 결과에 실패 표시가 하나도 없다는 이유로 `stepFailed` 가 거짓 →
+  //     띠에 **완료**로 세고 `runStatus().marks` 가 지시서 탭에 `완료` 를 넘겼다.
+  //     사진이 하나도 없는 단계가 체크되면 사람이 빠진 것을 영영 못 본다.
+  {
+    const domW = new JSDOM(readFileSync(join(here, 'helper_fixture.html'), 'utf8'), {
+      url: 'https://example.test/stay/43900/#stay_tab_room_types',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true
+    });
+    const wW = domW.window;
+    wW.localStorage.setItem('staySteps', JSON.stringify(PHOTO_STEPS));
+    wW.eval(readFileSync(join(here, '..', 'scripts', 'stay_helper.js'), 'utf8'));
+    wW.eval(readFileSync(join(here, '..', 'scripts', 'stay_boot.js'), 'utf8'));
+
+    const q1 = await wW.runStep(1);
+    ok(q1.submitted === false, 'runStep: 파일 앞에서는 저장하지 않는다', q1.submitted);
+    ok(q1.waitingFiles === true, 'runStep: 파일 다리를 기다린다는 것을 결과에 싣는다', q1);
+    ok(wW.stepFailed(q1) === false, 'stepFailed: 파일을 기다리는 단계는 실패가 아니다', q1);
+    const pq = wW.stayRun.progressState();
+    ok(pq.done === 0 && pq.skipped === 0 && pq.failed === 0,
+      'runStep: 사진이 아직 안 올라간 단계를 완료로 세지 않는다', pq);
+    ok(wW.guideMark(q1) === null,
+      'guideMark: 그 단계는 지시서 탭에 아무 것도 넘기지 않는다 — 완료로 체크하면 안 된다', wW.guideMark(q1));
+  }
 
   // 3b) 기본정보 이미지 모달 — 첫 `runStep` 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
   //     **같은 단계를 다시 부르는 것이 정상 경로**다(파일을 다리에 올린 뒤 다시 부른다).

@@ -615,6 +615,23 @@ const run = async () => {
   const noOcc = await R.fill([{ label: '인원 조합', kind: 'select', value: 'A9C9_ZZZ' }], cell);
   ok(noOcc[0].status !== 'ok', 'fill: 목록에 없는 좌표는 고르지 않는다', noOcc[0]);
 
+  // 12b-1. 그 판정을 **부트도 그대로 쓴다**(`stay_boot.js` 의 가격 셀 단계). 두 벌로 두었더니
+  //        한쪽에만 앞 조각 폴백이 있어, 항목 글자를 그대로 적은 원고(`선택: A2 · 성인 2`)가
+  //        칸은 이미 맞춰 놓고도 `not-found` 로 끝났다(2026-09-22 운영 실행). 내보내는 이름이
+  //        사라지면 부트가 조용히 옛 맞추기로 되돌아가므로 여기서 함께 지킨다.
+  {
+    ok(typeof R.pickOption === 'function', 'stayRun.pickOption 이 선다');
+    const sel = occSel();
+    ok((R.pickOption(sel, 'A2').el || {}).value === 'A2',
+      'pickOption: `A2` 는 앞 조각이 같은 `A2 · 성인 2` 다 — `A2C1_CHD` 가 아니다');
+    ok((R.pickOption(sel, 'A2 · 성인 2').el || {}).value === 'A2',
+      'pickOption: 항목 글자 전체로 적어도 같은 항목이다');
+    ok((R.pickOption(sel, '선택: A2 · 성인 2').el || {}).value === 'A2',
+      'pickOption: `선택:` 이 붙은 옛 꼴도 그 항목에 닿는다');
+    ok(R.pickOption(sel, 'A9C9_ZZZ').status === 'not-found',
+      'pickOption: 없는 좌표는 그대로 not-found 다 — 아무 항목이나 고르지 않는다');
+  }
+
   // 12b-2. 에이전트 모달(2026-09-09 신설)은 `.stay-modal` 인데 `hidden` 으로 **늘 실려 있다**.
   //        열린 모달로 세면 안 되고, 그 안의 제목·버튼이 카드·저장 버튼으로 잡혀서도 안 된다.
   {

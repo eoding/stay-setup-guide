@@ -184,6 +184,23 @@
     var settleOr = stayRun.settleOr || function (cond, ms) { return sleep(ms); };
     var nfc = function (t) { return String(t || '').normalize('NFC'); };
     var clean = function (t) { return nfc(t).replace(/\s+/g, ' ').trim(); };
+    // 셀렉트 항목 고르기는 도우미(`stayRun.pickOption`)와 **한 벌**이다 — `stayRun.fill` 이
+    // 다른 모든 화면에서 쓰는 바로 그 판정이고, `키 · 사람이 읽는 말` 꼴 항목을 위한 앞 조각
+    // 폴백이 거기 있다(`A2` 는 `A2C1_CHD` 의 앞글자라 글자 전체로는 모호하다).
+    // 종전에는 여기에 두 벌째 맞추기(`tier>=3 || tier>=2`)가 따로 있었다 — 항목 글자가
+    // `A2 · 성인 2` 로 바뀐 뒤(2026-09-08) 원고가 그 글자를 그대로 적으면
+    // (`선택: A2 · 성인 2`) 어느 항목에도 안 걸려 **늘 `not-found`** 였다. 칸은 이미 맞게
+    // 서 있는데 `bad` 가 차서 그 단계가 저장까지 못 간다(2026-09-22 운영 실행, 가격 셀 3단계).
+    var optText = function (sel) { return [].slice.call(sel.options).map(function (o) { return clean(o.textContent); }).join(' / '); };
+    var pickOpt = function (sel, want) {
+      if (window.stayRun && typeof stayRun.pickOption === 'function') {
+        var hit = stayRun.pickOption(sel, want);
+        return hit && hit.el ? hit.el : null;   // `ambiguous` 여도 가장 잘 맞는 하나를 준다
+      }
+      var opts = [].slice.call(sel.options);    // 옛 도우미가 깔린 페이지 — 종전 맞추기 그대로
+      return opts.find(function (o) { return tier(o.textContent, want) >= 3; })
+        || opts.find(function (o) { return tier(o.textContent, want) >= 2; }) || null;
+    };
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
     var pane = document.getElementById((location.hash || '').slice(1)) || document.body;
     var date = (nfc(s.title).match(/(\d{4}-\d{2}-\d{2})/) || [])[1];
@@ -434,7 +451,12 @@
         var want0 = occ === '무관' ? '' : occ;
         if (oc0.tagName === 'SELECT') {
           var hit0 = [].slice.call(oc0.options).find(function (o) { return clean(o.value) === want0; });
-          if (!hit0 && want0) { out.error = '새 행의 인원 조합 목록에 `' + occ + '` 이(가) 없습니다 (' + [].slice.call(oc0.options).map(function (o) { return clean(o.textContent); }).join(' / ') + ')'; return out; }
+          // 항목 **값**에 내부 번호가 실리고 좌표는 글자에만 있는 판이 있다
+          // (`<option value="77">A2 · 성인 2`). 값끼리만 견주면 화면에 버젓이 있는 좌표를
+          // 못 찾아 단계가 선다 — 그때는 도우미와 같은 판정으로 글자를 견준다(앞 조각 폴백).
+          // 진짜 없는 좌표는 여기서도 안 걸리므로 아래 멈춤은 그대로 살아 있다.
+          if (!hit0 && want0) hit0 = pickOpt(oc0, want0);
+          if (!hit0 && want0) { out.error = '새 행의 인원 조합 목록에 `' + occ + '` 이(가) 없습니다 (' + optText(oc0) + ')'; return out; }
           if (hit0) { oc0.value = hit0.value; ['input', 'change'].forEach(function (ev) { oc0.dispatchEvent(new Event(ev, { bubbles: true })); }); }
         } else if (want0) {
           var dsc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
@@ -492,9 +514,8 @@
       if (f.kind === 'empty') { setNative(el, ''); results.push({ label: f.label, status: 'ok' }); return; }
       var val = f.value !== undefined && f.value !== null ? String(f.value) : ((f.values || [])[0] || '');
       if (el.tagName === 'SELECT') {
-        var opts = [].slice.call(el.options);
-        var o2 = opts.find(function (o) { return tier(o.textContent, val) >= 3; }) || opts.find(function (o) { return tier(o.textContent, val) >= 2; });
-        if (!o2) { results.push({ label: f.label, status: 'not-found', detail: '`' + val + '` 옵션 없음' }); return; }
+        var o2 = pickOpt(el, val);
+        if (!o2) { results.push({ label: f.label, status: 'not-found', detail: '`' + val + '` 옵션 없음 · 화면 옵션: ' + optText(el) }); return; }
         setNative(el, o2.value); results.push({ label: f.label, status: 'ok', detail: clean(o2.textContent) }); return;
       }
       setNative(el, val); results.push({ label: f.label, status: 'ok', detail: el.value });
@@ -746,7 +767,16 @@
         return l + ': 되읽기만 어긋남 — 화면 값을 눈으로 확인하세요';
       }));
     }
-    if (opt.dry || out.bad.length || (out.uploads.length && !opt.uploaded) || (s.photos && s.photos.length && !opt.uploaded)) { out.submitted = false; return out; }
+    if (opt.dry || out.bad.length || (out.uploads.length && !opt.uploaded) || (s.photos && s.photos.length && !opt.uploaded)) {
+      out.submitted = false;
+      // **아직 끝나지 않았다**는 표시를 결과에 싣는다 — 드로어·모달은 열렸고 칸도 찼지만
+      // 사진이 하나도 안 올라갔다. 이 표시가 없던 동안 `stepFailed` 는 실패 표시가 하나도
+      // 없다는 이유로 거짓을 돌려줬고, 진행 띠는 이 단계를 **완료**로 세고 `runStatus().marks`
+      // 는 지시서 탭에 `완료` 를 넘겼다 — 사진 없는 단계가 체크되면 빠진 것을 영영 못 본다
+      // (2026-09-22 운영 실행). 값이 어긋나 선 것(`bad`)은 실패이지 기다림이 아니다.
+      if (!opt.dry && !out.bad.length) out.waitingFiles = true;
+      return out;
+    }
     // 믿을 수 있는 칸이 어긋난 채로 저장하지 않는다 — 저장은 되돌리기 어렵고, 그 값이 그대로
     // 굳는다. 화면을 눈으로 확인해 맞으면 `{ignoreMismatch:true}` 로 같은 단계를 다시 부른다.
     if (out.mismatch.length && !opt.ignoreMismatch) {
@@ -764,6 +794,18 @@
     if (sub.status === 'upload-label') {
       out.uploadAction = s.submit; out.submit = 'upload-label'; out.submitted = false;
       out.note = sub.detail;
+      // **파일을 옮긴 뒤**(`{uploaded:true}`)라면 `→ [사진 추가]` 줄은 이미 실행된 것이고
+      // 이 화면에는 더 누를 저장 버튼이 없다 — 그것이 그 단계의 끝이다(SKILL.md 「사진 단계」 5).
+      // 그 구분이 없던 동안 이 결과는 진행 띠에서 어느 숫자에도 안 세어지고(`pending`),
+      // 같은 결과를 `stepFailed` 는 실패로 읽어 실행 로그·지시서 탭에 **실패**로 적혔다.
+      // 게다가 고리는 그것을 또 「파일 기다림」 으로 읽어 같은 단계에서 영영 섰다
+      // (2026-09-22 운영 실행: 사진 6단계가 그대로 남았다).
+      if (opt.uploaded) {
+        out.uploadDone = true;
+        out.note = sub.detail + ' 파일은 이미 옮겼으므로(`uploaded`) 이 단계는 끝났습니다.';
+      } else {
+        out.waitingFiles = true;
+      }
       return out;
     }
     // 지시서의 저장 글자와 화면 버튼 글자가 다를 때(예: 시즌 드로어는 [추가]) 흔한 대안을 차례로 시도한다
@@ -871,6 +913,10 @@
     if (r.errors && r.errors.length) return true;
     if (r.mismatch && r.mismatch.length) return true;
     if (r.open === 'not-found' || r.open === 'ambiguous') return true;
+    // `upload-label` = 마지막 줄이 저장 버튼이 아니라 **파일 고르개**였다(룸 사진 올리기).
+    // 실패가 아니다 — 파일 앞이면 넘김(`waitingFiles`), 파일 뒤면 끝난 것(`uploadDone`)이다.
+    // `SUBMIT_OK` 에만 없다는 이유로 실패로 읽던 자리다(2026-09-22 운영 실행).
+    if (String(r.submit) === 'upload-label') return false;
     if (String(r.submit) === 'stayed') return drawerLeftOpen(r);
     if (r.submit !== undefined && r.submit !== null && window.SUBMIT_OK.indexOf(String(r.submit)) < 0) return true;
     // 이미지 단계는 모달 [저장] 만으로 끝나지 않는다 — 기본정보 폼의 [저장] 까지 가야 호텔과
@@ -929,12 +975,15 @@
       throw e;
     }
     // 아직 끝나지 않은 단계는 어느 숫자에도 세지 않는다 —
-    // `upload-label` 은 파일 다리로 사진을 올린 뒤 다시 부르라는 넘김이지 실패가 아니고,
+    // 사진 단계가 파일 다리를 기다리며 선 것(`waitingFiles`)은 넘김이지 실패도 완료도 아니고,
     // 시험 삼아 돌린 단계(dry)도 마찬가지다. 다시 부르면 그때 판정이 덮인다.
-    // 판정은 `submit` 글자와 `dry` 로만 가른다 — `runCheckStep` 은 저장이 없는 정상 단계라
-    // `submitted:false` 에 `submit` 칸이 아예 없다(그것으로 가르면 확인 단계가 통째로 안 세어진다).
+    // 판정 자리는 **`runStepCore` 가 실은 표시**다 — `submit` 글자로만 가르던 종전 규칙은
+    // 두 자리에서 틀렸다: 파일을 옮긴 뒤의 `upload-label` 은 **끝난 것**인데 넘김으로 읽었고,
+    // 파일 앞에서 선 사진 단계는 `submit` 칸이 아예 없어 **완료**로 세었다(2026-09-22 운영 실행).
+    // `runCheckStep` 은 저장이 없는 정상 단계라 `submitted:false` 에 `submit` 칸이 없다 —
+    // 그것으로 가르면 확인 단계가 통째로 안 세어진다.
     if (waited && r && typeof r === 'object') r.waitedMs = waited;
-    if (opt.dry || (r && r.submit === 'upload-label')) progMark(n, 'pending', { current: title, note: '' });
+    if (opt.dry || (r && r.waitingFiles)) progMark(n, 'pending', { current: title, note: '' });
     // 실패한 단계는 제목을 그대로 남긴다 — 지켜보는 사람이 어느 단계에서 깨졌는지 띠만 보고 안다
     else if (window.stepFailed(r)) progMark(n, 'failed', { current: title, note: progReason(r) });
     else if (r && r.skipped) progMark(n, 'skipped', { note: '' });
@@ -1013,7 +1062,8 @@
   // (`fields`·`after`·`drawer`·`modal`·`buttons`·`rows`)은 뺀다: JSON 으로 오가야 하고 커서도 작아야 한다.
   var LOOP_KEEP = ['no', 'title', 'kind', 'skipped', 'reason', 'refused', 'fatal', 'error', 'bad', 'errors',
     'warn', 'mismatch', 'mismatchWarn', 'stoppedBy', 'submit', 'submitAs', 'submitted', 'readback',
-    'uploads', 'open', 'openDetail', 'cardPick', 'rowHint', 'csrfRetried', 'csrfRetryFailed',
+    'uploads', 'waitingFiles', 'uploadDone', 'uploadAction',
+    'open', 'openDetail', 'cardPick', 'rowHint', 'csrfRetried', 'csrfRetryFailed',
     'pageSave', 'pageSaved', 'navigated', 'timeout', 'note', 'tab', 'left', 'checked', 'found',
     'saveAs', 'newRow', 'wantLos', 'display', 'month', 'occSet',
     'refreshWaitMs', 'waitedMs', 'rerun'];
@@ -1076,6 +1126,10 @@
   window.guideMark = function (r) {
     if (!r || r.no === undefined || r.no === null) return null;
     if (r.skipped) return { no: r.no, status: '건너뜀', note: String(r.reason || '') };
+    // 아직 파일을 기다리는 사진 단계는 **아무 것도 넘기지 않는다** — 완료로 체크하면 사진이
+    // 하나도 안 올라간 단계에 체크가 서서 사람이 빠진 것을 못 본다. 올린 뒤 다시 부르면
+    // 그때 `완료` 가 나간다(2026-09-22 운영 실행).
+    if (r.waitingFiles) return null;
     if (loopFailed(r)) {
       // 되읽기 불일치 **하나뿐**이면 「확인 필요」 다 — 화면을 눈으로 보고 넘길 수 있는 자리다.
       // 다른 실패 표시가 하나라도 같이 있으면 그냥 「실패」 다.
@@ -1094,7 +1148,13 @@
   // 넘기는 자리**다 — 고리는 그 단계를 다시 부르지 않고(모달을 또 열지 않는다) 여기서 멈춘다.
   function loopWaitingFiles(s, r) {
     if (!r) return false;
-    if (r.submit === 'upload-label') return true;
+    // `runStepCore` 가 그 자리에서 이미 판정해 표시를 싣는다 — 여기서 두 벌째로 짐작하지 않는다.
+    // 종전에는 `submit === 'upload-label'` 을 무조건 기다림으로 읽어, 파일을 옮긴 뒤 이어 부른
+    // 호출까지 다시 기다림이 됐다: 고리가 `files` → `runAll` → `files` 로 **같은 단계에서
+    // 영영 섰다**(2026-09-22 운영 실행). 끝난 것(`uploadDone`)은 기다림이 아니다.
+    if (r.waitingFiles) return true;
+    if (r.uploadDone) return false;
+    if (r.submit === 'upload-label') return true;   // 옛 부트가 남긴 결과(표시 없음)
     if (r.submitted !== false) return false;
     if ((r.bad || []).length || r.stoppedBy || r.error || r.refused) return false;
     if ((r.uploads || []).length) return true;
