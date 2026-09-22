@@ -4525,7 +4525,14 @@ class ScopeDictionaryTest(unittest.TestCase):
             self.assertIn(note[0], handle.read())
 
     def test_the_meta_says_the_new_baseline(self):
-        self.assertEqual(self.data["meta"]["generated_on"], "2026-09-21")
+        """`뽑은 날`은 못 박지 않는다 — 사전을 다시 받은 날이라 받을 때마다 달라진다.
+
+        정본은 ERP 의 `stay/agent_markup_notes.json` 이 들고 있는 `erp_baseline` 이다
+        (`scripts/sync_screen_dictionary.py` 가 그 둘을 함께 실어 온다). 날짜는 형식과
+        「그 배포판보다 앞설 수 없다」 만 본다.
+        """
+        self.assertRegex(self.data["meta"]["generated_on"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertGreaterEqual(self.data["meta"]["generated_on"], "2026-09-21")
         self.assertEqual(self.data["meta"]["erp_baseline"], "운영 2026-09-21 배포판 화면 기준")
 
     def test_the_meta_field_count_matches(self):
