@@ -344,11 +344,9 @@ CHILD_HEAD_RE = re.compile(r"^C(\d+)$")
 OCCUPANCY_KEYS_FIELDS = ("인원 조합(선택)", "인원 조합")
 #: 룸의 `허용 인원 조합(선택)`(ERP 643bd564c2, 2026-09-23). 짧은 표기도 받는다.
 ROOM_COMBOS_FIELDS = ("허용 인원 조합(선택)", "허용 인원 조합")
-#: 화면 사전이 아직 모르는 칸 — **사전을 다시 받으면 저절로 물러난다**(사전에 같은 이름이 있으면
-#: 여기 값은 쓰이지 않는다). 사전은 ERP 의 `stay_screen_dictionary` 관리 명령으로만 만들고 손으로
-#: 고치지 않는데(SKILL.md), 그 명령이 있는 ERP 가지와 이 칸이 있는 가지가 아직 합쳐지지 않아 다시
-#: 받을 수 없다. 그 사이 이 칸을 쓴 원고가 `사전에 없는 칸 이름` ⚠(→ `--strict` 실패)로 막히지 않게
-#: 이름과 종류만 여기 둔다. 종류는 ERP `RoomTypeForm.allowed_combos` 의 TextInput 그대로다.
+#: 이전 화면 사전을 지정해도 새 칸을 인식한다. 2026-09-23 이후 생성한 사전에는 이 칸이 있으며,
+#: 사전에 같은 이름이 있으면 그 종류를 우선한다. 사전은 ERP 의 `stay_screen_dictionary` 관리
+#: 명령으로만 생성한다(SKILL.md). 이전 사전용 종류는 `RoomTypeForm.allowed_combos` 의 TextInput이다.
 PENDING_DICTIONARY_FIELDS = {
     "허용 인원 조합(선택)": "텍스트",
     "허용 인원 조합": "텍스트",

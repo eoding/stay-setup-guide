@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ERP Stay 화면 안내</title>
-<meta name="stay-screen-guide" content="v1;screens=31;fields=242;generated=2026-09-22">
+<meta name="stay-screen-guide" content="v1;screens=31;fields=243;generated=2026-09-23">
 <style>
 
 :root{
@@ -183,7 +183,7 @@ footer code{font-size:13px;}
 </head>
 <body>
 <main>
-<header class="page-head"><h1>ERP Stay 화면 안내</h1><p class="lede">이 페이지는 화면 사전에서 그대로 만들어진다 — 여기 적힌 ERP 배포판의 화면과 같다.</p><p>호텔마다 받는 <strong>입력 지시서</strong>가 어느 칸에 <strong>무엇을</strong> 넣을지를 말하고, 이 페이지는 <strong>화면이 어떻게 움직이는지</strong>를 말한다.</p><div class="baseline"><dl><dt>화면 기준</dt><dd>운영 2026-09-21 배포판 화면 기준</dd><dt>사전 뽑은 날</dt><dd>2026-09-22</dd><dt>담은 것</dt><dd>화면 31개 · 입력 칸 242개</dd></dl></div></header>
+<header class="page-head"><h1>ERP Stay 화면 안내</h1><p class="lede">이 페이지는 화면 사전에서 그대로 만들어진다 — 여기 적힌 ERP 배포판의 화면과 같다.</p><p>호텔마다 받는 <strong>입력 지시서</strong>가 어느 칸에 <strong>무엇을</strong> 넣을지를 말하고, 이 페이지는 <strong>화면이 어떻게 움직이는지</strong>를 말한다.</p><div class="baseline"><dl><dt>화면 기준</dt><dd>운영 2026-09-21 배포판 화면 기준</dd><dt>사전 뽑은 날</dt><dd>2026-09-23</dd><dt>담은 것</dt><dd>화면 31개 · 입력 칸 243개</dd></dl></div></header>
 <section class="howto">
 <h2>화면 읽는 법</h2>
 <ol>
@@ -619,6 +619,13 @@ footer code{font-size:13px;}
 <td class="c-req" data-label="필수"></td>
 <td class="c-opt" data-label="선택지 / 형식"><span class="sub">예: 4</span></td>
 <td class="c-help" data-label="도움말"></td>
+</tr>
+<tr class="field">
+<td class="c-name" data-label="칸"><span class="fname">허용 인원 조합(선택)</span></td>
+<td class="c-kind" data-label="종류">텍스트</td>
+<td class="c-req" data-label="필수"></td>
+<td class="c-opt" data-label="선택지 / 형식"></td>
+<td class="c-help" data-label="도움말">계약서의 &#x27;2A+2C 또는 3A&#x27; 처럼 받는 조합을 쉼표로 적습니다(A=성인, C=아동 수 · 구간 코드는 적지 않습니다). 적은 조합 이하의 인원은 모두 허용되고(2A+2C 면 2A+1C·1A+2C 도 가능) 그 밖의 조합(예: 3A+1C)은 가격 셀이 있어도 팔리지 않고, 시즌 일괄 전개도 그 조합 셀을 만들지 않습니다. 아동(C)에는 유료 연령 구간 아이와, 무료 구간이라도 &#x27;방 인원수에 포함&#x27;인 구간의 아이(유아 등)가 듭니다 — 방 인원수에 포함되지 않는 구간의 아이만 세지 않습니다. 어느 구간에도 안 드는 나이는 성인으로 셉니다. 저장하면 이 호텔에서 이 룸의 기존 셀 중 조합 밖인 것을 모든 시즌·손입력에서 판매 중지합니다(지우지 않음). 조합을 넓혀도 자동으로 다시 열리지 않으니 시즌 [셀 상태 일괄]로 여세요. 다른 호텔과 함께 쓰는 룸은 먼저 [전용으로 분리]해야 적을 수 있습니다. 비우면 제한이 없습니다. 고객 화면 &#x27;투숙 조합&#x27; 에 &#x27;성인 2 + 소아 2 / 성인 3&#x27; 으로 표시됩니다.</td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">엑스트라베드 가능</span></td>
@@ -1285,7 +1292,7 @@ footer code{font-size:13px;}
 <td class="c-kind" data-label="종류">텍스트</td>
 <td class="c-req" data-label="필수"></td>
 <td class="c-opt" data-label="선택지 / 형식"><span class="sub">예: A2,A3 · 120자까지</span></td>
-<td class="c-help" data-label="도움말">비우면 인원 무관 단일가 한 좌표에만 깝니다(종전과 같음). 요금표가 &#x27;성인 2명 100 / 성인 3명 114&#x27; 처럼 인원별로 값을 주면 A2,A3 처럼 성인 수를 적습니다. 아래에 아동 추가 금액을 적으면 그 성인 좌표마다 아동 조합(A2C1_CHD)이 함께 깔립니다 — 아동 2명은 A2C2_CHD 처럼 직접 적으세요. 인원수 숫자(2,3,4)로 적어도 되고 A2,A3,A4 로 저장됩니다.</td>
+<td class="c-help" data-label="도움말">비우면 인원 무관 단일가 한 좌표에만 깝니다(종전과 같음). 요금표가 &#x27;성인 2명 100 / 성인 3명 114&#x27; 처럼 인원별로 값을 주면 A2,A3 처럼 성인 수를 적습니다. 아래에 아동 추가 금액을 적으면 그 성인 좌표마다 아동 조합(A2C1_CHD)이 함께 깔립니다 — 아동 2명은 A2C2_CHD 처럼 직접 적으세요. 인원수 숫자(2,3,4)로 적어도 되고 A2,A3,A4 로 저장됩니다. 룸에 허용 인원 조합(객실 정보)이 있으면 그 밖의 아동 조합은 그 룸에 깔리지 않고, 직접 적으면 막힙니다.</td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">인원 조합별 조정(선택)</span></td>
@@ -1544,14 +1551,14 @@ footer code{font-size:13px;}
 <td class="c-name" data-label="칸"><span class="fname">객실 포함</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 객실(룸 타입) 목록 — 체크(고른 것에서만 판다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼가 파는 객실(룸 타입) 목록 — 체크(고른 것에서만 판다). 오퍼를 알 수 없으면 호텔 전체 목록이다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말"><span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">객실 제외</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 객실(룸 타입) 목록 — 체크(여기 든 것에서는 팔지 않는다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼가 파는 객실(룸 타입) 목록 — 체크(여기 든 것에서는 팔지 않는다). 오퍼를 알 수 없으면 호텔 전체 목록이다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말">포함과 제외에 같은 대상이 있으면 제외가 이깁니다.<span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
@@ -1568,7 +1575,7 @@ footer code{font-size:13px;}
 <section class="screen" id="screen-addon">
 <h2><span class="screen-no">20.</span> 부가옵션 추가 · 편집<span class="tab-badge">부가옵션</span></h2>
 <p class="opens"><span class="k">여는 길</span><span class="path">편집 화면 탭 <code>부가옵션</code></span><span class="path">[부가옵션 추가] (고칠 때는 카드 머리의 [편집])</span></p>
-<p class="cards"><span class="k">화면 안 카드</span><code>의무 규칙</code> · <code>수량</code> · <code>연결 룸 (비우면 전체)</code> · <code>적용 범위</code></p>
+<p class="cards"><span class="k">화면 안 카드</span><code>의무 규칙</code> · <code>수량</code> · <code>적용 범위 (비우면 전체)</code> · <code>적용 범위</code></p>
 <table class="fields">
 <thead><tr><th>칸</th><th>종류</th><th>필수</th><th>선택지 / 형식</th><th>도움말</th></tr></thead>
 <tbody>
@@ -1667,15 +1674,15 @@ footer code{font-size:13px;}
 <td class="c-name" data-label="칸"><span class="fname">요금제 scope</span></td>
 <td class="c-kind" data-label="종류">선택</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="opt-list">---------</span><span class="sub">이 호텔의 요금제 목록(비우면 전 요금제)</span></td>
-<td class="c-help" data-label="도움말">이 칸은 더 이상 견적·웹에 쓰이지 않습니다 — 아래 [적용 범위] 카드로 요금제·객실 범위를 정하세요.</td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="opt-list">---------</span><span class="sub">이 호텔의 요금제 목록 — 연결 룸을 먼저 고르면 그 룸의 요금제를 선택할 수 있다</span></td>
+<td class="c-help" data-label="도움말"></td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">룸 레벨 scope</span></td>
 <td class="c-kind" data-label="종류">선택</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="opt-list">---------</span><span class="sub">이 호텔에 만들어 둔 룸 목록</span></td>
-<td class="c-help" data-label="도움말">이 칸은 더 이상 견적·웹에 쓰이지 않습니다 — 아래 [적용 범위] 카드로 요금제·객실 범위를 정하세요.</td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="opt-list">---------</span><span class="sub">이 호텔에 만들어 둔 룸 목록(비우면 전체)</span></td>
+<td class="c-help" data-label="도움말"></td>
 </tr>
 </tbody></table>
 <h4>블록 <code>적용 범위</code></h4>
@@ -1714,14 +1721,14 @@ footer code{font-size:13px;}
 <td class="c-name" data-label="칸"><span class="fname">객실 포함</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 판매 연결(객실) 목록 — 체크(고른 것에서만 판다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼의 판매 연결(객실) 목록 — 체크(고른 것에서만 판다). 오퍼를 고르기 전의 새 부가옵션 화면은 호텔 전체 목록이고 줄마다 <code>오퍼명 · 룸명</code> 으로 적힌다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말"><span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">객실 제외</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 판매 연결(객실) 목록 — 체크(여기 든 것에서는 팔지 않는다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼의 판매 연결(객실) 목록 — 체크(여기 든 것에서는 팔지 않는다). 오퍼를 고르기 전의 새 부가옵션 화면은 호텔 전체 목록이고 줄마다 <code>오퍼명 · 룸명</code> 으로 적힌다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말">포함과 제외에 같은 대상이 있으면 제외가 이깁니다.<span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
@@ -1733,7 +1740,7 @@ footer code{font-size:13px;}
 </tr>
 </tbody></table>
 <p class="buttons"><span class="k">버튼</span><span class="btn">부가옵션 추가</span><span class="btn">가격 추가</span><span class="btn">편집</span><span class="btn">삭제</span><span class="btn">추가</span><span class="btn">저장</span></p>
-<div class="notes"><span class="k">이 화면의 메모</span><ul><li>부가옵션은 정의를 먼저 저장하고, 그다음 가격 줄을 따로 넣는다.</li><li><strong>카드 <code>적용 범위</code></strong> 는 드로어 맨 아래에 따로 선다 — 축마다 셀렉트 한 줄이고, <code>기존 범위 그대로</code> 가 아닐 때만 그 아래 <code>포함</code>·<code>제외</code> 줄이 나타난다. 같은 대상이 양쪽에 있으면 <strong>제외가 이긴다</strong>. <code>지정한 대상만</code> 인데 포함을 비우면 그 항목은 아무 데서도 팔리지 않으므로 확인란 「범위를 비운 채 저장 (어디서도 판매하지 않음)」을 켜야 저장된다.</li><li><strong>새 범위를 건 행의 옛 범위 칸은 잠긴다</strong> — 어느 축이든 <code>구조 적격 전체</code>·<code>지정한 대상만</code> 으로 저장한 항목을 나중에 고치면서 그 축의 옛 칸(「연결 룸 (선택)」 · 「요금제 scope」 · 「룸 레벨 scope」) 값을 바꾸면 「적용 범위를 새로 설정한 항목입니다 — 옛 범위 칸은 [적용 범위]에서만 바꿀 수 있습니다.」 로 저장이 막힌다.</li><li>적용 범위 해소가 꺼져 있는 여행사에서는 카드 대신 안내 두 줄이 선다 — 「적용 범위 기능이 잠시 꺼져 있습니다 — 지금은 기존 범위 그대로 판매됩니다.」 · 「저장해 둔 범위는 그대로 남아 있고, 기능이 다시 켜지면 그때부터 적용됩니다.」 그 화면에서는 이 카드의 줄을 적지 않는다.</li></ul></div>
+<div class="notes"><span class="k">이 화면의 메모</span><ul><li>부가옵션은 정의를 먼저 저장하고, 그다음 가격 줄을 따로 넣는다.</li><li><strong>카드 <code>적용 범위</code></strong> 는 드로어 맨 아래에 따로 선다 — 축마다 셀렉트 한 줄이고, <code>기존 범위 그대로</code> 가 아닐 때만 그 아래 <code>포함</code>·<code>제외</code> 줄이 나타난다. 같은 대상이 양쪽에 있으면 <strong>제외가 이긴다</strong>. <code>지정한 대상만</code> 인데 포함을 비우면 그 항목은 아무 데서도 팔리지 않으므로 확인란 「범위를 비운 채 저장 (어디서도 판매하지 않음)」을 켜야 저장된다.</li><li><strong>새 범위를 건 행의 옛 범위 변경은 저장이 막힌다</strong> — 새 적용 범위를 저장한 항목에서 「연결 룸 (선택)」·「요금제 scope」·「룸 레벨 scope」 값을 바꾸면 「적용 범위를 새로 설정한 항목입니다 — 옛 범위 칸은 [적용 범위]에서만 바꿀 수 있습니다.」 로 저장이 거부된다.</li><li>적용 범위 해소가 꺼져 있는 여행사에서는 카드 대신 안내 두 줄이 선다 — 「적용 범위 기능이 잠시 꺼져 있습니다 — 지금은 기존 범위 그대로 판매됩니다.」 · 「저장해 둔 범위는 그대로 남아 있고, 기능이 다시 켜지면 그때부터 적용됩니다.」 그 화면에서는 이 카드의 줄을 적지 않는다.</li></ul></div>
 </section>
 <section class="screen" id="screen-addon-price">
 <h2><span class="screen-no">21.</span> 부가옵션 가격 추가 · 편집<span class="tab-badge">부가옵션</span></h2>
@@ -1828,14 +1835,14 @@ footer code{font-size:13px;}
 <td class="c-name" data-label="칸"><span class="fname">객실 포함</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 판매 연결(객실) 목록 — 체크(고른 것에서만 판다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼의 판매 연결(객실) 목록 — 체크(고른 것에서만 판다). 오퍼를 알 수 없으면 호텔 전체 목록이고 줄마다 <code>오퍼명 · 룸명</code> 으로 적힌다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말"><span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">객실 제외</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 판매 연결(객실) 목록 — 체크(여기 든 것에서는 팔지 않는다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼의 판매 연결(객실) 목록 — 체크(여기 든 것에서는 팔지 않는다). 오퍼를 알 수 없으면 호텔 전체 목록이고 줄마다 <code>오퍼명 · 룸명</code> 으로 적힌다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말">포함과 제외에 같은 대상이 있으면 제외가 이깁니다.<span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
@@ -2005,14 +2012,14 @@ footer code{font-size:13px;}
 <td class="c-name" data-label="칸"><span class="fname">객실 포함</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 판매 연결(객실) 목록 — 체크(고른 것에서만 판다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼의 판매 연결(객실) 목록 — 체크(고른 것에서만 판다). 전 오퍼 공통 프로모션은 호텔 전체 목록이고 줄마다 <code>오퍼명 · 룸명</code> 으로 적힌다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말"><span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
 <td class="c-name" data-label="칸"><span class="fname">객실 제외</span></td>
 <td class="c-kind" data-label="종류">다중 체크</td>
 <td class="c-req" data-label="필수"></td>
-<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 호텔의 판매 연결(객실) 목록 — 체크(여기 든 것에서는 팔지 않는다)</span></td>
+<td class="c-opt" data-label="선택지 / 형식"><span class="sub">이 오퍼의 판매 연결(객실) 목록 — 체크(여기 든 것에서는 팔지 않는다). 전 오퍼 공통 프로모션은 호텔 전체 목록이고 줄마다 <code>오퍼명 · 룸명</code> 으로 적힌다. 다른 오퍼의 대상이 이미 저장돼 있으면 <code>(다른 오퍼)</code> 꼬리표를 달고 남는다</span></td>
 <td class="c-help" data-label="도움말">포함과 제외에 같은 대상이 있으면 제외가 이깁니다.<span class="sub">보일 때 — 「객실 적용 범위」가 「기존 범위 그대로」가 아닐 때</span></td>
 </tr>
 <tr class="field">
@@ -2372,7 +2379,7 @@ footer code{font-size:13px;}
 <div class="notes"><span class="k">이 화면의 메모</span><ul><li>지시서가 값을 넣는 화면이 아니다 — 세팅이 실제로 팔리는지 확인하는 자리라 단계로 적지 않는다.</li><li>2번 섹션 요금 행 오른쪽의 [선택] 이 3·4·5번 섹션을 여는 유일한 버튼이다 — 누르면 그 버튼 글자가 <code>선택됨</code> 으로 바뀐다.</li><li>1번 섹션 아래는 [판매 객실 조회] · 조회 중이면 그 오른쪽에 <code>조회 중…</code> · 날짜를 고른 뒤에만 서는 [날짜 지우기] 다.</li><li>달력 위 달 이동은 [‹] [›] 이고, 판매하지 않는 달 쪽은 회색이며 말풍선이 「이 앞 달은 판매하지 않습니다」·「이 다음 달은 판매하지 않습니다」 다.</li><li>룸 머리 오른쪽에는 <code>객실</code> 스테퍼 [−] [+](1~5)와 [객실 상세] 가 선다 — [객실 상세] 를 누르면 글자가 <code>접기</code> 로 바뀐다.</li><li>요금 행 배지는 프로모션 이름 · 오퍼 이름 · <code>혜택 N</code> 이다.</li><li>조건을 바꾸면 2번 섹션에 「조건이 바뀌었습니다 — 다시 조회해주세요. 이전 선택은 무효가 됩니다.」 와 [다시 조회] 가 뜬다.</li><li>2번 섹션의 접힌 줄 「건너뛴 요금제 N건 — 이 조건에 팔지 않는 이유 보기」 를 펼치면 요금제마다 안 파는 사유가 선다.</li><li>조회가 막히는 자리 둘 — 날짜가 비면 [판매 객실 조회] 가 회색이고 말풍선이 「체크인·체크아웃을 먼저 선택해주세요」, 아이 나이를 안 고르면 1번 섹션에 「아동 나이(만 나이)를 모두 골라 주세요」 가 뜨고 버튼 말풍선도 같은 문장이다.</li><li>[미결제 예약 접수] 는 예약 등록 권한이 없으면 회색이고, 그 왼쪽에 「남은 항목: …」 이 선다.</li><li>섹션 머리는 <code>1. 일정·인원</code> · <code>2. 객실·요금제</code> · <code>3. 프로모션·추가요금·부가옵션·혜택</code> · <code>4. 최종 견적</code> · <code>5. 예약자·회원·여행자</code> 다.</li><li>1번 섹션 오른쪽 칸은 <code>성인</code>(1~8) · <code>아동</code>(0~4) · <code>객실 수</code>(<code>N개</code>) 이고, 아이 나이 칸 이름은 <code>아동 N 나이 (만 나이)</code> · 선택지는 <code>만 나이 선택</code> 과 <code>만 0세</code>~<code>만 17세</code> 다.</li><li>나이는 전부 만 나이다 — 세는 나이를 넣으면 아이가 한 살 위 구간으로 계산돼 소아가와 성인가가 갈린다.</li><li>요금 행은 <code>〈기준 인원〉 기준</code> 뒤에 <code>· 검색 〈검색한 구성〉</code> 을 회색으로 붙인다 — 기준은 가격이 깔린 인원 조합 좌표, 검색은 담당자가 고른 구성이라 다른 축이다.</li><li>4번·5번 섹션의 <code>예약 인원</code> 줄이 <code>성인 2명 · 아동 1명 (만 7세 · 소아) · 객실 1개</code> 로 서고, 5번에는 아이별 한 줄이 더 붙는다(무료 구간이면 「무료」, 어느 구간에도 안 드는 나이면 「성인 요금으로 계산」).</li><li>박수 층 때문에 안 팔리는 날은 「…박은 이 요금제가 파는 최소 숙박일수에 미달합니다 — 가격 셀이 …박 이상부터 깔려 있습니다.」 로 드러난다.</li><li>요청 박수와 다른 층으로 계산되면 「요청 박수 좌표 &#x27;…&#x27; 대신 …로 계산했습니다.」 가 함께 남는다.</li></ul></div>
 </section>
 <section class="not-covered" id="not-covered"><h2>이 안내에 없는 것</h2><ul><li>왼쪽 메뉴의 이름과 순서 — 여행사마다 다르게 설정하는 값이라 화면을 열어 봐야 안다.</li><li>선택지에 실제로 뜨는 목록 — 룸·오퍼·시즌·요금제·취소정책·거래처는 그 호텔에 무엇을 만들었는지가 정한다.</li><li>저절로 채워지는 값 — 상품코드·수수료 네 칸·정렬 기본값은 화면이 채운 뒤에야 보인다.</li><li>이미 있는 값 때문에 잠기는 칸 — 이미 연결된 룸의 체크박스가 회색으로 잠기는 것 등.</li><li>달력·시각 고르개가 실제로 펼쳐 보여 주는 목록.</li><li>저장한 뒤 잠깐 떴다 사라지는 안내 띠와 그 문구.</li><li>캠페인 만들기·수정 화면 — 2026-09-04 화면에서 제거됨(모델만 휴면 보존) — 지시서에 없음.</li><li><code>직원 예약 등록</code>의 2·3·5번 섹션 안쪽 칸 — 예약을 접수하는 화면이라 지시서가 값을 넣지 않는다. 이 사전은 세팅을 확인할 때 읽는 자리(인원·나이·기준/검색·경고 문구)만 담는다.</li><li>에이전트 모달의 붙여 넣기 상자 본문 — 화면이 그대로 건네는 명령문이라 사람이 옮겨 적을 값이 아니다.</li><li>운영 번역이 덮어쓴 글자 — 아래 README 의 한계 참고.</li><li>Stay 이미지 패널(<code>업로드</code>) — 탭이 없어 화면에서 열리지 않는다(대표·상세 이미지는 「기본정보」 탭이 정본).</li><li>「기본정보」·「참조정보」·「추가수집정보」·「환율 설정」·「SEO」·「전용 알림메시지 템플릿」 탭의 칸 — 상품 공통 화면이다.</li></ul></section>
-<footer><p>스킬 판: <code>stay-setup-guide 1.4.1</code></p><p>다시 만드는 명령 (저장소 맨 위에서):</p><p><code>python3 skills/stay-setup-guide/scripts/render_screen_guide.py</code></p><p>화면 사전이 바뀌면 이 명령을 다시 돌린다 — 손으로 고치지 않는다.</p></footer>
+<footer><p>스킬 판: <code>stay-setup-guide 1.4.3</code></p><p>다시 만드는 명령 (저장소 맨 위에서):</p><p><code>python3 skills/stay-setup-guide/scripts/render_screen_guide.py</code></p><p>화면 사전이 바뀌면 이 명령을 다시 돌린다 — 손으로 고치지 않는다.</p></footer>
 </main>
 </body>
 </html>

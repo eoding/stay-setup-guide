@@ -4638,9 +4638,9 @@ class RoomCombosTest(unittest.TestCase):
         self.assertIn(cm.norm_field("허용 인원 조합(선택)"), labels)
         kinds = cm.load_dictionary_kinds(DICTIONARY)
         self.assertEqual(kinds[cm.norm_field("허용 인원 조합(선택)")], {"텍스트"})
-        with open(DICTIONARY, encoding="utf-8") as handle:
-            data = json.load(handle)
-        data["screens"][0]["blocks"][0]["fields"].append({"label": "허용 인원 조합(선택)", "kind": "여러 줄 글"})
+        data = {"screens": [{"blocks": [{"fields": [
+            {"label": "허용 인원 조합(선택)", "kind": "여러 줄 글"},
+        ]}]}]}
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
             json.dump(data, handle, ensure_ascii=False)
         try:
