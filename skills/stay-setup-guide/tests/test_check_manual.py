@@ -4540,3 +4540,110 @@ class ScopeDictionaryTest(unittest.TestCase):
                       for s in self.data["screens"] for b in (s.get("blocks") or []))
         counted += sum(len(b.get("fields") or []) for b in (self.data["validation"]["blocks"] or []))
         self.assertEqual(self.data["meta"]["field_count"], counted)
+
+
+def combo_room_step(num, name, combos, max_adult="3", max_child="2", max_total="4"):
+    return f"""
+## {num}. 룸 만들기 ({num}번째, {name})
+탭: `객실`
+카드: `객실 (룸 타입)`
+버튼: [룸 추가]
+
+| 칸 | 값 |
+|---|---|
+| 룸 이름 | {name} |
+| 최대 성인 | {max_adult} |
+| 최대 소아 | {max_child} |
+| 최대 총원 | {max_total} |
+| 허용 인원 조합(선택) | {combos} |
+
+→ [저장]
+"""
+
+
+def combo_fill_step(num, room, keys):
+    return f"""
+## {num}. 시즌 가격 채우기 ({num}회차, Regular × {room})
+탭: `시즌`
+카드: `Regular`
+버튼: [가격]
+
+| 칸 | 값 |
+|---|---|
+| 판매 단가(공급 통화) | 100 |
+| 대상 룸 | 선택: 2026 시즌 요금 · {room} |
+| 인원 조합(선택) | {keys} |
+| 이미 값이 있는 날도 덮기 | 해제 |
+
+→ [이 단가로 깔기]
+"""
+
+
+class RoomCombosTest(unittest.TestCase):
+    """룸의 `허용 인원 조합(선택)`(ERP 643bd564c2, 2026-09-23) — 값 형식·룸 인원 칸·회차의 좌표."""
+
+    def test_three_spellings_are_read_like_the_erp(self):
+        want = [(2, 2), (3, 0)]
+        for text in ("2A+2C, 3A", "A2C2, A3", "성인 2 + 소아 2 / 성인 3", "3A 또는 2A+2C"):
+            self.assertEqual(cm.parse_room_combos(text), (want, None), text)
+        self.assertEqual(cm.parse_room_combos("비움"), ([], None))
+
+    def test_band_codes_duplicates_and_garbage_are_errors(self):
+        for text in ("A2C1_CHD", "2A+2C, 2A+2C", "0A", "두 명"):
+            combos, why = cm.parse_room_combos(text)
+            self.assertIsNone(combos, text)
+            self.assertTrue(why, text)
+
+    def test_key_rule_matches_erp_key_allowed(self):
+        """아동 조각 있는 키는 천장 대조, 없는 키는 머릿수 ≤ 최대 총원 — ERP `occupancy_combo.key_allowed`."""
+        combos = [(2, 2), (3, 0)]
+        allowed = {k: cm.room_combo_key_allowed(combos, k)
+                   for k in ("A2", "A3", "A4", "A5", "A2C1_CHD", "A2C2_CHD", "A3C1_CHD", "A1C2_CHD")}
+        self.assertEqual(allowed, {"A2": True, "A3": True, "A4": True, "A5": False, "A2C1_CHD": True,
+                                   "A2C2_CHD": True, "A3C1_CHD": False, "A1C2_CHD": True})
+        self.assertTrue(cm.room_combo_key_allowed([], "A3C1_CHD"))  # 조합 없음 = 제한 없음
+
+    def test_combo_axes_are_limited_to_twenty_like_the_erp(self):
+        for text in ("21A", "2A+21C"):
+            combos, why = cm.parse_room_combos(text)
+            self.assertIsNone(combos, text)
+            self.assertTrue(why, text)
+        # 총원은 룸별 한도 검사에서 따로 확인한다.
+        self.assertEqual(cm.parse_room_combos("20A+20C"), ([(20, 20)], None))
+
+    def test_combo_over_room_limits_is_an_error(self):
+        md = HEAD + combo_room_step(4, "Deluxe", "2A+2C, 3A+1C", max_adult="3", max_child="1", max_total="4")
+        problems = cm.find_room_combo_gaps(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("최대 소아", problems[0])
+
+    def test_typed_key_outside_the_rooms_combos_is_an_error(self):
+        md = (HEAD + combo_room_step(4, "Deluxe", "2A+2C, 3A")
+              + combo_room_step(5, "Premier", "2A+2C, 3A+1C")
+              + combo_fill_step(6, "Deluxe", "A3C1_CHD")
+              + combo_fill_step(7, "Premier", "A3C1_CHD")
+              + combo_fill_step(8, "Deluxe", "A2,A3,A2C2_CHD"))
+        problems = cm.find_fill_keys_outside_room_combos(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("6단계", problems[0])
+        self.assertIn("A3C1_CHD", problems[0])
+
+    def test_rooms_without_combos_are_not_checked(self):
+        md = HEAD + combo_room_step(4, "Deluxe", "비움") + combo_fill_step(5, "Deluxe", "A3C1_CHD")
+        self.assertEqual(cm.find_fill_keys_outside_room_combos(steps_of(md)), [])
+
+    def test_pending_dictionary_field_is_known_and_retires_when_the_dictionary_has_it(self):
+        """사전을 다시 받기 전까지 이 칸이 `사전에 없는 칸 이름` 으로 새지 않는다 — 받은 뒤에는 사전이 이긴다."""
+        labels = cm.load_dictionary(DICTIONARY)
+        self.assertIn(cm.norm_field("허용 인원 조합(선택)"), labels)
+        kinds = cm.load_dictionary_kinds(DICTIONARY)
+        self.assertEqual(kinds[cm.norm_field("허용 인원 조합(선택)")], {"텍스트"})
+        with open(DICTIONARY, encoding="utf-8") as handle:
+            data = json.load(handle)
+        data["screens"][0]["blocks"][0]["fields"].append({"label": "허용 인원 조합(선택)", "kind": "여러 줄 글"})
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False)
+        try:
+            self.assertEqual(cm.load_dictionary_kinds(handle.name)[cm.norm_field("허용 인원 조합(선택)")], {"여러 줄 글"})
+        finally:
+            os.unlink(handle.name)

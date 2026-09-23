@@ -342,6 +342,17 @@ CHILD_HEAD_RE = re.compile(r"^C(\d+)$")
 # (`2,3` · `3:+14`)도 서버가 받아 A-형으로 저장하지만, 같은 좌표가 화면·요금표·엔진 로그에서
 # A-형으로 다시 나오므로 지시서는 A-형만 쓴다.
 OCCUPANCY_KEYS_FIELDS = ("인원 조합(선택)", "인원 조합")
+#: 룸의 `허용 인원 조합(선택)`(ERP 643bd564c2, 2026-09-23). 짧은 표기도 받는다.
+ROOM_COMBOS_FIELDS = ("허용 인원 조합(선택)", "허용 인원 조합")
+#: 화면 사전이 아직 모르는 칸 — **사전을 다시 받으면 저절로 물러난다**(사전에 같은 이름이 있으면
+#: 여기 값은 쓰이지 않는다). 사전은 ERP 의 `stay_screen_dictionary` 관리 명령으로만 만들고 손으로
+#: 고치지 않는데(SKILL.md), 그 명령이 있는 ERP 가지와 이 칸이 있는 가지가 아직 합쳐지지 않아 다시
+#: 받을 수 없다. 그 사이 이 칸을 쓴 원고가 `사전에 없는 칸 이름` ⚠(→ `--strict` 실패)로 막히지 않게
+#: 이름과 종류만 여기 둔다. 종류는 ERP `RoomTypeForm.allowed_combos` 의 TextInput 그대로다.
+PENDING_DICTIONARY_FIELDS = {
+    "허용 인원 조합(선택)": "텍스트",
+    "허용 인원 조합": "텍스트",
+}
 OCCUPANCY_ADJUST_FIELDS = ("인원 조합별 조정(선택)", "인원 조합별 조정")
 BARE_NUMBER_RE = re.compile(r"^\d+$")
 #: `ProductPrice.occupancy_key` 의 `max_length`(`occupancy_key.KEY_MAX_LENGTH`). 넘는 좌표는
@@ -2043,6 +2054,142 @@ def _occupancy_keys_of(step):
     ]
 
 
+#: ERP `occupancy_combo` 의 세 표기와 구분자 — 글자 그대로 같다(`2A+2C` · `A2C2` · `성인 2 + 소아 2`).
+ROOM_COMBO_SPLIT_RE = re.compile(r"\s*(?:[,/;\n]|\bOR\b|또는)\s*", re.IGNORECASE)
+ROOM_COMBO_FORMS = (
+    re.compile(r"^(\d+)\s*A(?:\s*\+?\s*(\d+)\s*C)?$"),
+    re.compile(r"^A\s*(\d+)(?:\s*C\s*(\d+))?$"),
+)
+ROOM_COMBO_KOREAN_RE = re.compile(r"^성인\s*(\d+)\s*명?(?:\s*\+?\s*(?:소아|아동)\s*(\d+)\s*명?)?$")
+
+
+def parse_room_combos(text):
+    """`허용 인원 조합` 값 → `([(성인, 소아), …], 까닭)`. 비었거나 `비움` 이면 `([], None)` = 제한 없음.
+
+    ERP `occupancy_combo.parse_combos` 와 같은 걸음이다: 구간 코드가 붙은 좌표(`A2C1_CHD`)는
+    거부하고(조합은 룸에 붙고 구간은 오퍼마다 다르다), 성인 0명·같은 조합 두 번도 거부한다.
+    """
+    if _blank(text):
+        return [], None
+    combos = []
+    for item in ROOM_COMBO_SPLIT_RE.split(str(text).strip()):
+        item = item.strip()
+        if not item:
+            continue
+        if "_" in item:
+            return None, f"연령 구간 코드를 적지 않는다 — 아동은 머릿수만(예 2A+1C): {item}"
+        match = next((m for m in (r.match(item.upper()) for r in ROOM_COMBO_FORMS) if m), None)
+        match = match or ROOM_COMBO_KOREAN_RE.match(item)
+        if match is None:
+            return None, f"읽지 못했다 — 2A+2C, 3A 처럼 성인(A)·소아(C) 수로 적는다: {item}"
+        combo = (int(match.group(1)), int(match.group(2) or 0))
+        if combo[0] < 1:
+            return None, f"성인은 1명 이상이다: {item}"
+        if combo[0] > 20 or combo[1] > 20:
+            return None, f"성인·소아는 각각 20명 이하다: {item}"
+        if combo in combos:
+            return None, f"같은 조합이 두 번 적혀 있다: {item}"
+        combos.append(combo)
+    return sorted(combos), None
+
+
+def room_combo_key_allowed(combos, key):
+    """좌표가 그 룸에 깔려도 되는가 — ERP `occupancy_combo.key_allowed` 와 같은 판정.
+
+    아동 조각이 있는 키(`A2C1_CHD`)는 (성인, 조각 합)이 어느 조합의 천장 아래(성인 ≤ · 소아 ≤)면
+    참이고, 아동 조각이 없는 키(`A3`)는 **머릿수 좌표**라 성인 수 ≤ 조합들의 최대 총원이면 참이다.
+    조합이 없거나 키를 못 읽으면 참(ERP 도 막지 않는다).
+    """
+    if not combos:
+        return True
+    text = normalize_occupancy_key(key) or ""
+    if not text or BARE_NUMBER_RE.match(text):
+        return True
+    adults, parts, why = _read_a_form(text)
+    if why is not None or adults is None:
+        return True
+    if not parts:
+        return adults <= max(a + c for a, c in combos)
+    children = sum(count for count, _code in parts)
+    return any(adults <= a and children <= c for a, c in combos)
+
+
+def _room_combos_by_name(steps):
+    """`룸 만들기` 단계에서 룸 이름(비교용 꼴) → 읽은 허용 인원 조합. 못 읽은 룸은 넣지 않는다."""
+    out = {}
+    for step in steps:
+        if not step["title"].startswith(ROOM_CREATE_TITLE):
+            continue
+        name = (step["fields"].get(ROOM_NAME_FIELD) or "").strip()
+        raw = _labeled_value(step, ROOM_COMBOS_FIELDS)
+        if not name or raw is None:
+            continue
+        combos, why = parse_room_combos(raw)
+        if why is None and combos:
+            out[_fold(name)] = combos
+    return out
+
+
+def find_room_combo_gaps(steps):
+    """`허용 인원 조합` 값이 읽히지 않거나 같은 표의 룸 인원 칸을 넘으면 오류 — ERP 폼이 저장을 막는다.
+
+    ERP `RoomTypeForm._clean_allowed_combos` 가 같은 요청의 `최대 성인`·`최대 소아`·`최대 총원`
+    과 맞춰 보고 넘는 조합을 거부한다(`occupancy_combo.limit_problems`). 칸이 `비움` 이면 보지 않는다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ROOM_CREATE_TITLE):
+            continue
+        raw = _labeled_value(step, ROOM_COMBOS_FIELDS)
+        if raw is None:
+            continue
+        combos, why = parse_room_combos(raw)
+        if why is not None:
+            problems.append(f"{step['num']}단계: 허용 인원 조합을 {why}")
+            continue
+        limits = {}
+        for field, label in (("max_adult", "최대 성인"), ("max_child", "최대 소아"), ("max_total", "최대 총원")):
+            value = str(step["fields"].get(label) or "").strip()
+            limits[field] = int(value) if value.isdigit() else None
+        for a, c in combos:
+            shown = f"{a}A+{c}C" if c else f"{a}A"
+            if limits["max_adult"] is not None and a > limits["max_adult"]:
+                problems.append(f"{step['num']}단계: 허용 인원 조합 {shown} 의 성인이 최대 성인({limits['max_adult']})보다 많다")
+            if limits["max_child"] is not None and c > limits["max_child"]:
+                problems.append(f"{step['num']}단계: 허용 인원 조합 {shown} 의 소아가 최대 소아({limits['max_child']})보다 많다")
+            if limits["max_total"] is not None and a + c > limits["max_total"]:
+                problems.append(f"{step['num']}단계: 허용 인원 조합 {shown} 의 인원 합이 최대 총원({limits['max_total']})보다 많다")
+    return problems
+
+
+def find_fill_keys_outside_room_combos(steps):
+    """`시즌 가격 채우기` 에 **적은** 좌표가 그 룸의 허용 인원 조합 밖이면 오류 — ERP 가 전개 전에 거부한다.
+
+    ERP `season.typed_keys_outside_combos` 가 그 회차를 통째로 막는다(자동으로 붙는 `A3C1_CHD`
+    는 조용히 거르지만 사람이 적은 키는 막는다). 룸은 `대상 룸` 의 `<오퍼> · <룸>` 뒤 조각으로 찾는다.
+    """
+    by_room = _room_combos_by_name(steps)
+    if not by_room:
+        return []
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(SEASON_FILL_TITLE):
+            continue
+        for raw in target_rooms(step):
+            room = _fold(raw.split("\u00b7")[-1].strip())
+            combos = by_room.get(room)
+            if not combos:
+                continue
+            outside = [shown for shown, _norm in _occupancy_keys_of(step) if not room_combo_key_allowed(combos, shown)]
+            if outside:
+                allowed = " / ".join(f"{a}A+{c}C" if c else f"{a}A" for a, c in combos)
+                problems.append(
+                    f"{step['num']}단계: 인원 조합 {', '.join(outside)} 이(가) 룸 "
+                    f"{raw.split(chr(183))[-1].strip()} 의 허용 인원 조합({allowed}) 밖이다 — ERP 가 이 회차를 거부한다"
+                )
+    return problems
+
+
 def find_occupancy_key_duplicates(steps):
     """`인원 조합(선택)` 에 **같은 좌표**가 두 번 있으면 오류 — 서버는 둘을 하나로 접는다.
 
@@ -3481,6 +3628,8 @@ def load_dictionary(path):
                             value = column.get(key)
                             if value:
                                 add(value)
+    for label in PENDING_DICTIONARY_FIELDS:
+        add(label)
     return labels
 
 
@@ -3505,6 +3654,8 @@ def load_dictionary_kinds(path):
                         kinds.setdefault(norm_field(value), set()).add(kind)
                 for alias in field.get("aliases") or []:
                     kinds.setdefault(norm_field(alias), set()).add(kind)
+    for label, kind in PENDING_DICTIONARY_FIELDS.items():
+        kinds.setdefault(norm_field(label), {kind})
     return kinds
 
 
@@ -3662,6 +3813,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     cell_coordinate_gaps = find_cell_step_without_filled_coordinate(parsed)
     audience_only_names = find_audience_only_names(parsed)
     hangul_room_names = find_hangul_room_names(parsed)
+    room_combo_gaps = find_room_combo_gaps(parsed)
+    fill_keys_outside_combos = find_fill_keys_outside_room_combos(parsed)
     extra_bed_rules = find_extra_bed_optional_rules(parsed)
     child_policy_gaps = find_child_policy_without_age_band(parsed)
     gala_addons = find_gala_addons(parsed)
@@ -3768,6 +3921,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "child_lodging_addons": child_lodging_addons,
         "occupancy_key_legacy": occupancy_key_legacy,
         "occupancy_key_duplicates": occupancy_key_duplicates,
+        "room_combo_gaps": room_combo_gaps,
+        "fill_keys_outside_combos": fill_keys_outside_combos,
         "occupancy_key_denormalized": occupancy_key_denormalized,
         "plan_adjust_gaps": plan_adjust_gaps,
         "occupancy_adjust_gaps": occupancy_adjust_gaps,
@@ -3864,6 +4019,7 @@ def main(argv=None):
               + r["promotion_window_gaps"]
               + r["child_lodging_addons"] + r["occupancy_key_legacy"]
               + r["occupancy_key_duplicates"] + r["occupancy_key_denormalized"]
+              + r["room_combo_gaps"] + r["fill_keys_outside_combos"]
               + r["plan_adjust_gaps"]
               + r["occupancy_adjust_gaps"] + r["amount_format_gaps"]
               + r["los_prices_formats"] + r["los_without_base_price"]
