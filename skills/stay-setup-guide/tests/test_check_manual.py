@@ -1329,6 +1329,122 @@ class PhotoCountTest(unittest.TestCase):
             self.assertEqual(self.problems(handle.read()), [])
 
 
+#: 사진 폴더 밖을 가리키는 이름 — 모두 가짜 경로다
+OUTSIDE_PHOTO_NAMES = ("../x.jpg", "a/../../x.jpg", "..\\x.jpg", "/etc/passwd", "C:\\x.jpg", "C:/x.jpg",
+                       "\\\\host\\x.jpg", "../../secret.txt")
+
+
+class PhotoPathEscapeTest(unittest.TestCase):
+    """사진 파일명이 사진 폴더 밖을 가리키면 오류 — 러너가 그 파일을 호텔 사진으로 올릴 수 있다."""
+
+    def problems(self, md, photos_dir=None):
+        return cm.find_photo_path_gaps(steps_of(md), photos_dir)
+
+    def test_outside_names_in_a_file_list_fail(self):
+        for name in OUTSIDE_PHOTO_NAMES:
+            with self.subTest(name=name):
+                problems = self.problems(HEAD + photo_count_step(4, "대표이미지 올리기 (1장)", [name]))
+                self.assertEqual(len(problems), 1, problems)
+                self.assertTrue(problems[0].startswith(
+                    f"4단계: 사진 파일명이 사진 폴더 밖을 가리킨다 — {name} ("), problems)
+
+    def test_outside_names_in_a_file_cell_fail(self):
+        for name in OUTSIDE_PHOTO_NAMES:
+            with self.subTest(name=name):
+                problems = self.problems(
+                    HEAD + photo_count_step(4, "오퍼 이미지 올리기 (1장)", [name], as_field=True))
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(f"사진 파일명이 사진 폴더 밖을 가리킨다 — {name}", problems[0])
+
+    def test_source_tail_is_not_part_of_the_name(self):
+        md = HEAD + photo_count_step(
+            4, "상품상세 이미지 올리기 (1장)", ["../x.jpg — 출처: https://example.com/a.jpg"])
+        problems = self.problems(md)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("— ../x.jpg (", problems[0])
+        self.assertNotIn("example.com", problems[0])
+
+    def test_list_line_in_a_photo_step_without_the_file_line_is_still_seen(self):
+        md = HEAD + """
+## 4. 룸 사진 올리기 (1번째, Single)
+탭: `객실`
+폴더: 시험호텔/사진
+
+- ../x.jpg
+
+→ [사진 추가]
+"""
+        self.assertEqual(len(self.problems(md)), 1)
+
+    def test_control_characters_fail(self):
+        problems = self.problems(HEAD + photo_count_step(4, "대표이미지 올리기 (1장)", ["a\x01.jpg"]))
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_plain_names_pass(self):
+        names = ["01.jpg", "hotel_01.jpg", "객실_전경.jpg"]
+        self.assertEqual(self.problems(HEAD + photo_count_step(4, "상품상세 이미지 올리기 (3장)", names)), [])
+        self.assertEqual(self.problems(
+            HEAD + photo_count_step(4, "오퍼 이미지 올리기 (3장)", names, as_field=True)), [])
+
+    def test_subfolder_inside_the_photo_folder_is_not_an_escape(self):
+        """목록 줄 형식은 하위 폴더를 쓰지 않지만, 경계 규칙 자체는 폴더 안 하위 폴더를 막지 않는다."""
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(cm.photo_path_problem("객실/101.jpg", d))
+            self.assertIsNone(cm.photo_path_problem("객실/101.jpg"))
+
+    def test_plain_list_lines_outside_photo_steps_are_not_paths(self):
+        md = HEAD + rows_step(4, [("설명", "조식 포함")]) + "\n- 조식 / 석식 별도\n"
+        self.assertEqual(self.problems(md), [])
+
+    def test_symlink_pointing_outside_fails_when_photos_are_given(self):
+        with tempfile.TemporaryDirectory() as d:
+            photos = os.path.join(d, "사진")
+            os.mkdir(photos)
+            secret = os.path.join(d, "secret.txt")
+            with open(secret, "w", encoding="utf-8") as f:
+                f.write("x")
+            os.symlink(secret, os.path.join(photos, "hotel_01.jpg"))
+            md = HEAD + photo_count_step(4, "대표이미지 올리기 (1장)", ["hotel_01.jpg"])
+            self.assertEqual(self.problems(md), [])  # 폴더를 모르면 이름만 본다
+            problems = self.problems(md, photos)
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("hotel_01.jpg", problems[0])
+            self.assertNotIn(secret, problems[0])
+
+    def test_symlink_inside_the_folder_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "real.jpg"), "wb") as f:
+                f.write(b"jpeg")
+            os.symlink(os.path.join(d, "real.jpg"), os.path.join(d, "hotel_01.jpg"))
+            md = HEAD + photo_count_step(4, "대표이미지 올리기 (1장)", ["hotel_01.jpg"])
+            self.assertEqual(self.problems(md, d), [])
+
+    def test_folder_line_outside_the_share_fails(self):
+        for value in ("/etc", "../사진", "시험호텔/../../사진", "C:\\사진", "`/tmp/사진`"):
+            with self.subTest(value=value):
+                self.assertEqual(len(cm.find_folder_line_escapes([f"폴더: {value}"])), 1)
+        self.assertEqual(cm.find_folder_line_escapes(["폴더: 시험호텔/사진", "폴더: `시험호텔/사진`"]), [])
+
+    def test_check_and_main_fail_on_an_outside_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            for name, want in (("../x.jpg", 1), ("hotel_01.jpg", 0)):
+                with self.subTest(name=name):
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(HEAD + photo_count_step(4, "대표이미지 올리기 (1장)", [name]))
+                    r = cm.check(path)
+                    self.assertEqual(len(r["photo_path_gaps"]), want, r["photo_path_gaps"])
+                    if want:
+                        self.assertEqual(cm.main([path]), 1)
+
+    def test_the_example_manual_has_no_escape(self):
+        with open(EXAMPLE, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertEqual(self.problems(text), [])
+        self.assertEqual(cm.find_folder_line_escapes(
+            [l for l in text.splitlines() if l.startswith("폴더:")]), [])
+
+
 class RoomPhotoSaveTest(unittest.TestCase):
     """룸 사진 카드에는 저장 버튼이 없다 — 파일을 고르면 바로 올라간다."""
 

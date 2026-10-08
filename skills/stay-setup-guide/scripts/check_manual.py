@@ -13,6 +13,8 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 절대 경로(/home/...) 0
 - `폴더:` 줄이 `폴더: <공유 폴더명>/사진` 형식과 일치(--share-name 을 준 경우)
 - 사진 단계에서 참조한 파일명이 실제 사진 폴더에 있는지(--photos 를 준 경우)
+- 사진 파일명이 사진 폴더 밖을 가리키지 않는지(`..` · 절대 경로 · 제어 문자 — 늘 본다. --photos 를 주면
+  폴더 안 심볼릭 링크가 밖을 가리키는 것까지) · `폴더:` 줄이 절대 경로이거나 `..` 를 품지 않는지
 - 0단계(1·2·3 단계가 각각 환율 확인 · 거래처 확인 · 도시 확인)가 있는지
 - 표의 칸 이름이 화면 사전(screen-dictionary.json)에 있는지
 - 값에 나오는 금액이 계약서에 있는 숫자인지(--contract 를 준 경우, 경고만)
@@ -77,6 +79,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 
 #: 원고 폴더 이름 — 공유 폴더 `<이름>/` 안에서 원고·부속 파일이 사는 곳.
 #: 담당자에게 건네는 것은 `<이름>/<이름>_입력지시서.html` 하나이고, 원고는 여기 남는다.
@@ -133,6 +136,59 @@ PHOTO_LINE_RE = re.compile(
 PHOTO_FIELD_RE = re.compile(
     r"^파일\s*:\s*(?P<name>[\w][\w.\-]*\.(?:jpe?g|png))\s*$", re.IGNORECASE
 )
+# 경로 검사용 — 위 두 정규식은 모양이 맞는 이름만 잡아 `../x.jpg` 같은 이름을 **조용히 흘린다**.
+# 표 칸의 `파일:` 값은 무엇이든, 목록 줄은 `파일 선택` 뒤·사진 단계 안의 것을 다 모아 경계를 본다.
+FILE_VALUE_RE = re.compile(r"^파일\s*:\s*(.*\S)\s*$")
+BULLET_RE = re.compile(r"^\s*-\s+(.*\S)\s*$")
+PHOTO_SRC_TAIL_RE = re.compile(r"\s*[\u2014\u2013-]+\s*출처\s*:\s*\S+\s*$")
+
+#: 사진 파일명의 경계. 러너(`stay-setup-run` `parse_guide.py`)와 설치 도구는 파일명을 `사진 폴더 / 파일명`
+#: 으로 이어 붙여 그 파일을 ERP 에 호텔 사진으로 올린다(고객 화면에 실린다). 이름에 `..` 이나 절대 경로가
+#: 있으면 사진 폴더 **밖**의 파일(열쇠·설정 파일)이 올라갈 수 있으니, 그런 원고는 도장을 받지 못하게 한다.
+#: 이름을 **글자로 먼저** 본다 — NUL 은 경로를 만들 때 예외가 나고, Windows 꼴(`C:\x.jpg` · `\\host\x.jpg`)은
+#: 리눅스에서 resolve() 해도 폴더 안의 이상한 상대 이름으로 보이기 때문이다. 사진 폴더를 주면(`--photos`)
+#: 그다음 resolve() 로 심볼릭 링크까지 따라가 폴더 안에 머무는지 본다.
+#: **러너 `parse_guide.py` `photo_path_problem` 과 같은 규칙이다** — 두 스크립트는 서로 import 하지 않는
+#: 단독 파일이라 사본을 둔다. 한쪽을 고치면 다른 쪽도 같이 고친다.
+PHOTO_ESCAPE_MSG = "사진 파일명이 사진 폴더 밖을 가리킨다"
+PHOTO_SEP_RE = re.compile(r"[\\/]")
+PHOTO_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+
+
+def photo_path_problem(name, photos_dir=None):
+    """사진 파일명 하나 → 사진 폴더 밖을 가리키면 사유가 붙은 한글 문장, 괜찮으면 None.
+
+    막는 것: 빈 이름 · NUL·제어 문자 · 절대 경로(`/…` · `\\…` · `C:\\…` · `C:/…` · `\\\\host\\…`) ·
+    `..` 경로 조각(`/` 와 `\\` 둘 다로 자른다) · `photos_dir` 를 주면 `(photos_dir / 이름).resolve()` 가
+    `photos_dir.resolve()` 안에 있지 않은 것(폴더 안 심볼릭 링크가 밖을 가리키는 것 포함).
+    폴더 안의 하위 폴더(`객실/101.jpg`)는 막지 않는다. 바깥 경로를 열거나 있는지 묻지 않는다 —
+    resolve() 한 번이 전부다.
+    """
+    text = name if isinstance(name, str) else ""
+    shown = text if text.isprintable() else repr(text)
+
+    def why(reason):
+        return "%s — %s (%s)" % (PHOTO_ESCAPE_MSG, shown, reason)
+
+    if not text.strip():
+        return why("빈 이름")
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in text):
+        return why("제어 문자")
+    if text[0] in "/\\" or PHOTO_DRIVE_RE.match(text):
+        return why("절대 경로")
+    if ".." in PHOTO_SEP_RE.split(text):
+        return why("`..` 경로 조각")
+    if photos_dir is not None:
+        base = Path(photos_dir).resolve()
+        try:
+            target = (base / text).resolve()
+        except (OSError, RuntimeError, ValueError):
+            return why("경로를 풀 수 없음")
+        if target == base:
+            return why("사진 폴더 자체")
+        if base not in target.parents:
+            return why("폴더 밖으로 이어짐")
+    return None
 
 # 단계 첫 줄들(`화면:` `탭:` `카드:` …)과 마지막 저장 줄
 HEAD_RE = re.compile(r"^(화면|탭|카드|블록|버튼|폴더|주의):\s*(.*)$")
@@ -563,6 +619,7 @@ def parse_steps(lines):
     cur = None
     label = None      # 방금 지나온 `<칸 이름>:` 라벨 줄
     fence = None      # 펜스 블록을 모으는 중이면 (칸 이름, 줄 목록)
+    in_files = False  # `파일 선택 → 아래 파일` 바로 뒤의 목록 줄인가 (설치 도구의 원고 파서와 같은 문)
     for line in lines:
         if fence is not None:
             if FENCE_RE.match(line):
@@ -581,11 +638,23 @@ def parse_steps(lines):
         if m:
             label = None
             cur = {"num": int(m.group(1)), "title": m.group(2).strip(),
-                   "heads": {}, "rows": [], "fields": {}, "saves": [], "files": []}
+                   "heads": {}, "rows": [], "fields": {}, "saves": [], "files": [],
+                   "file_refs": []}
             steps.append(cur)
+            in_files = False
             continue
         if cur is None:
             continue
+        bullet = BULLET_RE.match(line)
+        if line.strip().startswith("파일 선택"):
+            in_files = True
+        elif not bullet:
+            in_files = False
+        if bullet and (in_files or _is_photo_step(cur["title"])):
+            # 모양이 어긋난 이름도 여기서는 다 모은다 — 경계 검사(`find_photo_path_gaps`)가 본다
+            ref = PHOTO_SRC_TAIL_RE.sub("", bullet.group(1).replace("`", "")).strip()
+            if ref:
+                cur["file_refs"].append(ref)
         h = HEAD_RE.match(line)
         if h:
             cur["heads"].setdefault(h.group(1), []).append(h.group(2).strip())
@@ -604,6 +673,10 @@ def parse_steps(lines):
             pf = PHOTO_FIELD_RE.match(value)
             if pf:
                 cur["files"].append(pf.group("name"))
+            fv = FILE_VALUE_RE.match(value)
+            ref = fv.group(1).replace("`", "").strip() if fv else ""
+            if ref:
+                cur["file_refs"].append(ref)
             continue
         pl = PHOTO_LINE_RE.match(line)
         if pl:
@@ -3251,6 +3324,47 @@ def find_photo_count_gaps(steps):
     return problems
 
 
+def _is_photo_step(title):
+    return any(kind in title for kind in PHOTO_STEP_TITLES)
+
+
+def find_photo_path_gaps(steps, photos_dir=None):
+    """사진 파일명이 사진 폴더 밖을 가리키면 오류(`photo_path_problem`).
+
+    보는 이름: 표 칸의 `파일:` 값(모양과 상관없이) · `파일 선택` 바로 뒤의 목록 줄 · 사진 단계 안의 목록 줄.
+    `--photos` 를 주면 폴더 안 심볼릭 링크가 밖을 가리키는 것까지 본다.
+    """
+    problems = []
+    for step in steps:
+        seen = set()
+        for name in step.get("file_refs", ()):
+            if name in seen:
+                continue
+            seen.add(name)
+            problem = photo_path_problem(name, photos_dir)
+            if problem:
+                problems.append(f"{step['num']}단계: {problem}")
+    return problems
+
+
+def find_folder_line_escapes(folder_lines):
+    """`폴더:` 줄이 절대 경로이거나 `..` 를 품으면 오류 — MANUAL-SPEC: 공유 폴더 기준 상대 경로.
+
+    `--share-name` 이 없어도 돈다(형식 대조는 공유 폴더명을 알 때만 하지만, 밖을 가리키는 것은 늘 틀렸다).
+    """
+    problems = []
+    for line in folder_lines:
+        value = line.split(":", 1)[1].replace("`", "").strip() if ":" in line else ""
+        if not value:
+            continue
+        if (any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value)
+                or value[0] in "/\\" or PHOTO_DRIVE_RE.match(value)
+                or ".." in PHOTO_SEP_RE.split(value)):
+            problems.append(f"폴더 줄이 공유 폴더 밖을 가리킨다 — {value} "
+                            "(`폴더:` 는 `<공유 폴더명>/사진` 상대 경로다)")
+    return problems
+
+
 def find_room_photo_saves(steps):
     """`룸 사진 올리기` 단계가 [저장] 으로 끝나면 오류 — 그 카드에는 저장 버튼이 없다.
 
@@ -3908,6 +4022,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     create_only_fields = find_create_only_fields(parsed)
     room_photo_saves = find_room_photo_saves(parsed)
     photo_count_gaps = find_photo_count_gaps(parsed)
+    photo_path_gaps = find_photo_path_gaps(parsed, photos_dir)
+    folder_escapes = find_folder_line_escapes(folders)
     addon_card_gaps = find_addon_card_gaps(parsed)
     promo_common = find_promo_common_cards(parsed)
     season_saves = find_season_save_gaps(parsed)
@@ -4027,6 +4143,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "create_only_fields": create_only_fields,
         "room_photo_saves": room_photo_saves,
         "photo_count_gaps": photo_count_gaps,
+        "photo_path_gaps": photo_path_gaps, "folder_escapes": folder_escapes,
         "addon_card_gaps": addon_card_gaps,
         "promo_common": promo_common, "season_saves": season_saves,
         "cancel_policy_saves": cancel_policy_saves,
@@ -4109,6 +4226,7 @@ def main(argv=None):
               + r["audience_only_names"] + r["gala_addons"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
+              + r["photo_path_gaps"] + r["folder_escapes"]
               + r["promo_common"] + r["season_saves"] + r["cancel_policy_saves"]
               + r["repeat_row_formats"] + r["check_value_classes"]
               + r["scope_row_gaps"] + r["scope_target_gaps"]

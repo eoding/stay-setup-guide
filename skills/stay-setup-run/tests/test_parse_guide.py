@@ -333,6 +333,120 @@ class TestCheckMode(unittest.TestCase):
         doc = json.loads(out.read_text(encoding="utf-8"))
         self.assertEqual(doc["guide"]["photo_missing"], ["hotel_01.jpg"])
         self.assertTrue(doc["steps"][0]["photos"][0]["missing"])
+        self.assertEqual(doc["guide"]["photo_unsafe"], [])
+
+
+def file_cell_guide(name):
+    """표 칸 `파일: <name>` 하나짜리 원고 — 이 칸은 이름 모양을 가리지 않고 사진이 된다(`FILE_RE`)."""
+    return ("# 시험 호텔 — 입력 지시서\n\n"
+            "## 1. 대표이미지 올리기 (1장)\n"
+            "탭: `기본정보`\n"
+            "폴더: 시험/사진\n\n"
+            "| 칸 | 값 |\n|---|---|\n"
+            "| 대표이미지 | 파일: %s |\n\n"
+            "→ [저장]\n" % name)
+
+
+#: 사진 폴더 밖을 가리키는 이름 — 모두 가짜 경로다
+OUTSIDE_NAMES = ("../x.jpg", "a/../../x.jpg", "..\\x.jpg", "/etc/passwd", "C:\\x.jpg", "C:/x.jpg",
+                 "\\\\host\\x.jpg", "../../secret.txt")
+
+
+class TestPhotoPathEscape(unittest.TestCase):
+    """지시서의 사진 파일명은 사진 폴더 밖을 가리킬 수 없다 — `--check` 는 1, steps.json 은 안 쓴다."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.dir = Path(self.tmp) / "시험"
+        self.photos = self.dir / "사진"
+        self.photos.mkdir(parents=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_outside_names_are_rejected(self):
+        for name in OUTSIDE_NAMES:
+            with self.subTest(name=name):
+                for base in (None, self.photos):
+                    problem = parse_guide.photo_path_problem(name, base)
+                    self.assertIsNotNone(problem, (name, base))
+                    self.assertIn("사진 파일명이 사진 폴더 밖을 가리킨다", problem)
+                    self.assertIn(name, problem)
+
+    def test_control_characters_and_empty_are_rejected(self):
+        for name in ("a\x00.jpg", "a\n.jpg", "", "   "):
+            with self.subTest(name=repr(name)):
+                self.assertIsNotNone(parse_guide.photo_path_problem(name, self.photos))
+
+    def test_plain_names_pass(self):
+        for name in ("01.jpg", "hotel_01.jpg", "객실_전경.jpg", "객실/101.jpg", "a..b.jpg"):
+            with self.subTest(name=name):
+                self.assertIsNone(parse_guide.photo_path_problem(name, self.photos))
+                self.assertIsNone(parse_guide.photo_path_problem(name))
+
+    def test_symlink_pointing_outside_is_rejected(self):
+        secret = Path(self.tmp) / "secret.txt"
+        secret.write_text("x", encoding="utf-8")
+        (self.photos / "link.jpg").symlink_to(secret)
+        problem = parse_guide.photo_path_problem("link.jpg", self.photos)
+        self.assertIsNotNone(problem)
+        self.assertIn("link.jpg", problem)
+        self.assertNotIn(str(secret), problem)  # 바깥 경로를 문장에 싣지 않는다
+
+    def test_symlink_inside_the_folder_passes(self):
+        (self.photos / "real.jpg").write_bytes(b"jpeg")
+        (self.photos / "alias.jpg").symlink_to(self.photos / "real.jpg")
+        self.assertIsNone(parse_guide.photo_path_problem("alias.jpg", self.photos))
+
+    def test_file_cell_outside_fails_check_and_writes_no_plan(self):
+        for name in ("../../secret.txt", "/etc/passwd", "C:\\x.jpg", "\\\\host\\x.jpg", "..\\x.jpg"):
+            with self.subTest(name=name):
+                render_guide(self.dir, file_cell_guide(name))
+                r = run(str(self.dir), "--check")
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn("사진 폴더 밖을 가리키는 파일명: 1", r.stdout)
+                self.assertIn("사진 파일명이 사진 폴더 밖을 가리킨다 — %s" % name, r.stdout)
+                self.assertIn("없는 사진 파일: 0", r.stdout)  # 바깥 이름은 있는지도 묻지 않는다
+                out = Path(self.tmp) / "steps.json"
+                r = run(str(self.dir), "-o", str(out))
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertFalse(out.exists())
+                self.assertFalse((self.dir / "steps.json").exists())
+                self.assertIn("steps.json)을 쓰지 않습니다", r.stderr)
+
+    def test_symlinked_photo_list_item_fails_check(self):
+        secret = Path(self.tmp) / "secret.txt"
+        secret.write_text("x", encoding="utf-8")
+        (self.photos / "hotel_01.jpg").symlink_to(secret)
+        render_guide(self.dir, MINI)
+        r = run(str(self.dir), "--check")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("사진 폴더 밖을 가리키는 파일명: 1", r.stdout)
+        out = Path(self.tmp) / "steps.json"
+        r = run(str(self.dir), "-o", str(out))
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertFalse(out.exists())
+
+    def test_inside_names_still_pass(self):
+        for name in ("01.jpg", "객실_전경.jpg"):
+            with self.subTest(name=name):
+                (self.photos / name).write_bytes(b"jpeg")
+                render_guide(self.dir, file_cell_guide(name))
+                r = run(str(self.dir), "--check")
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn("사진 폴더 밖을 가리키는 파일명: 0", r.stdout)
+                out = Path(self.tmp) / "steps.json"
+                r = run(str(self.dir), "-o", str(out))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                doc = json.loads(out.read_text(encoding="utf-8"))
+                self.assertEqual([p["file"] for p in doc["steps"][0]["photos"]], [name])
+                self.assertEqual(doc["guide"]["photo_unsafe"], [])
+
+    def test_old_plan_without_the_key_still_summarizes(self):
+        doc = {"guide": {"photo_missing": []}, "steps": []}
+        text, _u, _m, blocking = parse_guide.summarize(doc)
+        self.assertIn("사진 폴더 밖을 가리키는 파일명: 0", text)
+        self.assertEqual(blocking, 0)
 
 
 # dict-audit 과 합의한 머리 줄 키를 그대로 쓴다 — `탭:` · `카드:` · `버튼:` 이고

@@ -22,6 +22,9 @@
 sha256 이 도장과 다르면 **거부하고 2 로 끝낸다**. 사람이 검토한 지시서만 실행에 들어가게 하려는
 것이다 — 원고를 직접 주면 검사기를 건너뛸 수 있다.
 
+사진 파일명이 사진 폴더 밖을 가리키면(`..` · 절대 경로 · 밖을 가리키는 심볼릭 링크 — `photo_path_problem`)
+`--check` 는 1 로 끝나고, 실행 계획(steps.json)은 **쓰지 않고** 1 로 끝낸다.
+
 사용법:
     python3 parse_guide.py <<이름>_입력지시서.html | 공유 폴더>
         [--photos DIR] [--title-prefix STR] [-o <이름>_실행/steps.json] [--check]
@@ -1039,12 +1042,62 @@ def stamp_line(stamp):
         stamp.get("check") or "?", (stamp.get("sha256") or "")[:12], stamp.get("rendered") or "?")
 
 
+#: 사진 파일명의 경계. 지시서의 파일명은 `photos_dir / 파일명` 으로 이어 붙어 그 파일이 ERP 에 호텔 사진으로
+#: 올라간다(고객 화면에 실린다). 이름에 `..` 이나 절대 경로가 들어 있으면 사진 폴더 **밖**의 파일(열쇠·설정
+#: 파일)이 올라갈 수 있다 — 지시서 HTML 은 도장을 찍은 뒤에도 손으로 고칠 수 있으므로 이름을 그대로 믿지 않는다.
+#: 순서가 중요하다: 이름을 **글자로 먼저** 본다. NUL 은 `Path` 가 예외를 내고, Windows 꼴(`C:\x.jpg` ·
+#: `\\host\x.jpg`)은 리눅스에서 resolve() 해도 폴더 안의 이상한 상대 이름으로 보이기 때문이다. 그다음
+#: resolve() 로 심볼릭 링크까지 따라가 폴더 안에 머무는지 본다.
+#: **지시서 검사기(`check_manual.py` `photo_path_problem`)와 같은 규칙이다** — 두 스크립트는 서로 import
+#: 하지 않는 단독 파일이라 사본을 둔다. 한쪽을 고치면 다른 쪽도 같이 고친다.
+PHOTO_ESCAPE_MSG = "사진 파일명이 사진 폴더 밖을 가리킨다"
+PHOTO_SEP_RE = re.compile(r"[\\/]")
+PHOTO_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+
+
+def photo_path_problem(name, photos_dir=None):
+    """사진 파일명 하나 → 사진 폴더 밖을 가리키면 사유가 붙은 한글 문장, 괜찮으면 None.
+
+    막는 것: 빈 이름 · NUL·제어 문자 · 절대 경로(`/…` · `\\…` · `C:\\…` · `C:/…` · `\\\\host\\…`) ·
+    `..` 경로 조각(`/` 와 `\\` 둘 다로 자른다) · `photos_dir` 를 주면 `(photos_dir / 이름).resolve()` 가
+    `photos_dir.resolve()` 안에 있지 않은 것(폴더 안 심볼릭 링크가 밖을 가리키는 것 포함).
+    폴더 안의 하위 폴더(`객실/101.jpg`)는 막지 않는다. 바깥 경로를 열거나 있는지 묻지 않는다 —
+    resolve() 한 번이 전부다.
+    """
+    text = name if isinstance(name, str) else ""
+    shown = text if text.isprintable() else repr(text)
+
+    def why(reason):
+        return "%s — %s (%s)" % (PHOTO_ESCAPE_MSG, shown, reason)
+
+    if not text.strip():
+        return why("빈 이름")
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in text):
+        return why("제어 문자")
+    if text[0] in "/\\" or PHOTO_DRIVE_RE.match(text):
+        return why("절대 경로")
+    if ".." in PHOTO_SEP_RE.split(text):
+        return why("`..` 경로 조각")
+    if photos_dir is not None:
+        base = Path(photos_dir).resolve()
+        try:
+            target = (base / text).resolve()
+        except (OSError, RuntimeError, ValueError):
+            return why("경로를 풀 수 없음")
+        if target == base:
+            return why("사진 폴더 자체")
+        if base not in target.parents:
+            return why("폴더 밖으로 이어짐")
+    return None
+
+
 def summarize(doc):
     steps = doc["steps"]
     kinds = Counter(s["kind"] for s in steps)
     unknown = [(s["no"], f["label"], f["raw_value"])
                for s in steps for f in s["fields"] if f.get("unknown")]
     missing = doc["guide"].get("photo_missing", [])
+    unsafe = doc["guide"].get("photo_unsafe", [])  # 옛 steps.json 에는 없다
     pre = doc["guide"].get("preflight") or {"stale": [], "unknown_kinds": [], "charge_order": [], "age_overlap": []}
     for key in ("age_overlap", "value_format", "step_order"):
         pre.setdefault(key, [])  # 옛 steps.json 도 읽을 수 있게
@@ -1057,6 +1110,8 @@ def summarize(doc):
     lines += ["  %d단계 · %s · %s" % u for u in unknown[:20]]
     lines.append("없는 사진 파일: %d" % len(missing))
     lines += ["  %s" % m for m in missing[:20]]
+    lines.append("사진 폴더 밖을 가리키는 파일명: %d" % len(unsafe))
+    lines += ["  %d단계 · %s" % (x["no"], x["why"]) for x in unsafe[:20]]
     lines.append("러너가 거부하는 단계: %d" % len(pre["stale"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["stale"][:20]]
     lines.append("줄 차례가 어긋난 단계: %d" % len(pre["charge_order"]))
@@ -1071,7 +1126,7 @@ def summarize(doc):
         # 막지 않는다 — 알리기만 한다(`KNOWN_KINDS` 주석)
         lines.append("러너가 모르는 단계 갈래: %d" % len(pre["unknown_kinds"]))
         lines += ["  %d단계 · %s" % (x["no"], x["kind"]) for x in pre["unknown_kinds"][:20]]
-    blocking = (len(unknown) + len(missing) + len(pre["stale"])
+    blocking = (len(unknown) + len(missing) + len(unsafe) + len(pre["stale"])
                 + len(pre["charge_order"]) + len(pre["age_overlap"])
                 + len(pre["value_format"]) + len(pre["step_order"]))
     return "\n".join(lines), len(unknown), len(missing), blocking
@@ -1087,7 +1142,8 @@ def main(argv=None):
     ap.add_argument("-o", "--output", default=None,
                     help="실행 계획 경로 (기본: 공유 폴더의 steps.json — 보통 `<이름>_실행/steps.json` 을 준다)")
     ap.add_argument("--check", action="store_true",
-                    help="도장과 요약만 내고, 알 수 없는 값이나 없는 사진이 있으면 1 로 끝낸다")
+                    help="도장과 요약만 내고, 알 수 없는 값·없는 사진·사진 폴더 밖을 가리키는 파일명이 "
+                         "있으면 1 로 끝낸다")
     args = ap.parse_args(argv)
 
     try:
@@ -1105,17 +1161,25 @@ def main(argv=None):
     guide_dir = src.parent
     photos_dir = Path(args.photos).expanduser().resolve() if args.photos \
         else (guide_dir / "사진").resolve()
-    missing = []
-    for ph in (p for st in steps for p in st["photos"]):
-        if not (photos_dir / ph["file"]).exists():
-            ph["missing"] = True
-            if ph["file"] not in missing:
-                missing.append(ph["file"])
+    missing, unsafe = [], []
+    for st in steps:
+        for ph in st["photos"]:
+            problem = photo_path_problem(ph["file"], photos_dir)
+            if problem:
+                # 폴더 밖을 가리키는 이름은 있는지도 묻지 않는다 — 실행 계획도 쓰지 않는다(아래)
+                ph["unsafe"] = True
+                unsafe.append({"no": st["no"], "title": st["title"], "file": ph["file"], "why": problem})
+                continue
+            if not (photos_dir / ph["file"]).exists():
+                ph["missing"] = True
+                if ph["file"] not in missing:
+                    missing.append(ph["file"])
 
     doc = {"guide": {"title": title, "source": source, "guide_file": str(src),
                      "share_folder": guide_dir.name,
                      "photos_dir": str(photos_dir), "title_prefix": args.title_prefix,
-                     "stamp": stamp, "photo_missing": missing, "preflight": preflight(steps)},
+                     "stamp": stamp, "photo_missing": missing, "photo_unsafe": unsafe,
+                     "preflight": preflight(steps)},
            "steps": steps}
 
     text_summary, _n_unknown, _n_missing, blocking = summarize(doc)
@@ -1124,6 +1188,13 @@ def main(argv=None):
         print(text_summary)
         return 1 if blocking else 0
 
+    if unsafe:
+        # 다른 막힘(없는 사진 · 옛 화면 단계)은 실행 계획을 쓰고 러너가 그 단계에서 선다. 이것만은
+        # 계획을 **쓰지 않는다** — 폴더 밖 경로가 steps.json 에 실리면 러너가 그것을 올릴 수 있다.
+        print(text_summary, file=sys.stderr)
+        print("⛔ %s — 실행 계획(steps.json)을 쓰지 않습니다. 지시서의 파일명을 고쳐 다시 만드세요."
+              % PHOTO_ESCAPE_MSG, file=sys.stderr)
+        return 1
     out = Path(args.output) if args.output else guide_dir / "steps.json"
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(text_summary, file=sys.stderr)
