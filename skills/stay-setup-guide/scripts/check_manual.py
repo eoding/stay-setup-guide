@@ -209,7 +209,7 @@ STEP_KINDS = (
     "시즌 만들기", "시즌 가격 채우기", "셀 상태 바꾸기",
     "가격 셀 만들기", "가격 셀 손으로 고치기",
     "요금제 고치기", "요금제 배포", "요금제 전체 적용", "기준 요금제 바꾸기",
-    "판매일 열기",
+    "판매일 열기", "재고 수량 판매 켜기", "재고 한꺼번에 넣기", "재고 수량 고치기",
     "부과금 추가", "부가옵션 만들기", "부가옵션 가격 넣기",
     "프로모션 추가", "혜택 추가", "택1 그룹 만들기", "그룹에 혜택 추가",
     "판매 시작",
@@ -350,6 +350,9 @@ ROOM_COMBOS_FIELDS = ("허용 인원 조합(선택)", "허용 인원 조합")
 PENDING_DICTIONARY_FIELDS = {
     "허용 인원 조합(선택)": "텍스트",
     "허용 인원 조합": "텍스트",
+    # 재고는 아직 자동 화면 사전의 대상이 아니다. 운영 2026-10-08 폼의 보충 사전.
+    "총 수량": "숫자",
+    "판매 연결": "다중 체크",
 }
 OCCUPANCY_ADJUST_FIELDS = ("인원 조합별 조정(선택)", "인원 조합별 조정")
 BARE_NUMBER_RE = re.compile(r"^\d+$")
@@ -1532,7 +1535,7 @@ def find_unresolved_ref_bands(steps):
     """참조를 해소할 수 없는 구간·비율이 빈 % 구간은 **경고** — 원고는 맞고 화면 설정이 틀렸다.
 
     그 구간의 아동 금액 칸은 읽기 전용 안내 칸이라 원고에 적을 값은 `자동 입력됨 · 그대로 둠`
-    이 **맞다**(그래서 오류가 아니다 — James 결정 2026-09-15). 문제는 그 구간이 **깔리지
+    이 **맞다**(그래서 오류가 아니다 — 2026-09-15 결정). 문제는 그 구간이 **깔리지
     않는다**는 것이다: 화면이 「참조 구간을 해소할 수 없어 이 구간은 깔리지 않습니다」 를 띄우고
     전개도 같은 판정으로 건너뛰므로(`season.child_band_rates`), 그 나이의 아이가 낀 조합 셀이
     만들어지지 않는다. 지시서를 글자 그대로 입력해도 화면은 통과하니 여기서 알리지 않으면
@@ -3336,6 +3339,85 @@ def step_kind(title):
     return text
 
 
+# 재고는 선택 단계다. 없는 원고에는 아무 조건도 추가하지 않는다.
+INVENTORY_KINDS = ("재고 수량 판매 켜기", "재고 한꺼번에 넣기", "재고 수량 고치기")
+INVENTORY_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
+
+
+def find_inventory_gaps(steps):
+    """운영 재고 폼의 명시 입력·범위·켜기 순서를 저장 전에 확인한다."""
+    problems, enabled = [], set()
+    for step in steps:
+        kind = step_kind(step["title"])
+        if kind not in INVENTORY_KINDS:
+            continue
+        fields = step["fields"]
+        def fail(message):
+            problems.append(f"{step['num']}단계: {message}")
+        def name(value):
+            return (value or "").replace("`", "").strip()
+        def qualified(value):
+            parts = value.split(" · ", 1)
+            return len(parts) == 2 and all(part.strip() for part in parts)
+        def day(value):
+            try:
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value or ""):
+                    return None
+                return datetime.date.fromisoformat(value)
+            except ValueError:
+                return None
+        if name(head(step, "탭")) != "재고":
+            fail("재고 단계의 탭은 `재고`다")
+        if kind == "재고 수량 판매 켜기":
+            card = name(card_name(step))
+            if not qualified(card):
+                fail("수량으로 판매할 `카드: 오퍼명 · 객실명`을 적는다")
+            else:
+                enabled.add(card)
+            if fields:
+                fail("수량으로 판매 스위치는 입력 칸이 없다")
+            if step["saves"] != ["수량으로 판매"]:
+                fail("수량 판매 켜기의 마지막 줄은 [수량으로 판매]다")
+            continue
+        qty = fields.get("총 수량", "")
+        if not re.fullmatch(r"[0-9]+", qty) or not 0 <= int(qty) <= 9999:
+            fail("총 수량은 명시된 0~9999의 정수다 — 비움·남음·자동 값은 쓰지 않는다")
+        if kind == "재고 수량 고치기":
+            targets = [name(card_name(step))]
+            if not day(name(head(step, "블록"))):
+                fail("날짜별 수량의 `블록:`은 YYYY-MM-DD 날짜 하나다")
+            allowed = {"총 수량"}
+            submit = "저장"
+        else:
+            allowed = {"시작일", "종료일", "요일", "판매 연결", "총 수량"}
+            start, end = day(fields.get("시작일")), day(fields.get("종료일"))
+            if not start or not end or not 1 <= (end - start).days + 1 <= 400:
+                fail("재고 시작일·종료일은 양끝 포함 최대 400일이다")
+            raw_days = fields.get("요일", "")
+            weekdays = [x.strip() for x in raw_days.removeprefix("선택:").split(",") if x.strip()]
+            if not raw_days.startswith("선택:") or not weekdays or any(x not in INVENTORY_WEEKDAYS for x in weekdays):
+                fail("재고 요일은 `선택: 월, 화, …`로 하나 이상 명시한다")
+            elif start and end and 1 <= (end - start).days + 1 <= 400:
+                if not any(INVENTORY_WEEKDAYS[(start + datetime.timedelta(days=i)).weekday()] in weekdays
+                           for i in range((end - start).days + 1)):
+                    fail("고른 기간에 해당 요일이 없다")
+            raw_rooms = fields.get("판매 연결", "")
+            targets = [x.strip() for x in raw_rooms.removeprefix("선택:").split(",") if x.strip()]
+            if not raw_rooms.startswith("선택:") or not targets:
+                fail("판매 연결을 하나 이상 명시한다 — 기본 선택 전체를 쓰지 않는다")
+            submit = "넣기"
+        for target in targets:
+            if not qualified(target):
+                fail("판매 연결은 `오퍼명 · 객실명`으로 한정한다")
+            elif target not in enabled:
+                fail(f"`{target}`의 재고 수량 판매 켜기를 앞에 둔다")
+        if set(fields) - allowed:
+            fail("재고 폼에 없는 입력 칸: " + ", ".join(sorted(set(fields) - allowed)))
+        if step["saves"] != [submit]:
+            fail(f"재고 단계의 마지막 줄은 [{submit}]다")
+    return problems
+
+
 def find_unknown_step_kinds(steps):
     """단계 제목의 갈래가 정본도 러너 별칭도 아니면 오류 — 러너가 그 단계에서 멈춘다.
 
@@ -3776,6 +3858,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     unused_files = sorted(have - referenced) if photos_dir else []
 
     parsed = parse_steps(lines)
+    inventory_gaps = find_inventory_gaps(parsed)
     guide_day = guide_date(lines, today)
     past_sale_starts = find_past_sale_starts(parsed, guide_day)
     blank_booking_window = find_blank_booking_window(parsed)
@@ -3905,7 +3988,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "past_seasons": past_seasons,
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
-        "unknown_step_kinds": unknown_step_kinds,
+        "unknown_step_kinds": unknown_step_kinds, "inventory_gaps": inventory_gaps,
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
         "age_band_order": age_band_order,
@@ -4009,7 +4092,7 @@ def main(argv=None):
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["past_sale_starts"] + r["past_seasons"]
               + r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
-              + r["unknown_step_kinds"]
+              + r["unknown_step_kinds"] + r["inventory_gaps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]

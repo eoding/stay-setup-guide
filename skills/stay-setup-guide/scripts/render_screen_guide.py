@@ -708,9 +708,9 @@ def render_web_cell(row):
     else:
         parts.append('<span class="web-none">%s</span>' % inline(WEB_NONE_TEXT))
 
+    # 영향 지도의 줄이 스스로 머리말(「고객 화면에 안 나온다 — …」)을 갖는다 — 여기서 덧붙이지 않는다.
     for line in as_list(row.get('web_not_shown')):
-        parts.append('<span class="sub">코드에 자리는 있으나 지금은 안 보인다 — %s</span>'
-                     % impact_inline(line))
+        parts.append('<span class="sub">%s</span>' % impact_inline(line))
     if row.get('erp_reservation'):
         parts.append('<span class="sub">ERP 직원 예약: %s</span>'
                      % impact_inline(row['erp_reservation']))
@@ -857,16 +857,14 @@ def render_howto():
     return '\n'.join(out)
 
 
+IMPACT_BASELINE_TEXT = '배포된 코드를 읽어 정리한 것 (화면을 띄워 확인한 결과는 아님)'
+
+
 def impact_baseline_line(impact_meta):
-    """「고객 웹 영향」 줄 — 어느 커밋의 코드를 따라간 것인지."""
-    parts = []
-    for name, key in (('ERP', 'erp_ref'), ('엔진', 'engine_ref'), ('웹', 'web_ref')):
-        ref = (impact_meta or {}).get(key)
-        if ref:
-            parts.append(f'{name} {ref}')
-    if not parts:
+    """「고객 웹 영향」 줄 — 무엇을 기준으로 적었는지. 비공개 저장소의 커밋 번호는 찍지 않는다."""
+    if impact_meta is None:
         return ''
-    return ' · '.join(parts) + ' 기준 (코드 정적 추적, 실행 확인 아님)'
+    return IMPACT_BASELINE_TEXT
 
 
 def render_head_block(meta, screen_count, field_count, impact_meta=None):

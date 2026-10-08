@@ -1123,7 +1123,7 @@ const run = async () => {
     //     모달 헤더 [저장] 은 `contents_imagecontent` 행만 만들고, 호텔과 사진의 연결
     //     (`fit_masterimages`)은 폼이 저장될 때 생긴다(ERP `fit/views/master.py`
     //     `after_save_model` 이 `main_image_sort`·`image_sort` 를 읽어 bulk_create).
-    //     2026-09-10 운영 호텔 44000 에서 러너가 모달까지만 저장해 고객 화면에
+    //     2026-09-10 운영 호텔에서 러너가 모달까지만 저장해 고객 화면에
     //     "사진 준비 중" 이 떴다 — DB 의 `fit_masterimages` 가 0행이었다.
     wI.__pageSaveClicks = 0;
     const i3 = await wI.runStep(1, { uploaded: true });

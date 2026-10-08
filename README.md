@@ -7,6 +7,8 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
+Current release: plugin `stay-setup` 1.5.0 (`stay-setup-guide` 1.5.0, `stay-setup-run` 0.12.0).
+
 ## Install
 
 **Claude Code plugin (recommended — it updates itself).** In Claude Code, the CLI or the desktop app's Code tab:
@@ -46,8 +48,8 @@ Sales and operations staff who do not use a terminal should follow
   the ERP domain first.
 - **Codex** covers guide creation and entering the values by hand. **Automatic entry on Codex is not yet verified**
   — we do not claim it works. `skills/stay-setup-run` lists the three browser capabilities to confirm before trying
-  it. Other agents that read the standard `SKILL.md` format (Gemini CLI, Grok, Cursor, Hermes Agent) can produce the
-  guide the same way.
+  it. Other agents that read the standard `SKILL.md` format (Gemini CLI, Grok, Cursor) can produce the guide the same
+  way.
 - Contract formats the converter reads: xlsx, xlsm, xls, ods, csv, pdf, docx, pptx, odt, rtf, epub, hwp, hwpx.
 
 ## Use
@@ -88,13 +90,45 @@ While the runner works, a small strip in the top-right corner of the ERP page sh
 same browser and its checkmarks and progress bar rise on their own. Neither display changes the run; if the guide tab
 is not open the agent skips it silently.
 
-Per-hotel wall-clock time in production runs, photos included:
+Automatic entry took 13–19 minutes per hotel in production runs, photos included. At the end, read the validation
+banner. The pass mark is zero red and zero yellow items. Then press [판매 시작] yourself.
 
-| Automatic entry, one hotel | 13–19 minutes |
+## Optional room inventory
+
+Inventory is optional. The guide skill adds inventory steps only when the contract or the user states room quantities
+explicitly, per sale link and date. Without such quantities it adds no inventory step and asks no inventory question,
+and guides without inventory steps run exactly as before. A quantity is never estimated from the hotel's total room
+count or from what is left. The steps come after the sale links and sale days and before the price fill:
+
+| Step | What it does |
 |---|---|
+| `재고 수량 판매 켜기` | Turns on 수량으로 판매 (sell by quantity) for one sale link; skipped if it is already on |
+| `재고 한꺼번에 넣기` | Enters one total quantity for a date range (both ends included, at most 400 days), the listed weekdays and the listed sale links only; the drawer's default selection is never kept |
+| `재고 수량 고치기` | Changes the total quantity of one sale link on one date |
 
-At the end, read the validation banner. The pass mark is zero red and zero yellow items. Then press [판매 시작]
-yourself.
+The value is the total quantity for that sale link on that date, as stated in the contract or by the user, not the
+number remaining; sold and in-payment counts are read-only and never entered. Dates are stay nights, so the check-out
+day is not included. `0` means closed. An empty date means no quantity is set, and a link that sells by quantity does
+not sell on that date. The skills never turn quantity selling off and never clear or delete inventory. The form rules
+are in [`inventory-guide.md`](skills/stay-setup-guide/references/inventory-guide.md).
+
+## Screen help
+
+`skills/stay-setup-guide/scripts/explain_field.py` answers "what does this field do, and where do customers see it?"
+without a contract and without touching the ERP. Give it a field name, optionally narrowed to one screen, or a screen
+alone to list every field on it:
+
+```
+python3 skills/stay-setup-guide/scripts/explain_field.py '총 수량'
+python3 skills/stay-setup-guide/scripts/explain_field.py '<field>' --screen '<screen name or id>'
+python3 skills/stay-setup-guide/scripts/explain_field.py --screen '<screen name or id>'
+```
+
+It prints the baseline it was built from, then for each match the help text, the effect on sales, and where the field
+appears on customer pages (or that it does not appear there directly). `--json` gives the same as JSON; the exit code is
+1 when nothing matches. [`docs/화면-안내.html`](docs/화면-안내.html) now shows the same customer-page placement for
+each field. Both are reference information from analysing the ERP screens and deployed code at a point in time, not a
+check against live screens; when the real screen differs, the real screen wins.
 
 ## Rules the skills enforce
 
@@ -114,10 +148,10 @@ yourself.
   (2026-09-21 release). One contract line such as "the breakfast rate plan on every room except the suite" is written
   as a mode plus include/exclude lists on the rate-plan and room axes; exclude wins, and an explicit scope with an
   empty include list sells nowhere and needs the confirmation row. A surcharge has no rate-plan axis.
-- **The screen baseline is 운영 2026-09-21 배포판**, 31 screens. A new hotel starts empty: zero offers, zero rooms,
-  zero sale links, and the room-link drawer stays blocked until the first offer exists. When the ERP screens change,
-  both skills must be re-audited and the screen dictionary regenerated; the runner refuses steps written for older
-  screens rather than clicking the wrong row.
+- **The screen baseline is the production screens of 2026-09-21** (31 screens) **plus the inventory tab of
+  2026-10-08**. A new hotel starts empty: zero offers, zero rooms, zero sale links, and the room-link drawer stays
+  blocked until the first offer exists. When the ERP screens change, both skills must be re-audited and the screen
+  dictionary regenerated; the runner refuses steps written for older screens rather than clicking the wrong row.
 
 ## Repository layout
 
@@ -126,8 +160,8 @@ yourself.
 | [`.claude-plugin/`](.claude-plugin) · [`.codex-plugin/`](.codex-plugin) · [`.agents/plugins/`](.agents/plugins) | Plugin and marketplace manifests for Claude Code and Codex; bump every `version` field when a skill version changes |
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The guide skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a worked example, converter/checker/renderer scripts |
 | [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: parser, in-page helper and boot scripts, screen mechanics, run-log format |
-| [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers · [`화면-안내.html`](docs/화면-안내.html) — what every ERP Stay screen does, for staff entering hotels by hand (generated from the screen dictionary by `render_screen_guide.py`; regenerate it, never edit it) · [`쉽게-보기/`](docs/쉽게-보기) — picture explainers for non-developers (open the HTML in a browser): [how the runner works](docs/쉽게-보기/레시피-요리사-손.html), [where child rates go](docs/쉽게-보기/아이-요금.html), [the first week](docs/쉽게-보기/일주일.html) |
-| [`LICENSE`](LICENSE) | eoding Partner Use License |
+| [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers · [`화면-안내.html`](docs/화면-안내.html) — what every ERP Stay screen does and where each field appears on customer pages, for staff entering hotels by hand (generated by `render_screen_guide.py`; regenerate it, never edit it) · [`쉽게-보기/`](docs/쉽게-보기) — picture explainers for non-developers (open the HTML in a browser): [how the runner works](docs/쉽게-보기/레시피-요리사-손.html), [where child rates go](docs/쉽게-보기/아이-요금.html), [the first week](docs/쉽게-보기/일주일.html) |
+| [`LICENSE`](LICENSE) | eoding Partner Use License v1.3 |
 
 ## Disclaimer
 
@@ -136,16 +170,20 @@ official website or elsewhere) must be checked for copyright and usage permissio
 before use. The provider of these skills accepts no responsibility for the rights status of any photo. Obtain the
 hotel's permission before publishing photos on a sales page.
 
-The generated guide is a working aid. Verify every value against the contract before entering it. The runner copies
-what the guide says onto the screen; it does not check that the guide matches the contract. The provider is not
-liable for values entered into the ERP.
+The generated guide is a working aid. Verify every value against the contract before entering it, and check room
+inventory quantities against what was agreed with the hotel before selling. The runner copies what the guide says onto
+the screen; it does not check that the guide matches the contract. To the extent permitted by law, the provider is not
+liable for values, photos or inventory quantities entered into the ERP; the license states the exceptions.
 
 ## License
 
-**eoding Partner Use License** — see [`LICENSE`](LICENSE). In short: customers and partners with an eoding ERP
-account may use, copy and modify this repository internally to configure eoding ERP; redistribution outside your
-organization, resale, and use for other products are not permitted; no warranty. The bundled Pretendard font is
-separately under the SIL Open Font License
+**eoding Partner Use License v1.3** — see [`LICENSE`](LICENSE); the Korean text governs. In short: customers and
+partners with an eoding ERP account may use, copy and modify this repository internally to configure eoding ERP,
+including having an AI agent enter values and upload photos with their own account; redistribution outside your
+organization, resale, and use for other products are not permitted; no warranty. Values, photos and room inventory
+quantities entered by an AI agent must be checked by the user before selling. Screen help is reference information and
+does not guarantee how screens behave. Liability for eoding's wilful misconduct or gross negligence is not excluded.
+The bundled Pretendard font is separately under the SIL Open Font License
 ([`skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt`](skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt)).
 
 ## Repository rules

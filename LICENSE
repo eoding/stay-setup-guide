@@ -1,5 +1,5 @@
-eoding 파트너 사용 라이선스 (eoding Partner Use License) v1.2
-2026-09-03
+eoding 파트너 사용 라이선스 (eoding Partner Use License) v1.3
+2026-09-03 제정 · 2026-10-08 개정
 
 한국어 본문이 정본이며, 아래 영어는 참고 번역입니다.
 The Korean text governs; the English text below is a reference translation.
@@ -10,13 +10,21 @@ The Korean text governs; the English text below is a reference translation.
 
 저작권 (c) 2026 eoding. 모든 권리 보유.
 
+[중요 내용 요약]
+  · 이 저장소는 eoding ERP 고객사·파트너사의 내부 사용만 허용하며, 조직 밖 재배포·판매는
+    금지됩니다(제1조·제2조).
+  · AI 에이전트가 대신 입력한 값·사진·객실 재고 수량도 "판매 시작" 전에 사용자가 직접
+    확인해야 하며, 입력·게시된 내용의 책임은 사용자에게 있습니다(제4조).
+  · 화면 도움말은 참고 정보이며 실제 화면 동작을 보장하지 않습니다(제4조 제3항).
+  · eoding 의 고의 또는 중대한 과실로 인한 책임은 배제되지 않습니다(제4조 제4항).
+
 1. 허용되는 사용
    eoding 의 ERP(Stay 등) 계정을 가진 고객사·파트너사(이하 "사용자")는 이 저장소의
    내용(문서, 화면 사전, 스크립트, 예시)을 eoding ERP 를 설정·운영할 목적으로
    내부에서 사용·복사·수정할 수 있습니다. 사용자의 임직원과, 사용자를 위해 일하는
    AI 에이전트 도구가 그 목적으로 실행하는 것도 포함합니다. 여기에는 사용자의 지시에
-   따라 사용자의 계정으로 AI 에이전트가 eoding ERP 에 값을 자동으로 입력·수정하거나
-   사진을 올리는 것이 포함됩니다. 이 경우에도 eoding ERP 의 이용약관과 사용자·eoding
+   따라 사용자의 계정으로 AI 에이전트가 eoding ERP 에 값(객실 재고의 날짜별 판매 수량을
+   포함합니다)을 자동으로 입력·수정하거나 사진을 올리는 것이 포함됩니다. 이 경우에도 eoding ERP 의 이용약관과 사용자·eoding
    사이의 계약이 그대로 적용되며, 이 라이선스가 그것을 대체하거나 변경하지 않습니다.
 
 2. 금지되는 사용
@@ -35,14 +43,20 @@ The Korean text governs; the English text below is a reference translation.
    (skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt).
 
 4. 보증 부인·책임 제한
-   이 저장소의 내용은 무상으로 "있는 그대로" 제공되며, 법령이 허용하는 범위에서
-   정확성·완전성·특정 목적 적합성을 포함한 보증을 하지 않습니다. 생성된 지시서의
-   값은 사용자가 계약서와 대조한 뒤 입력해야 합니다. AI 에이전트가 대신 입력한
-   경우에도 사용자는 "판매 시작" 전에 입력된 값을 스스로 확인해야 하며, 입력·게시된
-   내용에 대한 책임은 사용자에게 있습니다. 법령이 허용하는 범위에서,
-   입력된 값·사진·설정으로 생긴 손해에 대해 eoding 은 책임을 지지 않습니다.
-   다만 eoding 또는 그 이행보조자의 고의 또는 중대한 과실로 인한 책임은 배제되지
-   않습니다.
+   ① 이 저장소의 내용은 무상으로 "있는 그대로" 제공되며, 법령이 허용하는 범위에서
+      정확성·완전성·특정 목적 적합성을 포함한 보증을 하지 않습니다. 생성된 지시서의
+      값은 사용자가 계약서와 대조한 뒤 입력해야 합니다. AI 에이전트가 대신 입력한
+      경우에도 사용자는 "판매 시작" 전에 입력된 값을 스스로 확인해야 하며, 입력·게시된
+      내용에 대한 책임은 사용자에게 있습니다.
+   ② 객실 재고 수량은 사용자가 지시서에 적거나 직접 지정한 값만 입력되며, 이 저장소의
+      스크립트가 수량을 정하지 않습니다. 수량이 틀리면 초과 판매나 판매 누락이 생길 수
+      있으므로, 사용자는 입력된 수량을 호텔과 합의한 수량과 대조한 뒤 판매해야 합니다.
+   ③ 화면 도움말(입력 칸이 고객 화면에 어떻게 나타나는지에 대한 설명)은 특정 시점의
+      eoding ERP 화면을 분석해 만든 참고 정보입니다. eoding ERP 가 바뀌면 실제 동작과
+      다를 수 있으며, 고객 화면의 표시 내용을 보장하지 않습니다.
+   ④ 법령이 허용하는 범위에서, 입력된 값·사진·재고 수량·설정으로 생긴 손해에 대해
+      eoding 은 책임을 지지 않습니다. 다만 eoding 또는 그 이행보조자의 고의 또는
+      중대한 과실로 인한 책임은 배제되지 않습니다.
 
 5. 종료
    사용자가 이 라이선스를 위반하면 허용은 자동으로 종료됩니다. eoding 은 향후
@@ -62,13 +76,25 @@ English (reference translation)
 
 Copyright (c) 2026 eoding. All rights reserved.
 
+[Key points]
+  · Internal use by eoding ERP customers and partners only; no redistribution or sale
+    outside your organization (sections 1 and 2).
+  · Values, photos and room inventory quantities entered by an AI agent must still be
+    checked by the User before going on sale; the User is responsible for what is
+    entered and published (section 4).
+  · Screen help is reference information and does not guarantee how screens behave
+    (section 4(3)).
+  · Liability for eoding's wilful misconduct or gross negligence is not excluded
+    (section 4(4)).
+
 1. Permitted use
    Customers and partners holding an eoding ERP (e.g. Stay) account ("Users") may
    use, copy and modify the contents of this repository (documents, screen
    dictionary, scripts, examples) internally for the purpose of configuring and
    operating eoding ERP. This includes execution by the User's staff and by AI
    agent tools acting on the User's behalf for that purpose, including an AI agent
-   automatically entering or amending values, and uploading photos, in eoding ERP
+   automatically entering or amending values (including daily room inventory
+   quantities), and uploading photos, in eoding ERP
    under the User's instruction and using the User's own account. The eoding ERP
    terms of service and the contract between the User and eoding continue to apply
    to such use; this license neither replaces nor modifies them.
@@ -92,16 +118,26 @@ Copyright (c) 2026 eoding. All rights reserved.
    (skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt).
 
 4. No warranty; limitation of liability
-   The contents are provided free of charge and "AS IS"; to the extent permitted
-   by law, no warranty is given, including as to accuracy, completeness or
-   fitness for a particular purpose. Values in a generated guide must be checked
-   against the contract before entry. Where an AI agent enters them on the User's
-   behalf, the User must still verify the entered values before going on sale
-   ("판매 시작"), and the User remains responsible for the content entered and
-   published. To the extent permitted by law, eoding is
-   not liable for damages arising from entered values, photos or settings;
-   liability for eoding's own wilful misconduct or gross negligence (or that of
-   its agents) is not excluded.
+   (1) The contents are provided free of charge and "AS IS"; to the extent
+       permitted by law, no warranty is given, including as to accuracy,
+       completeness or fitness for a particular purpose. Values in a generated
+       guide must be checked against the contract before entry. Where an AI agent
+       enters them on the User's behalf, the User must still verify the entered
+       values before going on sale ("판매 시작"), and the User remains responsible
+       for the content entered and published.
+   (2) Room inventory quantities are entered only as written in the guide or
+       specified by the User; the scripts in this repository do not decide
+       quantities. A wrong quantity can cause overselling or missed sales, so the
+       User must check entered quantities against those agreed with the hotel
+       before selling.
+   (3) Screen help (explanations of how an input field appears on customer
+       pages) is reference information produced by analysing eoding ERP screens
+       at a point in time. It may differ from actual behaviour after eoding ERP
+       changes and does not guarantee what customer pages display.
+   (4) To the extent permitted by law, eoding is not liable for damages arising
+       from entered values, photos, inventory quantities or settings; liability
+       for eoding's own wilful misconduct or gross negligence (or that of its
+       agents) is not excluded.
 
 5. Termination
    Permission terminates automatically upon breach. eoding may license future

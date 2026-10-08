@@ -885,7 +885,7 @@ const run = async () => {
     await R.tab('객실');
   }
 
-  // 12k. 페이지 우상단 [저장] — **기본정보 폼 전체 저장** (2026-09-10 운영 호텔 44000 실측).
+  // 12k. 페이지 우상단 [저장] — **기본정보 폼 전체 저장** (2026-09-10 운영 호텔 실측).
   //      이미지 모달의 헤더 [저장] 은 `contents_imagecontent` 행만 만들고, 호텔과 사진의
   //      연결(`fit_masterimages`)은 기본정보 폼이 저장될 때 생긴다 — ERP `fit/views/master.py`
   //      의 `after_save_model` 이 `main_image_sort`·`image_sort` 를 읽어 bulk_create 한다.

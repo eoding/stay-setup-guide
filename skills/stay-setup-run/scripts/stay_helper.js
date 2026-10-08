@@ -2448,7 +2448,7 @@
      `after_save_model` 이 폼이 실어 보낸 `main_image_sort`·`image_sort` 를 읽어
      `MasterImages` 를 bulk_create 한다. 모달만 저장하고 끝내면 화면에는 사진이
      보이는데 DB 에는 연결이 0행이라 고객 화면에 "사진 준비 중" 이 뜬다
-     (2026-09-10 운영 호텔 44000 실측).
+     (2026-09-10 운영 호텔 실측).
 
      그 저장 버튼은 드로어·모달 **밖**, 페이지 우상단 머리(`.right_header`)의 `#save` 다
      (`fit/templates/fit/master_form.html`). 누르면 htmx 가 아니라 **ajax POST** 가

@@ -34,6 +34,7 @@
     /설명$/         // 글상자 — 편집기가 값을 제 꼴로 되돌린다
   ];
   window.READBACK_TRUSTED_RES = [
+    /^총\s*수량$/,
     /(금액|단가|원가|판매가|정가|기준가|수수료)/,   // 금액 — 숫자가 그대로 되읽힌다
     /(날짜|일자|시작일|종료일)/,                    // 날짜
     /^인원\s*조합/,                                 // 좌표 — 틀리면 다른 셀을 덮는다
@@ -131,7 +132,7 @@
   // 기본정보 폼 전체가 저장될 때 생긴다 — ERP `fit/views/master.py` 의 `after_save_model` 이
   // 폼이 실어 보낸 `main_image_sort`·`image_sort` 를 읽어 `MasterImages` 를 bulk_create 한다.
   // 그래서 이 단계는 모달을 저장한 뒤 **페이지 우상단 [저장]** 까지 눌러야 끝난다
-  // (2026-09-10 운영 호텔 44000: 안 눌러 고객 화면에 "사진 준비 중" 이 떴다 — DB 0행).
+  // (2026-09-10 운영 호텔: 안 눌러 고객 화면에 "사진 준비 중" 이 떴다 — DB 0행).
   // `룸 사진 올리기` 는 여기 들지 않는다 — 그쪽은 파일을 고르는 즉시 올라가고 저장 버튼이 없다.
   window.IMAGE_STEP_RE = /이미지\s*올리기$/;
   window.isImageStep = function (s) {
@@ -667,6 +668,85 @@
     return out;
   };
 
+  window.runInventoryStep = async function (s, opt) {
+    opt = opt || {};
+    var out = { no: s.no, title: s.title, kind: s.kind, submitted: false };
+    var norm = function (text) { return String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var label = norm(s.head.card) + ' — 수량으로 판매';
+    var findSwitch = function () {
+      return Array.from(document.querySelectorAll('#stay_inventory [role="switch"]'))
+        .find(function (button) { return norm(button.getAttribute('aria-label')) === label; });
+    };
+    await stayRun.tab(s.head.tab || '재고');
+    await stayRun.waitFor(function () { return !!findSwitch(); }, 5000);
+    var button = findSwitch();
+    if (!button) { out.error = '재고 판매 연결을 찾지 못했습니다: ' + s.head.card; return out; }
+    if (s.kind === '재고 수량 판매 켜기') {
+      if (button.getAttribute('aria-checked') === 'true') {
+        out.skipped = true; out.reason = '이미 수량으로 판매 중'; return out;
+      }
+      if (opt.dry) return out;
+      var toggled = await stayRun.submit('수량으로 판매', { within: button.closest('td') });
+      out.errors = toggled.errors || [];
+      var current = findSwitch();
+      if (!out.errors.length && current && current.getAttribute('aria-checked') === 'true') {
+        out.submitted = true; out.submit = 'saved';
+      } else { out.error = '수량으로 판매 켜기를 확인하지 못했습니다'; }
+      return out;
+    }
+    if (button.getAttribute('aria-checked') !== 'true') {
+      out.error = '수량으로 판매가 꺼져 있습니다. 재고 수량 판매 켜기를 먼저 실행하세요.'; return out;
+    }
+    var day = norm(s.head.block);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) { out.error = '재고 날짜 하나를 YYYY-MM-DD로 지정하세요'; return out; }
+    var qty = (s.fields || []).find(function (field) { return field.label === '총 수량'; });
+    if (!qty || qty.kind !== 'typed' || !/^\d+$/.test(qty.value) || Number(qty.value) > 9999) {
+      out.error = '총 수량을 0~9999의 정수로 명시하세요'; return out;
+    }
+    var findCell = function () {
+      var toggle = findSwitch();
+      return toggle && Array.from(toggle.closest('tr').querySelectorAll('button[hx-get]'))
+        .find(function (cell) { return (cell.getAttribute('hx-get') || '').indexOf('/days/' + day + '/') >= 0; });
+    };
+    // Read and press the rendered month controls; never synthesize a request URL.
+    for (var attempt = 0; !findCell() && attempt < 60; attempt++) {
+      var pane = document.getElementById('stay_inventory');
+      var heading = pane && pane.querySelector('.stay-inv-month');
+      var match = heading && norm(heading.textContent).match(/(\d{4})년\s*(\d{1,2})월/);
+      if (!match) break;
+      var shownMonth = Number(match[1]) * 12 + Number(match[2]);
+      var wantedMonth = Number(day.slice(0,4)) * 12 + Number(day.slice(5,7));
+      if (shownMonth === wantedMonth) break;
+      var move = pane.querySelector('[aria-label="' + (shownMonth < wantedMonth ? '다음 달' : '이전 달') + '"]');
+      if (!move) break;
+      var before = norm(heading.textContent);
+      move.click();
+      var moved = await stayRun.waitFor(function () {
+        var now = document.querySelector('#stay_inventory .stay-inv-month');
+        return now && norm(now.textContent) !== before;
+      }, 5000);
+      if (!moved) break;
+    }
+    var cell = findCell();
+    if (!cell) { out.error = '해당 판매 연결의 날짜 칸을 찾지 못했습니다: ' + day; return out; }
+    var opened = await stayRun.open({ button: norm(cell.textContent), within: cell.closest('td') });
+    out.open = opened.status;
+    if (opened.status !== 'ok' && opened.status !== 'already') { out.error = '재고 수량 드로어를 열지 못했습니다'; return out; }
+    var fields = window.stepFields(s.no);
+    var filled = await stayRun.fill(fields);
+    out.bad = filled.filter(function (field) { return field.status !== 'ok' && field.status !== 'skipped'; });
+    var read = stayRun.readback(fields);
+    out.mismatch = read.mismatch;
+    if (opt.dry || out.bad.length || out.mismatch.length) return out;
+    var saved = await stayRun.submit('저장');
+    out.errors = saved.errors || [];
+    var after = findCell();
+    if (!out.errors.length && after && norm(after.textContent) === String(Number(qty.value))) {
+      out.submitted = true; out.submit = 'saved';
+    } else { out.error = '재고 저장 뒤 총 수량을 확인하지 못했습니다'; }
+    return out;
+  };
+
   window.runStepCore = async function (n, opt) {
     opt = opt || {};
     var s = window.step(n);
@@ -675,6 +755,7 @@
     var why = window.refusedStep(s);
     if (why) return { no: n, title: s.title, refused: true, fatal: true, error: why === window.FORBIDDEN_WARN_MSG ? why : window.STALE_GUIDE_MSG + ' (' + why + ')' };
     if (/가격 셀/.test(s.kind || '')) return window.runCellStep(n, opt);
+    if (/^재고 수량 (판매 켜기|고치기)$/.test(s.kind || '')) return window.runInventoryStep(s, opt);
     if (window.CHECK_KIND_RE.test(s.kind || '')) return window.runCheckStep(n, opt);
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
 

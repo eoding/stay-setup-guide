@@ -482,9 +482,6 @@ SYNTHETIC_IMPACT = {
         "erp_baseline": "시험용 배포판 화면 기준",
         "screen_count": 2,
         "field_count": 3,
-        "erp_ref": "aaaa1111",
-        "engine_ref": "bbbb2222",
-        "web_ref": "cccc3333",
     },
     "screens": [
         {
@@ -524,7 +521,7 @@ SYNTHETIC_IMPACT = {
                     "erp_column": "fake.Model.pick",
                     "engine": None,
                     "web": [],
-                    "web_not_shown": ["FakeCard.pick: 레일이 꺼져 있다. 코드상 자리는 카드 하단"],
+                    "web_not_shown": ["고객 화면에 안 나온다 — 그 카드 줄이 지금 꺼져 있다. 켜지면 카드 하단에 나온다"],
                     "erp_reservation": None,
                     "downstream": "미사용",
                     "effect": "ERP 안에서만 쓰인다 — 엔진이 이 컬럼을 아예 읽지 않아 고객 웹 어디에도 영향이 없다. 뒷문장은 목록에서 잘린다.",
@@ -637,7 +634,12 @@ class ImpactMapTest(unittest.TestCase):
         self.assertIn(
             '<span class="sub">ERP 직원 예약: 2. 객실·요금제 — 요금 행에서 확인</span>', block
         )
-        self.assertIn("코드에 자리는 있으나 지금은 안 보인다 — FakeCard.pick", block)
+        self.assertIn(
+            '<span class="sub">고객 화면에 안 나온다 — 그 카드 줄이 지금 꺼져 있다. 켜지면 카드 하단에 나온다</span>',
+            block,
+        )
+        # 머리말은 영향 지도의 줄이 갖는다 — 렌더러가 따로 덧붙이지 않는다.
+        self.assertNotIn("코드에 자리는 있으나", self.page)
 
     def test_internal_columns_are_not_printed(self):
         self.assertNotIn("fake.Model.name", self.page)
@@ -702,14 +704,19 @@ class ImpactMapTest(unittest.TestCase):
             self.assertIn(summary, table)
         self.assertEqual(table.count('<td class="c-screen"'), 2)
 
-    def test_header_carries_the_three_refs(self):
+    def test_header_states_the_impact_basis_without_commit_refs(self):
         head = re.search(r'<header class="page-head">.*?</header>', self.page, re.S).group(0)
         self.assertIn("<dt>고객 웹 영향</dt>", head)
-        self.assertIn(
-            "<dd>ERP aaaa1111 · 엔진 bbbb2222 · 웹 cccc3333 기준 (코드 정적 추적, 실행 확인 아님)</dd>",
-            head,
-        )
+        self.assertIn("<dd>%s</dd>" % rsg.IMPACT_BASELINE_TEXT, head)
         self.assertNotIn("고객 웹 영향", self.plain)
+
+    def test_commit_refs_in_impact_meta_are_never_printed(self):
+        impact = json.loads(json.dumps(SYNTHETIC_IMPACT))
+        impact["meta"].update(erp_ref="aaaa1111", engine_ref="bbbb2222", web_ref="cccc3333")
+        page, _ = rsg.render_guide(SYNTHETIC, None, "9.9.9", impact)
+        for ref in ("aaaa1111", "bbbb2222", "cccc3333"):
+            self.assertNotIn(ref, page)
+        self.assertIn("<dd>%s</dd>" % rsg.IMPACT_BASELINE_TEXT, page)
 
     def test_impact_counts_are_reported(self):
         self.assertEqual(

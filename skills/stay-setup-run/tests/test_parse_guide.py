@@ -489,7 +489,7 @@ class TestPreflight(unittest.TestCase):
         self.assertEqual(pre["stale"], [])
 
 
-#: A-seasense 지시서(2026-09-07)가 `그룹에 혜택 추가` 대신 쓴 표기 — 같은 화면(그룹 카드
+#: A 호텔 지시서(2026-09-07)가 `그룹에 혜택 추가` 대신 쓴 표기 — 같은 화면(그룹 카드
 #: [이 그룹에 혜택 추가])의 다른 제목이다. 러너는 드로어 일반 처리로 이미 실행했지만
 #: `--check` 가 "모르는 단계 갈래" 로 알렸다 — `KNOWN_KINDS` 에 이 표기를 더한다.
 GROUP_CANDIDATE = """# 시험 호텔 — 입력 지시서
@@ -509,7 +509,7 @@ GROUP_CANDIDATE = """# 시험 호텔 — 입력 지시서
 
 
 class TestGroupCandidateKind(unittest.TestCase):
-    """A-seasense 지시서의 `택1 그룹 후보 추가` — `그룹에 혜택 추가` 의 동의 표기."""
+    """A 호텔 지시서의 `택1 그룹 후보 추가` — `그룹에 혜택 추가` 의 동의 표기."""
 
     @classmethod
     def setUpClass(cls):
