@@ -26,8 +26,3 @@ python3 scripts/explain_field.py '총 수량' --json
 
 기존 242개 칸은 **운영 2026-09-21 화면 기준으로 배포 코드를 읽어 정리**한 것이다. 화면을 띄워 확인한 결과가 아니다. 허용 인원 조합은 2026-09-23, 재고는 운영 2026-10-08 폼과 배포 규칙으로 보충했다. 실제 화면과 다르면 현재 화면을 먼저 따르고 그 차이를 알려 준다.
 
-같은 영향 지도로 직원용 화면 안내를 다시 만들 수 있다:
-
-```bash
-python3 scripts/render_screen_guide.py --impact references/screen-effects.json --no-font
-```

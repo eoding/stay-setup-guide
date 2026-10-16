@@ -21,10 +21,6 @@ ERP 저장소 경로(`--basecamp`)는 사람마다 다르므로 반드시 준다
 않지만, 운영·스테이지 DB 를 향해 돌릴 이유는 없다. 돌리기 전에 어느 DB 를 보는지 한 줄로
 알려 준다.
 
-사전을 새로 받았으면 직원용 화면 안내도 다시 만든다(저장소에 담긴 것은 폰트를 넣지 않은 판이다):
-
-    python3 scripts/render_screen_guide.py --no-font
-
 종료 코드: 0 성공(또는 `--check` 통과) / 1 실패·사전이 낡음 / 2 사용법 오류
 """
 
@@ -283,7 +279,6 @@ def main(argv=None) -> int:
         except OSError as exc:
             _fail(f"쓸 폴더를 만들지 못했습니다 ({exc.__class__.__name__}).")
 
-        changed = []
         for name in FILE_NAMES:
             source = fresh_dir / name
             target = target_dir / name
@@ -294,15 +289,8 @@ def main(argv=None) -> int:
             except OSError as exc:
                 _fail(f"{name} 을 쓰지 못했습니다 ({exc.__class__.__name__}).")
             state = "그대로" if before == after else ("새 파일" if before is None else "바뀜")
-            if before != after:
-                changed.append(name)
             _log(f"{PROG}: {target} — {state} ({len(after):,} 바이트)")
 
-    if changed:
-        _log(
-            f"{PROG}: 사전이 바뀌었습니다 — 화면 안내도 다시 만드세요: "
-            "python3 scripts/render_screen_guide.py --no-font"
-        )
     return 0
 
 
