@@ -87,7 +87,7 @@ def fill_step(num, season, room, overwrite="해제", target=None):
 | 판매 단가(공급 통화) | 100 |
 {target_row}| 이미 값이 있는 날도 덮기 | {overwrite} |
 
-→ [이 단가로 깔기]
+→ [가격 적용]
 """
 
 
@@ -1874,7 +1874,7 @@ class OccupancyKeyIsNotASheetCellTest(unittest.TestCase):
 | 인원 조합(선택) | A2,A3 |
 | 인원 조합별 조정(선택) | A3:+30 |
 
-→ [이 단가로 깔기]
+→ [가격 적용]
 """
 
     def test_a_form_occupancy_keys_are_not_sheet_cells(self):
@@ -2552,6 +2552,45 @@ def paid_band_step(num, name="소아", code="CHD", kind="정액", card="`2026 �
 """
 
 
+class SeasonFillRenameTest(unittest.TestCase):
+    """ERP CO-32105(2026-10-20) — 시즌 가격 드로어의 글자 둘이 바뀌었다. 옛 원고도 새 원고도 통과한다.
+
+    저장 버튼 [이 단가로 깔기] → [가격 적용], `이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기`
+    → `이번에 고르지 않은 인원·요금제 가격 지우기`. 사전은 새 글자를 칸 이름으로, 옛 글자를 별칭으로 든다
+    (`sync_screen_dictionary.py` 로 사전을 다시 받으면 ERP 쪽 별칭이 없는 한 옛 글자가 빠진다 — 이 시험이 알린다).
+    """
+
+    OLD = ("이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기", "이 단가로 깔기")
+    NEW = ("이번에 고르지 않은 인원·요금제 가격 지우기", "가격 적용")
+
+    def manual(self, label, button):
+        step = fill_step(4, "Low", "Deluxe")
+        step = step.replace("| 이미 값이 있는 날도 덮기 | 해제 |\n",
+                            f"| 이미 값이 있는 날도 덮기 | 해제 |\n| {label} | 체크 |\n")
+        step = step.replace("→ [가격 적용]", f"→ [{button}]")
+        return HEAD.replace("| 통화 |", "| 공급 통화 |") + step
+
+    def test_both_labels_are_checkbox_names_in_the_dictionary(self):
+        labels = cm.load_dictionary(DICTIONARY)
+        kinds = cm.load_dictionary_kinds(DICTIONARY)
+        for label in (self.OLD[0], self.NEW[0]):
+            self.assertIn(cm.norm_field(label), labels, label)
+            self.assertEqual(kinds[cm.norm_field(label)], {"체크박스"}, label)
+
+    def test_old_and_new_manuscripts_both_check_clean(self):
+        for label, button in (self.OLD, self.NEW):
+            md = self.manual(label, button)
+            self.assertIn(f"| {label} | 체크 |", md)
+            self.assertIn(f"→ [{button}]", md)
+            with tempfile.TemporaryDirectory() as d:
+                path = os.path.join(d, "manual.md")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(md)
+                r = cm.check(path, dictionary_path=DICTIONARY)
+            self.assertEqual(r["unknown_fields"], [], button)
+            self.assertEqual(r["check_value_classes"], [], button)
+
+
 def price_fill_step(num, season="Regular", room="Single", rows=()):
     """`시즌 가격 채우기` — 새 칸(인원 조합·박수별 단가·아동 추가 금액)을 줄로 더해 쓴다."""
     body = "".join(f"| {k} | {v} |\n" for k, v in rows)
@@ -2567,7 +2606,7 @@ def price_fill_step(num, season="Regular", room="Single", rows=()):
 | 대상 룸 | 선택: {room} |
 {body}| 이미 값이 있는 날도 덮기 | 해제 |
 
-→ [이 단가로 깔기]
+→ [가격 적용]
 """
 
 

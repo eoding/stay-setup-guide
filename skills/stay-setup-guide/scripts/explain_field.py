@@ -18,7 +18,8 @@ def search(data, query, screen=''):
         if screen and not any(norm(screen) in norm(item[key]) for key in ('id', 'name')):
             continue
         for field in item['fields']:
-            if query and norm(query) not in norm(field['label']):
+            # 바뀌기 전 글자(`aliases`)로 물어도 같은 칸을 찾는다 — ERP CO-32105 처럼 화면 글자가 바뀐 칸
+            if query and not any(norm(query) in norm(t) for t in [field['label'], *field.get('aliases', [])]):
                 continue
             matches.append({'screen':item['name'], 'screen_id':item['id'],
                             'summary':item['summary'], **field})
