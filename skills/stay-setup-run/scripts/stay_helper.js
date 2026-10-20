@@ -1333,7 +1333,8 @@
   // ERP 가 글자를 바꾼 버튼(CO-32105, 2026-10-20). 배포 전 화면은 옛 글자, 배포 뒤 화면은 새 글자를
   // 그리고, 지시서도 쓴 때에 따라 둘 중 하나를 적는다 — 한 묶음의 글자는 **같은 버튼**이다.
   // ① 그 화면 표식(`data-stay-screen`) 안의 `[data-stay-action=…]` 가 하나면 글자보다 먼저 고른다.
-  // ② 없으면 묶음의 글자를 차례로 **정확히** 찾는다. 앞글자 일치로는 고르지 않는다 — `가격 적용` 의
+  // ② 없으면 묶음의 글자를 차례로 **정확히** 찾는다(`findButtonText` 의 exact — 글자가 꼭 같은 버튼만).
+  //    앞글자 일치는 물론 괄호 붙은 `가격 적용 (미리보기)` 도 고르지 않는다 — `가격 적용` 의
   //    앞글자가 시즌 카드의 [가격](드로어를 여는 버튼)과 같아서, 옛 화면에서 새 글자로 찾다가
   //    저장 대신 [가격] 을 누르게 된다.
   var RENAMED_BUTTONS = [
@@ -1373,25 +1374,27 @@
     if (m) return m;
     var texts = [w].concat(g.texts.filter(function (t) { return norm(t) !== norm(w); }));
     for (var i = 0; i < texts.length; i++) {
-      var b = findButtonText(scope, texts[i], true);
+      var b = findButtonText(scope, texts[i], true, true);
       if (b) return b;
     }
     return null;
   }
-  function findButtonText(scope, w, strict) {
+  function findButtonText(scope, w, strict, exact) {
     var list = [].slice.call(scope.querySelectorAll(BTN_SEL)).filter(function (b) {
       return !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b);
     });
     // 정확 일치(괄호 무시 포함)를 범위 안 → 문서 전체 순으로 먼저 찾고, 그다음에야 범위 안 접두 일치.
     // 글자 '포함'만으로는 절대 고르지 않는다 — `저장` 을 찾다가 `메모저장` 을 누르는 사고를 막는다.
-    var r = pick(list, btnText, w, 3);
+    // exact: 글자가 꼭 같은 버튼만(4) — 괄호 뺀 일치(3)·접두(2)는 쓰지 않는다. 이름이 바뀐 버튼의 별칭 찾기에서만 켠다.
+    var min = exact ? 4 : 3;
+    var r = pick(list, btnText, w, min);
     if (r.status === 'not-found' && scope !== document.body) {
       var all = [].slice.call(document.body.querySelectorAll(BTN_SEL)).filter(function (b) {
         return !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b);
       });
-      r = pick(all, btnText, w, 3);
+      r = pick(all, btnText, w, min);
     }
-    if (r.status === 'not-found' && !strict) r = pick(list, btnText, w, 2); // strict: 앞글자만 맞는 버튼(`추가` → `추가수집정보` 탭)은 고르지 않는다
+    if (r.status === 'not-found' && !strict && !exact) r = pick(list, btnText, w, 2); // strict: 앞글자만 맞는 버튼(`추가` → `추가수집정보` 탭)은 고르지 않는다
     return r.el || null;
   }
 

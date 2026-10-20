@@ -608,6 +608,24 @@ const run = async () => {
   seasonSec.removeAttribute('data-stay-screen');
   ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: 다른 화면의 `data-stay-action="save"` 는 이 글자로 고르지 않는다');
   ok(R.findButton(seasonSec, '가격') === opener, 'findButton: [가격] 은 여전히 [가격] 이다');
+  // 표식이 없을 때 글자 별칭은 **글자가 꼭 같은** 버튼만 고른다 — 괄호 붙은 `가격 적용 (미리보기)` 는 고르지 않는다
+  const PREVIEW = NEW_SAVE + ' (미리보기)';
+  saveBtn.textContent = PREVIEW;
+  ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: 표식 없이 `가격 적용 (미리보기)` 하나뿐이면 [가격 적용] 으로 고르지 않는다');
+  ok(R.findButton(seasonSec, OLD_SAVE) === null, 'findButton: 옛 글자로 찾아도 `가격 적용 (미리보기)` 는 고르지 않는다');
+  ok(R.findButton(win.document.body, NEW_SAVE) === null, 'findButton: 문서 전체 범위에서도 고르지 않는다');
+  const rPreview = await R.submit(NEW_SAVE);
+  ok(rPreview.status === 'not-found', 'submit: `가격 적용 (미리보기)` 뿐이면 다른 not-found 와 같이 not-found 로 선다', rPreview);
+  // 이 한 줄은 별칭 찾기가 아니다 — 이름이 바뀐 버튼이 아닌 글자는 종전대로 괄호를 무시하고 고른다
+  ok(R.findButton(seasonSec, NEW_SAVE + ' (초안)') === saveBtn, 'findButton: 별칭이 아닌 글자는 괄호 무시 일치를 종전대로 쓴다');
+  // 꼭 같은 [이 단가로 깔기] 가 함께 있으면 그것을 고른다 — 괄호 붙은 쪽이 아니다
+  seasonSec.insertAdjacentHTML('beforeend', '<button type="button" id="season_fill_exact">' + OLD_SAVE + '</button><button type="button" id="season_fill_paren">' + OLD_SAVE + '(초안)</button>');
+  const exactBtn = win.document.getElementById('season_fill_exact');
+  ok(R.findButton(seasonSec, NEW_SAVE) === exactBtn, 'findButton: `가격 적용 (미리보기)` 와 꼭 같은 `이 단가로 깔기` 가 같이 있으면 꼭 같은 쪽을 고른다');
+  ok(R.findButton(seasonSec, OLD_SAVE) === exactBtn, 'findButton: 옛 글자로 찾아도 꼭 같은 쪽이다');
+  exactBtn.remove();
+  ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: `이 단가로 깔기(초안)` 도 `가격 적용 (미리보기)` 도 고르지 않는다');
+  win.document.getElementById('season_fill_paren').remove();
   // 되돌린다
   seasonSec.setAttribute('data-stay-screen', 'season-price-fill');
   saveBtn.textContent = NEW_SAVE;
