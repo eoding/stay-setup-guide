@@ -577,6 +577,77 @@ const run = async () => {
                            { label: '박수별 단가(선택)', kind: 'typed', value: '3:100,5:90' }], seasonScope);
   ok(rb13.mismatch.length === 0, 'readback: 신설 칸 둘을 되읽는다', rb13.mismatch);
 
+  // 10e. ERP CO-32105(2026-10-20) — 저장 버튼 [이 단가로 깔기] → [가격 적용],
+  //      `이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기` → `이번에 고르지 않은 인원·요금제 가격 지우기`.
+  //      배포 전에 쓴 지시서는 옛 글자, 뒤에 쓴 지시서는 새 글자다 — 배포 전후 어느 화면에서든 둘 다 같은 것을 찾아야 한다.
+  const OLD_SAVE = '이 단가로 깔기', NEW_SAVE = '가격 적용';
+  const OLD_STALE = '이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기';
+  const NEW_STALE = '이번에 고르지 않은 인원·요금제 가격 지우기';
+  const seasonSec = win.document.getElementById('stay_season_fill_form');
+  const saveBtn = seasonSec.querySelector('[data-stay-action="save"]');
+  ok(R.findButton(seasonSec, NEW_SAVE) === saveBtn, 'findButton: 새 화면에서 [가격 적용] 을 찾는다');
+  ok(R.findButton(seasonSec, OLD_SAVE) === saveBtn, 'findButton: 옛 지시서의 [이 단가로 깔기] 로도 새 화면의 저장 버튼을 찾는다');
+  ok(R.findButton(win.document.body, '[' + OLD_SAVE + ']') === saveBtn, 'findButton: 대괄호 붙은 옛 글자도, 문서 전체 범위에서도');
+  // 화면 표식이 없어도(옛 배포판) 글자 별칭만으로 찾는다
+  saveBtn.removeAttribute('data-stay-action');
+  ok(R.findButton(seasonSec, OLD_SAVE) === saveBtn, 'findButton: 표식 없이도 글자 별칭으로 찾는다');
+  // 옛 화면 + 새 지시서. 같은 범위에 시즌 카드의 [가격](드로어를 여는 버튼)이 있다 —
+  // `가격` 은 `가격 적용` 의 앞글자라, 앞글자 일치로 고르면 저장 대신 [가격] 을 누른다.
+  saveBtn.textContent = OLD_SAVE;
+  seasonSec.insertAdjacentHTML('afterbegin', '<button type="button" id="season_price_opener">가격</button>');
+  const opener = win.document.getElementById('season_price_opener');
+  ok(R.findButton(seasonSec, NEW_SAVE) === saveBtn, 'findButton: 옛 화면에서 [가격 적용] 은 [이 단가로 깔기] 를 찾는다 — [가격] 이 아니다');
+  ok(R.findButton(seasonSec, NEW_SAVE, true) === saveBtn, 'findButton: strict 여도 같다');
+  // 두 글자 다 없으면 **아무것도 고르지 않는다** — 앞글자가 같은 [가격] 으로 흘러가지 않는다
+  saveBtn.textContent = '다른 버튼';
+  ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: 두 글자가 다 없으면 null — [가격] 을 고르지 않는다');
+  ok(R.findButton(seasonSec, OLD_SAVE) === null, 'findButton: 옛 글자로 찾아도 null');
+  // 표식이 붙어 있으면 글자가 무엇이든 그 저장 버튼이다 — 단, 이 화면(season-price-fill) 안에서만
+  saveBtn.setAttribute('data-stay-action', 'save');
+  ok(R.findButton(seasonSec, NEW_SAVE) === saveBtn, 'findButton: `data-stay-action="save"` 가 글자보다 먼저다');
+  seasonSec.removeAttribute('data-stay-screen');
+  ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: 다른 화면의 `data-stay-action="save"` 는 이 글자로 고르지 않는다');
+  ok(R.findButton(seasonSec, '가격') === opener, 'findButton: [가격] 은 여전히 [가격] 이다');
+  // 표식이 없을 때 글자 별칭은 **글자가 꼭 같은** 버튼만 고른다 — 괄호 붙은 `가격 적용 (미리보기)` 는 고르지 않는다
+  const PREVIEW = NEW_SAVE + ' (미리보기)';
+  saveBtn.textContent = PREVIEW;
+  ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: 표식 없이 `가격 적용 (미리보기)` 하나뿐이면 [가격 적용] 으로 고르지 않는다');
+  ok(R.findButton(seasonSec, OLD_SAVE) === null, 'findButton: 옛 글자로 찾아도 `가격 적용 (미리보기)` 는 고르지 않는다');
+  ok(R.findButton(win.document.body, NEW_SAVE) === null, 'findButton: 문서 전체 범위에서도 고르지 않는다');
+  const rPreview = await R.submit(NEW_SAVE);
+  ok(rPreview.status === 'not-found', 'submit: `가격 적용 (미리보기)` 뿐이면 다른 not-found 와 같이 not-found 로 선다', rPreview);
+  // 이 한 줄은 별칭 찾기가 아니다 — 이름이 바뀐 버튼이 아닌 글자는 종전대로 괄호를 무시하고 고른다
+  ok(R.findButton(seasonSec, NEW_SAVE + ' (초안)') === saveBtn, 'findButton: 별칭이 아닌 글자는 괄호 무시 일치를 종전대로 쓴다');
+  // 꼭 같은 [이 단가로 깔기] 가 함께 있으면 그것을 고른다 — 괄호 붙은 쪽이 아니다
+  seasonSec.insertAdjacentHTML('beforeend', '<button type="button" id="season_fill_exact">' + OLD_SAVE + '</button><button type="button" id="season_fill_paren">' + OLD_SAVE + '(초안)</button>');
+  const exactBtn = win.document.getElementById('season_fill_exact');
+  ok(R.findButton(seasonSec, NEW_SAVE) === exactBtn, 'findButton: `가격 적용 (미리보기)` 와 꼭 같은 `이 단가로 깔기` 가 같이 있으면 꼭 같은 쪽을 고른다');
+  ok(R.findButton(seasonSec, OLD_SAVE) === exactBtn, 'findButton: 옛 글자로 찾아도 꼭 같은 쪽이다');
+  exactBtn.remove();
+  ok(R.findButton(seasonSec, NEW_SAVE) === null, 'findButton: `이 단가로 깔기(초안)` 도 `가격 적용 (미리보기)` 도 고르지 않는다');
+  win.document.getElementById('season_fill_paren').remove();
+  // 되돌린다
+  seasonSec.setAttribute('data-stay-screen', 'season-price-fill');
+  saveBtn.textContent = NEW_SAVE;
+  opener.remove();
+
+  // 체크박스 — 옛 지시서는 옛 글자로 `체크` 를 적는다. `해제` 는 칸을 못 찾아도 건너뛰지만
+  // `체크` 는 경고만 남고 칸이 꺼진 채 저장된다 — 그래서 별칭이 꼭 있어야 한다.
+  const stale = q('[name=stale_cleanup]');
+  const rStaleOld = await R.fill([{ label: OLD_STALE, kind: 'check' }], seasonScope);
+  ok(rStaleOld[0].status === 'ok' && stale.checked === true, 'fill: 옛 글자로 새 화면의 `stale_cleanup` 을 켠다', rStaleOld[0]);
+  const rbStaleOld = R.readback([{ label: OLD_STALE, kind: 'check' }], seasonScope);
+  ok(rbStaleOld.mismatch.length === 0 && rbStaleOld.ok === 1, 'readback: 옛 글자로 되읽는다', rbStaleOld);
+  const rStaleNew = await R.fill([{ label: NEW_STALE, kind: 'uncheck' }], seasonScope);
+  ok(rStaleNew[0].status === 'ok' && stale.checked === false, 'fill: 새 글자로 끈다', rStaleNew[0]);
+  // 옛 화면(라벨이 옛 글자) + 새 지시서
+  const staleLabels = [stale.closest('tr').querySelector('th'), stale.closest('label').querySelector('span')];
+  staleLabels.forEach((el) => { el.textContent = OLD_STALE; });
+  const rStaleOldScreen = await R.fill([{ label: NEW_STALE, kind: 'check' }], seasonScope);
+  ok(rStaleOldScreen[0].status === 'ok' && stale.checked === true, 'fill: 새 글자로 옛 화면의 칸을 켠다', rStaleOldScreen[0]);
+  staleLabels.forEach((el) => { el.textContent = NEW_STALE; });
+  stale.checked = false;
+
   // 11. 2026-09-04 화면의 위험 버튼 — 이름만으로도 거부한다
   win.closeDrawer();
   const danger = { card: '위험 버튼' };

@@ -748,8 +748,9 @@ SEASON_CHILD = """# 시험 호텔 — 입력 지시서
 | 박수별 단가(선택) | 3:100,5:90 |
 | 아동 추가 금액 — 소아 | 23.18 |
 | 이미 값이 있는 날도 덮기 | 해제 |
+| 이번에 고르지 않은 인원·요금제 가격 지우기 | 해제 |
 
-→ [이 단가로 깔기]
+→ [가격 적용]
 """
 
 
@@ -787,6 +788,21 @@ class TestNewFieldPreflight(unittest.TestCase):
         self.assertEqual(field_by_label(fill, "박수별 단가(선택)")["value"], "3:100,5:90")
         child = field_by_label(fill, "아동 추가 금액 — 소아")
         self.assertEqual((child["kind"], child["value"]), ("typed", "23.18"))
+
+    def test_season_save_button_old_and_new_text_both_pass(self):
+        """ERP CO-32105(2026-10-20): [이 단가로 깔기] → [가격 적용], 지우기 칸 글자도 바뀌었다.
+
+        배포 전에 쓴 지시서는 옛 글자다 — 둘 다 막지 않고 마지막 줄을 글자 그대로 싣는다
+        (어느 글자든 같은 버튼으로 찾는 일은 `stay_helper.js` 의 `findButton` 이 한다).
+        """
+        old = swap("| 이번에 고르지 않은 인원·요금제 가격 지우기 | 해제 |",
+                   "| 이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기 | 해제 |",
+                   swap("→ [가격 적용]", "→ [이 단가로 깔기]"))
+        for text, button in ((SEASON_CHILD, "가격 적용"), (old, "이 단가로 깔기")):
+            pre = self._pre(text)
+            self.assertEqual((pre["value_format"], pre["step_order"], pre["unknown_kinds"]), ([], [], []), button)
+            _, raws = parse_guide.parse_markdown(text)
+            self.assertEqual([parse_guide.build_step(r) for r in raws][1]["submit"], button)
 
     def test_child_extra_label_re_reads_the_display_name(self):
         """구분자는 EM DASH 가 정본이지만 EN DASH·하이픈·가운뎃점도 받는다(원고 오타로 안 멈춘다)."""

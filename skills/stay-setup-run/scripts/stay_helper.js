@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.8.1'; // 운영 2026-09-21 배포판 화면 기준 + 상태 대기(`settleOr`) + 안내 띠를 마디로 가리기(`toastSnap`·`netWatch`)
+  var VERSION = '0.8.2'; // 운영 2026-09-21 배포판 화면 기준 + 상태 대기(`settleOr`) + 안내 띠를 마디로 가리기(`toastSnap`·`netWatch`)
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초) — 기본값이다. 느린 서버에서는 `stayRun.config({waitMs})` 로 올린다
   var TICK = 100;
 
@@ -850,8 +850,30 @@
     return '';
   }
 
+  // ERP 가 글자를 바꾼 칸(CO-32105, 2026-10-20) — 한 묶음의 글자는 같은 칸이다. 옛 지시서는 옛 글자,
+  // 새 지시서는 새 글자를 적고 화면은 배포 전후로 둘 중 하나를 그린다. 적힌 글자로 못 찾을 때만 다른 글자로
+  // 다시 찾는다. 채우기(`applyOne`)와 되읽기(`readOne`)가 모두 이 함수를 지난다.
+  var RENAMED_LABELS = [
+    ['이번에 고르지 않은 인원·요금제 가격 지우기', '이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기']
+  ];
+  function labelAliases(label) {
+    var n = norm(label);
+    for (var i = 0; i < RENAMED_LABELS.length; i++) {
+      if (RENAMED_LABELS[i].some(function (t) { return norm(t) === n; })) {
+        return RENAMED_LABELS[i].filter(function (t) { return norm(t) !== n; });
+      }
+    }
+    return [];
+  }
+
   // 라벨로 입력 요소 찾기 → [{el, tier, prio, matched}] (가장 잘 맞는 등급만)
   function findControls(scope, label) {
+    var hit = findControlsOne(scope, label);
+    var alts = hit.length ? [] : labelAliases(label);
+    for (var i = 0; i < alts.length && !hit.length; i++) hit = findControlsOne(scope, alts[i]);
+    return hit;
+  }
+  function findControlsOne(scope, label) {
     var ctrls = [].slice.call(scope.querySelectorAll(CTRL_SEL)).filter(function (el) { return isCtrl(el) && usable(el); });
     var scored = [];
     for (var i = 0; i < ctrls.length; i++) {
@@ -1308,22 +1330,71 @@
     var t = clean(el.textContent);
     return t.replace(/^\[(.*)\]$/, '$1');
   }
+  // ERP 가 글자를 바꾼 버튼(CO-32105, 2026-10-20). 배포 전 화면은 옛 글자, 배포 뒤 화면은 새 글자를
+  // 그리고, 지시서도 쓴 때에 따라 둘 중 하나를 적는다 — 한 묶음의 글자는 **같은 버튼**이다.
+  // ① 그 화면 표식(`data-stay-screen`) 안의 `[data-stay-action=…]` 가 하나면 글자보다 먼저 고른다.
+  // ② 없으면 묶음의 글자를 차례로 **정확히** 찾는다(`findButtonText` 의 exact — 글자가 꼭 같은 버튼만).
+  //    앞글자 일치는 물론 괄호 붙은 `가격 적용 (미리보기)` 도 고르지 않는다 — `가격 적용` 의
+  //    앞글자가 시즌 카드의 [가격](드로어를 여는 버튼)과 같아서, 옛 화면에서 새 글자로 찾다가
+  //    저장 대신 [가격] 을 누르게 된다.
+  var RENAMED_BUTTONS = [
+    { texts: ['가격 적용', '이 단가로 깔기'], screen: 'season-price-fill', action: 'save' }
+  ];
+  function renamedButton(w) {
+    var n = norm(w);
+    for (var i = 0; i < RENAMED_BUTTONS.length; i++) {
+      if (RENAMED_BUTTONS[i].texts.some(function (t) { return norm(t) === n; })) return RENAMED_BUTTONS[i];
+    }
+    return null;
+  }
+  function markedButton(scope, g) {
+    var ssel = '[data-stay-screen="' + g.screen + '"]', asel = '[data-stay-action="' + g.action + '"]';
+    var roots = [scope, drawerRoot()];
+    for (var i = 0; i < roots.length; i++) {
+      var root = roots[i];
+      if (!root || !root.querySelectorAll) continue;
+      var own = root.closest ? root.closest(ssel) : null;
+      var screens = own ? [own] : [].slice.call(root.querySelectorAll(ssel));
+      var hits = [];
+      screens.forEach(function (s) {
+        [].slice.call(s.querySelectorAll(asel)).forEach(function (b) {
+          if (b.matches(BTN_SEL) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b) && hits.indexOf(b) < 0) hits.push(b);
+        });
+      });
+      if (hits.length === 1) return hits[0];
+    }
+    return null;
+  }
   function findButton(scope, want, strict) {
     if (!scope || !want) return null;
     var w = String(want).replace(/^\[(.*)\]$/, '$1').trim();
+    var g = renamedButton(w);
+    if (!g) return findButtonText(scope, w, strict);
+    var m = markedButton(scope, g);
+    if (m) return m;
+    var texts = [w].concat(g.texts.filter(function (t) { return norm(t) !== norm(w); }));
+    for (var i = 0; i < texts.length; i++) {
+      var b = findButtonText(scope, texts[i], true, true);
+      if (b) return b;
+    }
+    return null;
+  }
+  function findButtonText(scope, w, strict, exact) {
     var list = [].slice.call(scope.querySelectorAll(BTN_SEL)).filter(function (b) {
       return !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b);
     });
     // 정확 일치(괄호 무시 포함)를 범위 안 → 문서 전체 순으로 먼저 찾고, 그다음에야 범위 안 접두 일치.
     // 글자 '포함'만으로는 절대 고르지 않는다 — `저장` 을 찾다가 `메모저장` 을 누르는 사고를 막는다.
-    var r = pick(list, btnText, w, 3);
+    // exact: 글자가 꼭 같은 버튼만(4) — 괄호 뺀 일치(3)·접두(2)는 쓰지 않는다. 이름이 바뀐 버튼의 별칭 찾기에서만 켠다.
+    var min = exact ? 4 : 3;
+    var r = pick(list, btnText, w, min);
     if (r.status === 'not-found' && scope !== document.body) {
       var all = [].slice.call(document.body.querySelectorAll(BTN_SEL)).filter(function (b) {
         return !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b);
       });
-      r = pick(all, btnText, w, 3);
+      r = pick(all, btnText, w, min);
     }
-    if (r.status === 'not-found' && !strict) r = pick(list, btnText, w, 2); // strict: 앞글자만 맞는 버튼(`추가` → `추가수집정보` 탭)은 고르지 않는다
+    if (r.status === 'not-found' && !strict && !exact) r = pick(list, btnText, w, 2); // strict: 앞글자만 맞는 버튼(`추가` → `추가수집정보` 탭)은 고르지 않는다
     return r.el || null;
   }
 
