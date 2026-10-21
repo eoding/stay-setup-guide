@@ -7,7 +7,7 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Current release: plugin `stay-setup` 1.5.3 (`stay-setup-guide` 1.5.3, `stay-setup-run` 0.12.2).
+Current release: plugin `stay-setup` 1.5.4 (`stay-setup-guide` 1.5.4, `stay-setup-run` 0.12.2).
 
 ## Install
 
@@ -130,6 +130,15 @@ appears on customer pages (or that it does not appear there directly). `--json` 
 customer pages. Both are point-in-time reference information (the guide uses screens captured on 2026-10-15), not a
 check against live screens; when the real screen differs, the real screen wins.
 
+[`docs/파트너-가이드-가격편.html`](docs/파트너-가이드-가격편.html) adds first-time pricing and eight maintenance
+scenarios: season, room or rate-plan price changes, removing occupancy/rate-plan combinations, adding a rate plan,
+date exceptions, pausing sales and extending a contract. It includes the two-checkbox comparison (overwrite prices
+versus remove unselected combinations). Adapted from the [upstream price guide](https://mhj-stack.github.io/eoding-stay-guide/price.html)
+checked on 2026-10-21, with the 2026-10-20 button labels and the distinction between creating and editing a season.
+Its amounts and dates are examples. This is a manual reference; the automated new-hotel workflow keeps overwrite off.
+The guide skill uses [`price-guide.md`](skills/stay-setup-guide/references/price-guide.md) for pricing questions,
+including when installed by copying only the skill folder.
+
 ## Rules the skills enforce
 
 - **USD is the default supply currency.** Another currency is used only after the user confirms it, and the
@@ -160,7 +169,7 @@ check against live screens; when the real screen differs, the real screen wins.
 | [`.claude-plugin/`](.claude-plugin) · [`.codex-plugin/`](.codex-plugin) · [`.agents/plugins/`](.agents/plugins) | Plugin and marketplace manifests for Claude Code and Codex; bump every `version` field when a skill version changes |
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The guide skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a worked example, converter/checker/renderer scripts |
 | [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: parser, in-page helper and boot scripts, screen mechanics, run-log format |
-| [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers · [`파트너-가이드.html`](docs/파트너-가이드.html) — the partner guide: STEP 01–15 in ERP input order, real ERP and customer screenshots with numbered fields, captured 2026-10-15; a hand-made snapshot, so it does not regenerate when the screen dictionary is re-synced. In the public copy, staff names, product codes, other hotels, contact details, prices and hotel photos are masked · [`쉽게-보기/`](docs/쉽게-보기) — picture explainers for non-developers (open the HTML in a browser): [how the runner works](docs/쉽게-보기/레시피-요리사-손.html), [where child rates go](docs/쉽게-보기/아이-요금.html), [the first week](docs/쉽게-보기/일주일.html) |
+| [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers · [`파트너-가이드.html`](docs/파트너-가이드.html) — the partner guide: STEP 01–15 in ERP input order, real ERP and customer screenshots with numbered fields, captured 2026-10-15; a hand-made snapshot, so it does not regenerate when the screen dictionary is re-synced. In the public copy, staff names, product codes, other hotels, contact details, prices and hotel photos are masked · [`파트너-가이드-가격편.html`](docs/파트너-가이드-가격편.html) — pricing setup and maintenance, linked from the input guide · [`쉽게-보기/`](docs/쉽게-보기) — picture explainers for non-developers (open the HTML in a browser): [how the runner works](docs/쉽게-보기/레시피-요리사-손.html), [where child rates go](docs/쉽게-보기/아이-요금.html), [the first week](docs/쉽게-보기/일주일.html) |
 | [`LICENSE`](LICENSE) | eoding Partner Use License v1.3 |
 
 ## Disclaimer
