@@ -16,6 +16,14 @@
     return f.concat((s.longtexts || []).map(function (l) { return { label: l.label, kind: 'typed', value: l.text }; }));
   };
 
+  window.customerOptionFields = function (s, fields) {
+    var result = fields.slice();
+    if (s.kind === '택1 그룹 만들기' && !result.some(function (f) { return f.label === '선택 상한' || f.label === '정확히 하나 선택 (끄면 선택 사항)' || f.label === '택1 여부'; })) {
+      result.push({label:'선택 상한',kind:'typed',value:'1'}, {label:'정확히 하나 선택 (끄면 선택 사항)',kind:'check'});
+    }
+    return result;
+  };
+
   /* ────────── 되읽기를 믿을 수 있는 칸 (2026-09-09) ──────────
    * 되읽기(`stayRun.readback`)는 만능이 아니다. 화면이 값을 제 꼴로 고쳐 되돌려주거나
    * (정률 `50` → `50%`), 반복 행·두 조각 이름이라 되읽을 때 칸을 다시 못 찾는 자리가 있다.
@@ -747,10 +755,139 @@
     return out;
   };
 
+  // 질문 저장은 바깥 혜택 [저장]과 별개다. 정확한 소속과 질문 패널만 다루고
+  // 저장 뒤 [편집]을 다시 열어 모든 값을 확인한다. 요청 실패를 재시도하지 않는다.
+  window.runQuestionStep = async function (s, opt) {
+    opt = opt || {};
+    var out = { no: s.no, title: s.title, submitted: false, verified: false };
+    var text = function (v) { return String(v || '').normalize('NFC').trim(); };
+    var fail = function (message) { out.error = message; return out; };
+    var buttons = function (root, title) {
+      return Array.from(root.querySelectorAll('button')).filter(function (b) { return text(b.textContent) === title && !b.disabled; });
+    };
+    var owners = text(s.head.card).split(' · ');
+    var types = { '혜택': 'benefit', '부과금': 'charge', '부가옵션': 'addon' };
+    if (owners.length !== 3 || !owners.every(Boolean) || !types[owners[1]] || s.head.tab !== owners[1]) return fail('질문 카드의 오퍼 · 항목 종류 · 이름을 확인하세요');
+    var fields = (s.fields || []).concat((s.longtexts || []).map(function (l) { return {label:l.label,kind:'typed',value:l.text}; }));
+    var allowed = ['구분', '질문', '필수 여부', '선택지 표시 방식', '안내문', '선택지 (한 줄에 하나)'];
+    var values = {};
+    for (var field of fields) {
+      if (allowed.indexOf(field.label) < 0 || Object.prototype.hasOwnProperty.call(values, field.label)) return fail('질문 칸이 없거나 중복됩니다: ' + field.label);
+      if (field.label === '필수 여부') {
+        if (field.kind !== 'check' && field.kind !== 'uncheck') return fail('필수 여부는 체크/해제입니다');
+        values[field.label] = field.kind === 'check';
+      } else values[field.label] = field.kind === 'empty' ? '' : String(field.value === undefined ? '' : field.value);
+    }
+    if (!['구분','질문','필수 여부','선택지 표시 방식'].every(function (k) { return Object.prototype.hasOwnProperty.call(values,k); })) return fail('질문 정의의 필수 칸이 빠졌습니다');
+    values['안내문'] = values['안내문'] || '';
+    if (Array.from(values['안내문']).length > 20000) return fail('질문 안내문은 20000자 이내입니다');
+    values['선택지 (한 줄에 하나)'] = (values['선택지 (한 줄에 하나)'] || '').split('\n').map(text).filter(Boolean).join('\n');
+    var choice = values['선택지 (한 줄에 하나)'].split('\n').filter(Boolean);
+    if (['단답형','장문형','체크박스','객관식','서술형'].indexOf(values['구분']) < 0 || !text(values['질문']) || Array.from(values['질문']).length > 200) return fail('질문 구분 또는 제목을 확인하세요');
+    if (['칩 선택형','셀렉트 박스형'].indexOf(values['선택지 표시 방식']) < 0) return fail('선택지 표시 방식을 확인하세요');
+    if (values['구분'] === '서술형' && values['필수 여부']) return fail('서술형 안내는 필수 답변이 아닙니다');
+    var selecting = ['체크박스','객관식'].indexOf(values['구분']) >= 0;
+    if (selecting !== !!choice.length || choice.length > 100 || new Set(choice).size !== choice.length || choice.some(function (x) { return Array.from(x).length > 200; })) return fail('선택지는 선택형 질문에만 최대 100개, 중복 없이 각각 200자 이내로 넣으세요');
+    var editing = s.kind === '정보 수집 질문 고치기';
+    if (s.submit !== (editing ? '질문 저장' : '질문 추가')) return fail('질문 전용 저장 버튼을 확인하세요');
+    var oldTitle = editing ? ((s.head.buttons_parsed || []).find(function (b) { return b.text === '편집' && b.row; }) || {}).row : values['질문'];
+    if (!oldTitle) return fail('수정할 기존 질문 제목이 없습니다');
+    await stayRun.tab(owners[1]);
+    var candidates = Array.from(document.querySelectorAll('[data-stay-entity]')).filter(function (el) {
+      if (el.getAttribute('data-stay-entity') !== types[owners[1]] || text(el.getAttribute('data-stay-name')) !== owners[2]) return false;
+      if (owners[1] !== '부가옵션') {
+        var parent = el.closest('[data-stay-entity="offer"]');
+        return parent && text(parent.getAttribute('data-stay-name')) === owners[0];
+      }
+      return Array.from(el.querySelectorAll('th')).some(function (th) { return text(th.textContent) === '오퍼' && th.nextElementSibling && text(th.nextElementSibling.textContent) === owners[0]; });
+    });
+    if (candidates.length !== 1) return fail('질문 대상 항목이 하나로 확인되지 않습니다');
+    var open = buttons(candidates[0], owners[1] === '혜택' ? '편집' : '정보 수집 폼');
+    if (open.length !== 1) return fail('정보 수집 폼을 여는 버튼이 하나가 아닙니다');
+    var selector = owners[1] === '혜택' ? '#stay_benefit_questions' : '#stay_item_questions';
+    var previous = document.querySelector(selector);
+    open[0].click();
+    if (!await stayRun.waitFor(function () { return document.querySelector(selector) && document.querySelector(selector) !== previous; }, 10000)) return fail('질문 폼이 새로 열리지 않았습니다');
+    var panel = document.querySelector(selector);
+    var rows = function (title) {
+      return Array.from(panel.querySelectorAll('p')).filter(function (p) {
+        var own = Array.from(p.childNodes).filter(function (n) { return n.nodeType === 3; }).map(function (n) { return n.textContent; }).join('');
+        var shownTitle = text(own).replace(/\s+\((단답형|장문형|체크박스|객관식|서술형)\)(?:\s*·\s*필수)?$/, '').trim();
+        return shownTitle === text(title) && buttons(p, '편집').length === 1;
+      });
+    };
+    var controls = function () {
+      var result = {};
+      for (var label of allowed) {
+        var matches = Array.from(panel.querySelectorAll('label')).filter(function (el) { return text(el.textContent).replace(/:$/, '') === label; });
+        if (matches.length !== 1) return null;
+        var control = matches[0].control || matches[0].querySelector('input,select,textarea');
+        if (!control || !panel.contains(control) || control.disabled) return null;
+        result[label] = control;
+      }
+      return result;
+    };
+    var same = function (cs) {
+      return cs && allowed.every(function (key) {
+        var el = cs[key], actual = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? text(el.selectedOptions[0] && el.selectedOptions[0].textContent) : el.value;
+        return actual === values[key];
+      });
+    };
+    var editRow = async function (row) {
+      previous = panel; buttons(row, '편집')[0].click();
+      var loaded = await stayRun.waitFor(function () { return document.querySelector(selector) && document.querySelector(selector) !== previous; }, 10000);
+      panel = document.querySelector(selector);
+      return loaded && panel && buttons(panel,'질문 저장').length === 1;
+    };
+    var found = rows(oldTitle);
+    if (editing && !found.length && oldTitle !== values['질문']) {
+      var renamed = rows(values['질문']);
+      if (renamed.length === 1 && await editRow(renamed[0]) && same(controls())) {
+        out.verified = true; out.skipped = true; out.reason = '이름 변경 후 저장된 같은 질문을 다시 확인'; return out;
+      }
+      return fail('기존 제목이 없고 새 제목의 질문 정의도 일치하지 않습니다');
+    }
+    if (found.length > 1 || (editing && found.length !== 1)) return fail('기존 질문 제목이 하나로 확인되지 않습니다');
+    if (found.length) {
+      if (!await editRow(found[0])) return fail('질문 편집 화면을 열지 못했습니다');
+      if (same(controls())) { out.verified = true; out.skipped = true; out.reason = '같은 질문 정의를 다시 열어 확인'; return out; }
+      if (!editing) return fail('같은 제목의 다른 질문이 있습니다 — 질문 고치기 단계로 명시하세요');
+    }
+    if (editing && oldTitle !== values['질문'] && rows(values['질문']).length) return fail('새 질문 제목이 기존 질문과 겹칩니다');
+    if (!editing && Array.from(panel.querySelectorAll('p')).filter(function (p) { return buttons(p, '편집').length === 1; }).length >= 200) return fail('한 정보 수집 폼에는 질문을 최대 200개까지 넣을 수 있습니다');
+    var cs = controls();
+    if (!cs) return fail('질문 입력 칸을 정확히 찾지 못했습니다');
+    for (var key of allowed) {
+      var el = cs[key], value = values[key];
+      if (el.tagName === 'SELECT') {
+        var opts = Array.from(el.options).filter(function (o) { return text(o.textContent) === value && !o.disabled; });
+        if (opts.length !== 1) return fail('질문 선택지가 하나가 아닙니다: ' + key);
+        el.value = opts[0].value;
+      } else {
+        var prop = el.type === 'checkbox' ? 'checked' : 'value';
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), prop).set.call(el, value);
+      }
+      el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true}));
+    }
+    if (!same(controls())) return fail('저장 전 질문 값 되읽기가 다릅니다');
+    if (opt.dry) return out;
+    var save = buttons(panel, s.submit);
+    if (save.length !== 1) return fail('질문 전용 저장 버튼을 찾지 못했습니다');
+    previous = panel; save[0].click(); out.submitted = true;
+    if (!await stayRun.waitFor(function () { return document.querySelector(selector) && document.querySelector(selector) !== previous; }, 10000)) return fail('질문 저장 응답을 확인하지 못했습니다 — 자동 재시도하지 않습니다');
+    panel = document.querySelector(selector);
+    if (panel.querySelector('.errorlist,[role="alert"]')) return fail('질문 저장 화면이 오류를 표시합니다');
+    found = rows(values['질문']);
+    if (found.length !== 1 || !await editRow(found[0]) || !same(controls())) return fail('저장 후 다시 연 질문 값이 지시서와 다릅니다');
+    out.verified = true; out.submit = 'ok'; return out;
+  };
+
   window.runStepCore = async function (n, opt) {
     opt = opt || {};
     var s = window.step(n);
     var out = { no: n, title: s.title };
+    if (s.kind === '원화 표시 설정 확인') return {no:n,title:s.title,submitted:false,manualAction:true,error:'CCS 관리자가 원화 설정을 저장하고 고객 홈페이지를 새로 열어 확인해야 합니다. 브라우저 자동 저장 대상이 아닙니다.'};
+    if (/^정보 수집 질문 (만들기|고치기)$/.test(s.kind)) return window.runQuestionStep(s, opt);
     // 옛 화면(자동 생성물 고쳐 쓰기) 기준 단계와 금지된 단계(`경고 넘어가기`)는 실행하지 않는다 — 위 `refusedStep`
     var why = window.refusedStep(s);
     if (why) return { no: n, title: s.title, refused: true, fatal: true, error: why === window.FORBIDDEN_WARN_MSG ? why : window.STALE_GUIDE_MSG + ' (' + why + ')' };
@@ -783,6 +920,7 @@
     }
     if (bps.length) {
       var bp = bps[0];
+      if (s.kind === '택1 그룹 만들기' && bp.text === '택1 그룹 만들기') bp = Object.assign({}, bp, {text:'선택 그룹 만들기'});
       var spec = { button: bp.text, row: bp.row, card: bp.card || s.head.card, block: s.head.block };
       // 판매 연결(오퍼 × 객실) 단계는 같은 룸 행이 오퍼마다 있으므로 제목의 `오퍼 · 룸` 을 행 이름으로 먼저 쓴다
       var th0 = window.titleHint(s);
@@ -826,7 +964,7 @@
       out.formReady = fw2.ready; if (fw2.waited) out.formWaited = fw2.waited;
     }
 
-    var F = window.stepFields(n);
+    var F = window.customerOptionFields(s, window.stepFields(n));
     var r = await stayRun.fill(F);
     // 화면에 없는 체크 칸(예: 저장 뒤에만 뜨는 `지금 모든 객실에 배포`)은 막지 않고 경고로만 남긴다
     out.warn = r.filter(function (x) { return x.status === 'not-found' && /^(check|uncheck)$/.test(x.kind); }).map(function (x) { return x.label + ': 화면에 없는 칸'; });

@@ -7,7 +7,13 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Current release: plugin `stay-setup` 1.5.4 (`stay-setup-guide` 1.5.4, `stay-setup-run` 0.12.2).
+Current release: plugin `stay-setup` 1.6.0 (`stay-setup-guide` 1.6.0, `stay-setup-run` 0.13.0).
+
+## 2026-10-22 customer options
+
+The [customer-options guide](skills/stay-setup-guide/references/customer-options-guide.md) covers the agency-wide KRW display setting, generic questions on benefits/charges/addons, selection limits and onsite payment amounts. The screen dictionary retains its original extraction date and adds a separately dated release supplement; new instructions are not presented as new screenshots.
+
+Question steps use the same input-guide contract as `stay-installer-mcp`. The browser runner verifies the exact offer/item, saves with the question-specific button, then reopens the question and checks the saved values. CCS settings require a human administrator and a fresh customer-page check. Customer answers and reservation history are reviewed after setup; installing questions does not perform a payment. Existing banner settings are reused, not automatically recreated.
 
 ## Install
 

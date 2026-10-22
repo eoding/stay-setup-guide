@@ -267,7 +267,8 @@ STEP_KINDS = (
     "요금제 고치기", "요금제 배포", "요금제 전체 적용", "기준 요금제 바꾸기",
     "판매일 열기", "재고 수량 판매 켜기", "재고 한꺼번에 넣기", "재고 수량 고치기",
     "부과금 추가", "부가옵션 만들기", "부가옵션 가격 넣기",
-    "프로모션 추가", "혜택 추가", "택1 그룹 만들기", "그룹에 혜택 추가",
+    "프로모션 추가", "혜택 추가", "택1 그룹 만들기", "선택 그룹 만들기", "그룹에 혜택 추가",
+    "원화 표시 설정 확인", "정보 수집 질문 만들기", "정보 수집 질문 고치기", "선택 그룹 고치기",
     "판매 시작",
 )
 #: 러너가 더 받는 표기 — 정본은 아니지만 실행은 된다. 새 원고는 위 정본으로 적는다.
@@ -627,6 +628,8 @@ def parse_steps(lines):
                 fence = None
                 if cur is not None and name:
                     cur["fields"].setdefault(name, " / ".join(x.strip() for x in buf if x.strip()))
+                    cur.setdefault("longtexts", {})[name] = "\n".join(buf)
+                    cur.setdefault("longtext_labels", []).append(name)
             else:
                 fence[1].append(line)
             continue
@@ -3532,6 +3535,120 @@ def find_inventory_gaps(steps):
     return problems
 
 
+def find_customer_option_gaps(steps):
+    """2026-10-22 화면 계약. 질문 선택지는 쉼표가 아닌 줄바꿈으로 나눈다."""
+    problems = []
+    defined = {}
+    for step in steps:
+        kind = step_kind(step["title"])
+        fields = step["fields"]
+        def fail(message):
+            problems.append(f"{step['num']}단계: {message}")
+        if kind == "원화 표시 설정 확인":
+            if set(fields) != {"Stay 온라인 요금은 원화만 표시"} or fields.get("Stay 온라인 요금은 원화만 표시") not in {"체크", "해제"}:
+                fail("원화 표시 설정 확인은 `Stay 온라인 요금은 원화만 표시`를 체크/해제로 명시한다")
+            if step["saves"] != ["확인"]:
+                fail("원화 설정은 CCS에서 먼저 수동 저장한다 — 지시서의 마지막 줄은 [확인]이다")
+        if kind in {"정보 수집 질문 만들기", "정보 수집 질문 고치기"}:
+            labels = [k for k, _ in step['rows']] + step.get('longtext_labels', [])
+            if len(labels) != len(set(labels)):
+                fail("질문 단계의 같은 칸·긴 글 블록을 두 번 적지 않는다")
+            owner = [x.strip() for x in card_name(step).split(" · ")]
+            if len(owner) != 3 or not all(owner) or owner[1] not in {"혜택", "부과금", "부가옵션"}:
+                fail("질문 카드에는 `오퍼명 · 혜택|부과금|부가옵션 · 항목명`을 적는다")
+            elif " ".join(step["heads"].get("탭", [])) != owner[1]:
+                fail("질문 탭은 카드 가운데의 혜택/부과금/부가옵션과 같아야 한다")
+            allowed = {"구분", "질문", "필수 여부", "선택지 표시 방식", "안내문", "선택지 (한 줄에 하나)"}
+            if set(fields) - allowed:
+                fail("질문 화면에 없는 칸: " + ", ".join(sorted(set(fields) - allowed)))
+            qtype = fields.get("구분", "").removeprefix("선택:").strip()
+            if fields.get("구분") != "선택: " + qtype or qtype not in {"단답형", "장문형", "체크박스", "객관식", "서술형"}:
+                fail("구분은 단답형/장문형/체크박스/객관식/서술형 중 화면 항목을 선택한다")
+            title = fields.get("질문", "").strip()
+            key = card_name(step)
+            previous = defined.setdefault(key, set())
+            old_title = None
+            for button in step['heads'].get('버튼', []):
+                match = re.search(r"`([^`]+)`\s*행의\s*\[편집\]", button)
+                if match:
+                    old_title = match.group(1)
+            if title in previous or (kind.endswith('고치기') and old_title in previous):
+                fail("한 원고에는 같은 질문의 최종 정의를 한 번만 적는다 — 만들기 뒤 고치기/이름 변경을 연결하지 않는다")
+            previous.add(title)
+            if old_title:
+                previous.add(old_title)
+            # 바뀐 이전 제목은 문항 수에 더하지 않는다. 새 질문만으로 200개를 넘는 경우를 잡는다.
+            created = defined.setdefault((key, 'created'), set())
+            if kind.endswith('만들기'):
+                created.add(title)
+                if len(created) > 200:
+                    fail("같은 항목의 정보 수집 폼에는 최대 200문항을 넣는다")
+            description = step.get("longtexts", {}).get("안내문", fields.get("안내문", ""))
+            if len(description) > 20000:
+                fail("질문 안내문은 20000자 이내다")
+            if not title or title in {"비움", "자동 입력됨 · 그대로 둠"} or len(title) > 200:
+                fail("질문은 비우지 않고 200자 이내로 적는다")
+            if fields.get("필수 여부") not in {"체크", "해제"}:
+                fail("질문의 필수 여부를 체크/해제로 명시한다")
+            if qtype == "서술형" and fields.get("필수 여부") != "해제":
+                fail("서술형은 고객 답변이 없는 안내이므로 필수 여부를 해제한다")
+            if fields.get("선택지 표시 방식") not in {"선택: 칩 선택형", "선택: 셀렉트 박스형"}:
+                fail("선택지 표시 방식은 칩 선택형 또는 셀렉트 박스형으로 명시한다 (객관식에만 적용)")
+            raw = step.get("longtexts", {}).get("선택지 (한 줄에 하나)", "")
+            choices = [line.strip() for line in raw.splitlines() if line.strip()]
+            if qtype in {"객관식", "체크박스"} and not choices:
+                fail("객관식/체크박스 선택지는 긴 값 블록에 한 줄에 하나씩 넣는다")
+            if len(choices) != len(set(choices)) or any(len(x) > 200 for x in choices):
+                fail("선택지는 중복 없이 각각 200자 이내로 적는다")
+            if len(choices) > 100:
+                fail("예약에서 받을 수 있는 선택지는 질문당 최대 100개다")
+            if qtype not in {"객관식", "체크박스"} and choices:
+                fail("선택형이 아닌 질문의 선택지는 비운다")
+            want = "질문 추가" if kind.endswith("만들기") else "질문 저장"
+            if step["saves"] != [want]:
+                fail(f"질문 단계의 마지막 줄은 [{want}]다")
+            if kind.endswith("고치기") and not any(re.search(r"`[^`]+`\s*행의\s*\[편집\]", x) for x in step["heads"].get("버튼", [])):
+                fail("질문 수정은 버튼: `<기존 질문 제목>` 행의 [편집]으로 대상을 명시한다")
+        if kind in {"선택 그룹 만들기", "선택 그룹 고치기", "택1 그룹 만들기"}:
+            if kind.startswith("선택 그룹") and not {"선택 상한", "정확히 하나 선택 (끄면 선택 사항)"} <= set(fields):
+                fail("새 선택 그룹은 선택 상한과 정확히 하나 선택 (끄면 선택 사항)을 모두 명시한다")
+            limit = fields.get("선택 상한", "비움")
+            exact = fields.get("정확히 하나 선택 (끄면 선택 사항)", fields.get("택1 여부", "해제"))
+            if limit != "비움" and (not limit.isdecimal() or int(limit) < 1):
+                fail("선택 상한은 비움(무제한) 또는 1 이상의 정수다")
+            if exact == "체크" and limit not in {"1", "비움"}:
+                fail("정확히 하나 선택을 켤 때 선택 상한은 1이다")
+        if kind == "부과금 추가" and any(k.startswith("현장 ") for k in fields):
+            onsite = {k: v for k, v in fields.items() if k == "현장 결제 단가" or k.startswith("현장 연령별 단가 · ")}
+            def number(value):
+                try:
+                    return decimal.Decimal(value.replace(',', ''))
+                except decimal.InvalidOperation:
+                    return None
+            for key, value in onsite.items():
+                if value == "비움":
+                    continue
+                amount = number(value)
+                if amount is None or not amount.is_finite() or amount < 0 or amount >= decimal.Decimal('10000000000') or amount.as_tuple().exponent < -2:
+                    fail(f"{key}는 비움 또는 0 이상의 소수 둘째 자리까지 금액이다 (정수 최대 10자리)")
+            currency = fields.get("현장 결제 통화", "비움")
+            has_currency = currency.startswith("선택:") and bool(currency.removeprefix("선택:").strip())
+            has_amount = any(value != "비움" for value in onsite.values())
+            if has_amount and not has_currency:
+                fail("현장 단가를 적으면 현장 결제 통화를 선택한다")
+            if has_currency:
+                online = [v for k, v in fields.items() if re.fullmatch(r"정액 금액(?: \([^)]*\))? 값", k)]
+                if fields.get("부과 방식") != "선택: 정액" or len(online) != 1 or number(online[0]) != 0:
+                    fail("현장 결제 항목은 부과 방식 정액, 온라인 정액 금액 값 0을 명시한다")
+                if any(k.startswith("연령별 단가 · ") and v != "비움" and number(v) != 0 for k, v in fields.items()):
+                    fail("현장 결제 항목의 온라인 연령별 단가는 0 또는 비움이다")
+                if any(re.match(r"(?:시간대별 )?요율 \d+", k) for k in fields):
+                    fail("현장 결제 항목에 시간대별 요율을 함께 넣지 않는다")
+            if any(k.startswith("현장 연령별 단가 · ") and v != "비움" for k, v in onsite.items()) and fields.get("부과 단위") != "선택: 인당":
+                fail("현장 연령별 단가는 인당일 때만 입력한다")
+    return problems
+
+
 def find_unknown_step_kinds(steps):
     """단계 제목의 갈래가 정본도 러너 별칭도 아니면 오류 — 러너가 그 단계에서 멈춘다.
 
@@ -3793,7 +3910,7 @@ def load_dictionary(path):
 
     # `screens` 의 검증 배너 줄은 최상위 `validation` 키를 가리키는 참조(`ref`)라 칸이 없다 —
     # 정본 한 벌을 함께 읽어 그 화면의 칸도 사전에 들어오게 한다.
-    screens = list(data.get("screens") or [])
+    screens = list(data.get("screens") or []) + list(data.get("supplemental_screens") or [])
     validation = data.get("validation")
     if isinstance(validation, dict):
         screens.append(validation)
@@ -3831,7 +3948,7 @@ def load_dictionary_kinds(path):
     """화면 사전에서 `{칸 이름: {종류, …}}` 를 모은다 — 같은 이름이 화면마다 다른 종류일 수 있다."""
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
-    screens = list(data.get("screens") or [])
+    screens = list(data.get("screens") or []) + list(data.get("supplemental_screens") or [])
     validation = data.get("validation")
     if isinstance(validation, dict):
         screens.append(validation)
@@ -4105,6 +4222,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
         "unknown_step_kinds": unknown_step_kinds, "inventory_gaps": inventory_gaps,
+        "customer_option_gaps": find_customer_option_gaps(parsed),
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
         "age_band_order": age_band_order,
@@ -4209,7 +4327,7 @@ def main(argv=None):
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["past_sale_starts"] + r["past_seasons"]
               + r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
-              + r["unknown_step_kinds"] + r["inventory_gaps"]
+              + r["unknown_step_kinds"] + r["inventory_gaps"] + r["customer_option_gaps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]
