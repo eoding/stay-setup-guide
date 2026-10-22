@@ -27,8 +27,8 @@ ERP 저장소 경로(`--basecamp`)는 사람마다 다르므로 반드시 준다
 from __future__ import annotations
 
 import argparse
+import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +41,27 @@ REFERENCES_DIR = SKILL_DIR / "references"
 
 #: 관리 명령이 찍는 두 파일 — 이름이 이 스킬의 `references/` 와 같다.
 FILE_NAMES = ("screen-dictionary.json", "screen-dictionary.md")
+SUPPLEMENT_MARKER = "\n## 2026-10-22 배포 보충\n"
+
+
+def preserve_supplement(name: str, fresh: str, previous: str) -> str:
+    """자동 추출 본문을 갱신하되 날짜가 다른 수동 보충을 지우지 않는다."""
+    if name.endswith('.json'):
+        old, new = json.loads(previous), json.loads(fresh)
+        for key in ('supplement_meta', 'supplemental_screens'):
+            if key in old:
+                new[key] = old[key]
+        return json.dumps(new, ensure_ascii=False, indent=2) + '\n'
+    return fresh.split(SUPPLEMENT_MARKER)[0] + (SUPPLEMENT_MARKER + previous.split(SUPPLEMENT_MARKER, 1)[1] if SUPPLEMENT_MARKER in previous else '')
+
+
+def core_only(name: str, text: str) -> str:
+    if name.endswith('.json'):
+        data = json.loads(text)
+        data.pop('supplement_meta', None)
+        data.pop('supplemental_screens', None)
+        return json.dumps(data, ensure_ascii=False, indent=2) + '\n'
+    return text.split(SUPPLEMENT_MARKER)[0]
 
 #: 감싸는 설정 모듈이 딛고 서는 ERP 설정. 로컬 개발 DB 를 보고 테스트용 플래그가 켜져 있다.
 DEFAULT_SETTINGS = "basecamp.settings.test"
@@ -253,7 +274,13 @@ def main(argv=None) -> int:
         _report_database(python, basecamp, env)
 
         if args.check:
-            done = _generate(python, basecamp, env, target_dir, args.generated_on, check=True)
+            core_dir = tmp_dir / 'core-check'
+            core_dir.mkdir()
+            for name in FILE_NAMES:
+                source = target_dir / name
+                if source.is_file():
+                    (core_dir / name).write_text(core_only(name, source.read_text(encoding='utf-8')), encoding='utf-8')
+            done = _generate(python, basecamp, env, core_dir, args.generated_on, check=True)
             for line in _interesting(done.stdout) + _interesting(done.stderr):
                 _log(f"  {line.strip()}")
             if done.returncode != 0:
@@ -284,8 +311,10 @@ def main(argv=None) -> int:
             target = target_dir / name
             before = target.read_bytes() if target.is_file() else None
             after = source.read_bytes()
+            if before is not None:
+                after = preserve_supplement(name, after.decode('utf-8'), before.decode('utf-8')).encode('utf-8')
             try:
-                shutil.copyfile(source, target)
+                target.write_bytes(after)
             except OSError as exc:
                 _fail(f"{name} 을 쓰지 못했습니다 ({exc.__class__.__name__}).")
             state = "그대로" if before == after else ("새 파일" if before is None else "바뀜")

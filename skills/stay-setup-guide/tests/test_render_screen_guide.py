@@ -181,12 +181,12 @@ class ScreenGuideCountsTest(unittest.TestCase):
     def test_screen_count_matches_meta(self):
         meta = self.data["meta"]["screen_count"]
         self.assertEqual(self.stats["screens"], meta)
-        self.assertEqual(len(re.findall(r'<section class="screen"', self.page)), meta)
+        self.assertEqual(len(re.findall(r'<section class="screen"', self.page)), meta + self.stats.get('supplemental_screens', 0))
 
     def test_field_count_matches_meta(self):
         meta = self.data["meta"]["field_count"]
         self.assertEqual(self.stats["fields"], meta)
-        self.assertEqual(len(re.findall(r'<tr class="field">', self.page)), meta)
+        self.assertEqual(len(re.findall(r'<tr class="field">', self.page)), meta + self.stats.get('supplemental_fields', 0))
 
     def test_counts_are_printed_on_the_page(self):
         meta = self.data["meta"]
@@ -232,7 +232,7 @@ class ScreenGuideContentTest(unittest.TestCase):
         anchors = set(re.findall(r'<section class="screen" id="([^"]+)">', self.page))
         links = set(re.findall(r'<a href="#(screen-[^"]+)">', self.toc))
         self.assertEqual(links, anchors)
-        self.assertEqual(len(anchors), self.data["meta"]["screen_count"])
+        self.assertEqual(len(anchors), self.data["meta"]["screen_count"] + len(self.data.get('supplemental_screens', [])))
 
     def test_every_screen_has_name_opens_and_cards(self):
         for screen in self.data["screens"]:

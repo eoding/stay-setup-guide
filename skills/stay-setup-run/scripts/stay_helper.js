@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.8.2'; // 운영 2026-09-21 배포판 화면 기준 + 상태 대기(`settleOr`) + 안내 띠를 마디로 가리기(`toastSnap`·`netWatch`)
+  var VERSION = '0.9.0'; // 2026-10-22: 현장·온라인 연령 단가의 입력 범위 분리
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초) — 기본값이다. 느린 서버에서는 `stayRun.config({waitMs})` 로 올린다
   var TICK = 100;
 
@@ -1902,6 +1902,16 @@
   async function applyOne(scope, f, opts) {
     var out = { label: f.label, kind: f.kind, status: 'not-found', detail: '' };
     if (f.kind === 'auto') { out.status = 'skipped'; out.detail = '저절로 차는 칸 — 건드리지 않았습니다'; return out; }
+    var age = nfc(f.label).match(/^(현장 )?연령별 단가 · (.+)$/);
+    if (age && (age[1] || scope.querySelector('[data-stay-card="onsite"],[data-stay-card="age_rates"]'))) {
+      var cards = scope.querySelectorAll('[data-stay-card="' + (age[1] ? 'onsite' : 'age_rates') + '"]');
+      if (cards.length !== 1) { out.status = 'error'; out.detail = '연령 단가의 현장/온라인 소속을 확인하지 못했습니다'; return out; }
+      var scopedField = Object.assign({}, f, {label:age[2]});
+      var scopedResult = await applyOne(cards[0], scopedField, opts);
+      scopedResult.label = f.label;
+      if (scopedResult.status !== 'ok') { scopedResult.status = 'error'; scopedResult.detail = '지정한 단가 카드에서 칸을 확인하지 못했습니다'; }
+      return scopedResult;
+    }
 
     var target = scope, name = f.label, idx = 0;
     var rep = splitRepeat(f.label);
@@ -2320,6 +2330,15 @@
   function readOne(scope, f) {
     var out = { label: f.label, kind: f.kind, actual: null, same: null };
     if (f.kind === 'auto') { out.same = null; out.actual = '(자동)'; return out; }
+    var age = nfc(f.label).match(/^(현장 )?연령별 단가 · (.+)$/);
+    if (age && (age[1] || scope.querySelector('[data-stay-card="onsite"],[data-stay-card="age_rates"]'))) {
+      var cards = scope.querySelectorAll('[data-stay-card="' + (age[1] ? 'onsite' : 'age_rates') + '"]');
+      if (cards.length !== 1) { out.actual = '(단가 소속 불명)'; out.same = false; return out; }
+      var scopedResult = readOne(cards[0], Object.assign({}, f, {label:age[2]}));
+      scopedResult.label = f.label;
+      if (scopedResult.actual === '(칸 없음)') { scopedResult.actual = '(단가 칸 불명)'; scopedResult.same = false; }
+      return scopedResult;
+    }
     var target = scope, name = f.label;
     var rep = splitRepeat(f.label);
     if (rep) {

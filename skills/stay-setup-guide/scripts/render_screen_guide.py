@@ -13,8 +13,8 @@
 `generated_on` 만 쓴다).
 
 `--impact <영향지도.json>` 을 주면 칸마다 **그 칸이 고객 웹 어디에 어떻게 나오는지**가
-두 칸(「웹에 나오는 곳」·「효과」) 더 붙고, 앞머리에 「한눈에」 절이 선다. 영향 지도는
-이 저장소에 담지 않는다(내부 표·컬럼 이름이 들어 있다) — 파일을 받아 옆에 두고 쓴다.
+두 칸(「웹에 나오는 곳」·「효과」) 더 붙고, 앞머리에 「한눈에」 절이 선다. 공개 영향 지도는
+화면 문구와 고객 표시 효과만 담는다.
 주지 않으면 **예전과 바이트까지 같은 파일**이 나온다.
 
 사용법:
@@ -1035,11 +1035,12 @@ def render_guide(data, font_b64=None, version='', impact=None):
     meta = data.get('meta') or {}
     tabs = data.get('tabs') or []
     screens = [resolve_screen(s, data) for s in data.get('screens') or []]
+    supplements = data.get('supplemental_screens') or []
 
     numbers = {}
     tab_of = {}
     by_tab = {}
-    for idx, screen in enumerate(screens, 1):
+    for idx, screen in enumerate(screens + supplements, 1):
         numbers[screen['id']] = idx
         tab = screen_tab(screen)
         tab_of[screen['id']] = tab
@@ -1055,6 +1056,11 @@ def render_guide(data, font_b64=None, version='', impact=None):
                           bundle['meta'] if bundle else None),
         render_howto(),
     ]
+    if supplements:
+        body.insert(1, '<aside class="notes"><strong>2026-10-22 배포 보충</strong><p>'
+                    '기본 화면 31개는 과거 추출본입니다. 원화 표시·질문·현장 결제·선택 그룹은 '
+                    '<a href="#screen-release-currency">아래의 최신 보충</a>을 따릅니다. '
+                    '보충 화면 ' + str(len(supplements)) + '개 · 입력 칸 ' + str(count_fields(supplements)) + '개이며 새 캡처가 아닙니다.</p></aside>')
     if bundle:
         body.append(render_impact_overview(screens, bundle))
     body.append(render_toc(tabs, by_tab, numbers))
@@ -1067,6 +1073,22 @@ def render_guide(data, font_b64=None, version='', impact=None):
             bundle['summaries'].get(sid, '') if bundle else '',
             impact_lookup(bundle, sid) if bundle else None,
         ))
+    supplements = data.get('supplemental_screens') or []
+    if supplements:
+        note = data.get('supplement_meta') or {}
+        body.append('<section><h2>배포 보충 · ' + inline(note.get('date', '')) + '</h2><p>'
+                    + inline(note.get('verification', '화면 문구 대조 보충 — 실제 화면 캡처가 아닙니다.'))
+                    + '</p></section>')
+        supplemental_impact = None
+        if impact:
+            ids = {str(s['id']) for s in supplements}
+            supplemental_impact = build_impact(supplements, {'screens': [
+                s for s in impact.get('supplemental_screens', []) if str(s['id']) in ids]})
+        for idx, screen in enumerate(supplements, len(screens) + 1):
+            sid = str(screen['id'])
+            body.append(render_screen(idx, screen, screen_tab(screen),
+                supplemental_impact['summaries'].get(sid, '') if supplemental_impact else '',
+                impact_lookup(supplemental_impact, sid) if supplemental_impact else None))
     body.append(render_not_covered(data.get('not_covered') or []))
     body.append(render_footer(version))
 
@@ -1096,6 +1118,8 @@ def render_guide(data, font_b64=None, version='', impact=None):
         'tabs': len(tabs),
         'meta_screens': meta.get('screen_count'),
         'meta_fields': meta.get('field_count'),
+        'supplemental_screens': len(supplements),
+        'supplemental_fields': count_fields(supplements),
         'impact': impact_counts(screens, bundle) if bundle else None,
     }
     return page, stats
@@ -1156,6 +1180,8 @@ def main(argv=None):
     size = len(page.encode('utf-8'))
     print(f'OK: {out_path}')
     print(f'  화면: {stats["screens"]}개 · 입력 칸: {stats["fields"]}개 · 탭: {stats["tabs"]}개')
+    if stats['supplemental_screens']:
+        print(f'  별도 배포 보충: 화면 {stats["supplemental_screens"]}개 · 입력 칸 {stats["supplemental_fields"]}개')
     print(f'  크기: {size / 1024:.1f} KB ({size:,} bytes)')
     print(f'  폰트: {font_note}')
     if stats['impact']:

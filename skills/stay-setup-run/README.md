@@ -197,3 +197,7 @@ target row and presses it, and the run log records it.
 **eoding Partner Use License** — see `LICENSE` at the repository root. Customers and partners with an eoding ERP
 account may use, copy and modify this repository internally to configure eoding ERP; redistribution outside your
 organization, resale, and use for other products are not permitted; no warranty.
+
+## 2026-10-22 고객 옵션
+
+[고객 옵션 안내](../stay-setup-guide/references/customer-options-guide.md)에 원화 표시·질문 폼·선택 그룹·현장 단가의 입력 조건을 정리했습니다. 질문 자동 실행은 저장 후 다시 편집하여 확인합니다. CCS 설정은 관리자 수동 저장과 고객 화면 확인이 필요합니다.
