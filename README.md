@@ -7,7 +7,20 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Current release: plugin `stay-setup` 1.6.0 (`stay-setup-guide` 1.6.0, `stay-setup-run` 0.13.0).
+Current release: plugin `stay-setup` 1.6.1 (`stay-setup-guide` 1.6.1, `stay-setup-run` 0.13.1).
+
+## 2026-10-23 operations guide update
+
+Rechecked the [upstream combined guide](https://mhj-stack.github.io/eoding-stay-guide/#start).
+The partner guide now follows room STEP 04 / offer STEP 05 and includes sales-day, pricing, season and child-rate
+FAQs. The skill-only [operations FAQ](skills/stay-setup-guide/references/operations-guide.md) covers the same decisions.
+The automated guide keeps its existing offer-before-room creation order; both paths create offers and rooms before sale links.
+Existing masked screenshots retain their 2026-10-15 capture date. Current price button names and the new-season
+[추가] / edit [저장] distinction are retained where upstream still uses old wording.
+
+The October customer options are **announced as upcoming** in the upstream guide checked on 2026-10-23.
+Confirm availability against the deployment notice and current screens before using them. The update adds customer-form
+completion/cancellation rules and post-booking answer guidance; it does not claim a new production-screen audit.
 
 ## 2026-10-22 customer options
 
@@ -139,8 +152,8 @@ check against live screens; when the real screen differs, the real screen wins.
 [`docs/파트너-가이드-가격편.html`](docs/파트너-가이드-가격편.html) adds first-time pricing and eight maintenance
 scenarios: season, room or rate-plan price changes, removing occupancy/rate-plan combinations, adding a rate plan,
 date exceptions, pausing sales and extending a contract. It includes the two-checkbox comparison (overwrite prices
-versus remove unselected combinations). Adapted from the [upstream price guide](https://mhj-stack.github.io/eoding-stay-guide/price.html)
-checked on 2026-10-21, with the 2026-10-20 button labels and the distinction between creating and editing a season.
+versus remove unselected combinations). Adapted from the [upstream price guide](https://mhj-stack.github.io/eoding-stay-guide/#price-start)
+rechecked on 2026-10-23, with the 2026-10-20 button labels and the distinction between creating and editing a season.
 Its amounts and dates are examples. This is a manual reference; the automated new-hotel workflow keeps overwrite off.
 The guide skill uses [`price-guide.md`](skills/stay-setup-guide/references/price-guide.md) for pricing questions,
 including when installed by copying only the skill folder.

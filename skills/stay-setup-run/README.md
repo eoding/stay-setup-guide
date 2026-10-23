@@ -201,3 +201,7 @@ organization, resale, and use for other products are not permitted; no warranty.
 ## 2026-10-22 고객 옵션
 
 [고객 옵션 안내](../stay-setup-guide/references/customer-options-guide.md)에 원화 표시·질문 폼·선택 그룹·현장 단가의 입력 조건을 정리했습니다. 질문 자동 실행은 저장 후 다시 편집하여 확인합니다. CCS 설정은 관리자 수동 저장과 고객 화면 확인이 필요합니다.
+
+## 2026-10-23 운영 안내 확인
+
+[원본 통합 가이드](https://mhj-stack.github.io/eoding-stay-guide/#start)의 10월 기능은 배포 예정 안내입니다. 배포 공지와 현재 화면을 확인한 뒤 사용합니다. 서비스 폼의 완료·취소·선택 해제와 예약 후 답변 수정 범위는 [고객 옵션 안내](../stay-setup-guide/references/customer-options-guide.md)에, 오퍼·시즌·아동과 판매 문제는 [운영 FAQ](../stay-setup-guide/references/operations-guide.md)에 정리했습니다. 사람용 STEP 번호(객실 04·오퍼 05)와 자동 지시서의 생성 순서는 구분합니다.

@@ -68,6 +68,7 @@ python3 scripts/check_manual.py examples/우에노_토우가네야/_원고/manua
 | `SKILL.md` | 이 스킬의 진입점. 입력 → 절차 → 반드시 지킬 것 → 하지 말 것 → 산출물 |
 | `references/MANUAL-SPEC.md` | 지시서 원고(`_원고/manual.md`) 형식 규칙 정본 — 구조·표 표기·단계 갈래별 마지막 줄·순서·금지어 |
 | `references/screen-dictionary.md` · `references/screen-dictionary.json` | ERP Stay 화면 31개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 검사기용 json). **손으로 고치지 않는다** — ERP 화면 마크업에서 `scripts/sync_screen_dictionary.py` 가 두 파일을 통째로 다시 만든다 |
+| `references/operations-guide.md` | 운영 FAQ — 오퍼·시즌·요금제 구분, 시즌 재전개, 날짜별 의무 부과금, 아동 요금, 작성중 오퍼 점검 |
 | `references/price-guide.md` | 가격 도움말 — 최초 입력과 기존 가격 수정 구분, 대상 룸·요금제 선택, 덮기·지우기, 상황별 A~H 안내. 사람용 `docs/파트너-가이드-가격편.html`의 핵심 판단 기준 |
 | `references/facts-guide.md` | 호텔·룸 팩트(주소·시설·면적·전망·침대·좌표·도시 코드) 수집 절차와 출처 우선순위 |
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님). 공유 폴더 배치 그대로다: 맨 위에 지시서 `우에노_토우가네야_입력지시서.html` · `changes.md` · `사진목록.txt`(파일명 · 출처 — **사진 파일 자체는 저작권 때문에 담지 않는다**), 작업 파일은 `_원고/` 안에 `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(원고 정답지) |
@@ -132,3 +133,7 @@ python3 -m unittest discover -s tests
 ## 2026-10-22 고객 옵션
 
 [고객 옵션 안내](../stay-setup-guide/references/customer-options-guide.md)에 원화 표시·질문 폼·선택 그룹·현장 단가의 입력 조건을 정리했습니다. 질문 자동 실행은 저장 후 다시 편집하여 확인합니다. CCS 설정은 관리자 수동 저장과 고객 화면 확인이 필요합니다.
+
+## 2026-10-23 운영 안내 확인
+
+[원본 통합 가이드](https://mhj-stack.github.io/eoding-stay-guide/#start)의 10월 기능은 배포 예정 안내입니다. 배포 공지와 현재 화면을 확인한 뒤 사용합니다. 서비스 폼의 완료·취소·선택 해제와 예약 후 답변 수정 범위는 [고객 옵션 안내](../stay-setup-guide/references/customer-options-guide.md)에, 오퍼·시즌·아동과 판매 문제는 [운영 FAQ](../stay-setup-guide/references/operations-guide.md)에 정리했습니다. 사람용 STEP 번호(객실 04·오퍼 05)와 자동 지시서의 생성 순서는 구분합니다.
