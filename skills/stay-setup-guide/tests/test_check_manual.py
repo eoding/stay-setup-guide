@@ -4688,7 +4688,7 @@ class ScopeDictionaryTest(unittest.TestCase):
         """
         self.assertRegex(self.data["meta"]["generated_on"], r"^\d{4}-\d{2}-\d{2}$")
         self.assertGreaterEqual(self.data["meta"]["generated_on"], "2026-09-21")
-        self.assertEqual(self.data["meta"]["erp_baseline"], "운영 2026-09-21 배포판 화면 기준")
+        self.assertEqual(self.data["meta"]["erp_baseline"], "2026-10-26 직원 설정 개선 작업본 기준 (운영 배포 전)")
 
     def test_the_meta_field_count_matches(self):
         counted = sum(len(b.get("fields") or [])

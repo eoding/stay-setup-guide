@@ -40,7 +40,7 @@ class TestExplainField(unittest.TestCase):
         data = rsg.load_dictionary(root / 'screen-dictionary.json')
         impact = rsg.load_impact(root / 'screen-effects.json')
         page, stats = rsg.render_guide(data, version='1.5.0', impact=impact)
-        self.assertEqual(stats['fields'], 243)
+        self.assertEqual(stats['fields'], 248)
         self.assertIn('허용 인원 조합', page)
 
 
