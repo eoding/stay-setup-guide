@@ -2656,6 +2656,9 @@
           "evidence": [
             "basecamp stay/services/staff_pricing.py::_check_in_out",
             "homepage-backend StayReferenceAssembler.checkInOut / StayPricing.xml"
+          ],
+          "aliases": [
+            "체크인 시각 override"
           ]
         },
         {
@@ -2670,6 +2673,9 @@
           "evidence": [
             "basecamp stay/services/staff_pricing.py::_check_in_out",
             "homepage-backend StayReferenceAssembler.checkInOut / StayPricing.xml"
+          ],
+          "aliases": [
+            "체크아웃 시각 override"
           ]
         },
         {
