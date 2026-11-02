@@ -1,0 +1,152 @@
+
+
+
+<div id="stay_offer_benefits" class="stay-root stay-readable" data-stay-panel="benefits">
+  
+  <span hidden
+        hx-get="/stay/{master:1}/benefits/"
+        hx-trigger="stay:offers-changed from:body"
+        hx-target="#stay_offer_benefits"
+        hx-swap="outerHTML"></span>
+
+  
+
+  <div class="stay-panel-intro"><h4 class="stay-section-title">혜택</h4></div>
+
+  
+  <div class="stay-card" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+    <div class="stay-card__head">
+      
+      <h4 class="stay-card__title">〈오퍼 관리용 이름〉 <small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+</h4>
+      <span>
+        <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create" data-stay-target="benefit"
+                title="예약에 항상 붙는 혜택을 추가합니다 — 고객이 고르지 않아도 들어갑니다"
+                hx-get="/stay/{master:1}/offers/{offer:1}/benefits/new/"
+                hx-target="#stay_drawer_body" hx-swap="innerHTML">
+          항상 포함 혜택 추가
+        </button>
+        <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_create" data-stay-target="benefit_group"
+                title="고객이 정해진 개수 안에서 고르거나 자유롭게 선택하는 묶음을 만듭니다 — 만든 뒤 그룹 카드의 [후보 혜택 추가]로 후보를 채워주세요"
+                hx-get="/stay/{master:1}/offers/{offer:1}/benefit-groups/new/"
+                hx-target="#stay_drawer_body" hx-swap="innerHTML">
+          선택 그룹 만들기
+        </button>
+      </span>
+    </div>
+
+    
+    <h5 class="stay-subsection-title">
+      <span class="stay-cond stay-cond--included">
+        <span class="stay-cond__icon" aria-hidden="true">&#10003;</span>
+        항상 포함
+      </span>
+    </h5>
+    
+    <p class="stay-description">항상 포함되는 혜택이 없습니다. 웰컴 드링크·조식 포함처럼 예약마다 늘 붙는 것을 넣습니다.</p>
+    
+
+    
+    
+    <div class="stay-card stay-subgroup" data-stay-card="choice_group" data-stay-entity="benefit_group" data-stay-name="택1 혜택" data-stay-entity-id="{benefit_group:1}">
+      <div class="stay-card__head">
+        <h5 class="stay-card__title">
+          <span class="stay-cond stay-cond--perk">
+            <span class="stay-cond__icon" aria-hidden="true">&#9813;</span>
+            정확히 하나
+          </span>
+          택1 혜택
+        </h5>
+        <span>
+          <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create" data-stay-target="benefit"
+                  title="이 그룹의 후보로 넣습니다 — 고객이 그룹 안에서 고릅니다"
+                  hx-get="/stay/{master:1}/offers/{offer:1}/benefits/new/?group={benefit_group:1}"
+                  hx-target="#stay_drawer_body" hx-swap="innerHTML">
+            후보 혜택 추가
+          </button>
+          <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                  hx-get="/stay/{master:1}/benefit-groups/{benefit_group:1}/edit/"
+                  hx-target="#stay_drawer_body" hx-swap="innerHTML">
+            그룹 편집
+          </button>
+          
+          <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                  title="그룹과 그 안의 후보 혜택을 함께 지웁니다 — 후보만 남기지 않습니다(남기면 전부 항상 포함이 되어 뜻이 뒤집힙니다)"
+                  hx-post="/stay/{master:1}/benefit-groups/{benefit_group:1}/delete/"
+                  hx-target="#stay_offer_benefits" hx-swap="outerHTML"
+                  hx-confirm="이 선택 그룹을 삭제할까요? 그룹에 속한 혜택도 함께 지워집니다.">
+            그룹 삭제
+          </button>
+        </span>
+      </div>
+
+      
+
+      
+      
+      
+      <span class="stay-cond stay-cond--restricted">
+        <span class="stay-cond__icon" aria-hidden="true">&#8856;</span>
+        후보가 하나뿐이라 선택 개수에 따라 고객이 고르거나 건너뜁니다.
+      </span>
+      
+      <div class="table1 stay-table-scroll">
+        <table class="bs-table stay-table stay-aligned-table">
+        <colgroup><col style="width:18%"><col style="width:15%"><col style="width:15%"><col style="width:20%"><col style="width:20%"><col style="width:12%"></colgroup>
+
+          <thead>
+            <tr>
+              <th>후보 혜택</th>
+              <th>제공량·주기</th><th>금액·할인</th><th>수령 절차</th>
+              <th>조건·안내 메모</th>
+              <th class="stay-column-center">액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+            <tr data-stay-entity="benefit" data-stay-name="스파 이용권" data-stay-entity-id="{benefit:1}">
+              <td>스파 이용권</td>
+              
+<td>
+  수량: 미설정 <br>
+  주기: 체류당<br>
+  인원: 미설정<br>
+  시간(분): 미설정
+</td>
+<td>
+  금액: 미설정<br>
+  할인율: 미설정
+</td>
+<td>
+  자동 제공 — 별도 절차 없음
+</td>
+
+              <td>
+                <small class="stay-money--empty">메모 없음</small>
+              </td>
+              <td class="td_actions">
+                <div class="stay-actions">
+                <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                        hx-get="/stay/{master:1}/benefits/{benefit:1}/edit/"
+                        hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                  편집
+                </button>
+                <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                        hx-post="/stay/{master:1}/benefits/{benefit:1}/delete/"
+                        hx-target="#stay_offer_benefits" hx-swap="outerHTML"
+                        hx-confirm="이 후보 혜택을 삭제할까요?">
+                  삭제
+                </button>
+                </div>
+              </td>
+            </tr>
+            
+          </tbody>
+        </table>
+      </div>
+      
+    </div>
+    
+  </div>
+  
+</div>

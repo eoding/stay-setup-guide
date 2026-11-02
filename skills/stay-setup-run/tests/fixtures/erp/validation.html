@@ -1,0 +1,30 @@
+
+
+
+<div id="stay_validation_banner" class="stay-root mb-3" data-stay-screen="validation">
+  <span hidden
+        hx-get="/stay/{master:1}/validation/"
+        hx-trigger="stay:revalidate from:body"
+        hx-target="#stay_validation_banner" hx-swap="outerHTML"></span>
+  
+
+  
+
+  
+  
+
+  
+  
+  
+
+  
+  <div class="stay-gate" data-stay-card="gate">
+    
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="activate" 
+            hx-post="/stay/{master:1}/activate/"
+            hx-target="#stay_validation_banner" hx-swap="outerHTML">
+      판매 시작
+    </button>
+    
+  </div>
+</div>

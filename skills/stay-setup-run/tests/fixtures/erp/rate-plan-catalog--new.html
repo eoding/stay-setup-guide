@@ -1,0 +1,331 @@
+
+
+
+
+
+<div id="stay_rate_plan_catalog_form_00000000" class="stay-card"
+     data-stay-screen="rate-plan-catalog" data-stay-card="main">
+
+  
+
+  
+
+  <div class="table1">
+    
+    <input type="hidden" name="inclusions_submitted" value="1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:140px"><col></colgroup>
+      <tbody>
+        
+        
+        
+        <tr>
+          <th>요금제명 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <input type="text" name="name" maxlength="200" data-stay-field="name" data-stay-kind="text" data-stay-required="1" aria-label="요금제명" required id="id_stay_name">
+            
+            
+            <small>호텔당 한 번 만듭니다 — 필요한 룸에 붙여 함께 사용합니다.</small>
+            
+            
+            
+            <small>고객 화면 요금 행에 이 이름이 그대로 나갑니다 — 계약서 표기를 씁니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>고객 노출명</th>
+          <td>
+            
+            <input type="text" name="display_name" maxlength="200" data-stay-field="display_name" data-stay-kind="text" aria-label="고객 노출명" id="id_stay_display_name">
+            
+            
+            
+            
+            <small>비우면 요금제명을 그대로 보여줍니다 — 계약 원문 라벨이 고객에게 나갑니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>호텔측 코드</th>
+          <td>
+            
+            <input type="text" name="code" maxlength="64" data-stay-field="code" data-stay-kind="text" aria-label="호텔측 코드" id="id_stay_code">
+            
+            
+            
+            
+            <small>호텔·ERP 대조용입니다. 고객 화면 요금 행에는 나오지 않습니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>식사 조건</th>
+          <td>
+            
+            <select name="meal_plan" class="browser-default" data-stay-field="meal_plan" data-stay-kind="select" aria-label="식사 조건" id="id_stay_meal_plan">
+  <option value="" selected>---------</option>
+
+  <option value="0">룸온리</option>
+
+  <option value="1">조식 포함</option>
+
+  <option value="2">조·석식 포함</option>
+
+  <option value="3">3식 포함</option>
+
+  <option value="4">올인클루시브</option>
+
+</select>
+            
+            
+            
+            
+            <small>고객 화면 요금 행에 &#x27;조식 포함&#x27;처럼 나갑니다. 비우면 그 줄이 없습니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>침대 구성</th>
+          <td>
+            
+            <select name="bed_config" class="browser-default" data-stay-field="bed_config" data-stay-kind="select" aria-label="침대 구성" id="id_stay_bed_config">
+  <option value="" selected>---------</option>
+
+  <option value="DOUBLE">더블</option>
+
+  <option value="TWIN">트윈</option>
+
+  <option value="SINGLE">싱글</option>
+
+  <option value="KING">킹</option>
+
+  <option value="QUEEN">퀸</option>
+
+  <option value="BUNK">벙크 (2층 침대)</option>
+
+  <option value="SOFA">소파베드</option>
+
+  <option value="OTHER">기타</option>
+
+</select>
+            
+            
+            
+            
+            <small>요금 행에 &#x27;킹 1&#x27;처럼 나갑니다 — 룸 침대와 별개 축이고, 비우면 행에는 안 나옵니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>환불 가능</th>
+          <td>
+            
+            <select name="refundable" class="browser-default" data-stay-field="refundable" data-stay-kind="tristate" aria-label="환불 가능" id="id_stay_refundable">
+  <option value="unknown" selected>모르겠음</option>
+
+  <option value="true">가능</option>
+
+  <option value="false">불가능</option>
+
+</select>
+            
+            
+            
+            
+            <small>비움(&#x27;모르겠음&#x27;)이면 고객 화면에 환불 문구를 아예 그리지 않습니다 — 모르겠음은 &#x27;환불 불가&#x27;가 아닙니다. &#x27;불가능&#x27;으로 두면 오퍼 취소정책이 무료 취소여도 이 행만 &#x27;환불 불가&#x27;로 나갑니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        
+        <tr data-stay-card="conditions"><th colspan="2"><b>판매 조건 — 비우면 제한 없음</b></th></tr>
+        
+        <tr>
+          <th>최소 숙박(박)</th>
+          <td>
+            
+            <input type="text" name="min_nights" inputmode="numeric" placeholder="1" data-stay-field="min_nights" data-stay-kind="number" aria-label="최소 숙박(박)" id="id_stay_min_nights">
+            
+            
+            
+            
+            <small>비우면 최소 숙박 제한이 없습니다. 이 박수 미만이면 이 요금제가 안 뜹니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>최대 숙박(박)</th>
+          <td>
+            
+            <input type="text" name="max_nights" inputmode="numeric" placeholder="2" data-stay-field="max_nights" data-stay-kind="number" aria-label="최대 숙박(박)" id="id_stay_max_nights">
+            
+            
+            
+            
+            <small>비우면 상한 없음입니다. &#x27;1~2박 요금&#x27;이라면 2를 넣어야 3박 검색에서 사라집니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>얼리버드 리드타임(체크인 D-N일)</th>
+          <td>
+            
+            <input type="text" name="min_lead_time_days" inputmode="numeric" placeholder="30" data-stay-field="min_lead_time_days" data-stay-kind="number" aria-label="얼리버드 리드타임(체크인 D-N일)" id="id_stay_min_lead_time_days">
+            
+            
+            
+            
+            <small>비우면 리드타임 제한이 없습니다. 30이면 체크인 30일 전까지만 예약됩니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>전용 취소 정책</th>
+          <td>
+            
+            <select name="cancellation_policy" class="browser-default" data-stay-field="cancellation_policy" data-stay-kind="select" data-stay-options="policies" aria-label="전용 취소 정책" id="id_stay_cancellation_policy">
+  <option value="" selected>(시즌·오퍼 정책을 따름)</option>
+
+  <option value="{policy:1}">체크인 7일 전 100% 환불</option>
+
+</select>
+            
+            
+            
+            
+            <small>이 요금제만의 규정(얼리버드 NRF 등). 비우면 시즌·오퍼 정책을 따릅니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        
+        
+        <tr>
+          <th>새 룸에도 붙이기</th>
+          <td>
+            
+            
+            <label class="check_form">
+              <input class="filled-in" type="checkbox" name="auto_apply"
+                     data-stay-field="auto_apply" data-stay-kind="checkbox"
+                     id="id_stay_auto_apply">
+              <span for="id_stay_auto_apply">새 룸에도 붙이기</span>
+            </label>
+            
+            
+            
+            <small>켜 두면 앞으로 만드는 객실 연결에 이 요금제가 자동으로 함께 생깁니다.</small>
+            
+            
+            <small>앞으로 판매 연결하는 룸에 이 요금제를 저절로 붙입니다. 이미 연결된 룸에는 붙이지 않습니다 — 목록의 [빠진 룸에 붙이기]를 사용하세요.</small>
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        <tr>
+          <th>정렬</th>
+          <td>
+            
+            <input type="text" name="sort" value="0" inputmode="numeric" data-stay-field="sort" data-stay-kind="number" aria-label="정렬" id="id_stay_sort">
+            
+            
+            
+            
+            <small>요금 행이 표에 놓이는 순서입니다 — 저장하면 연결된 룸별 요금제 전부의 순서가 함께 바뀝니다. 작은 숫자가 위입니다.</small>
+            
+          </td>
+        </tr>
+        
+        
+
+        
+        <tr>
+          <th>포함물</th>
+          <td x-data="{ extra: 0 }"
+              data-stay-field="inclusions" data-stay-kind="rows" data-stay-rows="inclusions">
+            
+            <template x-for="i in extra" :key="i">
+              <div>
+                <input type="text" name="inclusions_name" data-stay-col="name"
+                       placeholder="포함물 이름 (예: 조식 2인)" style="width:220px">
+                <input type="text" name="inclusions_description" data-stay-col="description"
+                       placeholder="설명 (선택)" style="width:320px">
+              </div>
+            </template>
+            <button type="button" class="stay-btn stay-btn--secondary" data-stay-action="add_row" @click="extra++">행 추가</button>
+            <small><span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span> 행을 입력하면 포함물 이름은 필수입니다. 이름과 설명을 모두 비운 행은 저장하지 않습니다.</small>
+            
+          </td>
+        </tr>
+
+        
+        <tr data-stay-card="deploy">
+          <th>룸에 붙이기</th>
+          <td>
+            
+            <label class="check_form">
+              <input class="filled-in" type="checkbox" name="apply_now" id="id_stay_apply_now" checked
+                     data-stay-field="apply_now" data-stay-kind="checkbox">
+              <span for="id_stay_apply_now">지금 있는 룸 전부에 바로 붙이기</span>
+            </label>
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary"
+            data-stay-action="save"
+            hx-post="/stay/{master:1}/rate-plans/catalog/new/"
+            hx-include="#stay_rate_plan_catalog_form_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">
+      만들기
+    </button>
+  </div>
+</div>

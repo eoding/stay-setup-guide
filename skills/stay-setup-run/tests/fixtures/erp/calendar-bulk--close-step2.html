@@ -1,0 +1,50 @@
+
+
+
+<div id="stay_calendar_bulk_00000000" class="stay-root stay-readable" data-stay-screen="calendar-bulk">
+  <input type="hidden" name="option" value="{room:1}" id="id_stay_option"><input type="hidden" name="rate_plan" value="{rate_plan:1}" id="id_stay_rate_plan"><input type="hidden" name="operation" value="close" id="id_stay_operation"><input type="hidden" name="month" value="2026-07" id="id_stay_month">
+  <section class="stay-card">
+    <h4 class="stay-section-title">적용 대상</h4>
+    <dl class="stay-facts">
+      <dt>오퍼</dt><dd>〈오퍼 관리용 이름〉</dd>
+      <dt>객실</dt><dd>〈오퍼 관리용 이름〉 · 디럭스</dd>
+      <dt>요금제</dt><dd>조식 포함</dd>
+    </dl>
+    <p class="stay-description"><strong>마감·해제 범위: 현재 요금제만</strong></p>
+  </section>
+  
+  
+  
+  <input type="hidden" name="scope" value="plan">
+  <input type="hidden" name="date_selection_0" value="2026-07-01">
+  <input type="hidden" name="date_selection_1" value="">
+  
+  <input type="hidden" name="period_from" value="2026-07-01">
+  <input type="hidden" name="period_to" value="2026-07-31">
+  <input type="hidden" name="weekdays" value="0"><input type="hidden" name="weekdays" value="1"><input type="hidden" name="weekdays" value="2"><input type="hidden" name="weekdays" value="3"><input type="hidden" name="weekdays" value="4"><input type="hidden" name="weekdays" value="5"><input type="hidden" name="weekdays" value="6">
+  <section class="stay-card">
+    <h4 class="stay-section-title">적용 내용 · 1일</h4>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <thead><tr><th>숙박일</th><th>현재 가격·마감 상태</th><th>변경 후</th></tr></thead>
+        <tbody><tr><td>2026-07-01</td><td>가격 판매 가능</td><td>요금제 마감</td></tr></tbody>
+      </table>
+    </div>
+    
+    <p class="stay-description">예약 기간·재고 등 다른 판매 조건은 유지됩니다. 마감 해제 후에도 이 조건을 충족해야 판매할 수 있습니다.</p>
+    
+    
+    <div class="stay-banner stay-banner--warning"><span>선택한 숙박일의 판매를 마감합니다. 이후 가격을 추가해도 마감은 유지되며, 기존 예약은 변경하지 않습니다.</span></div>
+    
+  </section>
+  
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="back"
+            hx-get="/stay/{master:1}/calendar/bulk/?operation=close&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;month=2026-07&amp;scope=plan&amp;period_from=2026-07-01&amp;period_to=2026-07-31&amp;weekdays=0&amp;weekdays=1&amp;weekdays=2&amp;weekdays=3&amp;weekdays=4&amp;weekdays=5&amp;weekdays=6"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML">기간 다시 선택</button>
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+            hx-post="/stay/{master:1}/calendar/bulk/" hx-include="#stay_calendar_bulk_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML" hx-disable="this">선택 날짜 마감</button>
+  </div>
+  
+</div>

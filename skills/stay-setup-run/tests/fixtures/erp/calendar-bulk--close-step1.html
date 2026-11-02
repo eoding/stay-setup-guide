@@ -1,0 +1,61 @@
+
+
+
+<div id="stay_calendar_bulk_00000000" class="stay-root stay-readable" data-stay-screen="calendar-bulk" data-calendar-selection>
+  <input type="hidden" name="option" value="{room:1}" id="id_stay_option"><input type="hidden" name="rate_plan" value="{rate_plan:1}" id="id_stay_rate_plan"><input type="hidden" name="operation" value="close" id="id_stay_operation"><input type="hidden" name="month" value="2026-07" id="id_stay_month">
+  <section class="stay-card">
+    <h4 class="stay-section-title">적용 대상</h4>
+    <dl class="stay-facts">
+      <dt>오퍼</dt><dd>〈오퍼 관리용 이름〉</dd>
+      <dt>객실</dt><dd>〈오퍼 관리용 이름〉 · 디럭스</dd>
+      <dt>요금제</dt><dd>조식 포함</dd>
+    </dl>
+    
+  </section>
+  
+  
+  
+  <section class="stay-card">
+    <h4 class="stay-section-title">적용 날짜</h4>
+    <div class="stay-calendar-form">
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_calendar_period_label">기간 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field stay-calendar-period" role="group" aria-labelledby="stay_calendar_period_label">
+          <label for="stay_calendar_from"><span class="stay-calendar-form__sr" data-stay-label-for="period_from">시작일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span><dmc-datetime x-data x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }"><input type="text" id="stay_calendar_from" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" autocomplete="off" name="period_from" value="2026-07-01" data-stay-field="period_from" data-stay-kind="date" data-stay-required="1" data-calendar-from></dmc-datetime></label>
+          <span aria-hidden="true">~</span>
+          <label for="stay_calendar_to"><span class="stay-calendar-form__sr" data-stay-label-for="period_to">종료일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span><dmc-datetime x-data x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }"><input type="text" id="stay_calendar_to" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" autocomplete="off" name="period_to" value="2026-07-31" data-stay-field="period_to" data-stay-kind="date" data-stay-required="1" data-calendar-to></dmc-datetime></label>
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_calendar_weekdays_label" data-stay-label-for="weekdays">요일</span>
+        <div class="stay-calendar-form__field" role="group" aria-labelledby="stay_calendar_weekdays_label"><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="0" checked><span>월</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="1" checked><span>화</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="2" checked><span>수</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="3" checked><span>목</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="4" checked><span>금</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="5" checked><span>토</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday value="6" checked><span>일</span></label></div>
+      </div>
+      
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_calendar_scope_label" data-stay-label-for="scope">범위</span>
+        <div class="stay-calendar-form__field" role="radiogroup" aria-labelledby="stay_calendar_scope_label">
+          <label class="check_form"><input type="radio" name="scope" data-stay-field="scope" data-stay-kind="radio" value="plan" checked><span>이 요금제</span></label>
+          <label class="check_form"><input type="radio" name="scope" data-stay-field="scope" data-stay-kind="radio" value="all"><span>객실 전체</span></label>
+        </div>
+      </div>
+      
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label">선택</span>
+        <div class="stay-calendar-form__field stay-calendar-summary">
+          <strong data-calendar-count role="status">31일</strong>
+          <span data-calendar-selected-label>· 2026-07-01 ~ 2026-07-31</span>
+          <span data-calendar-message class="stay-calendar-form__message" role="status"></span>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" name="date_selection_0" data-calendar-selected-ranges value="2026-07-01 ~ 2026-07-31">
+    <input type="hidden" name="date_selection_1" value="">
+    <p class="stay-description">이 요금제만 닫거나 열지, 이 객실의 모든 요금제에 걸지 고르세요.</p>
+  </section>
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="next" data-calendar-next
+            hx-get="/stay/{master:1}/calendar/bulk/" hx-include="#stay_calendar_bulk_00000000 :is(input,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML">다음</button>
+  </div>
+  
+</div>

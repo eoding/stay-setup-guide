@@ -1,0 +1,61 @@
+
+
+
+
+
+<div id="stay_rate_plan_deploy_form_00000000" class="stay-card" x-data="{ sel: '' }"
+     x-init="sel = $el.querySelector('[name=catalog]').value"
+     data-stay-screen="rate-plan-deploy" data-stay-card="main">
+
+  
+
+  <div class="stay-banner stay-banner--info"><span>
+      요금제의 내용(식사·환불·포함물)은 공통 요금제에서 한 번 정의합니다 — 여기서는 이 객실에 어떤 공통 요금제를 달지만 고릅니다.
+    </span></div>
+
+  <div class="table1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:110px"><col></colgroup>
+      <tbody>
+        <tr>
+          <th>공통 요금제 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            <select name="catalog" id="id_stay_catalog" aria-label="공통 요금제"
+                    data-stay-field="catalog" data-stay-kind="select" data-stay-options="rate_plan_catalogs" data-stay-required="1"
+                    class="browser-default" x-on:change="sel = $event.target.value">
+              
+              <option value="{catalog:1}">조식 포함</option>
+              
+              <option value="{catalog:2}">룸온리</option>
+              
+              <option value="{catalog:3}">하프보드</option>
+              
+              <option value="__new__">+ 새 공통 요금제 만들기</option>
+              
+            </select>
+            
+          </td>
+        </tr>
+        <tr x-show="sel === '__new__'">
+          <th>새 공통 요금제 이름 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            <input type="text" name="new_name" maxlength="200" data-stay-field="new_name" data-stay-kind="text" aria-label="새 공통 요금제 이름" id="id_stay_new_name">
+            <small>이름만으로 공통 요금제가 만들어져 이 객실에 붙습니다 — 식사·환불 등은 공통 요금제 <span class="stay-action-guide__btn stay-action-guide__btn--ghost">편집</span>에서 채우세요.</small>
+            
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary"
+            data-stay-action="deploy"
+            hx-post="/stay/{master:1}/rooms/{room:1}/rate-plans/create/"
+            hx-include="#stay_rate_plan_deploy_form_00000000 :is(input,select)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">
+      이 룸에 붙이기
+    </button>
+  </div>
+</div>

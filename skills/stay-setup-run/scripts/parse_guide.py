@@ -171,9 +171,34 @@ def title_kind(title):
 # 원고(manual.md) 읽기 — 시험용. 실행 입력은 지시서 HTML 이다
 # ---------------------------------------------------------------------------
 
+#: 지시서 HTML 이 실은 화면 사전의 동사 표시(`render_card` `#stay-action-flags`) — `parse_html` 이 채우고 steps.json `action_flags` 로 간다
+ACTION_FLAGS: dict = {}
+
+
 def new_raw(no, title):
     return {"no": no, "title": title, "heads": [], "rows": [],
-            "longtexts": [], "files": [], "submit": None, "lines": []}
+            "longtexts": [], "files": [], "submit": None, "lines": [],
+            # 지시서 HTML 이 실은 화면 표식(2026-10-28 `render_card`). 원고(.md)나 옛 HTML 이면 비어 있다.
+            "hooks": {"screen": None, "tab": None, "submit": None, "rows": [], "buttons": []}}
+
+
+#: 지시서 HTML 의 칸 줄(`<tr>`)이 싣는 표식 → steps.json 칸의 키
+ROW_HOOKS = {"data-stay-field": "field", "data-stay-row": "field_row", "data-stay-col": "field_col",
+             "data-stay-name": "field_name"}
+
+
+def row_hooks(tr):
+    """`<tr data-stay-field=… data-stay-row=…>` → {field, field_row, …}. 표식이 없으면 빈 dict."""
+    attrs = tr.get("attrs") or {}
+    out = {key: attrs[name] for name, key in ROW_HOOKS.items() if attrs.get(name)}
+    if "field_row" in out:
+        try:
+            out["field_row"] = int(out["field_row"])
+        except ValueError:
+            out.pop("field_row")
+    if attrs.get("data-stay-renamed"):
+        out["renamed"] = True
+    return out
 
 
 def split_row(line):
@@ -361,6 +386,8 @@ def parse_html_section(sec):
     num = text_of(find(h2, by_class("step-num"))).strip() if h2 is not None else ""
     title = md_of(find(h2, by_class("step-title"))).strip() if h2 is not None else ""
     cur = new_raw(int(num) if num.isdigit() else 0, title)
+    cur["hooks"]["screen"] = sec["attrs"].get("data-stay-screen") or None
+    cur["hooks"]["tab"] = sec["attrs"].get("data-stay-tab") or None
     pending = None
     for node in elements(sec):
         tag, cls = node["tag"], classes(node)
@@ -372,6 +399,12 @@ def parse_html_section(sec):
             rest = md_of(node, skip=(strong,)).strip()
             if label in HEAD_KEYS:
                 cur["heads"].append((label, rest))
+                if label == "버튼":
+                    # 버튼 줄의 [ … ] 마다 동사 표식 — `parse_button` 이 고르는 첫 버튼과 같은 차례다
+                    cur["hooks"]["buttons"].append([
+                        (text_of(span).strip(), span["attrs"].get("data-stay-action") or None,
+                         span["attrs"].get("data-stay-entity") or None, span["attrs"].get("data-stay-card") or None)
+                        for span in find_all(node, by_class("btn-look"))])
                 pending = None
             else:
                 pending = label
@@ -389,6 +422,7 @@ def parse_html_section(sec):
                 if not label:
                     continue
                 cur["rows"].append((label, html_value_cell(tds[1])))
+                cur["hooks"]["rows"].append(row_hooks(tr))
             continue
         if tag == "div" and "codeblock-wrap" in cls:
             code = find(node, by_tag("code"))
@@ -397,6 +431,7 @@ def parse_html_section(sec):
             continue
         if tag == "div" and "action-box" in cls:
             cur["submit"] = md_of(node).strip()
+            cur["hooks"]["submit"] = node["attrs"].get("data-stay-action") or None
             continue
         if tag in ("ul", "ol"):
             cur["files"].extend(html_photo_items(node))
@@ -415,11 +450,17 @@ def parse_html_section(sec):
 
 
 def parse_html(text):
+    ACTION_FLAGS.clear()  # 지시서 한 장마다 새로 — 앞 지시서의 표시가 남지 않게
     dom = DomBuilder()
     dom.feed(text)
     h1 = find(dom.root, by_tag("h1"))
     title = md_of(h1).strip() if h1 is not None else ""
     sections = find_all(dom.root, lambda n: n["tag"] == "section" and "step" in classes(n))
+    flags = find(dom.root, lambda n: n["attrs"].get("id") == "stay-action-flags")
+    if flags is not None:
+        split = lambda v: [x for x in (v or "").split(",") if x]  # noqa: E731
+        ACTION_FLAGS.update(danger=split(flags["attrs"].get("data-danger")),
+                            never_press=split(flags["attrs"].get("data-never-press")))
     return title, [parse_html_section(s) for s in sections]
 
 
@@ -428,17 +469,29 @@ def parse_html(text):
 # ---------------------------------------------------------------------------
 
 def build_step(raw):
+    hooks = raw.get("hooks") or {}
     head = {"screen": None, "tab": None, "card": None, "block": None,
-            "buttons": [], "buttons_parsed": [], "folder": None, "notice": None}
+            "buttons": [], "buttons_parsed": [], "folder": None, "notice": None,
+            "tab_key": hooks.get("tab")}
+    button_hooks = list(hooks.get("buttons") or [])
     for key, val in raw["heads"]:
         if key == "버튼":
             head["buttons"].append(val)
-            head["buttons_parsed"].append(parse_button(val))
+            parsed = parse_button(val)
+            spans = button_hooks.pop(0) if button_hooks else []
+            # 첫 [ … ] 의 동사 — 러너가 그 버튼을 동사 표식으로 먼저 찾는다(없으면 글자로)
+            hit = next((span for span in spans if span[1] and span[0] == parsed["text"]), None)
+            parsed["action"] = hit[1] if hit else None
+            # 탭 패널 버튼의 대상·카드(사전 `panel_actions`) — 러너는 그 안의 그 동사만 누른다
+            parsed["entity"] = hit[2] if hit else None
+            parsed["action_card"] = hit[3] if hit else None
+            head["buttons_parsed"].append(parsed)
         else:
             head[HEAD_FIELD[key]] = val.replace("`", "").strip() if key in BACKTICK_FREE else val
 
     fields, seen = [], Counter()
-    for label, value_raw in raw["rows"]:
+    row_hook_list = list(hooks.get("rows") or [])
+    for i, (label, value_raw) in enumerate(raw["rows"]):
         seen[label] += 1
         name = label if seen[label] == 1 else "%s #%d" % (label, seen[label])
         f = {"label": name, "raw_value": value_raw}
@@ -464,6 +517,8 @@ def build_step(raw):
             f["row_group"] = m.group(1).strip()
             f["row_index"] = int(m.group(2))
             f["row_field"] = m.group(3).strip()
+        if i < len(row_hook_list):
+            f.update(row_hook_list[i])
         fields.append(f)
 
     photos = [{"file": f, "source": s} for f, s in raw["files"]]
@@ -473,6 +528,7 @@ def build_step(raw):
 
     title = raw["title"]
     return {"no": raw["no"], "title": title, "kind": title_kind(title), "head": head,
+            "screen": hooks.get("screen"), "submit_action": hooks.get("submit"),
             "fields": fields,
             "longtexts": [{"label": l, "text": t} for l, t in raw["longtexts"]],
             "photos": photos, "submit": raw["submit"], "raw": raw.get("raw", "")}
@@ -537,9 +593,11 @@ AGE_RATE_LABEL_RE = re.compile(r"^연령별\s*단가(\s*[·・]\s*.+)?$")
 CHARGE_GATE_LABELS = ("부과 단위", "부과단위", "부과 방식", "부과방식")
 #: 인당을 고르는 칸 — 이 줄이 아예 없으면 카드가 설 일이 없다.
 CHARGE_UNIT_LABELS = ("부과 단위", "부과단위")
-#: 화면 차례는 … → 적용 날짜 → 적용 룸 scope → 연령별 단가 → 시간대별 요율 → 설명 이다.
+#: 화면 차례는 … → 적용 날짜 → 적용 룸 (선택) → 연령별 단가 → 시간대별 요율 → 설명 이다.
 #: 지시서도 그 차례를 따라야 사람이 화면과 나란히 읽는다(dict-audit 2026-09-04 합의).
-CHARGE_ROOM_SCOPE_LABELS = ("적용 룸 scope", "적용 룸", "적용룸 scope")
+#: 화면 글자는 2026-10-28 `적용 룸 scope` → `적용 룸 (선택)` 으로 바뀌었다 — 옛 글자를 빼면 옛 지시서의
+#: 차례 검사가, 새 글자가 없으면 새 지시서의 차례 검사가 **조용히 건너뛰어진다**.
+CHARGE_ROOM_SCOPE_LABELS = ("적용 룸 (선택)", "적용 룸(선택)", "적용 룸 scope", "적용 룸", "적용룸 scope")
 TIER_ROW_LABEL_RE = re.compile(r"^(시간대별\s*요율|요율)\s+\d+\s*[·・]")
 
 # --- 2026-09-08 신설 칸 — 시즌 가격 채우기의 `박수별 단가(선택)`·`아동 추가 금액 — <노출명>` ---
@@ -622,7 +680,7 @@ def charge_order_problem(step):
         return "[연령별 단가] 줄이 [부과 단위]·[부과 방식] 줄보다 앞에 있습니다 — 둘을 먼저 골라야 그 칸이 섭니다"
     scope_at = [i for i, l in enumerate(labels) if l in CHARGE_ROOM_SCOPE_LABELS]
     if scope_at and min(age_at) < max(scope_at):
-        return "[연령별 단가] 줄이 [적용 룸 scope] 줄보다 앞에 있습니다 — 화면 차례는 적용 룸 scope 다음입니다"
+        return "[연령별 단가] 줄이 [적용 룸 (선택)] 줄보다 앞에 있습니다 — 화면 차례는 적용 룸 (선택) 다음입니다"
     tier_at = [i for i, l in enumerate(labels) if TIER_ROW_LABEL_RE.match(l)]
     if tier_at and min(tier_at) < max(age_at):
         return "[시간대별 요율] 줄이 [연령별 단가] 줄보다 앞에 있습니다 — 요율 행이 하나라도 생기면 연령별 단가 카드가 사라집니다"
@@ -1181,6 +1239,8 @@ def main(argv=None):
                      "photos_dir": str(photos_dir), "title_prefix": args.title_prefix,
                      "stamp": stamp, "photo_missing": missing, "photo_unsafe": unsafe,
                      "preflight": preflight(steps)},
+           # 화면 사전이 위험·절대 금지로 표시한 동사 — 러너(`stay_boot.js`)가 도우미의 거부 표에 더한다
+           "action_flags": dict(ACTION_FLAGS),
            "steps": steps}
 
     text_summary, _n_unknown, _n_missing, blocking = summarize(doc)

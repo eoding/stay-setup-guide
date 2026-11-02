@@ -101,6 +101,103 @@ def normalize_circled_numbers(text):
 
 _CURRENT_FILE = ''
 
+# ---------------------------------------------------------------------------
+# 화면 표식(`data-stay-*`) — 2026-10-28
+#
+# 지시서 HTML 에 칸·버튼·화면의 **표식 key** 를 실어 둔다. 러너는 그 key 로 화면을 먼저 찾고, 못 찾을 때만 글자로
+# 찾는다(`parse_guide.py` 가 steps.json 으로 옮긴다). key 는 화면 사전으로 단계 화면 안에서 푼다(`screen_keys.py`).
+# 못 푼 자리는 속성을 **빼고** 그린다 — 틀린 key 를 싣느니 글자만 남기는 쪽이 안전하다.
+# ---------------------------------------------------------------------------
+_KEYS = None          # screen_keys.ScreenKeys — 처음 쓸 때 읽는다. 못 읽으면 False(표식 없이 그린다)
+_STEP = {}            # 지금 그리는 단계: {'kind': 갈래, 'screens': [화면 id 가 맞은 순서]}
+
+
+def _screen_keys():
+    global _KEYS
+    if _KEYS is None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import screen_keys
+            _KEYS = screen_keys.ScreenKeys.load()
+        except Exception:  # noqa: BLE001 — 사전이 없거나 깨졌으면 표식 없이 그린다(종전 지시서와 같다)
+            _KEYS = False
+    return _KEYS or None
+
+
+def _step_kind(title):
+    """`12. 시즌 만들기 (1번째, Peak)` → `시즌 만들기` — 검사기 `step_kind` 와 같은 셈."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import check_manual
+    m = HEADING_NUM_RE.match(title)
+    return check_manual.step_kind(m.group(2) if m else title)
+
+
+def _attr(name, value):
+    return f' {name}="{html.escape(str(value), quote=True)}"' if value not in (None, '') else ''
+
+
+def _field_attrs(label):
+    """표 한 줄의 칸 이름 → `data-stay-field`(+ 반복 행 번호·열, 이름 붙은 칸의 이름)."""
+    keys = _screen_keys()
+    kind = _STEP.get('kind')
+    if keys is None or not kind:
+        return ''
+    hit = keys.resolve(kind, label)
+    if hit is None or not hit.key:
+        return ''
+    _STEP.setdefault('screens', []).append(hit.screen)
+    return (_attr('data-stay-field', hit.key) + _attr('data-stay-row', hit.row) + _attr('data-stay-col', hit.column)
+            + _attr('data-stay-name', hit.name) + (' data-stay-renamed="1"' if hit.renamed else ''))
+
+
+def _button_attrs(text):
+    """`버튼:` 줄의 버튼 → 표식 속성. 탭 패널의 여는 버튼(사전 `panel_actions`)이면 동사 + 대상·카드,
+    아니면 드로어 안 버튼의 동사(`_button_action`). 못 가르면 빈 문자열 — 동사만 덩그러니 싣지 않는다."""
+    keys = _screen_keys()
+    kind = _STEP.get('kind')
+    if keys is None or not kind:
+        return ''
+    got = keys.opener(kind, to_plain_text(text), _STEP.get('button_row'))
+    if got:
+        return (_attr('data-stay-action', got['action']) + _attr('data-stay-entity', got['entity'])
+                + _attr('data-stay-card', got['card']))
+    return _attr('data-stay-action', _button_action(text))
+
+
+def _button_action(text):
+    """버튼 글자 → `data-stay-action`. 그 단계 화면의 사전 `actions` 에서 글자로 찾는다.
+
+    `버튼:` 줄은 **여는** 버튼이다 — 저장 자리 동사(`save` …)는 싣지 않는다. [호텔 만들기] · [판매일 열기] 처럼
+    여는 버튼과 저장 버튼의 글자가 같은 화면이 있어, 실으면 러너가 여는 대신 저장을 누른다.
+    """
+    keys = _screen_keys()
+    kind = _STEP.get('kind')
+    if keys is None or not kind:
+        return ''
+    verb = keys.action_for(kind, to_plain_text(text))
+    return '' if verb in keys.SUBMIT_VERBS else verb
+
+
+def _submit_action(text):
+    """단계 마지막 줄의 버튼 → 동사(그 화면의 저장 자리). `screen_keys.submit_action` 참고."""
+    keys = _screen_keys()
+    kind = _STEP.get('kind')
+    if keys is None or not kind:
+        return ''
+    return keys.submit_action(kind, to_plain_text(text))
+
+
+def _section_attrs():
+    """단계 상자의 화면·탭 표식 — 칸이 가장 많이 맞은 화면, 없으면 갈래 표의 첫 화면."""
+    keys = _screen_keys()
+    kind = _STEP.get('kind')
+    if keys is None or not kind:
+        return ''
+    hits = _STEP.get('screens') or []
+    screen = Counter(hits).most_common(1)[0][0] if hits else next(iter(keys.screen_ids(kind)), '')
+    tab = (keys.screens.get(screen, {}).get('screen', {}).get('tab') if screen else '') or keys.tab_key(kind)
+    return _attr('data-stay-screen', screen) + _attr('data-stay-tab', tab)
+
 
 def item_key(text):
     payload = (_CURRENT_FILE + '::' + to_plain_text(text)).encode('utf-8')
@@ -440,7 +537,7 @@ def render_inline(text, stats, code_buttons=True, bracket_buttons=False):
                 m3 = BARE_BRACKET_RE.match(text, start)
                 if m3:
                     inner_html = render_inline(m3.group(1), stats, code_buttons, bracket_buttons=False)
-                    result.append(f'<span class="btn-look">{inner_html}</span>')
+                    result.append(f'<span class="btn-look"{_button_attrs(m3.group(1))}>{inner_html}</span>')
                     pos = m3.end()
                 else:
                     result.append(html.escape('['))
@@ -570,7 +667,8 @@ def render_table(b, stats):
             tds.append(
                 f'<td{cls}{style}{role}><span class="cell-text">{inner}</span> {btn}</td>'
             )
-        rows_html.append(f'<tr>{"".join(tds)}</tr>')
+        row_attrs = _field_attrs(to_plain_text(cells[0])) if ncols == 2 and value_cols and cells else ''
+        rows_html.append(f'<tr{row_attrs}>{"".join(tds)}</tr>')
 
     return (
         f'<div class="table-wrap"><table>{colgroup}<thead><tr>{"".join(th_html)}</tr></thead>'
@@ -742,13 +840,20 @@ def render_block(b, stats, existing_ids, nav_items):
                 f'<button type="button" class="copy-btn copy-code" data-copy="{attr}">[복사]</button></span>'
             )
         else:
+            # `` `Single` 행의 [편집] `` — 그 행 이름이 있어야 패널 버튼의 대상을 가른다(`screen_keys.opener`)
+            m_row = re.search(r"`([^`]+)`\s*(?:행|줄)의", content or '') if label == '버튼' else None
+            _STEP['button_row'] = m_row.group(1).strip() if m_row else None
             inner = render_inline(content, stats, code_buttons=False, bracket_buttons=True) if content else ''
+            _STEP.pop('button_row', None)
         label_cls = ' class="lbl-warn"' if label == '주의' else ''
         return f'<p class="mline"><strong{label_cls}>{esc_label}:</strong> {inner}</p>'
 
     if kind == 'action':
         inner = render_inline(b[1], stats, code_buttons=True)
-        return f'<div class="action-box">{inner}</div>'
+        m_btn = re.search(r'\[([^\]]+)\]', b[1])
+        button = m_btn.group(1) if m_btn else to_plain_text(b[1]).strip()
+        action = _attr('data-stay-action', _submit_action(button)) if button else ''
+        return f'<div class="action-box"{action}>{inner}</div>'
 
     if kind == 'code':
         lang, content = b[1], b[2]
@@ -1802,6 +1907,14 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
 
     existing_ids = set()
     nav_items = []  # (id, level, label) — level 2 제목, 목차용
+
+    def close_step():
+        """단계가 끝나면 그 상자 여는 태그에 화면·탭 표식을 붙인다 — 칸이 다 그려져야 어느 화면인지 안다."""
+        at = _STEP.get('at')
+        attrs = _section_attrs() if at is not None else ''
+        if attrs:
+            body_parts[at] = body_parts[at][:-1] + attrs + '>'
+
     notice_positions = find_photo_notice_positions(blocks)
     body_parts = []
     h1_pos = None
@@ -1816,12 +1929,16 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
         step_no = None
         if b[0] == 'heading' and b[1] == 2:
             if step_open:
+                close_step()
                 body_parts.append('</section>')
             step_no = heading_step_no(b[2])
+            _STEP.clear()
             if step_no is None:
                 body_parts.append('<section class="step">')
             else:
                 step_total += 1
+                _STEP['kind'] = _step_kind(to_plain_text(b[2]))
+                _STEP['at'] = len(body_parts)
                 body_parts.append(f'<section class="step" data-step="{step_no}">')
             step_open = True
         body_parts.append(render_block(b, stats, existing_ids, nav_items))
@@ -1834,7 +1951,9 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
         stats['photo_notices'] += 1
         body_parts.append(PHOTO_NOTICE_HTML)
     if step_open:
+        close_step()
         body_parts.append('</section>')
+    _STEP.clear()
     if photos_dir and gallery_idx == len(blocks):
         body_parts.append(build_gallery(photos_dir, stats))
 
@@ -1848,6 +1967,12 @@ def render_card(md_text, filename, photos_dir, title_override, font_b64=None, st
         # 순서는 h1 → 진행 현황 → 목차. 목차를 먼저 끼웠으니 같은 자리에 한 번 더 끼운다.
         body_parts.insert(insert_at, build_progress_panel(step_total))
 
+    keys = _screen_keys()
+    if keys is not None:
+        # 화면 사전이 위험·절대 금지로 표시한 동사 — 러너가 거부 표에 더한다(`parse_guide` → steps.json `action_flags`)
+        flags = keys.flagged_actions()
+        body_parts.append(f'<div id="stay-action-flags" hidden{_attr("data-danger", ",".join(flags["danger"]))}'
+                          f'{_attr("data-never-press", ",".join(flags["never_press"]))}></div>')
     body_html = '\n'.join(p for p in body_parts if p)
     full_html = assemble_page(page_title, filename, body_html, font_b64, stamp)
     return full_html, stats

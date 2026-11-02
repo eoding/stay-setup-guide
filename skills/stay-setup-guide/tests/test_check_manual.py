@@ -1543,8 +1543,9 @@ class AgeBandDictionaryTest(unittest.TestCase):
         with open(DICTIONARY, encoding="utf-8") as handle:
             data = json.load(handle)
         screen = next(s for s in data["screens"] if s["id"] == "rate-plan-catalog")
-        field = next(f for b in screen["blocks"] for f in b["fields"]
-                     if f["label"] == "지금 모든 객실에 배포")
+        # 2026-10-28 사전부터 칸 key 로 찾는다 — 글자는 `지금 있는 룸 전부에 바로 붙이기` 로 바뀌었고 옛 글자는 former_labels 다
+        field = next(f for b in screen["blocks"] for f in b["fields"] if f.get("key") == "apply_now")
+        self.assertIn("지금 모든 객실에 배포", field.get("former_labels") or [])
         self.assertIn("정본 만들기", field["visible_when"])
         self.assertIn("편집", field["visible_when"])
 
@@ -4688,7 +4689,7 @@ class ScopeDictionaryTest(unittest.TestCase):
         """
         self.assertRegex(self.data["meta"]["generated_on"], r"^\d{4}-\d{2}-\d{2}$")
         self.assertGreaterEqual(self.data["meta"]["generated_on"], "2026-09-21")
-        self.assertEqual(self.data["meta"]["erp_baseline"], "2026-10-26 직원 설정 개선 작업본 기준 (운영 배포 전)")
+        self.assertEqual(self.data["meta"]["erp_baseline"], "2026-10-27 직원 설정·달력 개선 작업본 기준 (운영 배포 전)")
 
     def test_the_meta_field_count_matches(self):
         counted = sum(len(b.get("fields") or [])
@@ -4802,3 +4803,232 @@ class RoomCombosTest(unittest.TestCase):
             self.assertEqual(cm.load_dictionary_kinds(handle.name)[cm.norm_field("허용 인원 조합(선택)")], {"여러 줄 글"})
         finally:
             os.unlink(handle.name)
+
+
+def season_with_blocks(num, name, rows, blocks, title="시즌 만들기"):
+    """표 줄 + 펜스 블록(`날짜 나열:` · `추가 날짜:`)을 함께 적은 시즌 단계."""
+    body = "\n".join(f"| {k} | {v} |" for k, v in rows)
+    tail = "".join(f"\n{label}:\n```\n{text}\n```\n" for label, text in blocks)
+    return f"""
+## {num}. {title} ({num}번째, {name})
+탭: `시즌`
+카드: `오퍼A`
+
+| 칸 | 값 |
+|---|---|
+| 시즌명 | {name} |
+{body}
+{tail}
+→ [추가]
+"""
+
+
+class TestSeasonDateSelection(unittest.TestCase):
+    """시즌 날짜 줄 → ERP 날짜 선택 칸(2026-10-28). 원고 형식은 그대로고 `추가 날짜:` 블록 하나가 더 있다.
+
+    설치 도구 `season_dates.py` · 러너 `seasonDateValues` 와 같은 규칙이다 — 여기서 통과한 원고는 둘 다 옮길 수 있다.
+    """
+
+    def problem(self, rows, blocks=(), title="시즌 만들기"):
+        steps = steps_of(HEAD + season_with_blocks(4, "S", rows, blocks, title))
+        return cm.season_date_problem(steps[-1]), steps[-1]
+
+    def test_extra_dates_join_the_season_outside_the_filter(self):
+        rows = [("날짜 규칙 유형", "선택: 요일 규칙"), ("기간 시작", "2026-06-01"), ("기간 종료", "2026-06-30"),
+                ("적용 요일", "선택: 토")]
+        why, step = self.problem(rows, [("추가 날짜", "2026-06-10")])
+        self.assertIsNone(why)
+        days = cm.season_dates(step)
+        self.assertEqual(sorted(d.isoformat() for d in days),
+                         ["2026-06-06", "2026-06-10", "2026-06-13", "2026-06-20", "2026-06-27"])
+
+    def test_valid_shapes_pass(self):
+        self.assertIsNone(self.problem(RANGE)[0])
+        self.assertIsNone(self.problem(RANGE, [("추가 날짜", "2027-01-05, 2027-01-06")])[0])
+        self.assertIsNone(self.problem([("날짜 규칙 유형", "선택: 비연속 날짜 나열")],
+                                       [("날짜 나열", "2026-11-01 ~ 2026-12-28\n2027-1-4~2027-9-30\n2026-12-24")])[0])
+        months = [("날짜 규칙 유형", "선택: 월 목록"), ("기간 시작", "2026-01-01"), ("기간 종료", "2026-12-31"), ("적용 월", "선택: 7월, 8월")]
+        self.assertIsNone(self.problem(months, [("추가 날짜", "2026-12-24")])[0])
+        # 날짜 줄이 하나도 없는 고치기는 보지 않는다
+        self.assertIsNone(self.problem([("우선순위", "20")], title="시즌 고치기")[0])
+
+    def test_shapes_the_tools_cannot_move_are_errors(self):
+        cases = [
+            (RANGE, [("추가 날짜", "2027-01-05 ~ 2027-01-07")], "하루씩"),
+            ([("날짜 규칙 유형", "선택: 비연속 날짜 나열")], [("날짜 나열", "2026-07-01\n2026/07/02")], "2번째 줄"),
+            ([("날짜 규칙 유형", "선택: 비연속 날짜 나열"), ("기간 시작", "2026-07-01"), ("기간 종료", "2026-07-02")], [], "블록이 비었다"),
+            (RANGE, [("날짜 나열", "2026-07-01")], "비연속 날짜 나열일 때만"),
+            ([("날짜 규칙 유형", "선택: 요일 규칙"), ("적용 요일", "선택: 2026-06-01 ~ 2026-08-31 중 토")],
+             [("추가 날짜", "2026-06-10")], "두 줄이 모두"),
+            ([("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-07-10"), ("기간 종료", "2026-07-01")], [], "빠릅니다"),
+            ([("날짜 규칙 유형", "선택: 월 목록"), ("기간 시작", "2026-01-01"), ("기간 종료", "2026-01-31"), ("적용 월", "선택: 7월")],
+             [], "0일"),
+            ([("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-01-01"), ("기간 종료", "2027-12-31")], [], "550"),
+            ([("날짜 규칙 유형", "선택: 우주 규칙"), ("기간 시작", "2026-01-01"), ("기간 종료", "2026-01-02")], [], "모른다"),
+        ]
+        for rows, blocks, word in cases:
+            why, _step = self.problem(rows, blocks)
+            self.assertIsNotNone(why, (rows, blocks))
+            self.assertIn(word, why, (rows, blocks, why))
+
+    def test_problem_fails_the_whole_check(self):
+        md = HEAD + season_with_blocks(4, "Bad", RANGE, [("추가 날짜", "2027-01-05 ~ 2027-01-07")])
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path)
+        self.assertEqual(len(r["season_date_problems"]), 1, r["season_date_problems"])
+        self.assertIn("4단계: 시즌 `Bad`", r["season_date_problems"][0])
+
+
+class TestFieldKeys(unittest.TestCase):
+    """칸 이름 → 화면 칸 key(`data-stay-field`) — 단계의 화면 안에서 푼다(2026-10-28 사전, `screen_keys.py`)."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.join(SKILL, "scripts"))
+        import screen_keys
+        cls.sk = screen_keys
+        cls.keys = screen_keys.ScreenKeys.load()
+
+    def hit(self, kind, label):
+        got = self.keys.resolve(kind, label)
+        self.assertIsNotNone(got, (kind, label))
+        return got
+
+    def test_every_known_step_kind_has_a_row_in_the_kind_table(self):
+        self.assertEqual(sorted(cm.KNOWN_STEP_KINDS - set(self.keys.kinds)), [])
+
+    def test_current_alias_and_former_labels_reach_the_same_key(self):
+        self.assertEqual((self.hit("부과금 추가", "적용 룸 (선택)").key, self.hit("부과금 추가", "적용 룸 (선택)").how),
+                         ("room_scope", "label"))
+        old = self.hit("부과금 추가", "적용 룸 scope")
+        self.assertEqual((old.key, old.how, old.renamed), ("room_scope", "former_label", True))
+        self.assertEqual(self.hit("요금제 고치기", "새 객실에 자동 배포").key, "auto_apply")
+        self.assertEqual(self.hit("요금제 배포", "요금제 정본").key, "catalog")
+        self.assertEqual(self.hit("부가옵션 만들기", "Max quantity").key, "max_quantity")
+
+    def test_the_same_label_is_a_different_key_per_screen(self):
+        self.assertEqual(self.hit("룸 만들기", "침대 구성 1 · 침대 종류").key, "bed_configs")
+        self.assertEqual(self.hit("요금제 고치기", "침대 구성").key, "bed_config")
+        self.assertIsNone(self.keys.resolve("룸 만들기", "적용 룸 (선택)"))
+
+    def test_rows_named_fields_and_converted_lines(self):
+        row = self.hit("취소정책 만들기", "구간 2 · 수수료 값")
+        self.assertEqual((row.key, row.how, row.row, row.column), ("tiers", "row", 2, "수수료 값"))
+        tier = self.hit("프로모션 추가", "단(tier) 1 · 할인율(%)")
+        self.assertEqual((tier.key, tier.row), ("tiers", 1))
+        self.assertEqual(self.hit("프로모션 추가", "할인 단계 2 · 값").key, "tiers")
+        named = self.hit("판매 연결 한 번에 만들기", "오퍼별 표시명 · Single")
+        self.assertEqual((named.key, named.how, named.name), ("display_name_*", "named", "Single"))
+        self.assertEqual(self.hit("부과금 추가", "연령별 단가 · 소아").key, "age_rate_*")
+        start = self.hit("시즌 만들기", "기간 시작")
+        self.assertEqual((start.key, start.how), ("date_selection_0", "converted"))
+        # `셀 상태 바꾸기` 는 화면이 없어졌다(2026-10-28) — 그 줄은 도구가 캘린더 판매 마감으로 옮기므로 화면 칸으로 풀지 않는다
+        self.assertIsNone(self.keys.resolve("셀 상태 바꾸기", "종료 날짜"))
+        self.assertEqual(self.keys.tab_key("셀 상태 바꾸기"), "calendar")
+        self.assertEqual(self.hit("부가옵션 가격 넣기", "공급 원가(선택)").key, self.hit("부가옵션 가격 넣기", "공급 원가 (선택)").key)
+
+    def test_backticked_key_resolves_on_its_screen_only(self):
+        hit = self.hit("시즌 만들기", "`min_nights`")
+        self.assertEqual((hit.key, hit.how), ("min_nights", "key"))
+        self.assertIsNone(self.keys.resolve("시즌 만들기", "`room_scope`"))
+        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE + [("`priority`", "10"), ("`room_scope`", "x")])
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path, dictionary_path=os.path.join(SKILL, "references", "screen-dictionary.json"))
+        self.assertFalse([n for n in r["unknown_fields"] if n.startswith("`")], r["unknown_fields"])
+        keys = r["field_keys"].get("4") or r["field_keys"].get(4)
+        self.assertEqual(keys["`priority`"], "priority")
+        self.assertTrue(any("`room_scope`" in line for line in r["off_screen_fields"]), r["off_screen_fields"])
+
+    def test_panel_openers_get_a_verb_with_their_scope(self):
+        """탭 패널 버튼(사전 `panel_actions`) — 동사와 함께 대상·카드를 준다. 못 가르면 None(동사만 주지 않는다)."""
+        self.assertEqual(self.keys.opener("룸 만들기", "[룸 추가]"), {"action": "open_create", "entity": "", "card": ""})
+        self.assertEqual(self.keys.opener("룸 만들기", "편집", row="Single"), {"action": "open_edit", "entity": "room_type", "card": ""})
+        self.assertEqual(self.keys.opener("판매 연결 표시명 고치기", "편집", row="Single")["entity"], "room")
+        self.assertEqual(self.keys.opener("시즌 만들기", "시즌 추가"), {"action": "open_create", "entity": "offer", "card": ""})
+        self.assertEqual(self.keys.opener("그룹에 혜택 추가", "후보 혜택 추가")["card"], "choice_group")
+        # 옛 이름(2026-10-28 전)도 같은 버튼이다
+        self.assertEqual(self.keys.opener("그룹에 혜택 추가", "이 그룹에 혜택 추가")["card"], "choice_group")
+        self.assertEqual(self.keys.opener("혜택 추가", "혜택 추가"), {"action": "open_create", "entity": "offer", "card": ""})
+        # 전 오퍼 공통 · 오퍼별 두 [프로모션 추가] — 단계만으로는 못 가른다
+        self.assertIsNone(self.keys.opener("프로모션 추가", "프로모션 추가"))
+        # 저장 자리 · 위험 동사는 여는 버튼으로 주지 않는다
+        self.assertIsNone(self.keys.opener("룸 만들기", "삭제", row="Single"))
+
+    def test_flagged_actions_come_from_the_dictionary(self):
+        flags = self.keys.flagged_actions()
+        self.assertEqual(flags["never_press"], ["activate"])
+        for verb in ("delete", "archive", "close_month", "apply_tax", "dismiss", "undismiss", "toggle_quantity"):
+            self.assertIn(verb, flags["danger"])
+
+    def test_actions_and_tabs_come_from_the_dictionary(self):
+        self.assertEqual(self.keys.tab_key("시즌 만들기"), "seasons")
+        self.assertEqual(self.keys.tab_key("재고 수량 판매 켜기"), "inventory")
+        self.assertEqual(self.keys.action_for("요금제 배포", "[이 룸에 붙이기]"), "deploy")
+        self.assertEqual(self.keys.action_for("호텔 만들기", "호텔 만들기"), "save")
+        self.assertEqual(self.keys.action_for("시즌 만들기", "없는 버튼"), "")
+
+    def test_check_reports_renamed_and_off_screen_lines(self):
+        md = HEAD + season_step(4, "Regular", "오퍼A", RANGE + [("최소 숙박 override", "2"), ("부과 단위", "선택: 인당")])
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            r = cm.check(path, dictionary_path=os.path.join(SKILL, "references", "screen-dictionary.json"))
+        self.assertIsNone(r["field_key_error"])
+        keys = r["field_keys"]["4"] if "4" in r["field_keys"] else r["field_keys"][4]
+        self.assertEqual(keys["기간 시작"], "date_selection_0")
+        self.assertEqual(keys["최소 숙박 override"], "min_nights")
+        self.assertTrue(any("부과 단위" in line for line in r["off_screen_fields"]), r["off_screen_fields"])
+        self.assertFalse(any("최소 숙박" in line for line in r["off_screen_fields"]))
+
+
+class TestStatusInsideSeason(unittest.TestCase):
+    """셀 상태(→ 판매 마감)는 그 시즌의 날짜 안에서만 — 설치 도구·ERP 와 같은 규칙(2026-10-28)."""
+
+    def status_step(self, start, end):
+        return f"""
+## 9. 셀 상태 바꾸기 (1번째, Regular)
+탭: `시즌`
+카드: `Regular`
+
+| 칸 | 값 |
+|---|---|
+| 바꿀 상태 | 선택: 마감 |
+| 시작 날짜 | {start} |
+| 종료 날짜 | {end} |
+| 대상 룸 | 선택: 싱글 |
+
+→ [이 상태로 바꾸기]
+"""
+
+    def test_same_season_name_in_two_offers_needs_the_offer_in_the_card(self):
+        base = HEAD + season_step(4, "Regular", "오퍼A", INSIDE) + season_step(5, "Regular", "오퍼B", OUTSIDE)
+        amb = cm.find_status_outside_season(steps_of(base + self.status_step("2026-07-02", "2026-07-05")))
+        self.assertEqual(len(amb), 1, amb)
+        self.assertIn("오퍼 여럿(오퍼A, 오퍼B)", amb[0])
+        named = self.status_step("2026-07-02", "2026-07-05").replace("카드: `Regular`", "카드: `오퍼A · Regular`")
+        self.assertEqual(cm.find_status_outside_season(steps_of(base + named)), [])
+        wrong = self.status_step("2026-07-02", "2026-07-05").replace("카드: `Regular`", "카드: `오퍼B · Regular`")
+        self.assertEqual(len(cm.find_status_outside_season(steps_of(base + wrong))), 1)  # 오퍼B 의 Regular 는 2027 년이다
+
+    def test_plain_plan_value_is_warned(self):
+        md = HEAD + season_step(4, "Regular", "오퍼A", INSIDE) + self.status_step("2026-07-02", "2026-07-05").replace(
+            "| 대상 룸 | 선택: 싱글 |", "| 대상 룸 | 선택: 싱글 |\n| 요금제(선택) | 조식 포함 |")
+        got = cm.find_plain_plan_values(steps_of(md))
+        self.assertEqual(len(got), 1, got)
+        self.assertIn("선택: 조식 포함", got[0])
+        ok = md.replace("| 요금제(선택) | 조식 포함 |", "| 요금제(선택) | 선택: 조식 포함 |")
+        self.assertEqual(cm.find_plain_plan_values(steps_of(ok)), [])
+
+    def test_inside_passes_and_outside_fails(self):
+        base = HEAD + season_step(4, "Regular", "오퍼A", INSIDE)
+        self.assertEqual(cm.find_status_outside_season(steps_of(base + self.status_step("2026-07-02", "2026-07-05"))), [])
+        bad = cm.find_status_outside_season(steps_of(base + self.status_step("2026-07-09", "2026-07-12")))
+        self.assertEqual(len(bad), 1, bad)
+        self.assertIn("2일", bad[0])

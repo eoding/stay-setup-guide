@@ -418,8 +418,9 @@ async function loopTests() {
       if (n(x) === n(y)) return 4;
       return n(x).indexOf(n(y)) >= 0 ? 2 : 0;
     };
-    const row = (t) => ({ innerText: t, querySelector: () => null, closest: () => null });
+    const row = (t) => ({ innerText: t, querySelector: () => null, closest: () => null, getAttribute: () => null });
     const card = (head, rows) => ({
+      closest: () => null,
       querySelector: (sel) => (/stay-card__head|stay-card__title/.test(sel) ? { textContent: head } : null),
       querySelectorAll: () => rows.map(row)
     });
@@ -446,6 +447,22 @@ async function loopTests() {
 }
 
 await loopTests();
+
+// 자리로 짐작한 칸은 저장을 막는다(2026-10-28 검토) — 표식도 글자도 안 맞아 순서로 고른 칸이 하나라도 있으면 `bad`
+{
+  console.log('stay_boot 시험 — 순서로 짐작한 칸');
+  const ctx = bootSandbox({ guide: { title: '시험 호텔' }, steps: [stepOf(1, '호텔 정보 입력', { fields: [{ label: '체크인 시각', kind: 'typed', value: '15:00' }] })] });
+  let submitted = 0;
+  Object.assign(ctx.stayRun, {
+    fill: async () => [{ label: '체크인 시각', kind: 'typed', status: 'ok', matchedBy: 'order', matched: '(순서로 찾음: 체크아웃 시각)' }],
+    readback: () => ({ ok: 1, total: 1, mismatch: [], fields: [] }),
+    submit: async () => { submitted++; return { status: 'closed', errors: [] }; }
+  });
+  const r = await ctx.runStepCore(1, {});
+  ok(submitted === 0 && r.submitted === false, 'runStepCore: 순서로 짐작한 칸이 있으면 저장하지 않는다', { submitted, r });
+  ok((r.bad || []).some((b) => /체크인 시각: 순서로 짐작한 칸\(\(순서로 찾음: 체크아웃 시각\)\)/.test(b)), 'runStepCore: 그 칸을 이름으로 `bad` 에 적는다', r.bad);
+  ok(ctx.stepFailed(r) === true, 'stepFailed: 그 단계는 실패다');
+}
 
 let JSDOM = null;
 try { ({ JSDOM } = require('jsdom')); } catch (e) {

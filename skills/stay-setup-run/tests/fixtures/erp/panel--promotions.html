@@ -1,0 +1,273 @@
+
+
+<div id="stay_promotions" class="stay-root stay-readable" data-stay-panel="promotions">
+
+  
+  <span hidden
+        hx-get="/stay/{master:1}/promotions/"
+        hx-trigger="stay:offers-changed from:body"
+        hx-target="#stay_promotions" hx-swap="outerHTML"></span>
+
+  
+  
+  
+
+  
+  
+  <div class="stay-banner stay-banner--blocking" data-stay-banner="promotion_incomplete">
+    <div style="flex:1;min-width:0">
+      <strong>🔴 고르면 예약이 실패하는 프로모션 1건</strong>
+      <p class="stay-description">발동 조건·혜택 방식·할인 단계가 갖춰지지 않은 할인입니다. 고객이 그 할인을 선택하면 조용히 안 깎이는 것이 아니라 견적 자체가 거부됩니다. 아래 표에서 빨간 줄을 고치세요.</p>
+    </div>
+  </div>
+  
+
+  
+
+  <div class="stay-panel-intro"><h4 class="stay-section-title">프로모션</h4></div>
+
+  
+  <div class="stay-card">
+    
+    <div class="stay-card__head">
+      
+      <h4 class="stay-card__title">
+        전 오퍼 공통
+      </h4>
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/offers/0/promotions/new/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        프로모션 추가
+      </button>
+    </div>
+
+    
+    <p class="stay-description">오퍼를 지정하지 않은 할인이라 이 호텔의 모든 오퍼에 붙습니다.</p>
+    
+
+    
+    
+    
+    <p class="stay-description">전 오퍼 공통 프로모션이 없습니다.</p>
+    
+    
+  </div>
+  
+  <div class="stay-card" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+    
+    <div class="stay-card__head">
+      
+      <h4 class="stay-card__title">
+        〈오퍼 관리용 이름〉 <small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+
+        
+      </h4>
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/offers/{offer:1}/promotions/new/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        프로모션 추가
+      </button>
+    </div>
+
+    
+
+    
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup>
+          <col style="width:20%"><col style="width:18%"><col style="width:20%">
+          <col style="width:12%"><col style="width:14%"><col style="width:16%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>프로모션</th>
+            <th>발동 조건</th>
+            <th>혜택</th>
+            <th>중복</th>
+            <th>한정</th>
+            <th class="stay-column-center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr data-stay-entity="promotion" data-stay-name="얼리버드 15%" data-stay-entity-id="{promotion:1}">
+            <td>
+              
+              <span class="stay-card__title">얼리버드 15%</span>
+              
+              
+              <div class="stay-cond stay-cond--restricted">
+                <span class="stay-cond__icon">⊘</span>규칙이 불완전해 고객이 고르면 예약이 거부됩니다.
+              </div>
+              
+              
+              
+              
+            </td>
+            <td>
+              
+              <span class="stay-badge stay-badge--blocking">조건 없음</span>
+              
+            </td>
+            <td>
+              
+              
+              
+              <span class="stay-money stay-money--empty">단이 없습니다</span>
+              
+              
+            </td>
+            <td>
+              
+              <small>택일</small>
+              
+              
+            </td>
+            <td>
+              
+              
+<div data-stay-saved-scope>
+
+  <div><strong>요금제</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+  <div><strong>객실</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+</div>
+
+              
+              
+              
+              <small>숙박일 제한 없음</small>
+              
+              
+              
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/promotions/{promotion:1}/edit/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 할인을 지웁니다 — 막는 조건이 없어 누르면 바로 지워지고 되돌릴 수 없습니다. 이 할인을 가리키던 혜택·택1 그룹은 지워지지 않고 연결만 끊깁니다"
+                      hx-post="/stay/{master:1}/promotions/{promotion:1}/delete/"
+                      hx-target="#stay_promotions" hx-swap="outerHTML"
+                      hx-confirm="이 프로모션을 삭제할까요? 되돌릴 수 없습니다. 이 할인을 쓰던 혜택·택1 그룹은 지워지지 않고 연결만 끊깁니다.">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="promotion" data-stay-name="연박 할인" data-stay-entity-id="{promotion:2}">
+            <td>
+              
+              <span class="stay-card__title">연박 할인</span>
+              
+              
+              
+              
+              
+            </td>
+            <td>
+              
+              <span class="stay-badge stay-badge--tinted">연박</span>
+              
+            </td>
+            <td>
+              
+              
+              
+              <div>
+                
+                <small>최소 숙박(박) 2 →</small>
+                
+                <span class="stay-money">
+                  10%
+                  
+                </span>
+              </div>
+              
+              <div>
+                
+                <small>최소 숙박(박) 4 →</small>
+                
+                <span class="stay-money">
+                  15%
+                  
+                </span>
+              </div>
+              
+              
+              <small>※ 만족하는 단 중 가장 높은 하나만 적용</small>
+              
+            </td>
+            <td>
+              
+              <small>택일</small>
+              
+              
+            </td>
+            <td>
+              
+              
+<div data-stay-saved-scope>
+
+  <div><strong>요금제</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+  <div><strong>객실</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+</div>
+
+              
+              
+              
+              <small>숙박일 제한 없음</small>
+              
+              
+              
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/promotions/{promotion:2}/edit/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 할인을 지웁니다 — 막는 조건이 없어 누르면 바로 지워지고 되돌릴 수 없습니다. 이 할인을 가리키던 혜택·택1 그룹은 지워지지 않고 연결만 끊깁니다"
+                      hx-post="/stay/{master:1}/promotions/{promotion:2}/delete/"
+                      hx-target="#stay_promotions" hx-swap="outerHTML"
+                      hx-confirm="이 프로모션을 삭제할까요? 되돌릴 수 없습니다. 이 할인을 쓰던 혜택·택1 그룹은 지워지지 않고 연결만 끊깁니다.">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+  
+  
+  
+</div>

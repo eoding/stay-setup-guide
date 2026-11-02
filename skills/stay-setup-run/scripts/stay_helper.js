@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.9.0'; // 2026-10-22: 현장·온라인 연령 단가의 입력 범위 분리
+  var VERSION = '0.14.0'; // 2026-10-30: 화면 표식 우선·저장 결과·안전한 캘린더 마감
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초) — 기본값이다. 느린 서버에서는 `stayRun.config({waitMs})` 로 올린다
   var TICK = 100;
 
@@ -334,16 +334,25 @@
   function netWatch(st) {
     if (!st) return null;
     var hub = window.__stayRunNet;
-    if (hub) { hub.st = st; return hub; }          // 이미 감쌌다 — 셈 그릇만 지금 것으로 잇는다
-    hub = { st: st };
-    var done = function (url, status) {
+    if (hub) { hub.st = st; st.xhrStarted = hub.seq || 0; return hub; }
+    hub = { st: st, seq: st.xhrStarted || 0 };
+    var done = function (url, status, method, id) {
       var s = hub.st;
       if (!s) return;
       s.xhrPending = Math.max(0, (s.xhrPending || 0) - 1);
       s.xhrDone = (s.xhrDone || 0) + 1;
       s.xhrLast = { url: trunc(String(url || ''), 200), status: Number(status) || 0 };
+      // A background GET may finish after the save, or keep polling indefinitely.
+      // Retain bounded request metadata so neither can hide the target write.
+      s.xhrRecent = s.xhrRecent || [];
+      s.xhrRecent.push({ id: id, method: method, url: s.xhrLast.url, status: s.xhrLast.status });
+      if (s.xhrRecent.length > 64) s.xhrRecent.splice(0, s.xhrRecent.length - 64);
     };
-    var start = function () { var s = hub.st; if (s) s.xhrPending = (s.xhrPending || 0) + 1; };
+    var start = function () {
+      var id = ++hub.seq, s = hub.st;
+      if (s) { s.xhrPending = (s.xhrPending || 0) + 1; s.xhrStarted = id; }
+      return id;
+    };
 
     try {
       var of = window.fetch;
@@ -351,13 +360,15 @@
         var wrapped = function (input) {
           var url = '';
           try { url = (input && typeof input === 'object' && input.url) ? input.url : String(input); } catch (e) { url = ''; }
-          start();
+          var init = arguments[1] || {};
+          var method = String(init.method || (input && input.method) || 'GET').toUpperCase();
+          var id = start();
           var p;
-          try { p = of.apply(this, arguments); } catch (e) { done(url, 0); throw e; }
-          if (!p || typeof p.then !== 'function') { done(url, 0); return p; }
+          try { p = of.apply(this, arguments); } catch (e) { done(url, 0, method, id); throw e; }
+          if (!p || typeof p.then !== 'function') { done(url, 0, method, id); return p; }
           return p.then(
-            function (r) { done(url, r && r.status); return r; },
-            function (e) { done(url, 0); throw e; }
+            function (r) { done(url, r && r.status, method, id); return r; },
+            function (e) { done(url, 0, method, id); throw e; }
           );
         };
         wrapped.__stayRunWrapped = true;
@@ -372,7 +383,7 @@
         var oOpen = proto.open, oSend = proto.send;
         if (typeof oOpen === 'function') {
           var wOpen = function (method, url) {
-            try { this.__stayRunUrl = String(url || ''); } catch (e) { }
+            try { this.__stayRunUrl = String(url || ''); this.__stayRunMethod = String(method || 'GET').toUpperCase(); } catch (e) { }
             return oOpen.apply(this, arguments);
           };
           wOpen.__stayRunWrapped = true;
@@ -380,16 +391,14 @@
         }
         var wSend = function () {
           var self = this, settled = false;
+          var url = self.__stayRunUrl || '', method = self.__stayRunMethod || 'GET', id = start();
           var fin = function () {
             if (settled) return;
             settled = true;
-            var u = '';
-            try { u = self.__stayRunUrl || ''; } catch (e) { }
             var code = 0;
             try { code = self.status; } catch (e) { }
-            done(u, code);
+            done(url, code, method, id);
           };
-          start();
           try {
             if (typeof self.addEventListener === 'function') self.addEventListener('loadend', fin);
             else {
@@ -853,8 +862,35 @@
   // ERP 가 글자를 바꾼 칸(CO-32105, 2026-10-20) — 한 묶음의 글자는 같은 칸이다. 옛 지시서는 옛 글자,
   // 새 지시서는 새 글자를 적고 화면은 배포 전후로 둘 중 하나를 그린다. 적힌 글자로 못 찾을 때만 다른 글자로
   // 다시 찾는다. 채우기(`applyOne`)와 되읽기(`readOne`)가 모두 이 함수를 지난다.
+  // 2026-10-28 이름 변경(`basecamp/.local-work/renamed-labels-20261028.md`)도 여기 둔다 — 표식(`data-stay-field`)으로
+  // 찾게 되기 전까지의 다리다. 새 글자가 같은 칸끼리는 한 묶음이어야 한다(`labelAliases` 는 첫 묶음만 본다).
   var RENAMED_LABELS = [
-    ['이번에 고르지 않은 인원·요금제 가격 지우기', '이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기']
+    ['이번에 고르지 않은 인원·요금제 가격 지우기', '이 시즌이 예전에 깐 다른 인원 조합·요금제 셀 지우기'],
+    // 부가옵션 · 부가옵션 가격
+    ['Category', '화면 섹션'],
+    ['Sorting Order', '정렬'],
+    ['Date apply type', '적용 방식'],
+    ['Max quantity', '수량 상한'],
+    ['Foc quantity', '무료 제공 수량'],
+    ['룸 레벨 scope', '적용 룸 타입 (선택)'],
+    ['요금제 scope', '적용 요금제 (선택)'],
+    ['시즌 scope', '적용 시즌 (선택)'],
+    // 부과금
+    ['적용 룸 scope', '적용 룸 (선택)'],
+    // 프로모션 반복 행 묶음(`할인 단계 1 · …`) — `findSection` 도 이 표를 본다
+    ['단(tier)', '할인 단계'],
+    // 시즌 가격 채우기 · 가격 셀 창 · 부가옵션 가격
+    ['공급 원가(net, 선택)', '공급 원가(net)', '공급 원가 (선택)'],
+    // 시즌
+    ['최소 숙박 override', '최소 숙박 (시즌 예외)'],
+    ['취소 정책 override', '취소 정책 (시즌 예외)'],
+    // 가격 캘린더 확인 단계 — 새 글자는 `판매가 (USD)` 처럼 통화가 붙는다(괄호는 `tier` 가 뗀다)
+    ['새 판매가', '판매가'],
+    // 공통 요금제(옛 요금제 정본)
+    ['새 객실에 자동 배포', '새 룸에도 붙이기'],
+    ['지금 모든 객실에 배포', '지금 있는 룸 전부에 바로 붙이기'],
+    ['요금제 정본', '공통 요금제'],
+    ['새 정본 이름', '새 공통 요금제 이름']
   ];
   function labelAliases(label) {
     var n = norm(label);
@@ -945,7 +981,8 @@
     [/침대/, '침대 행 추가'],
     [/요율|시간대/, '요율 행 추가'],
     [/구간/, '구간 추가'],
-    [/^단(tier)?$/i, '단 추가'],
+    // 프로모션 단 묶음 — 화면 제목은 `할인 단계`(2026-10-28), 버튼 글자는 그대로 [단 추가]다
+    [/^(단(tier)?|할인단계)$/i, '단 추가'],
     [/포인트/, '행 추가']
   ];
   function addButtonFor(group) {
@@ -981,7 +1018,36 @@
     }
     return null;
   }
-  function findSection(scope, group) {
+  // 반복 행 묶음 제목도 이름이 바뀐다(`단(tier)` → `할인 단계`). 적힌 글자와 별칭을 **함께** 견주어 가장 잘 맞는
+  // 상자를 고른다 — 적힌 글자만 보면 `단` 이 `할인 단계` 에 글자 포함(등급 1)으로 걸려 엉뚱한 상자를 집을 수 있다.
+  // 반복 행 묶음 — 지시서가 key 를 실어 왔으면 `[data-stay-rows=<key>]` 표식으로 먼저 찾는다. 행이 하나도 없는
+  // 묶음(새 프로모션의 할인 단계)도 표식으로는 찾힌다 — 글자 제목 다음 상자에는 입력 칸이 아직 없어 못 찾는다.
+  function hookSection(scope, key) {
+    if (!key || !HOOK_KEY_RE.test(key) || !scope || !scope.querySelectorAll) return null;
+    var sel = '[data-stay-rows="' + key + '"]';
+    var hits = [].slice.call(scope.querySelectorAll(sel));
+    if (scope.matches && scope.matches(sel)) hits.unshift(scope);
+    return hits.length === 1 ? hits[0] : null;
+  }
+  // 그 묶음의 [행 추가] — 같은 카드(`data-stay-card`) 안의 `add_row` 가 하나면 그것
+  function hookAddButton(sec) {
+    var card = sec && sec.closest && (sec.closest('[data-stay-card]') || sec.parentElement);
+    if (!card) return null;
+    var hits = [].slice.call(card.querySelectorAll('[data-stay-action="add_row"]')).filter(function (b) {
+      return b.matches(BTN_SEL) && !b.disabled && shown(b);
+    });
+    return hits.length === 1 ? hits[0] : null;
+  }
+  function findSection(scope, group, key) {
+    var hooked = hookSection(scope, key);
+    if (hooked) return hooked;
+    var names = [group].concat(labelAliases(group)), cands = [];
+    for (var i = 0; i < names.length; i++) cands = cands.concat(sectionCands(scope, names[i]));
+    if (!cands.length) return null;
+    cands.sort(function (a, b) { return b.tier - a.tier || a.size - b.size; });
+    return cands[0].el;
+  }
+  function sectionCands(scope, group) {
     var cands = [];
     [].slice.call(scope.querySelectorAll('tr')).forEach(function (tr) {
       var th = tr.querySelector('th'); if (!th) return;
@@ -995,9 +1061,7 @@
       var box = followingBox(h, scope) || containerOf(h, scope, CTRL_SEL);
       if (box) cands.push({ el: box, tier: t, size: box.querySelectorAll('*').length });
     });
-    if (!cands.length) return null;
-    cands.sort(function (a, b) { return b.tier - a.tier || a.size - b.size; });
-    return cands[0].el;
+    return cands;
   }
 
   // 묶음 안의 행들. 표면 tbody 의 tr, 아니면 입력을 가진 형제 묶음 중 가장 많은 것.
@@ -1029,21 +1093,25 @@
     return boxes.length ? boxes : ctrls;
   }
 
-  async function ensureRow(scope, group, n, opts) {
-    var sec = findSection(scope, group);
+  async function ensureRow(scope, group, n, opts, key) {
+    var sec = findSection(scope, group, key);
     if (!sec) return { error: true, status: 'not-found', detail: '반복 행 묶음 `' + group + '` 을 찾지 못했습니다' };
     var rows = sectionRows(sec);
     if (rows.length < n) {
       var text = (opts && opts.addButton) || addButtonFor(group);
       var guard = 0;
       while (rows.length < n && guard++ < 30) {
-        var btn = findButton(sec, text) || findButton(scope, text) || findButton(baseScope(), text);
+        var hookedSec = hookSection(scope, key);
+        var btn = (hookedSec && hookAddButton(hookedSec)) || findButton(sec, text) || findButton(scope, text) || findButton(baseScope(), text);
         if (!btn) return { error: true, status: 'not-found', detail: '행 추가 버튼 [' + text + '] 을 찾지 못했습니다' };
+        // 행 추가도 글자로 찾으므로 엉뚱한 버튼이 잡힐 수 있다 — 막힌 버튼이면 누르지 않는다
+        var no = refusal(btn, text);
+        if (no) return { error: true, status: 'refused', reason: no.reason, detail: no.detail };
         var had = rows.length, sec0 = sec;
         btn.click();
         // 기다리는 것은 **행이 하나 늘어나는 것**이다(150ms 고정 대기였다)
-        await settleOr(function () { return sectionRows(findSection(scope, group) || sec0).length > had; }, 150);
-        sec = findSection(scope, group) || sec;
+        await settleOr(function () { return sectionRows(findSection(scope, group, key) || sec0).length > had; }, 150);
+        sec = findSection(scope, group, key) || sec;
         rows = sectionRows(sec);
       }
     }
@@ -1338,7 +1406,18 @@
   //    앞글자가 시즌 카드의 [가격](드로어를 여는 버튼)과 같아서, 옛 화면에서 새 글자로 찾다가
   //    저장 대신 [가격] 을 누르게 된다.
   var RENAMED_BUTTONS = [
-    { texts: ['가격 적용', '이 단가로 깔기'], screen: 'season-price-fill', action: 'save' }
+    { texts: ['가격 적용', '이 단가로 깔기'], screen: 'season-price-fill', action: 'save' },
+    { texts: ['정본 만들기', '공통 요금제 만들기'], screen: '', action: '' },
+    { texts: ['가격', '가격 입력'], screen: '', action: '' },
+    { texts: ['전체 적용', '빠진 룸에 붙이기'], screen: '', action: '' },
+    { texts: ['이 객실에 배포', '이 룸에 붙이기'], screen: 'rate-plan-deploy', action: 'deploy' },
+    // 2026-10-28 — 판매 연결의 요금제 행 드로어(`_rate_plan_form.html`)
+    { texts: ['정본 편집 열기', '공통 요금제에서 고치기'], screen: 'rate-plan-row', action: 'open_edit' },
+    // 혜택 탭 패널 버튼 — 같은 탭에 `open_create` 가 셋이라 동사만으로는 못 고른다(화면 표식 없음)
+    { texts: ['택1 그룹 만들기', '선택 그룹 만들기'], screen: '', action: '' },
+    // 2026-10-28 혜택 탭 — 오퍼 머리의 [혜택 추가](항상 포함)와 그룹 카드의 [이 그룹에 혜택 추가](후보)가 이름을 갈랐다
+    { texts: ['혜택 추가', '항상 포함 혜택 추가'], screen: '', action: '' },
+    { texts: ['이 그룹에 혜택 추가', '후보 혜택 추가'], screen: '', action: '' }
   ];
   function renamedButton(w) {
     var n = norm(w);
@@ -1348,6 +1427,7 @@
     return null;
   }
   function markedButton(scope, g) {
+    if (!g.screen) return null;
     var ssel = '[data-stay-screen="' + g.screen + '"]', asel = '[data-stay-action="' + g.action + '"]';
     var roots = [scope, drawerRoot()];
     for (var i = 0; i < roots.length; i++) {
@@ -1420,6 +1500,24 @@
     return null;
   }
 
+  // 표식 동사(`data-stay-action`)로 먼저 거른다 — 글자는 ERP 가 바꿀 수 있지만 동사는 그대로다
+  // (`삭제` → `판매 연결 삭제` 가 글자 정규식을 빠져나간 일, 2026-10-28). 아래 글자 정규식은 표식 없는
+  // 옛 화면을 위한 뒷받침으로 남긴다.
+  var DANGER_ACTIONS = {
+    'delete': '삭제 버튼입니다',
+    'archive': '보관 버튼입니다',
+    'unarchive': '판매 상태를 바꾸는 버튼입니다',
+    'end': '판매 상태를 바꾸는 버튼입니다',
+    'resume': '판매 상태를 바꾸는 버튼입니다',
+    'share': '다른 호텔에도 영향을 주는 버튼입니다',
+    'close_month': '닫기(판매일을 닫는) 버튼입니다',
+    'apply_tax': '저장된 금액을 환산해 덮는 버튼입니다',
+    'dismiss': '검증 경고를 넘기는 버튼입니다',
+    'undismiss': '넘긴 검증 경고를 되살리는 버튼입니다',
+    // 지시서 HTML 에 사전 표시(`#stay-action-flags`)가 없어도(배포 전에 그린 지시서) 막도록 여기에도 둔다
+    'clear': '값을 지우는 버튼입니다',
+    'toggle_quantity': '수량 판매를 켜고 끄는 버튼입니다'
+  };
   var DANGER = [
     [/^삭제$|^그룹\s*삭제$|^선택삭제$/, '삭제 버튼입니다'],
     [/^보관$/, '보관 버튼입니다'],
@@ -1427,15 +1525,40 @@
     [/^(?:.*\s)?닫기$/, '닫기(판매일을 닫는) 버튼입니다'],
     [/^공용으로$/, '다른 호텔에도 영향을 주는 버튼입니다'],
     [/^판매\s*종료$|^보관\s*해제$|^판매\s*재개$/, '판매 상태를 바꾸는 버튼입니다'],
-    // 룸 카테고리를 이 호텔 전용으로 갈라낸다 — 다른 호텔이 쓰던 카탈로그가 끊긴다
-    [/^전용으로\s*분리$/, '룸 카테고리를 갈라내는 버튼입니다'],
     // 검증 배너의 [세후가로 확정] — 저장된 금액을 통째로 환산해 덮는다
-    [/^세후가로\s*확정$/, '저장된 금액을 환산해 덮는 버튼입니다']
+    [/^세후가로\s*확정$/, '저장된 금액을 환산해 덮는 버튼입니다'],
+    // 검증 배너의 [이건 넘어가기] → 사유 칸의 [넘어가기]. 확인창이 없다
+    [/^(?:이건\s*)?넘어가기$/, '검증 경고를 넘기는 버튼입니다'],
+    // 재고 [비우기](`clear`) — 고른 날의 총 수량을 지운다
+    [/^비우기$/, '값을 지우는 버튼입니다']
   ];
-  function refusal(btn, want) {
+  // [판매 시작] 은 force 로도 못 누른다(`hard`). 표식 둘(동사 `activate`, 판매 시작 카드 `gate`)과 글자 중
+  // 하나만 맞아도 거부한다 — 글자가 바뀌어도, 표식이 빠져도 막힌다.
+  var SALE_START = { reason: 'sale-start', hard: true, detail: '[판매 시작] 은 사용자가 직접 누릅니다 — 도우미는 절대 누르지 않습니다' };
+  // 화면 사전이 표시한 동사(2026-10-28 `danger` · `never_press`) — 지시서가 실어 오면(`actionFlags`) 위 표에 **더한다**.
+  // 위 표는 지우지 않는다: 사전이 없거나 낡은 지시서여도 막는 자리는 그대로다.
+  var FLAG_DANGER = {}, FLAG_NEVER = {};
+  function actionFlags(patch) {
+    if (patch && typeof patch === 'object') {
+      (patch.danger || []).forEach(function (v) { if (/^[A-Za-z0-9_-]+$/.test(v)) FLAG_DANGER[v] = true; });
+      (patch.never_press || []).forEach(function (v) { if (/^[A-Za-z0-9_-]+$/.test(v)) FLAG_NEVER[v] = true; });
+    }
+    return { danger: Object.keys(FLAG_DANGER).sort(), never_press: Object.keys(FLAG_NEVER).sort() };
+  }
+  // allow: 지시서 단계가 그 동사를 누르라고 적은 자리(`allow: ['toggle_quantity']`) — 그 동사의 위험 거부와 글자
+  // 뒷받침만 건너뛴다. [판매 시작]·절대 금지·확인창(`hx-confirm`)은 그대로 막는다.
+  function refusal(btn, want, allow) {
     var t = btnText(btn) || String(want || '');
-    if (norm(t) === norm('판매 시작')) return { reason: 'sale-start', detail: '[판매 시작] 은 사용자가 직접 누릅니다 — 도우미는 절대 누르지 않습니다' };
-    for (var i = 0; i < DANGER.length; i++) if (DANGER[i][0].test(clean(t))) return { reason: 'dangerous', detail: DANGER[i][1] + ' — 사용자 확인 뒤 force 로만 누릅니다' };
+    var act = (btn.getAttribute && btn.getAttribute('data-stay-action')) || '';
+    var allowedVerb = !!act && (allow || []).indexOf(act) >= 0;
+    if (act === 'activate' || (btn.closest && btn.closest('[data-stay-card="gate"]'))) return SALE_START;
+    if (norm(t) === norm('판매 시작')) return SALE_START;
+    if (act && FLAG_NEVER[act]) return { reason: 'never-press', hard: true, action: act, detail: '[' + t + '](' + act + ') 은 화면 사전이 「절대 누르지 않음」 으로 표시한 버튼입니다' };
+    if (!allowedVerb) {
+      if (Object.prototype.hasOwnProperty.call(DANGER_ACTIONS, act)) return { reason: 'dangerous', action: act, detail: DANGER_ACTIONS[act] + ' — 사용자 확인 뒤 force 로만 누릅니다' };
+      if (act && FLAG_DANGER[act]) return { reason: 'dangerous', action: act, detail: '화면 사전이 위험으로 표시한 버튼입니다(' + act + ') — 사용자 확인 뒤 force 로만 누릅니다' };
+      for (var i = 0; i < DANGER.length; i++) if (DANGER[i][0].test(clean(t))) return { reason: 'dangerous', detail: DANGER[i][1] + ' — 사용자 확인 뒤 force 로만 누릅니다' };
+    }
     if (btn.hasAttribute('hx-confirm') || btn.hasAttribute('data-confirm') ||
       (btn.hasAttribute('onclick') && /confirm\(/.test(btn.getAttribute('onclick') || '')))
       return { reason: 'confirm', detail: '누르면 확인창이 뜨는 버튼입니다 — 사용자 확인 뒤 force 로만 누릅니다' };
@@ -1674,18 +1797,69 @@
     return rowCandidates(root)[0].filter(shown).map(function (r) { return trunc(textOf(r), 60); }).slice(0, 30);
   }
 
-  // 마지막으로 `open` 이 연 모달과 그때의 요청 서명. 같은 단계를 다시 부를 때
+  // 마지막으로 `open` 이 연 창과 그때의 요청 서명. 같은 단계를 다시 부를 때
   // "이미 열려 있다" 를 가리는 데만 쓴다.
-  var lastOpen = { key: null, modal: null, within: null };
+  var lastOpen = { key: null, modal: null, drawer: null, drawerBody: null, within: null };
   function openKey(s) {
-    return [s.button || '', s.row || '', s.card || '', s.block || ''].join('|');
+    return [s.button || '', s.row || '', s.card || '', s.block || '', s.action || '',
+      s.entity || '', s.actionCard || '', s.offer || ''].join('|');
   }
   function sameOpener(s) {
     return lastOpen.key === openKey(s) && lastOpen.within === (s.within || null);
   }
 
+  // Navigate through visible native controls before looking up a row or opener.
+  // No hidden clicks, backend calls, or guesses between duplicate offer names.
+  async function workspace(spec) {
+    var s = spec || {}, pane = baseScope('pane');
+    var root = pane && (pane.matches('[data-workspace]') ? pane : pane.querySelector('[data-workspace]'));
+    if (!root) return { status: 'legacy' };
+    await waitFor(function () { return root.classList.contains('is-workspace-ready'); }, 3000);
+    if (!root.classList.contains('is-workspace-ready')) return { status: 'not-ready', error: '목록 선택기가 준비되지 않았습니다.' };
+    var hint = [s.kind, s.button, s.card, s.block].filter(Boolean).join(' ');
+    var key = root.getAttribute('data-workspace'), view = '';
+    if (key === 'rooms') view = /판매 연결|객실 추가/.test(hint) ? 'sales' : 'types';
+    if (key === 'offers') view = /연령 구간/.test(hint) ? 'ages' : 'list';
+    if (key === 'rate-plans') {
+      if (/공통 요금제|공통 정의|정본|전체 적용|빠진 룸에 붙이기/.test(hint)) view = 'catalog';
+      else view = /요금제 배포|요금제 추가|이 객실에 배포|이 룸에 붙이기|룸별|객실별| · /.test(hint) ? 'rooms' : 'catalog';
+    }
+    var viewButton = view && root.querySelector('[data-workspace-view-button="' + view + '"]');
+    if (viewButton && viewButton.getAttribute('aria-pressed') !== 'true') viewButton.click();
+    var filter = root.querySelector('[data-workspace-filter="offer"]');
+    if (!filter || !shown(filter)) return { status: 'ok', view: view };
+    var card = norm(s.card || ''), offerHint = norm(s.offer || '');
+    var offerName = function (option) { return norm(option.getAttribute('data-workspace-name') || option.textContent); };
+    var candidates = [].slice.call(filter.options).filter(function (o) {
+      var name = offerName(o);
+      return o.value !== '*' && (offerHint ? (name === offerHint || norm(o.textContent) === offerHint) : card === name || card.indexOf(name + ' · ') === 0);
+    });
+    // An offer can itself contain a middle dot; prefer the longest exact prefix.
+    if (candidates.length) {
+      var longest = Math.max.apply(null, candidates.map(function (o) { return offerName(o).length; }));
+      candidates = candidates.filter(function (o) { return offerName(o).length === longest; });
+    }
+    if (candidates.length > 1 || (offerHint && !candidates.length)) return { status: 'ambiguous', error: '오퍼를 하나로 확인하지 못했습니다: ' + (offerHint || card) };
+    filter.value = candidates.length ? candidates[0].value : '*';
+    filter.dispatchEvent(new Event('change', { bubbles: true }));
+    var room = root.querySelector('[data-workspace-filter="room"]');
+    if (room && shown(room)) {
+      var suffix = candidates.length ? card.slice(offerName(candidates[0]).length).replace(/^ · /, '') : card;
+      var matches = [].slice.call(room.options).filter(function (o) { return o.value !== '*' && norm(o.textContent) === suffix; });
+      if (matches.length > 1) return { status: 'ambiguous', error: '객실을 하나로 확인하지 못했습니다: ' + suffix };
+      room.value = matches.length ? matches[0].value : '*';
+      room.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return { status: 'ok', view: view, offer: filter.value, room: room && room.value };
+  }
+
   async function open(spec) {
-    var s = spec || {};
+    var s = Object.assign({}, spec || {});
+    if (!s.within && !s.inDrawer && !drawerRoot()) {
+      var navigation = await workspace(s);
+      if (!/^(ok|legacy)$/.test(navigation.status)) return navigation;
+      if (navigation.status === 'ok' && /^(요금제 정본|정본)$/.test(s.card || '')) s.card = '공통 요금제';
+    }
     var root = null, scope = null, rowMissing = false;
     // 범위와 버튼을 **그때그때 다시** 찾는다 — 조각이 갈리면 앞서 잡아 둔 마디는 떨어져 나간다
     var resolve = function () {
@@ -1697,7 +1871,8 @@
         if (sc2 && !narrowState.rowMissing) { scope = sc2; rowMissing = false; }
       }
       if (rowMissing) return null;
-      var b = s.button ? findButton(scope, s.button) : null;
+      var b = actionButton(scope, s.action, { entity: s.entity, card: s.actionCard, name: s.entity ? (s.row || s.card) : null })
+        || (s.button ? findButton(scope, s.button) : null);
       if (!b && s.inDrawer !== true) {
         var d = drawerRoot();
         if (d) b = findButton(narrow(d, s), s.button);
@@ -1728,15 +1903,22 @@
     }
     if (rowMissing) return remember({ status: 'not-found', reason: 'row', detail: '`' + s.row + '` 행을 찾지 못했습니다', scope: describe(scope), rows: rowsIn(root) });
     if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + s.button + '] 을 찾지 못했습니다', scope: describe(scope), buttons: buttonsIn(scope) });
-    var no = refusal(btn, s.button);
-    if (no && !s.force) return remember({ status: 'refused', reason: no.reason, detail: no.detail });
+    var no = refusal(btn, s.button, s.allow);
+    if (no && (no.hard || !s.force)) return remember({ status: 'refused', reason: no.reason, detail: no.detail });
     // **이 버튼이 연 모달이 아직 열려 있으면 다시 누르지 않는다.** 사진 단계(`대표이미지 올리기`·
     // `상품상세 이미지 올리기`)는 첫 `runStep` 이 모달만 열고 `submitted:false` 로 끝나는 규약이라
     // 같은 단계를 다시 부르는 것이 정상 경로인데, 종전에는 이미 열린 `#content-modal` 을 또 열려다
     // `open: 'timeout'` 으로 끝났다(2026-09-10 운영 실행). 모달이 화면을 덮고 있어 뒤의 버튼을
     // 눌러도 아무 일이 일어나지 않으므로 `waitFor` 가 붙잡을 변화가 없다.
-    // 드로어는 이 갈래가 필요 없다 — 다시 누르면 조각이 새로 그려져 `innerHTML` 이 바뀌고,
-    // 그 변화를 아래 `waitFor` 가 이미 성공으로 읽는다.
+    // 드로어도 같은 창을 다시 열면 선택한 파일이 사라진다. 같은 요청으로 연 창이고
+    // 본문 노드도 그대로일 때만 재사용한다. 다른 대상으로 본문이 바뀌면 다시 연다.
+    var drawerNow = drawerRoot();
+    if (drawerNow && lastOpen.drawer === drawerNow &&
+        lastOpen.drawerBody === drawerNow.firstElementChild && sameOpener(s) && !drawerNow.contains(btn)) {
+      var stD = readState();
+      return remember({ status: 'already', detail: '[' + s.button + '] 이 연 드로어가 이미 열려 있어 다시 누르지 않았습니다',
+        drawer: stD.drawer, modal: stD.modal, errors: [], fields: fieldsIn() });
+    }
     var openedNow = modalRoot();
     if (openedNow && lastOpen.modal === openedNow && sameOpener(s) && !openedNow.contains(btn)) {
       var stA = readState();
@@ -1761,7 +1943,10 @@
     var st = readState();
     if (st.loginPage) return remember({ status: 'login', detail: '로그인 화면이 나타났습니다 — 사용자가 로그인해야 합니다', url: st.url });
     // 무엇이 이 버튼으로 열렸는지 적어 둔다 — 같은 단계를 다시 부를 때 위 갈래가 이것으로 갈린다.
-    lastOpen = ok ? { key: openKey(s), modal: modalRoot(), within: s.within || null } : { key: null, modal: null, within: null };
+    var openedDrawer = drawerRoot();
+    lastOpen = ok ? { key: openKey(s), modal: modalRoot(), drawer: openedDrawer,
+      drawerBody: openedDrawer && openedDrawer.firstElementChild, within: s.within || null }
+      : { key: null, modal: null, drawer: null, drawerBody: null, within: null };
     return remember({
       status: ok ? 'ok' : 'timeout',
       drawer: st.drawer, modal: st.modal,
@@ -1796,6 +1981,8 @@
     for (var i = 0; i < times; i++) {
       var btn = findButton(scope, buttonText) || findButton(baseScope(), buttonText);
       if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + buttonText + '] 을 찾지 못했습니다', clicked: done });
+      var no = refusal(btn, buttonText);
+      if (no) return remember({ status: 'refused', reason: no.reason, detail: no.detail, clicked: done });
       var n0 = scope.querySelectorAll(CTRL_SEL).length;
       btn.click(); done++;
       // 기다리는 것은 **칸이 늘어나는 것**(행이 하나 섰다)이다(150ms 고정 대기였다)
@@ -1810,7 +1997,85 @@
     o.value = f.text !== undefined ? f.text : f.value;
     o.values = f.values;
     o.file = f.file;
+    // 지시서 HTML 이 실은 화면 표식(steps.json `fields[].field` …) — 있으면 표식으로 먼저 찾는다
+    ['field', 'field_row', 'field_col', 'field_name'].forEach(function (k) { if (f[k] !== undefined && f[k] !== null && f[k] !== '') o[k] = f[k]; });
+    // 빈 인원 키도 유효한 단일가다. 누락과 빈 문자열을 구분한다.
+    ['occupancy_key', 'los_nights'].forEach(function (k) { if (Object.prototype.hasOwnProperty.call(f, k)) o[k] = f[k]; });
     return o;
+  }
+
+  /* ─────────────────── 표식 먼저, 글자는 그다음 (2026-10-28) ───────────────────
+     ERP 화면의 칸은 `data-stay-field="<폼 필드 이름>"` 을 단다(`stay/agent_markup.py`). 지시서가 그 key 를
+     실어 오면(`fields[].field`) 글자보다 먼저 그 표식으로 칸을 찾는다 — 화면 글자가 바뀌어도 key 는 그대로다.
+     표식이 없거나(배포 전 화면·옛 지시서) 그 칸이 범위에 없으면 종전처럼 글자로 찾는다.
+     · 반복 행(`field_row`)은 묶음을 `[data-stay-rows=<key>]` 로 찾는다(`findSection`) — 칸은 그 행 안에서 글자로.
+     · 이름 붙은 칸(`display_name_*` 처럼 key 에 `*`)과 시즌 날짜(`date_selection_*`, 위 `seasonDatePlan`)는 표식으로 고르지 않는다. */
+  var HOOK_KEY_RE = /^[A-Za-z0-9_-]+$/;
+  // 가격 일괄 입력은 행 순번/라벨 대신 인원·최소 숙박일수·열로 한 칸을 식별한다.
+  // 명시한 키가 없거나 중복이면 다른 칸으로 추측하지 않는다.
+  function priceRowControl(scope, f) {
+    var hasKey = Object.prototype.hasOwnProperty.call(f, 'occupancy_key');
+    var hasLos = Object.prototype.hasOwnProperty.call(f, 'los_nights');
+    if (f.field !== 'prices' && !hasKey && !hasLos) return null;
+    var invalid = { error: '가격 칸에는 field=prices, occupancy_key, 양수 los_nights, field_col(price/original_price/net_amount)이 필요합니다' };
+    if (f.field !== 'prices' || !hasKey || typeof f.occupancy_key !== 'string' || !hasLos ||
+        !/^[1-9][0-9]*$/.test(String(f.los_nights)) ||
+        !/^(price|original_price|net_amount)$/.test(f.field_col || '') || !/^(typed|empty)$/.test(f.kind)) return invalid;
+    var tables = [].slice.call(scope.querySelectorAll('[data-stay-rows="prices"]'));
+    if (scope.matches && scope.matches('[data-stay-rows="prices"]')) tables.unshift(scope);
+    var rows = [];
+    tables.forEach(function (table) {
+      [].slice.call(table.querySelectorAll('[data-stay-occupancy-key][data-stay-los-nights]')).forEach(function (row) {
+        if (row.closest('[data-stay-rows]') === table && shown(row) &&
+            row.getAttribute('data-stay-occupancy-key') === f.occupancy_key &&
+            row.getAttribute('data-stay-los-nights') === String(f.los_nights)) rows.push(row);
+      });
+    });
+    if (rows.length !== 1) return { error: '지정한 인원·숙박일수의 가격 행이 ' + rows.length + '개입니다 — 입력을 멈췄습니다' };
+    var controls = [].slice.call(rows[0].querySelectorAll('[data-stay-col="' + f.field_col + '"]')).filter(function (el) {
+      return isCtrl(el) && usable(el);
+    });
+    if (controls.length !== 1) return { error: '지정한 가격 열의 입력 칸이 ' + controls.length + '개입니다 — 입력을 멈췄습니다' };
+    return { el: controls[0], matched: 'prices/' + f.occupancy_key + '/' + f.los_nights + '/' + f.field_col };
+  }
+  function hookControls(scope, f) {
+    var key = f && f.field;
+    if (!key || f.field_row || !HOOK_KEY_RE.test(key) || /^date_selection_/.test(key) || !scope || !scope.querySelectorAll) return [];
+    var sel = '[data-stay-field="' + key + '"]';
+    var nodes = [].slice.call(scope.querySelectorAll(sel));
+    if (scope.matches && scope.matches(sel)) nodes.unshift(scope);
+    var out = [];
+    nodes.forEach(function (n) {
+      var ctrls = isCtrl(n) ? [n] : [].slice.call(n.querySelectorAll(CTRL_SEL)).filter(isCtrl);
+      ctrls.forEach(function (el) {
+        if (usable(el) && !out.some(function (c) { return c.el === el; }))
+          out.push({ el: el, tier: 4, prio: 9, matched: '[data-stay-field=' + key + ']' });
+      });
+    });
+    return out;
+  }
+  // 동사 표식(`data-stay-action`)으로 버튼 하나 — 열린 드로어 안을 먼저, 그다음 범위. 둘 이상이면 고르지 않는다.
+  // `where` = {entity, name, card}(탭 패널 버튼, 사전 `panel_actions`): 그 대상(`data-stay-entity`, 이름이 있으면
+  // `data-stay-name` 까지) 또는 그 카드(`data-stay-card`) **바로 안의** 버튼만 본다 — 같은 동사가 대상마다 있다.
+  function actionButton(scope, verb, where) {
+    if (!verb || !HOOK_KEY_RE.test(verb)) return null;
+    var w = where || {};
+    var roots = [drawerRoot(), scope].filter(function (r, i, all) { return r && r.querySelectorAll && all.indexOf(r) === i; });
+    for (var i = 0; i < roots.length; i++) {
+      var hits = [].slice.call(roots[i].querySelectorAll('[data-stay-action="' + verb + '"]')).filter(function (b) {
+        if (!(b.matches(BTN_SEL) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && shown(b))) return false;
+        if (w.entity && HOOK_KEY_RE.test(w.entity)) {
+          var owner = b.closest('[data-stay-entity]');
+          if (!owner || owner.getAttribute('data-stay-entity') !== w.entity) return false;
+          if (w.name && norm(owner.getAttribute('data-stay-name') || '') !== norm(w.name)) return false;
+        }
+        if (w.card && HOOK_KEY_RE.test(w.card) && !b.closest('[data-stay-card="' + w.card + '"]')) return false;
+        return true;
+      });
+      if (hits.length === 1) return hits[0];
+      if (hits.length > 1) return null;
+    }
+    return null;
   }
 
   // 라벨이 칸 이름이 아니라 묶음 제목일 때(예 `어메니티` 아래 체크박스 여러 개): 제목으로 묶음을 찾아 그 안의 체크박스를 돌려준다
@@ -1902,6 +2167,14 @@
   async function applyOne(scope, f, opts) {
     var out = { label: f.label, kind: f.kind, status: 'not-found', detail: '' };
     if (f.kind === 'auto') { out.status = 'skipped'; out.detail = '저절로 차는 칸 — 건드리지 않았습니다'; return out; }
+    var priceTarget = priceRowControl(scope, f);
+    if (priceTarget) {
+      out.matchedBy = 'hook';
+      if (priceTarget.error) { out.status = 'error'; out.detail = priceTarget.error; return out; }
+      out.matched = priceTarget.matched;
+      var priceValues = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
+      return applyToEl(priceTarget.el, f, priceValues, out);
+    }
     var age = nfc(f.label).match(/^(현장 )?연령별 단가 · (.+)$/);
     if (age && (age[1] || scope.querySelector('[data-stay-card="onsite"],[data-stay-card="age_rates"]'))) {
       var cards = scope.querySelectorAll('[data-stay-card="' + (age[1] ? 'onsite' : 'age_rates') + '"]');
@@ -1916,16 +2189,19 @@
     var target = scope, name = f.label, idx = 0;
     var rep = splitRepeat(f.label);
     if (rep) {
-      var r = await ensureRow(scope, rep.group, rep.n, opts);
+      var r = await ensureRow(scope, rep.group, rep.n, opts, f.field_row ? f.field : null);
       if (r.error) { out.status = r.status; out.detail = r.detail; return out; }
       target = r.row; name = rep.field;
     }
     var ix = splitIndex(name);
     if (ix) { name = ix.label; idx = ix.n - 1; }
 
+    // 표식 먼저 — 지시서가 칸 key 를 실어 왔고 화면에 그 표식이 있으면 글자로 찾지 않는다
+    var cands = hookControls(scope, f);
+    out.matchedBy = cands.length ? 'hook' : 'label';
     // 적용 범위의 `<축> 포함`·`<축> 제외` 는 축 줄을 기준으로 잡는다 — 이름만으로는 어느 축인지
     // 가를 수 없고, `포함` 은 `조식 포함` 같은 체크박스 글자와도 겹친다.
-    var cands = rep ? [] : scopeBoxes(scope, name);
+    if (!cands.length) cands = rep ? [] : scopeBoxes(scope, name);
     if (!cands.length) cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
     if (!cands.length && target !== scope) cands = findControls(scope, name);
     if (!cands.length && /^(multi|select|check|uncheck|empty)$/.test(f.kind)) cands = groupBoxes(scope, name);
@@ -1999,6 +2275,7 @@
       out.multiple = !!el.multiple;
       out.accept = el.getAttribute('accept') || '';
       out.marker = '[data-stay-upload="' + f.label + '"]';
+      out.selectedFiles = [].slice.call(el.files || []).map(function (file) { return file.name; });
       return out;
     }
     if (f.kind === 'empty' || (!values.length && f.kind !== 'check')) {
@@ -2053,18 +2330,155 @@
     return guessAmong(orderedControls(scope), list, els, idxs2, i);
   }
 
+  /* ─────────────────── 시즌 날짜 → 날짜 선택 칸 (2026-10-28) ───────────────────
+     원고 형식은 그대로다: `날짜 규칙 유형` · `기간 시작` · `기간 종료` · `날짜 나열:` 과, 고르지 않아도 되는
+     `추가 날짜:`(월·요일 조건 밖이어도 넣는 날). 새 시즌 화면은 기간 칸을 그리지 않고 날짜 선택기 하나를 세운다 —
+     실제로 저장되는 값은 그 안의 두 칸(`date_selection_0` 기간 · `_1` 추가 날짜)이고, 선택기는 그 칸을 읽어 다시 그린다.
+     그래서 날짜 줄은 라벨로 찾지 않고 이 두 칸에 **통째로** 쓴다(원고에 날짜 줄이 있으면 화면의 날짜를 갈아 끼운다).
+     두 칸이 없는 화면(배포 전)에서는 아무것도 하지 않는다 — 종전처럼 라벨로 채운다.
+     줄 모양·오류 규칙은 설치 도구 `stay_installer/season_dates.py` 와 같다. 날짜를 펼치는 규칙은 ERP 가 정본이다. */
+  var SEASON_DATE = { rule: '날짜 규칙 유형', start: '기간 시작', end: '기간 종료', list: '날짜 나열', extra: '추가 날짜',
+                      months: '적용 월', weekdays: '적용 요일' };
+  var SEASON_RULES = { '기간범위': 0, '월목록': 1, '요일규칙': 2, '비연속날짜나열': 3 };
+  function seasonDay(token, where) {
+    var m = String(token || '').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    var d = m && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (!m || d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3])
+      throw new Error(where + ' 날짜 형식을 확인해주세요 — YYYY-MM-DD 또는 YYYY-MM-DD ~ YYYY-MM-DD');
+    return d.toISOString().slice(0, 10);
+  }
+  function seasonLine(raw, where) {
+    var parts = String(raw).split('~').map(function (p) { return p.trim(); });
+    if (parts.length > 2) throw new Error(where + ' 날짜 형식을 확인해주세요 — YYYY-MM-DD 또는 YYYY-MM-DD ~ YYYY-MM-DD');
+    var a = seasonDay(parts[0], where), b = seasonDay(parts[parts.length - 1], where);
+    if (b < a) throw new Error(where + ' 종료 날짜가 시작 날짜보다 빠릅니다');
+    return [a, b];
+  }
+  function seasonLines(text) {
+    var out = [];
+    String(text || '').split('\n').forEach(function (raw) { raw.split(',').forEach(function (p) { if (p.trim()) out.push(p.trim()); }); });
+    return out;
+  }
+  function seasonDateValues(list) {
+    var at = {}, idx = [];
+    list.forEach(function (f, i) {
+      var key = Object.keys(SEASON_DATE).filter(function (k) { return norm(SEASON_DATE[k]) === norm(f.label); })[0];
+      if (!key) return;
+      at[key] = f;
+      if (key !== 'rule' && key !== 'months' && key !== 'weekdays') idx.push(i);
+    });
+    var text = function (f) {
+      if (!f || /^(empty|auto|uncheck)$/.test(f.kind)) return '';
+      return String(f.values && f.values.length ? f.values.join(', ') : (f.value === undefined || f.value === null ? '' : f.value)).trim();
+    };
+    var listed = seasonLines(text(at.list)), extrasRaw = seasonLines(text(at.extra));
+    var start = text(at.start), end = text(at.end);
+    if (!(listed.length || extrasRaw.length || start || end)) return null;
+    var ruleText = text(at.rule), rule = null;
+    if (ruleText) {
+      rule = SEASON_RULES[norm(ruleText)];
+      if (rule === undefined) throw new Error('`날짜 규칙 유형` 값 `' + ruleText + '` 을 모릅니다');
+    }
+    if (rule === null) {
+      if (listed.length && (start || end)) throw new Error('`날짜 규칙 유형` 줄이 없는데 `날짜 나열` 과 `기간 시작`·`기간 종료` 이 함께 있습니다 — 유형을 적어주세요');
+      rule = listed.length ? 3 : 0;
+    }
+    var fmt = function (p) { return p[0] === p[1] ? p[0] : p[0] + ' ~ ' + p[1]; };
+    var ranges;
+    if (rule === 3) {
+      if (!listed.length) throw new Error('`날짜 규칙 유형` 이 비연속 날짜 나열인데 `날짜 나열:` 블록이 비었습니다');
+      ranges = listed.map(function (raw, n) { return fmt(seasonLine(raw, '날짜 나열 ' + (n + 1) + '번째 줄의')); });
+    } else {
+      if (listed.length) throw new Error('`날짜 나열:` 블록은 `날짜 규칙 유형` 이 비연속 날짜 나열일 때만 씁니다');
+      if (!(start && end)) throw new Error('`기간 시작`·`기간 종료` 두 줄이 모두 있어야 합니다');
+      ranges = [fmt(seasonLine(start + ' ~ ' + end, '`기간 시작`·`기간 종료` 의'))];
+    }
+    var extras = [];
+    extrasRaw.forEach(function (raw, n) {
+      var p = seasonLine(raw, '추가 날짜 ' + (n + 1) + '번째 줄의');
+      if (p[0] !== p[1]) throw new Error('추가 날짜 ' + (n + 1) + '번째 줄: 추가 날짜에는 하루씩 입력해주세요. 기간은 `기간 시작`·`기간 종료` 또는 `날짜 나열` 에 넣습니다');
+      if (extras.indexOf(p[0]) < 0) extras.push(p[0]);
+    });
+    var monthOf = String(text(at.months || null) || '');
+    return { idx: idx, ranges: ranges.join('\n'), extras: extras.sort().join('\n'), rule: rule,
+             months: rule === 1 ? (monthOf.match(/\d{1,2}(?=\s*월)/g) || []).map(Number) : [],
+             weekdays: rule === 2 ? String(text(at.weekdays || null) || '').split('').map(function (ch) { return '월화수목금토일'.indexOf(ch); })
+               .filter(function (n, i, all) { return n >= 0 && all.indexOf(n) === i; }) : [] };
+  }
+  // 시즌 단계의 칸들 → 그 시즌의 전개 날짜(ERP `expand_dates` 와 같은 규칙: 월·요일 조건은 그 유형일 때만 기간에 걸고,
+  // 추가 날짜는 조건 없이 더한다. 요일은 0=월). 읽을 수 없으면 {error}. 판매 마감이 시즌 밖 날을 닫지 않게 쓴다(`runCloseStep`).
+  function seasonDays(fields) {
+    var list = (fields || []).map(normalizeField);
+    var v;
+    try { v = seasonDateValues(list); } catch (e) { return { error: String(e && e.message || e) }; }
+    if (!v) return { error: '시즌 날짜 줄이 없습니다' };
+    var seen = {};
+    var add = function (iso) { seen[iso] = true; };
+    v.ranges.split('\n').filter(Boolean).forEach(function (line) {
+      var p = line.split('~').map(function (x) { return x.trim(); });
+      var d = new Date(p[0] + 'T00:00:00Z'), end = new Date(p[p.length - 1] + 'T00:00:00Z');
+      for (var guard = 0; d <= end && guard < 4000; guard++, d = new Date(d.getTime() + 86400000)) {
+        var mon = d.getUTCMonth() + 1, wd = (d.getUTCDay() + 6) % 7;
+        if ((!v.months.length || v.months.indexOf(mon) >= 0) && (!v.weekdays.length || v.weekdays.indexOf(wd) >= 0)) add(d.toISOString().slice(0, 10));
+      }
+    });
+    v.extras.split('\n').filter(Boolean).forEach(add);
+    var days = Object.keys(seen).sort();
+    if (!days.length) return { error: '전개된 날짜가 0일입니다' };
+    if (days.length > 550) return { error: '한 시즌은 최대 550일입니다' };
+    return { days: days };
+  }
+  // 이 범위에 날짜 선택 두 칸이 서 있고 원고에 날짜 줄이 있으면 → {idx, boxes, ranges, extras} 또는 {idx, error}
+  function seasonDatePlan(scope, list) {
+    var box0 = scope && scope.querySelector && scope.querySelector('[data-stay-field="date_selection_0"]');
+    var box1 = box0 && scope.querySelector('[data-stay-field="date_selection_1"]');
+    if (!box0 || !box1) return null;
+    var idx = list.map(function (f, i) { return /^(기간시작|기간종료|날짜나열|추가날짜)$/.test(norm(f.label)) ? i : -1; })
+      .filter(function (i) { return i >= 0; });
+    if (!idx.length) return null;
+    try {
+      var v = seasonDateValues(list);
+      return v ? Object.assign(v, { boxes: [box0, box1] }) : null;
+    } catch (e) { return { idx: idx, error: String(e && e.message || e) }; }
+  }
+  function seasonBoxLabel(box) {
+    var l = box.getAttribute('data-stay-field') === 'date_selection_1' ? '추가 날짜 · 직접 입력' : '기간 · 직접 입력';
+    var lab = box.id && box.ownerDocument.querySelector('label[for="' + box.id + '"]');
+    return lab ? clean(lab.textContent) : l;
+  }
+  function seasonDateLines(v) { return String(v || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean).join('\n'); }
+  function writeSeasonDates(plan, list, res, els) {
+    if (!plan.error) {
+      var details = plan.boxes[0].closest('details');
+      if (details) details.open = true;   // 닫힌 <details> 안의 칸은 화면에 없다 — 사람이 보는 값과 같게 펼쳐 둔다
+      setText(plan.boxes[0], plan.ranges);
+      setText(plan.boxes[1], plan.extras);
+    }
+    plan.idx.forEach(function (i) {
+      var f = list[i], extra = norm(f.label) === norm(SEASON_DATE.extra), box = plan.boxes ? plan.boxes[extra ? 1 : 0] : null;
+      res[i] = plan.error
+        ? { label: f.label, kind: f.kind, status: 'error', detail: plan.error }
+        : { label: f.label, kind: f.kind, status: 'ok', detail: box.value, matched: seasonBoxLabel(box), name: box.name || '', matchedBy: 'hook' };
+      els[i] = box;
+    });
+  }
+
   async function fill(fields, opts) {
     var o = opts || {};
     var scope = narrow(baseScope(), o);
     var list = (fields || []).map(normalizeField);
     var res = [], els = [];
+    var dates = seasonDatePlan(scope, list);
     for (var i = 0; i < list.length; i++) {
+      if (dates && dates.idx.indexOf(i) >= 0) { res.push({ label: list[i].label, kind: list[i].kind, status: 'pending' }); els.push(null); continue; }
       // 이 60ms 는 **고정 대기 그대로 둔다** — 앞 칸의 `change` 를 받은 Alpine 이 다음 칸을 세우거나
       // 접는 한 틱을 주는 것이라 그 자리에서 볼 상태가 없다(무엇이 설지 아직 모른다).
       try { res.push(await applyOne(scope, list[i], o)); await sleep(60); }
       catch (e) { res.push({ label: list[i].label, kind: list[i].kind, status: 'error', detail: String(e && e.message || e) }); }
       els.push(res[i]._el || null); delete res[i]._el;
     }
+    // 시즌 날짜는 다른 칸(유형·월·요일)을 다 넣은 뒤 두 칸에 한 번에 쓴다
+    if (dates) writeSeasonDates(dates, list, res, els);
     // 2차: 이름으로 못 찾았지만 **앞 칸이 화면을 바꿔 이제 서 있을** 칸을 한 번 더 시도한다.
     // Stay 폼은 앞 칸의 값이 뒤 칸을 세우고 접는다(Alpine `x-show`): 부과금의 [정액 금액]·
     // [연령별 단가] 는 [부과 단위]가 `인당` 이고 [부과 방식]이 `정액` 일 때만, 연령 구간의 [요금 기준 값]·
@@ -2111,7 +2525,7 @@
       var f = list[k], values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
       var out2 = { label: f.label, kind: f.kind, status: 'not-found', detail: '' };
       try { out2 = await applyToEl(el, f, values, out2); } catch (e) { out2.status = 'error'; out2.detail = String(e && e.message || e); }
-      out2.byOrder = true; out2.matched = '(순서로 찾음: ' + (labelsOf(el)[0] || {}).text + ')';
+      out2.byOrder = true; out2.matchedBy = 'order'; out2.matched = '(순서로 찾음: ' + (labelsOf(el)[0] || {}).text + ')';
       els[k] = out2._el || el; delete out2._el;
       res[k] = out2; await sleep(60);   // 위와 같은 Alpine 한 틱 — 볼 상태가 없어 고정 대기 그대로다
     }
@@ -2180,11 +2594,19 @@
     return { ok: true, from: from, inputs: n, hooked: hooked };  // 토큰 값은 싣지 않는다
   }
 
+  // 저장 표지(2026-10-29 ERP `editor.mark_saved`) — 저장에 성공한 응답이 `#stay_save_result` 를
+  // `data-stay-result="saved"` + 저장 시각(`data-stay-saved-at`)으로 갈아 끼운다. 시각이 바뀌었으면 **이번** 저장이 된 것이다.
+  function saveMark() {
+    var el = document.getElementById('stay_save_result');
+    return el && el.getAttribute('data-stay-result') === 'saved' ? (el.getAttribute('data-stay-saved-at') || 'saved') : '';
+  }
+
   async function submit(buttonText, opts) {
     var o = opts || {};
     var scope = narrow(baseScope(), o);
     var drawerEl = document.querySelector('.stay-drawer.is-open');
-    var btn = findButton(scope, buttonText) || (drawerEl && findButton(drawerEl, buttonText)) || findButton(document.body, buttonText, true);
+    // 동사 표식(steps.json `submit_action`)이 있으면 그 버튼이 먼저다 — 아래 거부 검사는 똑같이 지난다
+    var btn = actionButton(scope, o.action) || findButton(scope, buttonText) || (drawerEl && findButton(drawerEl, buttonText)) || findButton(document.body, buttonText, true);
     // 저장 버튼이 아니라 파일 고르개인가 — 그렇다면 **다른 버튼을 대신 찾지 않는다**.
     // `not-found` 로 돌려주면 부르는 쪽이 `저장·추가·…` 대안을 훑다가 드로어의 [저장] 을 누른다.
     if (!btn) {
@@ -2196,10 +2618,21 @@
       });
     }
     if (!btn) return remember({ status: 'not-found', detail: '버튼 [' + buttonText + '] 을 찾지 못했습니다', buttons: buttonsIn(scope), url: location.href, errors: [] });
-    var no = refusal(btn, buttonText);
-    if (no && (no.reason === 'sale-start' || !o.force)) return remember({ status: 'refused', reason: no.reason, detail: no.detail, errors: [], url: location.href });
+    var no = refusal(btn, buttonText, o.allow);
+    if (no && (no.hard || !o.force)) return remember({ status: 'refused', reason: no.reason, detail: no.detail, errors: [], url: location.href });
 
-    var before = { drawer: !!drawerRoot(), modal: !!modalRoot(), url: location.href, path: location.pathname, settles: hx.settles, swaps: hx.swaps };
+    // Basic-information steps use the same public submit entry as drawer steps,
+    // but their page header posts with legacy AJAX rather than htmx.
+    if (!drawerRoot() && !modalRoot() && document.querySelector('form#default') &&
+        btn.closest('.right_header') && btn === pageSaveButton()) {
+      var pageResult = await pageSave();
+      var pageState = readState();
+      pageResult.drawer = pageState.drawer;
+      pageResult.modal = pageState.modal;
+      return remember(pageResult);
+    }
+
+    var before = { drawer: !!drawerRoot(), modal: !!modalRoot(), url: location.href, path: location.pathname, settles: hx.settles, swaps: hx.swaps, saved: saveMark() };
     // 안내 띠는 **마디로 가린다** — 앞 단계의 띠가 안 사라지면 글자로는 새 띠를 못 본다(`toastSnap` 주석)
     var tSnap = toastSnap();
     hx.error = null; hx.errorStatus = null;
@@ -2253,6 +2686,7 @@
       }
       if (before.drawer && !drawerRoot()) { status = 'settled'; break; }
       if (before.modal && !modalRoot()) { status = 'settled'; break; }
+      if (saveMark() && saveMark() !== before.saved && hx.pending === 0) { status = 'settled'; break; }
     }
 
     // ── CSRF 403 이면 **딱 한 번** 다시 보낸다 ────────────────────────────────
@@ -2319,8 +2753,11 @@
     else if (hx.error) out.status = 'error';
     else if (status === 'settled') {
       var closed = (before.drawer && !st.drawer.open) || (before.modal && !st.modal.open);
-      out.status = closed ? 'closed' : 'stayed';
+      // 드로어가 남아 있어도 이번 저장 표지가 섰고 오류가 없으면 저장된 것이다(`saved`)
+      var markedNow = !!saveMark() && saveMark() !== before.saved;
+      out.status = closed ? 'closed' : (markedNow && !errors.length ? 'saved' : 'stayed');
     }
+    if (saveMark() && saveMark() !== before.saved) out.saveMark = saveMark();
     // 조각 다시 그리기를 얼마나 기다렸는지 — 로그에 그대로 남는다(흔한 경우 한 틱, 30ms 안쪽)
     if (refreshWaitMs !== null) out.refreshWaitMs = refreshWaitMs;
     out.drawer = st.drawer; out.modal = st.modal;
@@ -2330,6 +2767,13 @@
   function readOne(scope, f) {
     var out = { label: f.label, kind: f.kind, actual: null, same: null };
     if (f.kind === 'auto') { out.same = null; out.actual = '(자동)'; return out; }
+    var priceTarget = priceRowControl(scope, f);
+    if (priceTarget) {
+      out.matchedBy = 'hook';
+      if (priceTarget.error) { out.actual = '(가격 행 불명)'; out.error = priceTarget.error; out.same = false; return out; }
+      var priceValues = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
+      return readEl(priceTarget.el, f, priceValues, out);
+    }
     var age = nfc(f.label).match(/^(현장 )?연령별 단가 · (.+)$/);
     if (age && (age[1] || scope.querySelector('[data-stay-card="onsite"],[data-stay-card="age_rates"]'))) {
       var cards = scope.querySelectorAll('[data-stay-card="' + (age[1] ? 'onsite' : 'age_rates') + '"]');
@@ -2342,14 +2786,16 @@
     var target = scope, name = f.label;
     var rep = splitRepeat(f.label);
     if (rep) {
-      var sec = findSection(scope, rep.group);
+      var sec = findSection(scope, rep.group, f.field_row ? f.field : null);
       var rows = sectionRows(sec);
       if (rows.length < rep.n) { out.actual = '(행 없음)'; out.same = false; return out; }
       target = rows[rep.n - 1]; name = rep.field;
     }
     var ix = splitIndex(name); var idx = 0;
     if (ix) { name = ix.label; idx = ix.n - 1; }
-    var cands = rep ? [] : scopeBoxes(scope, name);   // 적용 범위의 포함·제외는 축 줄로 잡는다
+    var cands = hookControls(scope, f);               // 표식 먼저(위 `hookControls`)
+    out.matchedBy = cands.length ? 'hook' : 'label';
+    if (!cands.length) cands = rep ? [] : scopeBoxes(scope, name);   // 적용 범위의 포함·제외는 축 줄로 잡는다
     if (!cands.length) cands = rep ? findInRow(target, name, f.kind) : findControls(target, name);
     if (!cands.length && target !== scope) cands = findControls(scope, name);
     if (!cands.length && /^(multi|select|check|uncheck|empty)$/.test(f.kind)) cands = groupBoxes(scope, name);
@@ -2417,7 +2863,15 @@
     var scope = narrow(baseScope(), opts || {});
     var list = (fields || []).map(normalizeField);
     var els = [];
-    var res = list.map(function (f) {
+    var dates = seasonDatePlan(scope, list);
+    var res = list.map(function (f, i) {
+      if (dates && dates.idx.indexOf(i) >= 0) {
+        // 시즌 날짜는 두 칸 값을 원고에서 만든 값과 줄 단위로 견준다
+        if (dates.error) return { label: f.label, kind: f.kind, actual: null, same: false, error: dates.error };
+        var extra = norm(f.label) === norm(SEASON_DATE.extra), box = dates.boxes[extra ? 1 : 0];
+        var actual = seasonDateLines(box.value), want = extra ? dates.extras : dates.ranges;
+        return { label: f.label, kind: f.kind, actual: actual, expected: want, same: actual === want, _el: box };
+      }
       try { return readOne(scope, f); }
       catch (e) { return { label: f.label, kind: f.kind, actual: null, same: false, error: String(e && e.message || e) }; }
     });
@@ -2432,7 +2886,7 @@
       if (!el) continue;
       var f = list[k], values = f.values && f.values.length ? f.values : (f.value !== undefined && f.value !== null && f.value !== '' ? [String(f.value)] : []);
       var o2 = readEl(el, f, values, { label: f.label, kind: f.kind, actual: null, same: null });
-      o2.byOrder = true; els[k] = o2._el || el; delete o2._el; res[k] = o2;
+      o2.byOrder = true; o2.matchedBy = 'order'; els[k] = o2._el || el; delete o2._el; res[k] = o2;
     }
     var checked = res.filter(function (r) { return r.same !== null; });
     return remember({
@@ -2498,9 +2952,14 @@
     }
     if (!target) return remember({ status: 'not-found', detail: '대상 파일 칸을 찾지 못했습니다' });
     var want = spec.names && spec.names.length ? spec.names : null;
+    var available = [].slice.call(src.files);
+    var missing = want ? want.filter(function (name) { return !available.some(function (file) { return file.name === name; }); }) : [];
+    if (missing.length) return remember({ status: 'not-found', detail: '파일 다리에 요청한 사진이 없습니다: ' + missing.join(', '), missing: missing });
+    var selected = available.filter(function (file) { return !want || want.indexOf(file.name) >= 0; });
+    if (!target.multiple && selected.length > 1) return remember({ status: 'ambiguous', detail: '한 장만 받는 파일 칸입니다 — names로 사진 한 장을 지정하세요' });
     var dt = new DataTransfer(), moved = [];
-    [].slice.call(src.files).forEach(function (f) {
-      if (!want || want.indexOf(f.name) >= 0) { if (!target.multiple && dt.items.length) return; dt.items.add(f); moved.push(f.name); }
+    selected.forEach(function (f) {
+      dt.items.add(f); moved.push(f.name);
     });
     if (!moved.length) return remember({ status: 'not-found', detail: '옮길 파일이 없습니다: ' + (want || []).join(', '), have: [].slice.call(src.files).map(function (f) { return f.name; }) });
     // 파일을 고르는 것만으로 올라가는 칸인가 — 룸 사진 칸이 그렇다(`hx-trigger="change"` 가 붙어
@@ -2543,8 +3002,8 @@
      그 저장 버튼은 드로어·모달 **밖**, 페이지 우상단 머리(`.right_header`)의 `#save` 다
      (`fit/templates/fit/master_form.html`). 누르면 htmx 가 아니라 **ajax POST** 가
      나가고(새 화면으로 넘어가지 않는다) 성공하면 Materialize 안내 띠가 뜬다 —
-     그래서 `submit()` 의 htmx 기다림으로는 정착을 못 본다. 여기서는 띠가 새로 뜨는
-     것과 화면이 넘어가는 것 둘 다 본다. 필수 칸이 비어 있으면 ERP 는 요청을 아예
+     그래서 `submit()` 의 htmx 기다림으로는 정착을 못 본다. 이 폼의 새 저장 요청이
+     끝났는지 보며, 안내 띠만으로 성공을 판정하지 않는다. 필수 칸이 비어 있으면 ERP 는 요청을 아예
      보내지 않고 칸에 `.not-valid` 만 붙인다 — 그것도 갈라 읽는다. */
   function pageSaveButton() {
     var inOver = function (el) {
@@ -2586,29 +3045,42 @@
     });
 
     var before = {
-      url: location.href, path: location.pathname,
-      settles: hx.settles, swaps: hx.swaps,
-      xhrDone: hx.xhrDone || 0
+      path: location.pathname,
+      xhrStarted: hx.xhrStarted || 0
     };
     // 안내 띠를 **마디로 가린다** — 앞 저장의 띠가 60초 넘게 남아 글자가 같으면 종전 판정은
     // 새 띠를 영영 못 봤다(2026-09-21 운영 실측, `toastSnap` 주석).
     var tSnap = toastSnap();
     // 저장 요청의 주소 — 기본정보 폼은 `/fit/master/<id>/change/` 로 간다. 폼의 `action` 도 같이 본다.
-    var saveUrls = ['/change/'];
+    var saveUrls = [];
+    var saveAddress = function (value) {
+      try { var u = new URL(value, location.href); return u.origin + u.pathname; }
+      catch (e) { return ''; }
+    };
+    var addSaveUrl = function (value) {
+      if (!value) return;
+      var address = saveAddress(value);
+      if (address && saveUrls.indexOf(address) < 0) saveUrls.push(address);
+    };
     try {
       var frm = (btn.form || (btn.closest && btn.closest('form'))) || document.querySelector('form');
       var act = frm && frm.getAttribute('action');
-      if (act && saveUrls.indexOf(act) < 0) saveUrls.push(act);
-    } catch (e) { /* 폼을 못 찾아도 `/change/` 만으로 가린다 */ }
-    // 그물로 본 저장 — 클릭 뒤에 끝난 요청이 있고, 그 주소가 저장 주소이며, 2xx·3xx 로 답했고,
-    // 지금 도는 요청이 없다. 띠를 못 보는 판(묵은 띠)에서도 이것으로 끝을 안다.
+      addSaveUrl(act);
+      addSaveUrl(btn.getAttribute('hx-post') || btn.getAttribute('hx-put') || btn.getAttribute('hx-patch'));
+      var idInput = document.getElementById('master_id');
+      var match = location.pathname.match(/^\/(?:stay\/|fit\/master\/)(\d+)\//);
+      var masterId = (idInput && idInput.value) || (match && match[1]);
+      if (/^\d+$/.test(String(masterId || ''))) addSaveUrl('/fit/master/' + masterId + '/change/');
+    } catch (e) { /* No target means no network-only success claim. */ }
+    // Only a new write to this form's exact target proves a save. Global htmx
+    // swaps and unrelated /change/ requests are never evidence for this form.
     var netSaved = function () {
-      if ((hx.xhrDone || 0) <= before.xhrDone) return null;
-      if ((hx.xhrPending || 0) !== 0) return null;
-      var l = hx.xhrLast;
-      if (!l || !l.url) return null;
-      if (!(l.status >= 200 && l.status < 400)) return null;
-      for (var i = 0; i < saveUrls.length; i++) if (l.url.indexOf(saveUrls[i]) >= 0) return l;
+      var recent = hx.xhrRecent || [];
+      for (var i = recent.length - 1; i >= 0; i--) {
+        var l = recent[i];
+        if (l.id <= before.xhrStarted || !/^(POST|PUT|PATCH)$/.test(l.method || '')) continue;
+        if (saveUrls.indexOf(saveAddress(l.url)) >= 0) return l;
+      }
       return null;
     };
     hx.error = null; hx.errorStatus = null;
@@ -2619,26 +3091,17 @@
       await sleep(TICK);
       if (hx.unloading || location.pathname !== before.path) { status = 'navigated'; break; }
       if (hx.error) { status = 'error'; break; }
-      // ajax 저장은 안내 띠로만 끝을 알린다("저장되었습니다.")
       toastNow = tSnap.fresh();
-      // 이 200ms 는 **고정 대기 그대로 둔다** — ajax 저장의 콜백이 화면을 마저 고치는 짬이고,
-      // 요청이 htmx 가 아니라서 `pending` 도 이미 0 이다(그 자리에서 볼 상태가 없다).
-      if (toastNow) { await sleep(200); status = 'settled'; break; }
-      // 띠가 안 갈려도 **요청이 끝난 것**으로 안다 — 묵은 띠에 가려 저장이 timeout 으로 나던 자리다.
+      // A toast can belong to an older/background action. It is feedback, never
+      // independent evidence that this click saved this form.
       xhrHit = netSaved();
       if (xhrHit) {
+        if (!(xhrHit.status >= 200 && xhrHit.status < 400)) {
+          hx.error = '저장 요청이 실패했습니다 (' + (xhrHit.status || '네트워크') + ')';
+          status = 'error'; break;
+        }
         // 응답이 끝난 뒤 화면이 마저 고쳐지는 짬 — 새 띠나 필수 칸 표시가 오면 곧바로 끊는다
         await settleOr(function () { return !!tSnap.fresh() || invalidFields().length > 0; }, 400);
-        toastNow = tSnap.fresh();
-        status = 'settled'; break;
-      }
-      // htmx 로 저장하는 화면(Stay 쪽 전체 화면 폼)도 있으니 그 신호도 같이 본다
-      if (hx.pending === 0 && (hx.settles > before.settles || hx.swaps > before.swaps)) {
-        // 기다리는 것은 **끝을 알리는 표시**다 — 안내 띠가 새로 뜨거나 필수 칸 표시가 붙는 것
-        // (250ms 고정 대기였다). 둘 다 안 오면 종전과 같은 250ms 에서 끊는다.
-        await settleOr(function () {
-          return !!tSnap.fresh() || invalidFields().length > 0;
-        }, 250);
         toastNow = tSnap.fresh();
         status = 'settled'; break;
       }
@@ -2669,7 +3132,7 @@
       out.detail = '필수 칸이 비어 저장 요청이 나가지 않았습니다: ' + bad.join(' · ');
     }
     if (status === 'timeout') out.detail = '저장이 끝난 표시(새 안내 띠·오간 요청·화면 갈림)를 못 봤습니다 — 스크린샷으로 확인하세요';
-    if (st.loginPage) out.status = 'login';
+    if (st.loginPage) { out.status = 'login'; out.saved = false; }
     return remember(out);
   }
 
@@ -2839,6 +3302,7 @@
     buttons: function (o) { return buttonsIn(narrow(baseScope(), o || {})); },
     fileInputs: fileInputs,
     tab: tab,
+    workspace: workspace,
     open: open,
     fill: fill,
     addRow: addRow,
@@ -2858,6 +3322,8 @@
     sleep: sleep, waitFor: waitFor, tier: tier, findButton: findButton,
     // 저장·열기 천장 읽기·바꾸기 — 느린 서버에서 `stayRun.config({waitMs: 40000})`
     config: config,
+    actionFlags: actionFlags,
+    seasonDays: seasonDays,
     // 고정 대기 대신 상태 대기 — 부트(`stay_boot.js`)의 가격 셀 단계도 같은 것을 쓴다
     settleOr: settleOr,
     // 저장 뒤 조각 다시 그리기 기다리기 — 부트의 고리가 단계 앞에서 같은 것을 쓴다

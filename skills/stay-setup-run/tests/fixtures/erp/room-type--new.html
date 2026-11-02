@@ -1,0 +1,825 @@
+
+
+
+
+
+
+<script id="stay_bed_rows_initial" type="application/json">[]</script>
+<div id="stay_room_type_form_00000000" data-stay-screen="room-type"
+     x-data="{ beds: JSON.parse(document.getElementById('stay_bed_rows_initial').textContent) || [] }">
+
+  
+
+  <div class="stay-card" data-stay-card="main">
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:140px"><col></colgroup>
+        <tbody>
+          
+          
+          <tr>
+            <th>룸 이름 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td>
+              
+              <input type="text" name="name" maxlength="100" data-stay-field="name" data-stay-kind="text" data-stay-required="1" aria-label="룸 이름" required id="id_stay_name">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>룸 설명</th>
+            <td>
+              
+              <textarea name="description" cols="40" rows="3" placeholder="예: 바다가 보이는 발코니가 딸린 객실입니다." data-stay-field="description" data-stay-kind="textarea" aria-label="룸 설명" id="id_stay_description">
+</textarea>
+              
+              <small>고객 화면 객실 카드에 표시됩니다. 비우면 표시하지 않습니다</small>
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>상위 동/윙</th>
+            <td>
+              
+              <select name="parent_category" class="browser-default" data-stay-field="parent_category" data-stay-kind="select" data-stay-options="room_types" aria-label="상위 동/윙" id="id_stay_parent_category">
+  <option value="" selected>(없음)</option>
+
+  <option value="{room_type:1}">디럭스</option>
+
+  <option value="{room_type:2}">스위트</option>
+
+</select>
+              
+              <small>같은 호텔 안의 동·윙 구분입니다(예: I동/II동). 없으면 비워두세요.</small>
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>면적(㎡)</th>
+            <td>
+              
+              <input type="text" name="room_size_sqm" inputmode="decimal" placeholder="42.5" data-stay-field="room_size_sqm" data-stay-kind="number" aria-label="면적(㎡)" id="id_stay_room_size_sqm">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>전망</th>
+            <td>
+              
+              <input type="text" name="view" placeholder="오션뷰 / 가든뷰 …" maxlength="50" data-stay-field="view" data-stay-kind="text" aria-label="전망" id="id_stay_view">
+              
+              <small>룸 필터 칩의 소스입니다 — &#x27;오션뷰&#x27;처럼 고객에게 보일 표기를 그대로 씁니다.</small>
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>층/건물</th>
+            <td>
+              
+              <input type="text" name="floor_info" placeholder="3~7층 / I동 …" maxlength="50" data-stay-field="floor_info" data-stay-kind="text" aria-label="층/건물" id="id_stay_floor_info">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          
+          
+          
+          
+          <tr>
+            <th>기준 성인</th>
+            <td>
+              
+              <input type="text" name="base_adult" inputmode="numeric" placeholder="2" data-stay-field="base_adult" data-stay-kind="number" aria-label="기준 성인" id="id_stay_base_adult">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>최대 성인</th>
+            <td>
+              
+              <input type="text" name="max_adult" inputmode="numeric" placeholder="3" data-stay-field="max_adult" data-stay-kind="number" aria-label="최대 성인" id="id_stay_max_adult">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>최대 소아</th>
+            <td>
+              
+              <input type="text" name="max_child" inputmode="numeric" placeholder="1" data-stay-field="max_child" data-stay-kind="number" aria-label="최대 소아" id="id_stay_max_child">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>최대 총원</th>
+            <td>
+              
+              <input type="text" name="max_total" inputmode="numeric" placeholder="4" data-stay-field="max_total" data-stay-kind="number" aria-label="최대 총원" id="id_stay_max_total">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>허용 인원 조합(선택)</th>
+            <td>
+              
+              <input type="text" name="allowed_combos" placeholder="2A+2C, 3A" maxlength="200" data-stay-field="allowed_combos" data-stay-kind="text" aria-label="허용 인원 조합(선택)" id="id_stay_allowed_combos">
+              
+              <small>계약서의 &#x27;2A+2C 또는 3A&#x27; 처럼 받는 조합을 쉼표로 적습니다(A=성인, C=아동 수 · 구간 코드는 적지 않습니다). 적은 조합 이하의 인원은 모두 허용되고(2A+2C 면 2A+1C·1A+2C 도 가능) 그 밖의 조합(예: 3A+1C)은 가격 셀이 있어도 팔리지 않고, 시즌 일괄 전개도 그 조합 셀을 만들지 않습니다. 아동(C)에는 유료 연령 구간 아이와, 무료 구간이라도 &#x27;방 인원수에 포함&#x27;인 구간의 아이(유아 등)가 듭니다 — 방 인원수에 포함되지 않는 구간의 아이만 세지 않습니다. 어느 구간에도 안 드는 나이는 성인으로 셉니다. 저장하면 이 호텔에서 이 룸의 기존 셀 중 조합 밖인 것을 모든 시즌·손입력에서 판매 중지합니다(지우지 않음). 조합을 넓혀도 자동으로 다시 열리지 않으니 가격 캘린더의 셀 편집으로 여세요. 비우면 제한이 없습니다. 고객 화면 &#x27;투숙 조합&#x27; 에 &#x27;성인 2 + 소아 2 / 성인 3&#x27; 으로 표시됩니다.</small>
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>엑스트라베드 가능</th>
+            <td>
+              
+              <select name="extra_bed_allowed" class="browser-default" data-stay-field="extra_bed_allowed" data-stay-kind="tristate" aria-label="엑스트라베드 가능" id="id_stay_extra_bed_allowed">
+  <option value="unknown" selected>모르겠음</option>
+
+  <option value="true">가능</option>
+
+  <option value="false">불가능</option>
+
+</select>
+              
+              <small>계약에 없으면 &#x27;모르겠음&#x27;으로 두세요. &#x27;불가능&#x27;으로 두면 엑스트라베드 없음으로 확정됩니다.</small>
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>엑스트라베드 최대</th>
+            <td>
+              
+              <input type="text" name="extra_bed_max" inputmode="numeric" placeholder="1" data-stay-field="extra_bed_max" data-stay-kind="number" aria-label="엑스트라베드 최대" id="id_stay_extra_bed_max">
+              
+              
+              
+            </td>
+          </tr>
+          
+          
+          
+          <tr>
+            <th>재고 상한(메타)</th>
+            <td>
+              
+              <input type="text" name="inventory_cap" inputmode="numeric" placeholder="10" data-stay-field="inventory_cap" data-stay-kind="number" aria-label="재고 상한(메타)" id="id_stay_inventory_cap">
+              
+              <small>참고용 값이에요. 실제 판매 수량은 [재고] 탭에서 정해요.</small>
+              
+            </td>
+          </tr>
+          
+          
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="stay-card" data-stay-card="bed_configs">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="bed_configs">침대 구성</h4>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
+              x-on:click="beds.push({ code: '', count: 1 })">침대 행 추가</button>
+    </div>
+    <div class="table1">
+      
+      <input type="hidden" name="bed_configs_submitted" value="1">
+      <table class="bs-table stay-table" data-stay-field="bed_configs" data-stay-kind="rows" data-stay-rows="bed_configs">
+        <colgroup><col><col style="width:120px"><col style="width:80px"></colgroup>
+        <thead><tr>
+          <th>침대 종류</th><th>개수</th><th></th>
+        </tr></thead>
+        <tbody>
+          
+          <template x-for="(bed, index) in beds" :key="index">
+            <tr>
+              <td>
+                
+                <select name="bed_configs_code" data-stay-col="code" class="browser-default" x-model="bed.code">
+                  <option value="">선택하세요</option>
+                  <option value="DOUBLE">더블</option><option value="TWIN">트윈</option><option value="SINGLE">싱글</option><option value="KING">킹</option><option value="QUEEN">퀸</option><option value="BUNK">벙크 (2층 침대)</option><option value="SOFA">소파베드</option><option value="OTHER">기타</option>
+                </select>
+              </td>
+              <td><input type="number" name="bed_configs_count" data-stay-col="count" min="1" step="1" x-model="bed.count"></td>
+              <td>
+                
+                <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="remove_row"
+                        x-on:click="beds.splice(index, 1)">삭제</button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="beds.length === 0">
+            <td colspan="3"><small>계약서에 침대 구성이 없으면 비워 두세요 — 지어내지 않습니다.</small></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    
+    
+    <small style="display:block;margin-top:6px;color:var(--stay-text-tertiary)">
+      지금 입력해도 되고, 생성 후 편집에서도 언제든 추가·수정할 수 있습니다.
+    </small>
+    
+  </div>
+
+  
+  
+  
+  
+  <div class="stay-card" data-stay-card="amenities" data-stay-field="amenities_code" data-stay-kind="multicheck"
+       x-data="{
+         amenitySources: JSON.parse(document.getElementById('stay_amenity_sources_00000000').textContent || '[]'),
+         amenityPick: '',
+         amenityCopiedFrom: '',
+         copyAmenities() {
+           const source = this.amenitySources.find((room) => String(room.id) === String(this.amenityPick));
+           if (!source) { return }
+           const wanted = source.codes.map((code) => code.toLowerCase());
+           this.$root.querySelectorAll('input[name=amenities_code]').forEach((box) => {
+             box.checked = wanted.includes(box.value.toLowerCase())
+           });
+           const custom = this.$root.querySelector('input[name=amenities_custom]');
+           if (custom) { custom.value = source.custom }
+           this.amenityCopiedFrom = source.name
+         }
+       }">
+    <script id="stay_amenity_sources_00000000" type="application/json">[{"id": {room_type:1}, "name": "\ub514\ub7ed\uc2a4", "codes": [], "custom": ""}, {"id": {room_type:2}, "name": "\uc2a4\uc704\ud2b8", "codes": [], "custom": ""}]</script>
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="amenities_code">어메니티</h4>
+      
+      
+      <div>
+        
+        <select class="browser-default" x-model="amenityPick" data-stay-control="amenity_copy_source"
+                aria-label="다른 룸에서 복사"
+                style="display:inline-block;width:auto;max-width:220px;vertical-align:middle">
+          <option value="">다른 룸에서 복사…</option>
+          <option value="{room_type:1}">디럭스</option><option value="{room_type:2}">스위트</option>
+        </select>
+        <button type="button" class="stay-btn stay-btn--ghost"
+                x-bind:disabled="!amenityPick"
+                data-stay-action="copy" x-on:click="copyAmenities()">복사</button>
+      </div>
+      
+    </div>
+    <small x-show="amenityCopiedFrom" style="display:block;margin-bottom:6px;color:var(--stay-text-tertiary)">
+      <span x-text="amenityCopiedFrom"></span>에서 복사했습니다 — 확인 후 <span class="stay-action-guide__btn stay-action-guide__btn--primary">저장</span>을 누르세요(아직 저장 전입니다).
+    </small>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">구조</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BALCONY" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>발코니·테라스</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="PRIVATE_POOL" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>프라이빗 풀</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="POOL_ACCESS" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>수영장 바로 연결(풀 액세스)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="PRIVATE_ENTRANCE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>전용 출입구</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SMOKING" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>흡연 가능</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">냉난방·환경</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="AIR_CONDITIONING" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>에어컨</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="HEATING" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>난방</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FAN" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>선풍기</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SOUNDPROOF" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>방음</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BLACKOUT_CURTAIN" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>암막 커튼</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WINDOW" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>창문</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WOODEN_FLOOR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>마룻바닥</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="TILE_MARBLE_FLOOR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>타일·대리석 바닥</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="CARPET_FLOOR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>카펫 바닥</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">욕실</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="PRIVATE_BATHROOM" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>프라이빗 욕실</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SHARED_BATHROOM" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>공용 욕실</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SHOWER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>샤워실</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BATHTUB" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>욕조</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WHIRLPOOL_BATH" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>월풀 욕조(자쿠지)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="TOILETRIES" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>세면도구</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="HAIR_DRYER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>헤어드라이어</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BATHROBE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>목욕 가운</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SLIPPERS" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>슬리퍼</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="TOWEL" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>타월</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="MIRROR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>거울</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">엔터테인먼트·통신</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FREE_WIFI" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>무료 Wi-Fi</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WIRED_INTERNET" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>유선인터넷</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="TV" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>TV</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SATELLITE_TV" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>위성·케이블 방송</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="STREAMING_SERVICE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>스트리밍 서비스(넷플릭스 등)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="TELEPHONE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>전화</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">식음료·주방</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="MINIBAR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>미니바</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="REFRIGERATOR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>냉장고</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="ELECTRIC_KETTLE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>전기 주전자</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="COFFEE_TEA_MAKER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>커피·티 메이커</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="COFFEE_MACHINE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>커피 머신(캡슐·에스프레소)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FREE_WATER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>무료 생수</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FREE_COFFEE_TEA" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>무료 커피·차</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FRUIT_SNACK" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>과일·스낵</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WINE_GLASSES" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>와인잔</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="KITCHENETTE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>간이주방</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FULL_KITCHEN" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>풀키친</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="KITCHENWARE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>주방용품</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="DISHWASHER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>식기세척기</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="MICROWAVE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>전자레인지</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="DINING_AREA" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>식사 공간</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="DINING_TABLE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>식탁</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BBQ_FACILITIES" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>바베큐 시설</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">가구·수납</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="DESK" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>책상</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SOFA" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>소파</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SEATING_AREA" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>휴식 공간(좌석)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="OUTDOOR_FURNITURE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>야외용 가구</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WARDROBE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>옷장</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="DRESSING_ROOM" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>드레스룸</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="HANGERS" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>옷걸이</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="LINEN" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>리넨·침구</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="EXTRA_LONG_BED" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>긴 침대(2m 이상)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FOLDAWAY_BED" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>접이식 침대</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BEDSIDE_OUTLET" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>침대 옆 콘센트</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WASTE_BIN" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>휴지통</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">생활·세탁</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="IRON" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>다림질 도구</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="TROUSER_PRESS" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>바지 전용 다리미</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WASHING_MACHINE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>세탁기</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="DRYING_RACK" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>세탁물 건조대</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="CLEANING_SUPPLIES" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>청소용품</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="UMBRELLA" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>우산</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SCALE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>체중계</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">안전·위생</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="IN_ROOM_SAFE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>객실 내 안전 금고</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="LAPTOP_SAFE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>노트북용 금고</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SMOKE_DETECTOR" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>화재감지기</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="FIRE_EXTINGUISHER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>소화기</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="HAND_SANITIZER" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>손 소독제</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="VISUAL_ALARM" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>시각 경보기</span>
+      </label>
+      
+    </div>
+    
+    
+    <input type="hidden" name="amenities_submitted" value="1">
+    <div style="margin-bottom:8px">
+      <small style="display:block;font-weight:500;margin-bottom:2px">서비스·아동</small>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="ROOM_SERVICE" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>룸서비스</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="WAKE_UP_CALL" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>모닝콜</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="ALARM_CLOCK" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>알람시계</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SLEEP_KIT" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>숙면용 편의 용품</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="SEWING_KIT" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>반짇고리</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="CRIB_ON_REQUEST" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>유아용 침대(요청 시)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="BABY_KIT" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>유아용 편의 용품(요청 시)</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="STEP_STOOL" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>발판·디딤대</span>
+      </label>
+      
+      <label class="check_form" style="display:inline-block;margin:2px 14px 2px 0">
+        <input class="filled-in" type="checkbox" name="amenities_code" value="HYPOALLERGENIC" data-stay-field="amenities_code" data-stay-kind="multicheck">
+        <span>저자극 객실</span>
+      </label>
+      
+    </div>
+    
+    <small>
+      체크하지 않은 항목은 저장되지 않습니다. '흡연 가능'을 체크하지 않으면 고객 화면에 금연으로 표시됩니다.
+    </small>
+    <div style="margin-top:6px">
+      <label data-stay-label-for="amenities_custom" for="id_stay_amenities_custom">직접 입력 (목록에 없을 때만, 콤마로 구분)</label>
+      <input type="text" name="amenities_custom" id="id_stay_amenities_custom" value=""
+             data-stay-field="amenities_custom" data-stay-kind="text"
+             placeholder="예: 커넥팅 도어 가능">
+      <small>여기 적은 문구는 고객 화면에 그대로 나갑니다 — 필터·아이콘에는 연결되지 않습니다.</small>
+    </div>
+    
+    
+    
+    <small style="display:block;margin-top:6px;color:var(--stay-text-tertiary)">
+      지금 골라도 되고, 생성 후 편집에서도 언제든 바꿀 수 있습니다.
+    </small>
+    
+  </div>
+  
+
+  
+  
+  <div class="stay-card" data-stay-card="room_images_hint" style="opacity:.6">
+    <div class="stay-card__head"><h4 class="stay-section-title">룸 사진</h4></div>
+    <small>룸을 저장하면 이 자리에서 사진을 올릴 수 있습니다.</small>
+  </div>
+  
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+            hx-post="/stay/{master:1}/room-types/new/"
+            hx-include="#stay_room_type_form_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">저장</button>
+  </div>
+</div>

@@ -1,0 +1,58 @@
+
+
+
+
+
+<div id="stay_inventory_cell_00000000" data-stay-screen="inventory-cell"
+     x-data="{ qty: '', sold: 0 }"
+     x-init="qty = $el.querySelector('[name=total_qty]')?.value || ''"
+     x-on:input="if ($event.target.name === 'total_qty') qty = $event.target.value">
+  
+
+  <p><b>〈오퍼 관리용 이름〉 · 디럭스</b><br><small>2026-07-01 (수)</small></p>
+
+  <input type="hidden" name="month" value="2026-10">
+  <div class="table1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:96px"><col></colgroup>
+      <tbody>
+        <tr>
+          <th>팔림</th>
+          <td>-</td>
+        </tr>
+        <tr>
+          <th>결제 중</th>
+          <td>0실</td>
+        </tr>
+        <tr>
+          <th>남음</th>
+          <td>안 팖 — 수량을 넣지 않은 날이라 수량으로 판매하면 팔리지 않습니다</td>
+        </tr>
+        <tr>
+          <th>총 수량 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            <input type="text" name="total_qty" inputmode="numeric" placeholder="10" data-stay-field="total_qty" data-stay-kind="number" data-stay-required="1" aria-label="총 수량" required id="id_stay_total_qty">
+            <small>0 은 마감, <span class="stay-action-guide__btn stay-action-guide__btn--secondary">비우기</span>는 '안 팖'입니다 — 수량으로 판매하면 둘 다 그날 팔리지 않습니다.</small>
+            
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stay-banner stay-banner--warning"
+       x-show="qty.trim() !== '' && Number(qty) < sold" style="display:none">
+    <span>팔린 수(0실)보다 적어요. 남은 수는 0으로 보이고 더 팔리지 않아요.</span>
+  </div>
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+            hx-post="/stay/{master:1}/inventory/links/{room:1}/days/2026-07-01/"
+            hx-include="#stay_inventory_cell_00000000 :is(input,select)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">
+      저장
+    </button>
+    
+  </div>
+</div>

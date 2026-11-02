@@ -55,6 +55,74 @@ def preserve_supplement(name: str, fresh: str, previous: str) -> str:
     return fresh.split(SUPPLEMENT_MARKER)[0] + (SUPPLEMENT_MARKER + previous.split(SUPPLEMENT_MARKER, 1)[1] if SUPPLEMENT_MARKER in previous else '')
 
 
+#: ERP 옆 파일(`agent_markup_notes.json`)이 아직 `former_labels` 로 싣지 않은 옛 화면 글자 — (화면 id, 칸 key) → 옛 글자.
+#: 옛 원고가 이 글자를 적는다. 2026-10-28 의 네 칸(공통 요금제 이름 바뀜)은 basecamp 노트가 싣게 되어 비웠다.
+#: 다음에 노트보다 화면이 먼저 바뀌면 여기에 잠깐 적는다(겹쳐도 합칠 뿐이라 해가 없다).
+GUIDE_FORMER_LABELS: dict = {}
+#: 사전 픽스처의 글자가 화면보다 낡은 칸 — 화면이 지금 그리는 글자를 **별칭**으로 더한다(옛 글자가 아니라 바른 글자다).
+GUIDE_ALIASES: dict = {}
+
+
+def _fields_by_key(data: dict) -> dict:
+    out = {}
+    for screen in data.get("screens") or []:
+        for block in screen.get("blocks") or []:
+            for item in block.get("fields") or []:
+                if item.get("key"):
+                    out[(screen.get("id"), item["key"])] = item
+    return out
+
+
+def carry_former_labels(fresh: dict, previous: dict | None) -> list:
+    """새 사전의 칸마다 옛 글자(`former_labels`)를 모은다 — 옛 원고가 쓰는 글자가 사전에서 사라지지 않게.
+
+    ① ERP 가 준 `former_labels` ② 지난 사전의 **같은 (화면, key)** 칸 글자가 바뀌었으면 그 옛 글자와 그 칸의
+    `former_labels` ③ `GUIDE_FORMER_LABELS`. 지금 글자와 같은 것은 뺀다. 바뀐 자리 목록을 돌려준다(알림용).
+    """
+    old = _fields_by_key(previous or {})
+    changes = []
+    for (screen_id, key), item in _fields_by_key(fresh).items():
+        labels = list(item.get("former_labels") or [])
+        before = old.get((screen_id, key))
+        if before is not None:
+            if before.get("label") and before["label"] != item.get("label"):
+                labels.append(before["label"])
+                changes.append(f"{screen_id}/{key}: {before['label']} → {item.get('label')}")
+            labels += list(before.get("former_labels") or [])
+        labels += GUIDE_FORMER_LABELS.get((screen_id, key), [])
+        kept = []
+        for label in labels:
+            if label and label != item.get("label") and label not in kept:
+                kept.append(label)
+        if kept:
+            item["former_labels"] = kept
+        else:
+            item.pop("former_labels", None)
+        extra = [a for a in GUIDE_ALIASES.get((screen_id, key), []) if a not in (item.get("aliases") or [])]
+        if extra:
+            item["aliases"] = list(item.get("aliases") or []) + extra
+    return changes
+
+
+def render_markdown_with(basecamp: Path, python: str, data: dict) -> str:
+    """ERP 의 `agent_dictionary.render_markdown` 으로 사람이 읽는 판을 찍는다 — 장고·DB 없이(bs4 만 쓴다)."""
+    with tempfile.TemporaryDirectory(prefix="stay-dict-md-") as tmp:
+        source = Path(tmp) / "dictionary.json"
+        source.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        code = (
+            "import json, sys; from stay import agent_dictionary as a;"
+            "d = json.load(open(sys.argv[1], encoding='utf-8'));"
+            "sys.stdout.write(a.render_markdown(d, a.load_notes().get('markdown')))"
+        )
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.pathsep.join([str(basecamp), *([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])])
+        done = subprocess.run([python, "-c", code, str(source)], cwd=str(basecamp), env=env,
+                              capture_output=True, text=True, encoding="utf-8")
+    if done.returncode != 0:
+        _fail("마크다운을 찍지 못했습니다:\n" + _tail(done.stderr))
+    return done.stdout
+
+
 def core_only(name: str, text: str) -> str:
     if name.endswith('.json'):
         data = json.loads(text)
@@ -261,11 +329,17 @@ def main(argv=None) -> int:
                     help="사전에 박을 날짜 (기본: 오늘). 두 번 돌려 같은 파일인지 볼 때만 준다")
     ap.add_argument("--check", action="store_true",
                     help="덮어쓰지 않고 지금 사전이 화면과 같은지만 본다 (다르면 종료 코드 1)")
+    ap.add_argument("--from-json", default=None,
+                    help="관리 명령을 돌리지 않고 ERP 가 커밋한 사전 픽스처(JSON)에서 받는다 — DB 를 건드리지 않는다 "
+                         "(예: <basecamp>/stay/tests/fixtures/screen-dictionary-20261028.json)")
     args = ap.parse_args(argv)
 
     basecamp = _resolve_basecamp(args.basecamp)
     python = _resolve_python(args.python, basecamp)
     target_dir = Path(args.out).expanduser().resolve() if args.out else REFERENCES_DIR
+
+    if args.from_json:
+        return _sync_from_json(Path(args.from_json).expanduser().resolve(), basecamp, python, target_dir, args.check)
 
     with tempfile.TemporaryDirectory(prefix="stay-dict-") as tmp:
         tmp_dir = Path(tmp)
@@ -321,6 +395,35 @@ def main(argv=None) -> int:
             _log(f"{PROG}: {target} — {state} ({len(after):,} 바이트)")
 
     return 0
+
+
+def _sync_from_json(fixture: Path, basecamp: Path, python: str, target_dir: Path, check: bool) -> int:
+    """픽스처 → `references/` 두 파일. 옛 글자(`former_labels`)를 이어 붙이고 수동 보충은 그대로 둔다."""
+    if not fixture.is_file():
+        _fail(f"사전 픽스처가 없습니다: {fixture}")
+    fresh = json.loads(fixture.read_text(encoding="utf-8"))
+    json_target = target_dir / FILE_NAMES[0]
+    previous = json.loads(json_target.read_text(encoding="utf-8")) if json_target.is_file() else None
+    for line in carry_former_labels(fresh, previous):
+        _log(f"  글자 바뀜 · {line}")
+    outputs = {
+        FILE_NAMES[0]: json.dumps(fresh, ensure_ascii=False, indent=2) + "\n",
+        FILE_NAMES[1]: render_markdown_with(basecamp, python, fresh),
+    }
+    stale = False
+    for name, text in outputs.items():
+        target = target_dir / name
+        before = target.read_text(encoding="utf-8") if target.is_file() else None
+        after = preserve_supplement(name, text, before) if before is not None else text
+        if check:
+            same = before is not None and core_only(name, before) == core_only(name, after)
+            stale = stale or not same
+            _log(f"{PROG}: {target} — {'같다' if same else '다르다'}")
+            continue
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target.write_text(after, encoding="utf-8")
+        _log(f"{PROG}: {target} — {'그대로' if before == after else ('새 파일' if before is None else '바뀜')} ({len(after.encode('utf-8')):,} 바이트)")
+    return 1 if stale else 0
 
 
 if __name__ == "__main__":

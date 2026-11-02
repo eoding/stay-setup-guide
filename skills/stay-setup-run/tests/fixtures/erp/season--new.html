@@ -1,0 +1,463 @@
+
+
+
+
+
+<div id="stay_season_form_00000000" class="stay-card"
+     data-stay-screen="season" data-stay-card="main"
+     x-data="{
+       ruleType: '0', checkin: '', checkout: '',
+       syncTimes() {
+         this.checkin = this.$el.querySelector('[name=checkin_time]').value;
+         this.checkout = this.$el.querySelector('[name=checkout_time]').value;
+       }
+     }" x-init="syncTimes()" x-on:input="syncTimes()" x-on:change="syncTimes()">
+
+  
+
+  <div class="table1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:150px"><col></colgroup>
+      <tbody>
+        
+        
+        
+        <tr>
+          <th>시즌명 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <input type="text" name="name" maxlength="100" data-stay-field="name" data-stay-kind="text" data-stay-required="1" aria-label="시즌명" required id="id_stay_name">
+            
+            
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>시즌 코드</th>
+          <td>
+            
+            <input type="text" name="code" maxlength="64" data-stay-field="code" data-stay-kind="text" aria-label="시즌 코드" id="id_stay_code">
+            
+            
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>날짜 규칙 유형 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <select name="dateset_rule_type" class="browser-default" x-model="ruleType" data-stay-field="dateset_rule_type" data-stay-kind="select" data-stay-required="1" aria-label="날짜 규칙 유형" id="id_stay_dateset_rule_type">
+  <option value="0" selected>기간 범위</option>
+
+  <option value="1">월 목록</option>
+
+  <option value="2">요일 규칙</option>
+
+  <option value="3">비연속 날짜 나열</option>
+
+</select>
+            
+            
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>시즌 날짜</th>
+          <td>
+            
+            <div class="stay-date-selection" data-stay-date-selection data-date-initial="">
+  <div class="stay-date-selection__toolbar">
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-mode="range" aria-pressed="true">기간 선택</button>
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-mode="single" aria-pressed="false">하루씩 추가</button>
+  </div>
+  <p class="stay-date-selection__instruction" role="status" aria-live="polite">① 시작일을 선택하세요.</p>
+  <div class="stay-date-selection__progress" data-date-progress></div>
+  <div class="stay-date-selection__month">
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-month="-1" aria-label="이전 달">◀</button>
+    <strong data-date-month-label></strong>
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-month="1" aria-label="다음 달">▶</button>
+  </div>
+  <div class="stay-date-selection__grid" data-date-grid role="group" aria-label="날짜 달력"></div>
+  <p class="stay-date-selection__legend">진한 칸: 시작·종료일 / 옅은 칸: 기간에 포함 / + 표시: 추가 날짜 / 검은 테두리: 마지막 선택</p>
+  
+  <div class="stay-date-selection__selection-head">
+    <strong><output data-date-summary></output></strong>
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-clear>선택 비우기</button>
+  </div>
+  <ul class="stay-date-selection__list" data-date-list aria-label="선택한 기간과 날짜"></ul>
+  <details class="stay-date-selection__direct">
+    <summary>날짜를 직접 입력하기</summary>
+    <div class="stay-date-selection__inputs">
+    <div><label for="id_stay_date_selection_0" data-stay-label-for="date_selection_0">기간 · 직접 입력</label><textarea name="date_selection_0" cols="40" rows="2" class="stay-date-ranges" aria-label="시즌 날짜" id="id_stay_date_selection_0" data-stay-field="date_selection_0" data-stay-kind="textarea">
+</textarea>
+</div>
+    <div><label for="id_stay_date_selection_1" data-stay-label-for="date_selection_1">추가 날짜 · 직접 입력</label><textarea name="date_selection_1" cols="40" rows="2" class="stay-date-extras" aria-label="시즌 날짜" id="id_stay_date_selection_1" data-stay-field="date_selection_1" data-stay-kind="textarea">
+</textarea>
+</div>
+    </div>
+    <p class="stay-description">기간은 한 줄에 YYYY-MM-DD ~ YYYY-MM-DD, 추가 날짜는 YYYY-MM-DD로 입력하세요. 시즌의 월·요일 조건이 있어도 추가 날짜는 포함됩니다.</p>
+  </details>
+</div>
+            
+            
+            
+            
+            
+            <small x-show="ruleType === '1'" style="display:block;color:var(--stay-text-tertiary)">
+              이 기간 안에서 아래 '적용 월'에 해당하는 날짜만 시즌이 됩니다.
+            </small>
+            <small x-show="ruleType === '2'" style="display:block;color:var(--stay-text-tertiary)">
+              이 기간 안에서 아래 '적용 요일'에 해당하는 날짜만 시즌이 됩니다.
+            </small>
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        
+        
+        
+        <tr x-show="ruleType === '1'">
+          <th>적용 월 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="1" id="id_stay_months_0"
+                     >
+              <span for="id_stay_months_0">1월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="2" id="id_stay_months_1"
+                     >
+              <span for="id_stay_months_1">2월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="3" id="id_stay_months_2"
+                     >
+              <span for="id_stay_months_2">3월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="4" id="id_stay_months_3"
+                     >
+              <span for="id_stay_months_3">4월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="5" id="id_stay_months_4"
+                     >
+              <span for="id_stay_months_4">5월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="6" id="id_stay_months_5"
+                     >
+              <span for="id_stay_months_5">6월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="7" id="id_stay_months_6"
+                     >
+              <span for="id_stay_months_6">7월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="8" id="id_stay_months_7"
+                     >
+              <span for="id_stay_months_7">8월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="9" id="id_stay_months_8"
+                     >
+              <span for="id_stay_months_8">9월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="10" id="id_stay_months_9"
+                     >
+              <span for="id_stay_months_9">10월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="11" id="id_stay_months_10"
+                     >
+              <span for="id_stay_months_10">11월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="months"
+                     data-stay-field="months" data-stay-kind="multicheck"
+                     value="12" id="id_stay_months_11"
+                     >
+              <span for="id_stay_months_11">12월</span>
+            </label>
+            
+            
+            
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr x-show="ruleType === '2'">
+          <th>적용 요일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="0" id="id_stay_weekdays_0"
+                     >
+              <span for="id_stay_weekdays_0">월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="1" id="id_stay_weekdays_1"
+                     >
+              <span for="id_stay_weekdays_1">화</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="2" id="id_stay_weekdays_2"
+                     >
+              <span for="id_stay_weekdays_2">수</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="3" id="id_stay_weekdays_3"
+                     >
+              <span for="id_stay_weekdays_3">목</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="4" id="id_stay_weekdays_4"
+                     >
+              <span for="id_stay_weekdays_4">금</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="5" id="id_stay_weekdays_5"
+                     >
+              <span for="id_stay_weekdays_5">토</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:10px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck"
+                     value="6" id="id_stay_weekdays_6"
+                     >
+              <span for="id_stay_weekdays_6">일</span>
+            </label>
+            
+            
+            
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        
+        
+        <tr>
+          <th>우선순위 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <input type="text" name="priority" value="0" inputmode="numeric" data-stay-field="priority" data-stay-kind="number" data-stay-required="1" aria-label="우선순위" required id="id_stay_priority">
+            
+            
+            <small>겹치는 날에 어느 시즌을 그 밤의 시즌으로 볼지 정합니다 — 값이 큰 쪽이 이기고, 시즌에 건 프로모션·부가옵션·최소 박수가 그 승자를 따릅니다. 같으면 나중에 만든 시즌이 이깁니다. 객실 요금은 이 값과 무관합니다 — 겹치는 날의 요금은 가격 채우기가 먼저 채운 값이 남습니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>최소 숙박 (시즌 예외)</th>
+          <td>
+            
+            <input type="text" name="min_nights" inputmode="numeric" placeholder="2" data-stay-field="min_nights" data-stay-kind="number" aria-label="최소 숙박 (시즌 예외)" id="id_stay_min_nights">
+            
+            
+            <small>비우면 오퍼 기본값을 따릅니다. 0을 넣으면 &#x27;제한 없음&#x27;이 되어 오퍼 기본값을 덮어씁니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>취소 정책 (시즌 예외)</th>
+          <td>
+            
+            <select name="cancellation_policy" class="browser-default" data-stay-field="cancellation_policy" data-stay-kind="select" data-stay-options="policies" aria-label="취소 정책 (시즌 예외)" id="id_stay_cancellation_policy">
+  <option value="" selected>(오퍼 기본 정책을 따름)</option>
+
+  <option value="{policy:1}">체크인 7일 전 100% 환불</option>
+
+</select>
+            
+            
+            <small>비우면 오퍼 기본 정책을 따릅니다 — 이 시즌만 다른 규정을 쓸 때 고릅니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>시즌 체크인 예외 (기록용)</th>
+          <td>
+            
+            <div class="select-field"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="checkin_time" input-format="time" data-date-format="H:i" data-form-control="time" data-lang="ko" placeholder="14:00" data-stay-field="checkin_time" data-stay-kind="time" aria-label="시즌 체크인 예외 (기록용)" id="id_stay_checkin_time">
+        </dmc-datetime>
+    </div>
+</div>
+            
+            
+            <small data-stay-time-source>설정 참고: <span x-text="checkin || '미설정'"></span> · <span x-text="checkin ? '시즌 예외' : '오퍼 공통 설정'"></span></small>
+            
+            <small>비우면 별도 예외 없이 오퍼 공통 설정을 참고합니다. 현재 고객 안내에는 시즌 예외 시각이 반영되지 않습니다. 목록에서 고르거나 24시간 형식으로 직접 입력 (예: 14:15)</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>시즌 체크아웃 예외 (기록용)</th>
+          <td>
+            
+            <div class="select-field"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="checkout_time" input-format="time" data-date-format="H:i" data-form-control="time" data-lang="ko" placeholder="14:00" data-stay-field="checkout_time" data-stay-kind="time" aria-label="시즌 체크아웃 예외 (기록용)" id="id_stay_checkout_time">
+        </dmc-datetime>
+    </div>
+</div>
+            
+            
+            <small data-stay-time-source>설정 참고: <span x-text="checkout || '미설정'"></span> · <span x-text="checkout ? '시즌 예외' : '오퍼 공통 설정'"></span></small>
+            
+            <small>비우면 별도 예외 없이 오퍼 공통 설정을 참고합니다. 현재 고객 안내에는 시즌 예외 시각이 반영되지 않습니다. 목록에서 고르거나 24시간 형식으로 직접 입력 (예: 14:15)</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+        
+        <tr>
+          <th>호텔 예약 코드</th>
+          <td>
+            
+            <input type="text" name="booking_code" maxlength="64" data-stay-field="booking_code" data-stay-kind="text" aria-label="호텔 예약 코드" id="id_stay_booking_code">
+            
+            
+            <small>호텔 발주 시 쓰는 시즌별 부킹 코드(예: NWPQEB1).</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary"
+            data-stay-action="save"
+            hx-post="/stay/{master:1}/offers/{offer:1}/seasons/new/"
+            hx-include="#stay_season_form_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">
+      추가
+    </button>
+  </div>
+</div>

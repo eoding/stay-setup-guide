@@ -1,0 +1,121 @@
+
+
+
+
+<div id="stay_sale_days" class="stay-root stay-readable" data-stay-screen="sale-day-close">
+  
+  
+  <span hidden
+        hx-get="/stay/{master:1}/sale-days/"
+        hx-trigger="stay:rooms-changed from:body, stay:prices-filled from:body, stay:cells-removed from:body"
+        hx-target="#stay_sale_days"
+        hx-swap="outerHTML"></span>
+
+
+  
+  
+  
+  
+
+  
+  <div class="erp_cont_head">
+    <h4 class="stay-section-title">판매일</h4>
+    <div class="erp_cont_head_right">
+      <button type="button" class="stay-btn stay-btn--primary"
+              data-stay-action="open_days"
+              title="고른 룸·기간의 날짜를 한 번에 엽니다 — 이미 열려 있는 날은 그대로 두므로 여러 번 눌러도 안전합니다"
+              hx-get="/stay/{master:1}/sale-days/open/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        판매일 열기
+      </button>
+    </div>
+  </div>
+
+  
+  <div class="table1 stay-table-scroll" data-stay-card="months">
+    <table class="bs-table stay-table stay-aligned-table">
+      
+      <colgroup>
+        <col style="width:14%"><col style="width:16%"><col style="width:8%">
+        <col style="width:11%"><col style="width:11%"><col style="width:22%">
+        <col style="width:18%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>오퍼</th>
+          <th>룸</th>
+          <th class="stay-column-center">열린 날</th>
+          <th class="stay-column-center">가격 있는 날</th>
+          <th class="stay-column-center">가격 없는 날</th>
+          <th>기간</th>
+          
+          <th class="stay-column-center">월별 판매일 닫기
+            <span class="stay-info" tabindex="0"
+                  aria-label="가격·예약이 없는 빈 판매일만 지웁니다 — 판매 중인 날은 그대로 팝니다. 특정 날짜의 판매를 멈추려면 가격 캘린더에서 그 날짜 셀의 판매 상태를 바꾸세요.">?</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        
+        
+        <tr data-stay-entity="room" data-stay-name="디럭스" data-stay-entity-id="{room:1}">
+          
+          <td rowspan="1" style="vertical-align:top">
+            
+
+
+<span class="stay-card__title">〈오퍼 관리용 이름〉</span>
+<small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+
+
+<small style="color:var(--stay-text-tertiary)">룸 1개</small>
+
+          </td>
+          
+          <td>디럭스</td>
+          <td class="stay-numeric stay-numeric--center">1</td>
+          <td class="stay-numeric stay-numeric--center">1</td>
+          
+          <td class="stay-numeric stay-numeric--center">0</td>
+          <td><dl class="stay-facts">
+  <dt>시작</dt> <dd>2026-07-01</dd>
+  <dt>종료</dt> <dd>2026-07-01</dd>
+</dl></td>
+          <td>
+            
+            <div class="stay-month-actions">
+            
+            <span id="close_{room:1}_1">
+              <input type="hidden" name="room" value="{room:1}"
+                     data-stay-field="room" data-stay-kind="select" data-stay-options="rooms" data-stay-required="1">
+              <input type="hidden" name="date_from" value="2026-07-01"
+                     data-stay-field="date_from" data-stay-kind="date" data-stay-required="1">
+              <input type="hidden" name="date_to" value="2026-07-01"
+                     data-stay-field="date_to" data-stay-kind="date" data-stay-required="1">
+              <button type="button" class="stay-btn stay-btn--ghost"
+                      data-stay-action="close_month"
+                      title="디럭스 · 2026-07 의 빈 판매일을 지웁니다 — 열린 1일 중 가격이 있는 1일과 예약이 걸린 날은 그대로 남아 계속 팔립니다"
+                      hx-post="/stay/{master:1}/sale-days/close/"
+                      hx-include="#close_{room:1}_1 input"
+                      hx-target="#stay_sale_days" hx-swap="outerHTML"
+                      
+                      hx-confirm="디럭스의 2026-07 빈 판매일을 정리할까요? 가격·예약이 걸린 날은 그대로 팔립니다."
+                      hx-disable="this">
+                7월
+                닫기
+              </button>
+            </span>
+            
+            </div>
+          </td>
+        </tr>
+        
+        
+      </tbody>
+    </table>
+  </div>
+  
+  
+
+</div>

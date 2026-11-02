@@ -207,6 +207,19 @@ DATE_SPAN_RE = re.compile(r"(\d{4}-\d{1,2}-\d{1,2})\s*~\s*(\d{4}-\d{1,2}-\d{1,2}
 MONTH_RE = re.compile(r"(\d{1,2})월")
 # 시즌 하나가 담을 수 있는 날짜 수 상한 — 이보다 길면 값을 못 읽은 것으로 보고 대조에서 뺀다
 MAX_SEASON_DAYS = 4000
+# ERP 가 한 시즌에 담는 날짜 상한(`stay/services/season.MAX_SEASON_DAYS`) — 위 4000 은 "못 읽음" 문턱이라 다른 값이다
+ERP_MAX_SEASON_DAYS = 550
+# 시즌 날짜 줄(2026-10-28 ERP 날짜 선택 칸). `추가 날짜:` 는 고르지 않아도 되는 블록 — 월·요일 조건 밖이어도 넣는 날
+SEASON_LIST_FIELD = "날짜 나열"
+SEASON_EXTRA_FIELD = "추가 날짜"
+SEASON_RULE_TYPES = ("기간 범위", "월 목록", "요일 규칙", "비연속 날짜 나열")
+# 날짜 선택 칸으로 옮겨지는 원고 표 줄 — 시즌(`기간 시작`·`기간 종료`)과 셀 상태(`시작 날짜`·`종료 날짜`).
+# 화면에는 이 이름의 칸이 없다(2026-10-28). `날짜 나열:` · `추가 날짜:` 는 블록이라 칸 이름 검사를 받지 않는다.
+# 칸 셀에 화면 칸 key 를 백틱으로 적은 줄(`` `min_nights` ``) — 설치 도구·러너가 그 key 로 바로 찾는다(2026-10-28)
+BACKTICK_KEY_RE = re.compile(r"^`[A-Za-z0-9_]+`$")
+CLOSE_STEP_LABELS = ("바꿀 상태", "시작 날짜", "종료 날짜", "대상 룸", "요금제(선택)")
+DATE_SELECTION_MANUSCRIPT_LABELS = ("기간 시작", "기간 종료", "시작 날짜", "종료 날짜")
+STRICT_DAY_RE = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}$")
 
 OVERWRITE_FIELD = "이미 값이 있는 날도 덮기"
 PROMO_COMMON_CARD = "전 오퍼 공통"
@@ -577,7 +590,8 @@ PROVISION_FREQUENCY_FIELD = "제공 주기"
 # `지금 모든 객실에 배포` 체크박스와 그 묶음 머리 `배포` 는 [정본 만들기] 쪽에만 그려지고,
 # 기존 정본을 [편집] 로 열면 그 줄이 아예 없다 — 지시서가 그 줄을 쓰면 담당자가 없는 칸을 찾는다.
 # 두 드로어는 저장 버튼으로 갈리므로(만들기 [만들기] · 편집 [저장]) 그 버튼으로 판정한다.
-CREATE_ONLY_FIELDS = {"지금 모든 객실에 배포": "만들기"}
+# 2026-10-28 화면 글자가 `지금 있는 룸 전부에 바로 붙이기` 로 바뀌었다 — 옛 원고의 글자도 같은 칸이다.
+CREATE_ONLY_FIELDS = {"지금 모든 객실에 배포": "만들기", "지금 있는 룸 전부에 바로 붙이기": "만들기"}
 
 # 그 칸을 쓰면 안 되는 **고치기 단계**의 제목. 버튼으로도 갈리지만(위 표), 제목이 이미
 # "고치기" 라고 말하는 단계에서는 사람 말로 그대로 돌려주는 편이 고칠 자리를 바로 가리킨다.
@@ -730,7 +744,18 @@ def _span(start, end):
 
 
 def season_dates(step):
-    """시즌 만들기 단계의 표에서 날짜 집합을 읽는다. 읽을 수 없으면 None."""
+    """시즌 만들기 단계의 표에서 날짜 집합을 읽는다. 읽을 수 없으면 None.
+
+    `추가 날짜:` 블록(2026-10-28)의 날은 월·요일 조건과 상관없이 더한다 — ERP 날짜 선택 칸의 규칙이다.
+    """
+    base = _season_base_dates(step)
+    if base is None:
+        return None
+    extras = {d for d in (_date(m.group(0)) for m in DATE_TOKEN_RE.finditer(step["fields"].get(SEASON_EXTRA_FIELD, ""))) if d}
+    return base | extras
+
+
+def _season_base_dates(step):
     fields = step["fields"]
     kind = strip_select(fields.get("날짜 규칙 유형", ""))
     if kind == "기간 범위":
@@ -972,6 +997,191 @@ def find_promotion_window_gaps(steps):
                 "화면이 「종료일이 시작일보다 빠릅니다」 로 저장을 막는다"
             )
     return problems
+
+
+def _strict_range(raw, where):
+    """한 줄 → (시작, 끝). ERP 날짜 선택 칸(`stay/date_selection.parse_ranges`)이 받는 모양만 받는다."""
+    parts = [p.strip() for p in raw.split("~")]
+    bad = f"{where} 날짜 형식을 확인해주세요 — YYYY-MM-DD 또는 YYYY-MM-DD ~ YYYY-MM-DD"
+    if len(parts) > 2 or not all(STRICT_DAY_RE.match(p) for p in parts):
+        raise ValueError(bad)
+    start, end = _date(parts[0]), _date(parts[-1])
+    if start is None or end is None:
+        raise ValueError(bad)
+    if end < start:
+        raise ValueError(f"{where} 종료 날짜가 시작 날짜보다 빠릅니다")
+    return start, end
+
+
+def _block_lines(value):
+    """블록 본문 → 줄. 이 검사기는 블록의 줄을 ` / ` 로 이어 담는다(`parse_steps`). 콤마로 이어 적은 줄도 나눈다."""
+    out = []
+    for raw in re.split(r"\n|\s/\s", value or ""):
+        out += [p.strip() for p in raw.split(",") if p.strip()]
+    return out
+
+
+def season_date_problem(step):
+    """시즌 단계의 날짜 줄이 ERP 날짜 선택 칸(`date_selection_0` 기간 · `_1` 추가 날짜)으로 옮겨지는가 — 이유 한 줄, 아니면 None.
+
+    설치 도구·러너가 같은 규칙으로 옮긴다(`stay_installer/season_dates.py` · `stay_helper.js` `seasonDateValues`).
+    날짜 줄이 하나도 없는 단계(고치기에서 우선순위만 바꾸기)는 보지 않는다.
+    """
+    fields = step["fields"]
+    listed = _block_lines(fields.get(SEASON_LIST_FIELD, ""))
+    extras_raw = _block_lines(fields.get(SEASON_EXTRA_FIELD, ""))
+    start = (fields.get("기간 시작") or "").strip()
+    end = (fields.get("기간 종료") or "").strip()
+    start, end = ("" if start in BLANK_VALUES or start == "비움" else start), ("" if end in BLANK_VALUES or end == "비움" else end)
+    if not (listed or extras_raw or start or end):
+        return None
+    kind = strip_select(fields.get("날짜 규칙 유형", ""))
+    if kind and kind not in SEASON_RULE_TYPES:
+        return f"`날짜 규칙 유형` 값 `{kind}` 을 모른다 — {' / '.join(SEASON_RULE_TYPES)} 중 하나다"
+    if not kind:
+        if listed and (start or end):
+            return "`날짜 규칙 유형` 줄이 없는데 `날짜 나열` 과 `기간 시작`·`기간 종료` 이 함께 있다 — 유형을 적는다"
+        kind = "비연속 날짜 나열" if listed else "기간 범위"
+    try:
+        if kind == "비연속 날짜 나열":
+            if not listed:
+                return "`날짜 규칙 유형` 이 비연속 날짜 나열인데 `날짜 나열:` 블록이 비었다"
+            ranges = [_strict_range(raw, f"날짜 나열 {n}번째 줄의") for n, raw in enumerate(listed, 1)]
+        else:
+            if listed:
+                return "`날짜 나열:` 블록은 `날짜 규칙 유형` 이 비연속 날짜 나열일 때만 쓴다"
+            if not (start and end):
+                return "`기간 시작`·`기간 종료` 두 줄이 모두 있어야 한다"
+            ranges = [_strict_range(f"{start} ~ {end}", "`기간 시작`·`기간 종료` 의")]
+        extras = set()
+        for n, raw in enumerate(extras_raw, 1):
+            a, b = _strict_range(raw, f"추가 날짜 {n}번째 줄의")
+            if a != b:
+                return f"추가 날짜 {n}번째 줄: 추가 날짜에는 하루씩 적는다(기간은 `기간 시작`·`기간 종료` 또는 `날짜 나열`)"
+            extras.add(a)
+    except ValueError as error:
+        return str(error)
+    # 월·요일 조건은 그 유형일 때만 기간에 걸린다(ERP `expand_dates`). 추가 날짜는 조건을 받지 않는다.
+    months = {int(m) for m in MONTH_RE.findall(strip_select(fields.get("적용 월", "")))} if kind == "월 목록" else set()
+    weekdays = _weekday_set(strip_select(fields.get("적용 요일", ""))) if kind == "요일 규칙" else set()
+    days = set()
+    for a, b in ranges:
+        if (b - a).days + 1 > ERP_MAX_SEASON_DAYS * 4:
+            return f"기간이 너무 길다 — 한 시즌은 최대 {ERP_MAX_SEASON_DAYS}일이다"
+        for i in range((b - a).days + 1):
+            d = a + datetime.timedelta(days=i)
+            if (not months or d.month in months) and (not weekdays or d.weekday() in weekdays):
+                days.add(d)
+    days |= extras
+    if not days:
+        return "전개된 날짜가 0일이다 — 기간·월·요일 조건이 고르는 날이 없다"
+    if len(days) > ERP_MAX_SEASON_DAYS:
+        return f"전개 날짜가 {len(days)}일이다 — 한 시즌은 최대 {ERP_MAX_SEASON_DAYS}일이고 ERP 가 저장을 거절한다(기간을 나눈다)"
+    return None
+
+
+def find_season_date_problems(steps):
+    """시즌 날짜 줄이 ERP 날짜 선택 칸으로 옮겨지지 않으면 오류 — 도구가 그 단계에서 멈추거나 ERP 가 저장을 거부한다."""
+    problems = []
+    for step in steps:
+        if not (step["title"].startswith("시즌 만들기") or step["title"].startswith("시즌 고치기")):
+            continue
+        why = season_date_problem(step)
+        if why:
+            name = step_subject(step["title"]) or step["fields"].get("시즌명") or ""
+            problems.append(f"{step['num']}단계: 시즌 `{name}` 날짜 — {why}")
+    return problems
+
+
+def find_field_keys(steps, dictionary_path, labels):
+    """단계마다 표 줄의 칸 이름 → 화면 칸 key(`data-stay-field`) — 그 단계의 화면 안에서 푼다(`screen_keys.py`).
+
+    돌려주는 것: `keys` {단계 번호: {칸 이름: key}} · `renamed` 옛 글자로 적은 줄(경고 — 옛 글자도 받는다) ·
+    `off_screen` 사전에는 있지만 **그 단계 화면의 칸이 아닌** 줄(경고) · `error`.
+    갈래 표(`references/step-kinds.json`)는 사전 옆에 있으면 그것을, 없으면 이 스킬의 것을 쓴다.
+    """
+    out = {"keys": {}, "renamed": [], "off_screen": [], "error": None}
+    try:
+        import screen_keys
+        kinds_path = os.path.join(os.path.dirname(os.path.abspath(dictionary_path)), "step-kinds.json")
+        if not os.path.exists(kinds_path):
+            kinds_path = str(screen_keys.STEP_KINDS_PATH)
+        keys = screen_keys.ScreenKeys.load(dictionary_path, kinds_path)
+    except (ImportError, OSError, ValueError) as error:
+        out["error"] = str(error)
+        return out
+    for step in steps:
+        kind = step_kind(step["title"])
+        if not keys.screen_ids(kind):
+            continue
+        resolved = {}
+        for name, _value in step["rows"]:
+            hit = keys.resolve(kind, name)
+            if hit is None:
+                n = norm_field(name)
+                known = (n in labels or strip_repeat_prefix(n) in labels or strip_row_suffix(n) in labels
+                         or bool(BACKTICK_KEY_RE.match(n)))
+                if known and n not in DICT_EXEMPT and n != CAMPAIGN_FIELD:
+                    out["off_screen"].append(f"{step['num']}단계 `{name}` ({kind} 화면: {', '.join(keys.screen_ids(kind))})")
+                continue
+            resolved[name] = hit.key
+            if hit.renamed:
+                out["renamed"].append(f"{step['num']}단계 `{name}` → `{hit.label}`")
+        if resolved:
+            out["keys"][step["num"]] = resolved
+    return out
+
+
+def find_status_outside_season(steps):
+    """`셀 상태 바꾸기` 의 `시작 날짜 ~ 종료 날짜` 가 그 시즌의 날짜 안이어야 한다 — 밖의 날이 하루라도 끼면 오류.
+
+    ERP 의 종전 드로어(`status_fill_dates`)와 설치 도구의 판매 마감이 같은 규칙으로 막는다. 화면 러너는 그 시즌의 날만
+    골라 닫지만 원고는 처음부터 시즌 안으로 적는다(2026-10-28). 시즌 날짜를 못 읽으면 날짜 대조는 하지 않는다.
+
+    카드는 `<시즌>` 또는 `<오퍼> · <시즌>` 이다. 같은 이름의 시즌이 오퍼 둘 이상에 있는데 카드가 오퍼를 밝히지 않으면
+    **오류**다 — 도구가 어느 오퍼의 날을 닫을지 모른다.
+    """
+    seasons = season_index(steps)
+    problems = []
+    for step in steps:
+        if not step["title"].startswith("셀 상태 바꾸기"):
+            continue
+        card = (card_name(step) or "").strip()
+        offer, name = (card.rsplit(" · ", 1) if " · " in card else ("", card or (step_subject(step["title"]) or "")))
+        offer, name = offer.strip(), name.strip()
+        found = [(o, v) for (o, season), v in seasons.items() if season == name and (not offer or o == offer)]
+        if not offer and len({o for o, _v in found}) > 1:
+            problems.append(f"{step['num']}단계: 시즌 `{name}` 이 오퍼 여럿({', '.join(sorted({o for o, _v in found}))})에 있다 — "
+                            f"`카드: <오퍼> · {name}` 으로 오퍼를 밝힌다")
+            continue
+        days = [v for _o, v in found]
+        if len(days) != 1 or not days[0]:
+            continue
+        start, end = _date_field(step["fields"], "시작 날짜"), _date_field(step["fields"], "종료 날짜")
+        span = _span(start, end) if start and end else None
+        if not span:
+            continue
+        outside = sorted(span - days[0])
+        if outside:
+            shown = ", ".join(d.isoformat() for d in outside[:4]) + (" …" if len(outside) > 4 else "")
+            problems.append(f"{step['num']}단계: 셀 상태 날짜 중 시즌 `{name}` 의 날이 아닌 날 {len(outside)}일 ({shown}) — 시즌 안의 날짜로 좁힌다")
+    return problems
+
+
+def find_plain_plan_values(steps):
+    """`셀 상태 바꾸기` 의 `요금제(선택)` 을 `선택:` 없이 맨 글자로 적은 줄(경고).
+
+    도구는 맨 글자도 요금제 이름으로 읽는다(`조식 포함` = 그 요금제만, 러너·설치 도구 같다). 그래도 사전 종류가 `다중 체크`
+    라 정본은 `선택: 조식 포함` 이고, `해제`·`비움` 이 모든 요금제다.
+    """
+    out = []
+    for step in steps:
+        if not step["title"].startswith("셀 상태 바꾸기"):
+            continue
+        raw = (step["fields"].get("요금제(선택)") or "").strip()
+        if raw and not raw.startswith("선택:") and raw not in ("비움", "해제") and raw not in BLANK_VALUES:
+            out.append(f"{step['num']}단계 `요금제(선택) | {raw}` — `선택: {raw}` 로 적는다(도구는 그 이름의 요금제만 닫는다)")
+    return out
 
 
 def find_past_seasons(steps, today):
@@ -3914,6 +4124,15 @@ def load_dictionary(path):
     validation = data.get("validation")
     if isinstance(validation, dict):
         screens.append(validation)
+    # 날짜 선택 칸(`date_selection`)이 선 화면의 원고 줄 — 화면 글자가 아니라 도구가 그 칸으로 옮기는 줄이다
+    if any(field.get("key", "").startswith("date_selection")
+           for screen in screens for block in screen.get("blocks") or [] for field in block.get("fields") or []):
+        for label in DATE_SELECTION_MANUSCRIPT_LABELS:
+            add(label)
+    # `셀 상태 바꾸기` 의 원고 줄 — 그 화면(시즌 [기존 가격 상태 변경])은 2026-10-28 에 없어졌고 도구가 가격 캘린더 [판매 마감]
+    # 으로 옮긴다(`stay_boot.js` `runCloseStep` · 설치 도구 `_calendar_close`). 사전에 그 화면이 없어도 원고의 줄이다.
+    for label in CLOSE_STEP_LABELS:
+        add(label)
     for screen in screens:
         for block in screen.get("blocks") or []:
             for field in block.get("fields") or []:
@@ -3921,7 +4140,8 @@ def load_dictionary(path):
                     value = field.get(key)
                     if value:
                         add(value)
-                for alias in field.get("aliases") or []:
+                # 옛 화면 글자(2026-10-28 사전부터) — 옛 원고가 쓰는 글자라 계속 받는다
+                for alias in list(field.get("aliases") or []) + list(field.get("former_labels") or []):
                     add(alias)
                 # 체크박스 칸은 지시서에서 `<칸 이름> · <체크박스 문구>` 로도 쓴다
                 checkbox_text = field.get("checkbox_text")
@@ -4096,6 +4316,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     promotion_window_gaps = find_promotion_window_gaps(parsed)
     past_seasons = find_past_seasons(parsed, guide_day)
     season_overlaps = find_season_overlaps(parsed)
+    season_date_problems = find_season_date_problems(parsed) + find_status_outside_season(parsed)
+    plain_plan_values = find_plain_plan_values(parsed)
     needless_overwrite = find_needless_overwrite(parsed)
     cancel_policy_gaps = find_missing_cancel_policy(parsed)
     legacy_offer_steps = find_legacy_offer_edit_steps(parsed)
@@ -4163,6 +4385,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     dict_error = None
     unknown_fields = []
     check_value_classes = []
+    field_keys = {"keys": {}, "renamed": [], "off_screen": [], "error": None}
     if dictionary_path:
         try:
             labels = load_dictionary(dictionary_path)
@@ -4182,8 +4405,11 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
                     continue
                 if n == CAMPAIGN_FIELD:  # 걷힌 칸 — `find_campaign_uses` 가 오류로 잡는다(두 번 알리지 않는다)
                     continue
+                if BACKTICK_KEY_RE.match(n):  # 백틱 key(`` `min_nights` ``) — 그 단계 화면에서 `find_field_keys` 가 본다
+                    continue
                 seen.append(n)
             unknown_fields = seen
+            field_keys = find_field_keys(parsed, dictionary_path, labels)
 
     contract_error = None
     loose_amounts = []
@@ -4219,7 +4445,9 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "blank_booking_window": blank_booking_window,
         "promotion_window_gaps": promotion_window_gaps,
         "past_seasons": past_seasons,
-        "season_overlaps": season_overlaps, "needless_overwrite": needless_overwrite,
+        "season_overlaps": season_overlaps, "season_date_problems": season_date_problems,
+        "plain_plan_values": plain_plan_values,
+        "needless_overwrite": needless_overwrite,
         "cancel_policy_gaps": cancel_policy_gaps, "skip_warning_steps": skip_warning_steps,
         "unknown_step_kinds": unknown_step_kinds, "inventory_gaps": inventory_gaps,
         "customer_option_gaps": find_customer_option_gaps(parsed),
@@ -4269,6 +4497,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "check_value_classes": check_value_classes,
         "currency": currency,
         "dict_checked": bool(dictionary_path), "dict_error": dict_error, "unknown_fields": unknown_fields,
+        "field_keys": field_keys["keys"], "renamed_labels": field_keys["renamed"],
+        "off_screen_fields": field_keys["off_screen"], "field_key_error": field_keys["error"],
         "contract_checked": bool(contract_path), "contract_error": contract_error,
         "loose_amounts": loose_amounts,
     }
@@ -4326,7 +4556,7 @@ def main(argv=None):
     if r["zero_missing"]:
         problems.append("0단계(환율·거래처·도시 확인) 누락")
     for p in (r["past_sale_starts"] + r["past_seasons"]
-              + r["season_overlaps"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
+              + r["season_overlaps"] + r["season_date_problems"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["unknown_step_kinds"] + r["inventory_gaps"] + r["customer_option_gaps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
               + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
@@ -4379,6 +4609,15 @@ def main(argv=None):
         warnings.append(w)
     for w in r["scope_target_overlaps"]:
         warnings.append(w)
+    if r["plain_plan_values"]:
+        warnings.append(f"`요금제(선택)` 맨 글자 {len(r['plain_plan_values'])}개: {r['plain_plan_values'][:5]}")
+    if r["renamed_labels"]:
+        warnings.append(f"옛 화면 글자 {len(r['renamed_labels'])}개 — 지금 글자로 바꾸면 좋다(옛 글자도 받는다): "
+                        f"{r['renamed_labels'][:10]}")
+    if r["off_screen_fields"]:
+        warnings.append(f"그 단계 화면에 없는 칸 {len(r['off_screen_fields'])}개: {r['off_screen_fields'][:10]}")
+    if r["field_key_error"]:
+        warnings.append(f"칸 key 를 풀지 못했다 — {r['field_key_error']}")
     if r["unknown_fields"]:
         shown = r["unknown_fields"][:15]
         msg = f"사전에 없는 칸 이름 {len(r['unknown_fields'])}개: {shown}"

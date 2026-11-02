@@ -1,0 +1,508 @@
+
+
+<div id="stay_inventory" class="stay-root stay-readable">
+  <span hidden
+        hx-get="/stay/{master:1}/inventory/?month=2026-07"
+        hx-trigger="stay:rooms-changed from:body, stay:offers-changed from:body"
+        hx-target="#stay_inventory"
+        hx-swap="outerHTML"></span>
+
+  
+  <style>
+    #stay_inventory .stay-inv-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    #stay_inventory .stay-inv-month { min-width: 92px; text-align: center; font-size: 14px; }
+    #stay_inventory .stay-inv-scroll { margin-top: 12px; overflow-x: auto; }
+    #stay_inventory .stay-inv-table { width: 100%; min-width: 1100px; table-layout: fixed; border-collapse: collapse; }
+    #stay_inventory .stay-inv-col-offer { width: 96px; }
+    #stay_inventory .stay-inv-col-link { width: 132px; }
+    #stay_inventory .stay-inv-col-sub { width: 46px; }
+    #stay_inventory .stay-inv-table th,
+    #stay_inventory .stay-inv-table td {
+      height: 22px;
+      padding: 1px 2px;
+      font-size: 11px;
+      line-height: 1.3;
+      text-align: center;
+      vertical-align: middle;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    #stay_inventory .stay-inv-table thead th { height: 34px; }
+    #stay_inventory .stay-inv-table thead th small { display: block; font-size: 10px; font-weight: 400; color: var(--stay-text-tertiary); }
+    #stay_inventory .stay-inv-table thead th.is-sat { color: var(--stay-blue-6); }
+    #stay_inventory .stay-inv-table thead th.is-sun { color: var(--stay-blocking); }
+    #stay_inventory .stay-inv-table thead th[data-today] { outline: 2px solid var(--stay-blue-6); outline-offset: -2px; }
+    #stay_inventory .stay-inv-table td.stay-inv-offer,
+    #stay_inventory .stay-inv-table td.stay-inv-link {
+      padding: 6px;
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      color: var(--stay-text);
+      background: var(--stay-bg-surface);
+    }
+    #stay_inventory .stay-inv-table td.stay-inv-offer { font-weight: 600; }
+    #stay_inventory .stay-inv-table td.stay-inv-offer small { display: block; font-weight: 400; color: var(--stay-text-tertiary); }
+    #stay_inventory .stay-inv-table th.stay-inv-sub { font-weight: 500; color: var(--stay-text-secondary); background: var(--stay-bg-thead); }
+    #stay_inventory .stay-inv-table tr.stay-inv-tr--first > * { border-top: 2px solid var(--stay-border-emphasis); }
+    
+    #stay_inventory .stay-inv-table td.stay-inv-day--none { background: var(--stay-n1); color: var(--stay-text-tertiary); }
+    #stay_inventory .stay-inv-table td.stay-inv-rem { font-weight: 700; color: var(--stay-text); }
+    #stay_inventory .stay-inv-table td.stay-inv-rem.stay-inv-day--closed { background: var(--stay-blocking-tinted); color: var(--stay-blocking); }
+    #stay_inventory .stay-inv-table td.stay-inv-rem.stay-inv-day--low { background: var(--stay-warning-tinted); color: var(--stay-warning); }
+    #stay_inventory .stay-inv-table td.stay-inv-rem.stay-inv-day--oversold {
+      background: var(--stay-warning-tinted);
+      color: var(--stay-warning);
+      box-shadow: inset 0 0 0 2px var(--stay-warning);
+    }
+    #stay_inventory .stay-inv-total {
+      display: block;
+      width: 100%;
+      min-height: 20px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--stay-radius-xs);
+      background: none;
+      font: inherit;
+      font-weight: 600;
+      color: var(--stay-text);
+      text-transform: none;
+      letter-spacing: normal;
+      cursor: pointer;
+    }
+    #stay_inventory .stay-inv-total:hover { background: var(--stay-brand-tinted); box-shadow: inset 0 0 0 1px var(--stay-brand-border); }
+    #stay_inventory .stay-inv-day--none .stay-inv-total { font-size: 10px; font-weight: 400; color: var(--stay-text-tertiary); }
+    #stay_inventory .stay-inv-day--oversold .stay-inv-total { color: var(--stay-warning); }
+    #stay_inventory .stay-inv-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      font-size: 12px;
+      color: var(--stay-text-secondary);
+      text-transform: none;
+      letter-spacing: normal;
+      cursor: pointer;
+    }
+    #stay_inventory .stay-inv-switch__track {
+      position: relative;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--stay-n4);
+    }
+    #stay_inventory .stay-inv-switch__track::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--stay-bg-surface);
+    }
+    #stay_inventory .stay-inv-switch[aria-checked="true"] { color: var(--stay-text); font-weight: 600; }
+    #stay_inventory .stay-inv-switch[aria-checked="true"] .stay-inv-switch__track { background: var(--stay-brand); }
+    #stay_inventory .stay-inv-switch[aria-checked="true"] .stay-inv-switch__track::after { left: 14px; }
+    #stay_inventory .stay-inv-table td.stay-inv-unlimited {
+      height: auto;
+      padding: 2px 8px;
+      text-align: left;
+      white-space: normal;
+      font-size: 11px;
+      color: var(--stay-text-tertiary);
+    }
+    #stay_inventory .stay-inv-table tr.stay-inv-sumhead th {
+      padding: 6px;
+      text-align: left;
+      white-space: normal;
+      font-weight: 400;
+      color: var(--stay-text-secondary);
+      background: var(--stay-bg-thead);
+    }
+    #stay_inventory .stay-inv-table tr.stay-inv-sum td { font-weight: 600; color: var(--stay-text); }
+    #stay_inventory .stay-inv-table tr.stay-inv-sum td.stay-inv-link { font-weight: 500; }
+  </style>
+
+  
+  
+  
+  
+
+  <div class="erp_cont_head">
+    <h4 class="stay-section-title">재고</h4>
+    <div class="erp_cont_head_right stay-inv-head">
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="goto" aria-label="이전 달"
+              hx-get="/stay/{master:1}/inventory/?month=2026-06"
+              hx-target="#stay_inventory" hx-swap="outerHTML">◀</button>
+      <b class="stay-inv-month">2026년 7월</b>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="goto" aria-label="다음 달"
+              hx-get="/stay/{master:1}/inventory/?month=2026-08"
+              hx-target="#stay_inventory" hx-swap="outerHTML">▶</button>
+      
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="goto"
+              hx-get="/stay/{master:1}/inventory/?month=2026-10"
+              hx-target="#stay_inventory" hx-swap="outerHTML">이번 달</button>
+      
+      
+      
+      <button data-stay-action="open_create" data-stay-target="inventory_bulk" type="button" class="stay-btn stay-btn--primary"
+              title="고른 기간·요일·판매 연결의 칸에 총 수량을 한 번에 넣거나 비웁니다"
+              hx-get="/stay/{master:1}/inventory/bulk/?month=2026-07"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">한꺼번에 넣기</button>
+      
+    </div>
+  </div>
+
+  
+  
+  <div class="table1 stay-inv-scroll">
+    <table class="bs-table stay-inv-table">
+      <colgroup>
+        <col class="stay-inv-col-offer"><col class="stay-inv-col-link"><col class="stay-inv-col-sub">
+        <col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col><col>
+      </colgroup>
+      <thead>
+        <tr>
+          <th>오퍼</th>
+          <th>객실</th>
+          <th></th>
+          
+          <th>1<small>수</small></th>
+          
+          <th>2<small>목</small></th>
+          
+          <th>3<small>금</small></th>
+          
+          <th class="is-sat">4<small>토</small></th>
+          
+          <th class="is-sun">5<small>일</small></th>
+          
+          <th>6<small>월</small></th>
+          
+          <th>7<small>화</small></th>
+          
+          <th>8<small>수</small></th>
+          
+          <th>9<small>목</small></th>
+          
+          <th>10<small>금</small></th>
+          
+          <th class="is-sat">11<small>토</small></th>
+          
+          <th class="is-sun">12<small>일</small></th>
+          
+          <th>13<small>월</small></th>
+          
+          <th>14<small>화</small></th>
+          
+          <th>15<small>수</small></th>
+          
+          <th>16<small>목</small></th>
+          
+          <th>17<small>금</small></th>
+          
+          <th class="is-sat">18<small>토</small></th>
+          
+          <th class="is-sun">19<small>일</small></th>
+          
+          <th>20<small>월</small></th>
+          
+          <th>21<small>화</small></th>
+          
+          <th>22<small>수</small></th>
+          
+          <th>23<small>목</small></th>
+          
+          <th>24<small>금</small></th>
+          
+          <th class="is-sat">25<small>토</small></th>
+          
+          <th class="is-sun">26<small>일</small></th>
+          
+          <th>27<small>월</small></th>
+          
+          <th>28<small>화</small></th>
+          
+          <th>29<small>수</small></th>
+          
+          <th>30<small>목</small></th>
+          
+          <th>31<small>금</small></th>
+          
+        </tr>
+      </thead>
+      <tbody>
+        
+        
+        
+        
+        <tr class="stay-inv-tr--first" data-stay-entity="room" data-stay-name="디럭스" data-stay-entity-id="{room:1}">
+          
+
+<td class="stay-inv-offer" rowspan="6">
+  
+  〈오퍼 관리용 이름〉
+  
+</td>
+
+          <td class="stay-inv-link" rowspan="2">
+
+<div>디럭스</div>
+<button type="button" class="stay-inv-switch" role="switch" data-stay-action="toggle_quantity"
+        aria-checked="false"
+        aria-label="〈오퍼 관리용 이름〉 · 디럭스 — 수량으로 판매"
+        hx-post="/stay/{master:1}/inventory/links/{room:1}/quantity/"
+        hx-vals='{"enabled": "1", "month": "2026-07"}'
+        hx-target="#stay_inventory" hx-swap="outerHTML"
+        hx-disable="this"><span class="stay-inv-switch__track" aria-hidden="true"></span>수량으로 판매</button>
+</td>
+          <th class="stay-inv-sub">팔림</th>
+          <td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td><td class="stay-inv-sold">0</td>
+        </tr>
+        <tr>
+          <td class="stay-inv-unlimited" colspan="32">
+            수량 없이 판매합니다.
+          </td>
+        </tr>
+        
+        
+        
+        <tr class="stay-inv-tr--first" data-stay-entity="room" data-stay-name="스위트" data-stay-entity-id="{room:2}">
+          
+          <td class="stay-inv-link" rowspan="4">
+
+<div>스위트</div>
+<button type="button" class="stay-inv-switch" role="switch" data-stay-action="toggle_quantity"
+        aria-checked="true"
+        aria-label="〈오퍼 관리용 이름〉 · 스위트 — 수량으로 판매"
+        hx-post="/stay/{master:1}/inventory/links/{room:2}/quantity/"
+        hx-vals='{"enabled": "0", "month": "2026-07"}'
+        hx-target="#stay_inventory" hx-swap="outerHTML"
+        hx-confirm="이 판매 연결은 앞으로 수량 제한 없이 팔려요. 팔린 수는 계속 셉니다. 끌까요?"
+        hx-disable="this"><span class="stay-inv-switch__track" aria-hidden="true"></span>수량으로 판매</button>
+</td>
+          <th class="stay-inv-sub">총</th>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-01/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-02/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-03/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-04/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-05/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-06/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-07/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-08/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-09/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-10/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-11/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-12/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-13/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-14/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-15/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-16/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-17/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-18/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-19/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-20/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-21/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-22/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-23/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-24/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-25/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-26/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-27/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-28/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-29/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-30/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+          <td class="stay-inv-day--none">
+            <button type="button" class="stay-inv-total" data-stay-action="open_cell"
+                    hx-get="/stay/{master:1}/inventory/links/{room:2}/days/2026-07-31/?month=2026-07"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">안 팖</button>
+          </td>
+          
+        </tr>
+        <tr>
+          <th class="stay-inv-sub">팔림</th>
+          <td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td>
+        </tr>
+        <tr>
+          <th class="stay-inv-sub">결제 중</th>
+          <td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td><td class="stay-inv-day--none"></td>
+        </tr>
+        <tr>
+          <th class="stay-inv-sub">남음</th>
+          <td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td><td class="stay-inv-rem stay-inv-day--none"></td>
+        </tr>
+        
+        
+        
+
+        
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="stay-action-guide">
+    <dl>
+      <div><dt>남음</dt><dd>빨강은 마감, 주황은 5실 이하입니다.</dd></div>
+      <div><dt>결제 중</dt><dd>손님이 결제창을 연 객실이며 5분 뒤 저절로 풀립니다.</dd></div>
+    </dl>
+  </div>
+  
+</div>

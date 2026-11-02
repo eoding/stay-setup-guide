@@ -7,13 +7,28 @@
   'use strict';
   var d = JSON.parse(localStorage.getItem('staySteps') || '{"steps":[]}');
   window.__steps = d;
+  // 화면 사전이 위험·절대 금지로 표시한 동사(지시서가 실어 온 것) — 도우미의 거부 표에 더한다(2026-10-28)
+  if (d.action_flags && window.stayRun && typeof stayRun.actionFlags === 'function') stayRun.actionFlags(d.action_flags);
 
   window.step = function (n) { return d.steps.find(function (x) { return x.no === n; }); };
 
   window.stepFields = function (n) {
     var s = window.step(n);
-    var f = s.fields.map(function (x) { return { label: x.label, kind: x.kind, value: x.value, values: x.values }; });
+    // 화면 표식(`field` · `field_row` · `field_col` · `field_name`, 2026-10-28)도 넘긴다 — 도우미가 표식으로 먼저 찾는다
+    var f = s.fields.map(function (x) {
+      var o = { label: x.label, kind: x.kind, value: x.value, values: x.values };
+      if (x.file) o.file = x.file;
+      ['field', 'field_row', 'field_col', 'field_name', 'occupancy_key', 'los_nights'].forEach(function (k) { if (x[k] !== undefined && x[k] !== null) o[k] = x[k]; });
+      return o;
+    });
     return f.concat((s.longtexts || []).map(function (l) { return { label: l.label, kind: 'typed', value: l.text }; }));
+  };
+
+  // fill 결과의 찾은 길 셈 — {hook, label, order}. 로그·runStatus 에 그대로 남긴다.
+  window.matchedByCounts = function (results) {
+    var c = { hook: 0, label: 0, order: 0 };
+    (results || []).forEach(function (x) { if (x && c[x.matchedBy] !== undefined) c[x.matchedBy]++; });
+    return c;
   };
 
   window.customerOptionFields = function (s, fields) {
@@ -58,7 +73,7 @@
     return window.READBACK_TRUSTED_RES.some(function (re) { return re.test(t); });
   };
 
-  // 만들기 단계의 "이름" 칸 — 목록에 같은 이름이 이미 있으면 그 단계를 건너뛴다(공용 정책 포함)
+  // 만들기 단계의 "이름" 칸 — 실제 중복 판정은 목록 범위와 소유 범위까지 확인한다.
   window.nameOf = function (s) {
     // `노출명`·`밴드 코드` 는 연령 구간 단계의 이름 칸이다(2026-09-04 신설 화면).
     // 코드보다 노출명이 앞이다 — 목록 표의 첫 칸이 코드라도, 사람이 같은 것으로 읽는 이름은 노출명이다.
@@ -75,8 +90,19 @@
   window.listScope = function (card) {
     var pane = document.getElementById((location.hash || '').slice(1)) || document.body;
     if (!card) return pane;
+    if (/^객실\s*\(룸\s*타입\)$/.test(card)) {
+      var roomPanels = Array.from(pane.querySelectorAll('[data-stay-panel="room_types"]')).filter(function (p) { return !p.closest('[hidden]'); });
+      return roomPanels.length === 1 ? roomPanels[0] : null;
+    }
+    if (/^(요금제 정본|정본)$/.test(card) && pane.querySelector('[data-workspace]')) card = '공통 요금제';
+    var grouped = Array.from(pane.querySelectorAll('[data-workspace-item]')).filter(function (item) {
+      if (item.hidden) return false;
+      var label = item.getAttribute('data-workspace-offer-name') + (item.hasAttribute('data-workspace-room-name') ? ' · ' + item.getAttribute('data-workspace-room-name') : '');
+      return label.normalize('NFC') === card.normalize('NFC');
+    });
+    if (grouped.length === 1) return grouped[0];
     var norm = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
-    var hit = Array.from(pane.querySelectorAll('.stay-card')).find(function (c) { var h = c.querySelector('.stay-card__head,.stay-card__title'); return h && stayRun.tier(norm(h.textContent).split('#')[0], card) >= 2; });
+    var hit = Array.from(pane.querySelectorAll('.stay-card')).find(function (c) { if (c.closest('[hidden]')) return false; var h = c.querySelector('.stay-card__head,.stay-card__title'); return h && stayRun.tier(norm(h.textContent).split('#')[0], card) >= 2; });
     return hit || null;
   };
 
@@ -90,14 +116,54 @@
     // 연령 구간이 하나도 안 생겼다. 카드 밖의 행은 어떤 경우에도 「이미 있음」 의 근거가 아니다.
     var scope = window.listScope(card);
     if (!scope) return false;
-    var rows = Array.from(scope.querySelectorAll('tbody tr, .stay-card, li')).filter(function (r) { return r.querySelector && !r.closest('.stay-drawer'); });
+    var rows = Array.from(scope.querySelectorAll('tbody tr, .stay-card, li')).filter(function (r) { return r.querySelector && !r.closest('.stay-drawer') && !r.closest('[hidden]'); });
     // 오퍼 칸이 있는 단계면 같은 오퍼가 적힌 항목만 "이미 있음"으로 본다 (부가옵션처럼 카드가 오퍼별이 아닐 때)
     if (mustContain) rows = rows.filter(function (r) { return norm(r.innerText).indexOf(norm(mustContain)) >= 0; });
     var esc = norm(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return rows.some(function (r) {
+      if (r.getAttribute('data-stay-name')) return norm(r.getAttribute('data-stay-name')) === norm(name);
       var t = norm(r.innerText);
       return t.indexOf(norm(name)) === 0 || t.split(/\s{2,}|\n/)[0] === norm(name) || new RegExp('(^|\\s)' + esc + '(\\s|$)').test(t);
     });
+  };
+
+  window.ratePlanFullyDeployed = function (s) {
+    var scope = window.listScope(s.head.card);
+    if (!scope) return false;
+    var button = (s.head.buttons_parsed || []).find(function (b) { return b.row; });
+    if (!button) return false;
+    var norm = function (v) { return String(v || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var rows = Array.from(scope.querySelectorAll('[data-stay-entity="rate_plan_catalog"]')).filter(function (r) {
+      return !r.closest('[hidden]') && norm(r.getAttribute('data-stay-name')) === norm(button.row);
+    });
+    if (rows.length !== 1) return false;
+    return Array.from(rows[0].querySelectorAll('.stay-numeric')).some(function (cell) {
+      var match = cell.textContent.match(/^\s*(\d+)\s*\/\s*(\d+)\s*개\s*룸\s*$/);
+      return match && Number(match[1]) > 0 && Number(match[1]) === Number(match[2]);
+    });
+  };
+
+  window.policyPresence = async function (s, name) {
+    var hx = window.__stayRunHtmx;
+    if (hx && hx.pending > 0) await stayRun.waitFor(function () { return hx.pending === 0; }, window.LIST_WAIT_MS || 3000);
+    var scope = window.listScope(s.head.card);
+    if (!scope) return { error: '취소정책 목록을 확인하지 못했습니다' };
+    var norm = function (v) { return String(v || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var field = (s.fields || []).find(function (f) { return f.field === 'scope' || f.label === '사용 범위'; });
+    var value = field && field.value || '공용';
+    var privatePolicy = /전용/.test(value);
+    if (!privatePolicy && !/공용/.test(value)) return { error: '취소정책 사용 범위를 확인하지 못했습니다' };
+    var masterId = String(stayRun.state().hotelId || '');
+    if (privatePolicy && !/^\d+$/.test(masterId)) return { error: '취소정책 소유 호텔을 확인하지 못했습니다' };
+    var rows = Array.from(scope.querySelectorAll('[data-stay-entity="policy"]')).filter(function (row) {
+      return !row.closest('[hidden]') && norm(row.getAttribute('data-stay-name')) === norm(name);
+    });
+    if (rows.some(function (row) { return !row.hasAttribute('data-stay-owner-master-id'); })) {
+      return { error: '취소정책의 소유 호텔 표식이 없습니다 — ERP와 스킬 버전을 확인하세요' };
+    }
+    var matching = rows.filter(function (row) { return row.getAttribute('data-stay-owner-master-id') === (privatePolicy ? masterId : ''); });
+    if (matching.length > 1) return { error: '이름과 소유 범위가 같은 취소정책이 여러 개입니다' };
+    return { found: matching.length === 1 };
   };
 
   // 같은 판정이되, **아직 그리는 중이면 기다렸다** 본다(기본 3초).
@@ -694,7 +760,8 @@
         out.skipped = true; out.reason = '이미 수량으로 판매 중'; return out;
       }
       if (opt.dry) return out;
-      var toggled = await stayRun.submit('수량으로 판매', { within: button.closest('td') });
+      // 사전이 `toggle_quantity` 를 위험으로 표시한다 — 이 단계가 바로 그것을 켜라는 단계라 그 동사만 푼다(켜기만 한다)
+      var toggled = await stayRun.submit('수량으로 판매', { within: button.closest('td'), allow: ['toggle_quantity'] });
       out.errors = toggled.errors || [];
       var current = findSwitch();
       if (!out.errors.length && current && current.getAttribute('aria-checked') === 'true') {
@@ -882,6 +949,221 @@
     out.verified = true; out.submit = 'ok'; return out;
   };
 
+  /* ─────────────── 셀 상태 바꾸기 → 가격 캘린더 판매 마감 (2026-10-28) ───────────────
+     ERP 는 시즌의 [기존 가격 상태 변경] 드로어를 없애고 가격 캘린더의 [판매 마감] 드로어로 옮겼다. 지시서는 그대로
+     `셀 상태 바꾸기` 단계를 적는다 — `바꿀 상태` 가 `마감` 이면 그 드로어로 건다:
+       캘린더 탭 → 오퍼 칩 → 룸 · 요금제 칩 → [판매 마감] → ① 기간(시작·종료)·요일(전부)·범위 → [다음] → ② 확인 → [선택 날짜 마감]
+     범위: `요금제(선택)` 이 없거나 `해제` 면 그 룸의 **모든 요금제**(종전 드로어의 "안 고르면 전 요금제"),
+     이름을 적었으면 룸마다 그 요금제만. 설치 도구(`stay_installer/steps/sell.py::_calendar_close`)와 같은 규칙이다.
+     `마감` 이 아닌 상태(추후 공지·판매 금지·미공급·판매 가능)는 마감으로 짐작하지 않는다 — 사람 몫(`manualAction`)이다.
+     캘린더에 [판매 마감] 이 없는 ERP(배포 전)에서는 종전처럼 시즌 [상태] 드로어로 간다. */
+  window.CLOSE_STATUS_WORDS = ['마감', '판매 마감'];
+  window.statusNotCloseMsg = function (status) {
+    return '`' + (status || '(상태 없음)') + '` 은 판매 마감으로 옮길 수 없습니다 — 시즌 [기존 가격 상태 변경] 도구가 없어졌고, '
+      + '가격 캘린더는 판매 마감·마감 해제만 겁니다. [마감 해제] 는 캘린더가 건 마감만 풀기 때문에 `판매 가능` 과도 같지 않습니다. '
+      + '사람이 ERP 에서 그 날짜의 상세 가격으로 바꿉니다';
+  };
+  window.calendarCloseAvailable = async function () {
+    if (document.querySelector('[data-calendar-bulk-action="close"]')) return true;
+    if (!window.stayRun || typeof stayRun.tab !== 'function') return false;
+    var t = await stayRun.tab('가격 캘린더');
+    if (!t || t.status !== 'ok') return false;
+    if (typeof stayRun.waitFor === 'function') await stayRun.waitFor(function () { return !!document.querySelector('[data-calendar-bulk-action="close"]'); }, 3000);
+    return !!document.querySelector('[data-calendar-bulk-action="close"]');
+  };
+  // 원고의 그 시즌 — `시즌 만들기/고치기` 중 이름이 그 시즌인 단계. `offer` 를 주면(`카드: <오퍼> · <시즌>`) 그 오퍼 것만.
+  // → {offer, step} 또는 {error}. 같은 이름이 오퍼 여럿에 있으면 고르지 않는다 — 다른 계약의 날을 닫게 된다.
+  // 같은 오퍼에서 여러 번 적혔으면(만들기 뒤 고치기) 날짜 줄이 있는 **마지막** 단계가 그 시즌의 날이다.
+  window.seasonOfferOf = function (seasonName, offer) {
+    var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var cardOf = function (x) { return clean(String((x.head && x.head.card) || '').replace(/`/g, '')); };
+    var hits = (d.steps || []).filter(function (x) {
+      if (!/^시즌 (만들기|고치기)/.test(x.kind || '')) return false;
+      var nameF = (x.fields || []).find(function (f) { return clean(f.label) === '시즌명'; });
+      var sub = (clean(x.title).match(/\(([^)]*)\)\s*$/) || [])[1] || '';
+      var named = (nameF && clean(nameF.value) === seasonName) || clean(sub.split(',').pop()) === seasonName;
+      return named && (!offer || cardOf(x) === offer);
+    });
+    if (!hits.length) return { error: '시즌 `' + seasonName + '`' + (offer ? '(오퍼 `' + offer + '`)' : '') + ' 을 이 지시서에서 찾지 못했습니다 — 그 시즌의 날을 몰라 닫지 않습니다' };
+    var offers = hits.map(cardOf).filter(function (o, i, all) { return all.indexOf(o) === i; });
+    if (offers.length > 1) return { error: '시즌 `' + seasonName + '` 이 오퍼 여럿(' + offers.join(', ') + ')에 있습니다 — `카드: <오퍼> · ' + seasonName + '` 으로 오퍼를 적어 주세요' };
+    var dated = hits.filter(function (x) { return !(stayRun.seasonDays(window.stepFields(x.no)) || {}).error; });
+    return { offer: offers[0] || null, step: (dated.length ? dated : hits)[dated.length ? dated.length - 1 : hits.length - 1] };
+  };
+  // 룸 → 오퍼별 표시명(원고의 판매 연결 단계 `오퍼별 표시명 · <룸>`) — 캘린더 칩은 표시명으로 그린다
+  window.displayNameOf = function (room) {
+    var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var names = [];
+    (d.steps || []).forEach(function (x) {
+      (x.fields || []).forEach(function (f) {
+        var m = clean(f.label).match(/^오퍼별 표시명 · (.+)$/);
+        if (m && clean(m[1]) === room && f.value && /^typed$/.test(f.kind)) names.push(clean(f.value));
+      });
+    });
+    return names;
+  };
+  // 칩 고르기 — 이름이 **꼭 같은** 칩이 먼저다. 없을 때만 괄호·빈칸만 다른(`tier` ≥ 3) 칩을 보고, 그것도 하나일 때만 쓴다.
+  // `Room Only (Non-refundable)` ↔ `Room Only`, `Deluxe (City View)` ↔ `Deluxe (Ocean View)` 처럼 괄호만 다른 이름이 겹친다
+  // (설치 도구 `lookup._by_name` 의 정확 일치와 같은 규칙). → {hits, how: 'exact'|'loose'}
+  window.pickChips = function (chips, keyOf, wants) {
+    var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var exact = chips.filter(function (c) { return wants.some(function (w) { return clean(keyOf(c)) === clean(w); }); });
+    if (exact.length) return { hits: exact, how: 'exact' };
+    return { hits: chips.filter(function (c) { return wants.some(function (w) { return stayRun.tier(keyOf(c), w) >= 3; }); }), how: 'loose' };
+  };
+  window.runCloseStep = async function (s, opt) {
+    opt = opt || {};
+    var out = { no: s.no, title: s.title, kind: s.kind };
+    var clean = function (t) { return String(t || '').normalize('NFC').replace(/\s+/g, ' ').trim(); };
+    var field = function (label) { return (s.fields || []).find(function (f) { return clean(f.label) === label; }); };
+    var blank = function (f) { return !f || /^(empty|auto|uncheck)$/.test(f.kind || ''); };
+    var listOf = function (f) {
+      if (blank(f)) return [];
+      var vals = f.values && f.values.length ? f.values : String(f.value || '').split(',');
+      return vals.map(clean).filter(Boolean);
+    };
+    var manual = function (why) { return { no: s.no, title: s.title, submitted: false, manualAction: true, error: why }; };
+    var status = listOf(field('바꿀 상태'))[0] || '';
+    if (window.CLOSE_STATUS_WORDS.indexOf(status) < 0) return manual(window.statusNotCloseMsg(status));
+    var start = listOf(field('시작 날짜'))[0] || '', end = listOf(field('종료 날짜'))[0] || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) {
+      out.error = '`시작 날짜`·`종료 날짜` 를 읽지 못했습니다(' + start + ' ~ ' + end + ')'; return out;
+    }
+    var rooms = listOf(field('대상 룸'));
+    if (!rooms.length) { out.error = '`대상 룸` 이 비었습니다 — 마감할 룸을 적어 주세요'; return out; }
+    // `요금제(선택)` — `선택: A, B` 도 맨 글자 `A` 도 요금제 이름이다(설치 도구 `_plan_names` 와 같다). `해제`·`비움` 은 모든 요금제
+    var plans = listOf(field('요금제(선택)'));
+    // 카드 `<오퍼> · <시즌>` 이면 오퍼를 밝힌 것이다(시즌 이름이 오퍼 여럿에 있을 때 쓰는 꼴)
+    var card = clean(String((s.head && s.head.card) || '').replace(/`/g, ''));
+    var cardOffer = null, season = card;
+    if (card.indexOf(' · ') >= 0) { cardOffer = card.slice(0, card.lastIndexOf(' · ')).trim(); season = card.slice(card.lastIndexOf(' · ') + 3).trim(); }
+    if (!season) season = clean(((clean(s.title).match(/\(([^)]*)\)\s*$/) || [])[1] || '').split(',').pop());
+    var found = window.seasonOfferOf(season, cardOffer);
+    if (found.error) return manual(found.error + ' — 사람이 ERP 가격 캘린더에서 닫습니다');
+    var offer = cardOffer || found.offer;
+    // 닫을 날 = 적은 기간 ∩ 그 시즌의 날(원고의 시즌 날짜 줄을 ERP 규칙으로 펼친다). 기간을 그대로 닫지 않는다.
+    var sd = stayRun.seasonDays(window.stepFields(found.step.no));
+    if (sd.error) return manual('시즌 `' + season + '` 의 날을 원고에서 읽지 못했습니다(' + sd.error + ') — 사람이 ERP 가격 캘린더에서 닫습니다');
+    var inSeason = {}; sd.days.forEach(function (x) { inSeason[x] = true; });
+    var wanted = [], outside = [];
+    for (var dd = new Date(start + 'T00:00:00Z'), last = new Date(end + 'T00:00:00Z'); dd <= last; dd = new Date(dd.getTime() + 86400000)) {
+      var iso = dd.toISOString().slice(0, 10);
+      (inSeason[iso] ? wanted : outside).push(iso);
+    }
+    if (!wanted.length) return manual('`' + start + ' ~ ' + end + '` 에 시즌 `' + season + '` 의 날이 하루도 없습니다 — 닫을 날이 없습니다');
+    // 끊김 없는 구간마다 한 번 — 캘린더 드로어는 기간 하나(∩ 요일)를 받는다(떨어진 기간은 기간마다 실행한다)
+    var runs = [];
+    wanted.forEach(function (x) {
+      var prev = runs[runs.length - 1];
+      var next = prev && new Date(new Date(prev.to + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
+      if (prev && next === x) prev.to = x; else runs.push({ from: x, to: x });
+    });
+    var spans = runs.map(function (r) { return r.from === r.to ? r.from : r.from + ' ~ ' + r.to; });
+    out.want = { status: status, season: season, offer: offer, dates: spans, outside: outside, rooms: rooms, plans: plans.length ? plans : '(모든 요금제)' };
+    if (opt.dry) { out.dry = true; out.submitted = false; return out; }
+
+    var waitFor = stayRun.waitFor;
+    var t = await stayRun.tab('가격 캘린더'); out.tab = t && t.status;
+    if (!t || t.status !== 'ok') { out.error = '가격 캘린더 탭으로 이동하지 못했습니다'; return out; }
+    var shown = function (el) { return !!el && !el.disabled; };
+    // 오퍼 칩 — 오퍼가 둘 이상일 때만 선다
+    var offerChips = [].slice.call(document.querySelectorAll('[data-stay-entity="offer"][data-stay-action="goto"]'));
+    // 오퍼가 여럿인데 이 시즌의 오퍼를 원고에서 못 읽었으면 멈춘다 — 지금 보이는 오퍼에 마감을 걸면 다른 계약이 닫힌다
+    if (offerChips.length > 1 && !offer) { out.error = '시즌 `' + season + '` 의 오퍼를 원고에서 찾지 못했습니다 — 캘린더에 오퍼가 여럿이라 고를 수 없습니다'; return out; }
+    if (offerChips.length && offer) {
+      var op = window.pickChips(offerChips, function (c) { return c.getAttribute('data-stay-name') || ''; }, [offer]);
+      if (op.hits.length !== 1) { out.error = '캘린더 오퍼 칩에서 `' + offer + '` 을 ' + (op.hits.length ? '하나로 못 골랐습니다(' + op.hits.length + '개)' : '찾지 못했습니다'); return out; }
+      var oc = op.hits[0];
+      if (!/--primary/.test(oc.className)) {
+        oc.click();
+        var offerSelected = await waitFor(function () {
+          return [].slice.call(document.querySelectorAll('[data-stay-entity="offer"][data-stay-action="goto"]')).some(function (c) {
+            return c.getAttribute('data-stay-name') === oc.getAttribute('data-stay-name') && /--primary/.test(c.className);
+          });
+        }, 6000);
+        if (!offerSelected) { out.error = '오퍼 `' + offer + '` 로 이동하지 못했습니다 — 저장하지 않습니다'; return out; }
+      }
+    }
+    var partsOf = function (c) {
+      var parts = clean(c.getAttribute('data-stay-name') || '').split(' · ');
+      return { head: parts.slice(0, -1).join(' · '), tail: parts[parts.length - 1] };
+    };
+    // 룸 하나 = 판매 연결 하나 — 칩의 좌표(`option=`)로 센다(표시명이 같은 두 룸이 한 룸처럼 섞이지 않게)
+    var roomOf = function (c) { var m = String(c.getAttribute('hx-get') || '').match(/[?&]option=([^&]+)/); return m ? m[1] : partsOf(c).head; };
+    var chipFor = function (room, plan) {
+      var chips = [].slice.call(document.querySelectorAll('[data-stay-entity="rate_plan"][data-stay-action="goto"]'));
+      var byRoom = window.pickChips(chips, function (c) { return partsOf(c).head; }, [room].concat(window.displayNameOf(room)));
+      var roomIds = byRoom.hits.map(roomOf).filter(function (r, i, all) { return all.indexOf(r) === i; });
+      if (!roomIds.length) return { error: '캘린더에서 룸 `' + room + '` 칩을 찾지 못했습니다' };
+      if (roomIds.length > 1) return { error: '캘린더에서 룸 `' + room + '` 이 ' + roomIds.length + '개 칩 묶음에 걸립니다(' + byRoom.hits.map(function (c) { return c.getAttribute('data-stay-name'); }).join(' / ') + ') — 이름을 정확히 적어 주세요' };
+      var mine = byRoom.hits;
+      if (!plan) return { chip: mine[0] };
+      var byPlan = window.pickChips(mine, function (c) { return partsOf(c).tail; }, [plan]);
+      if (byPlan.hits.length !== 1) return { error: '룸 `' + room + '` 에서 요금제 `' + plan + '` 칩을 ' + (byPlan.hits.length ? '하나로 못 골랐습니다(' + byPlan.hits.map(function (c) { return partsOf(c).tail; }).join(' / ') + ')' : '찾지 못했습니다') };
+      return { chip: byPlan.hits[0] };
+    };
+    out.closed = [];
+    for (var i = 0; i < rooms.length; i++) {
+      var targets = plans.length ? plans : [null];
+      for (var j = 0; j < targets.length; j++) {
+        var room = rooms[i], plan = targets[j], where = room + ' · ' + (plan || '모든 요금제');
+        var picked = chipFor(room, plan);
+        if (picked.error) { out.error = picked.error; return out; }
+        var chip = picked.chip;
+        if (!/--primary/.test(chip.className)) {
+          var nameKey = chip.getAttribute('data-stay-name');
+          chip.click();
+          var coordinateSelected = await waitFor(function () {
+            return [].slice.call(document.querySelectorAll('[data-stay-entity="rate_plan"][data-stay-action="goto"]')).some(function (c) {
+              return c.getAttribute('data-stay-name') === nameKey && roomOf(c) === roomOf(chip) && /--primary/.test(c.className);
+            });
+          }, 6000);
+          if (!coordinateSelected) { out.error = '객실·요금제 `' + where + '` 로 이동하지 못했습니다 — 저장하지 않습니다'; return out; }
+        }
+        for (var k = 0; k < runs.length; k++) {
+          var run = runs[k], span = spans[k];
+          var bulk = document.querySelector('[data-calendar-bulk-action="close"]');
+          if (!bulk) { out.error = '[판매 마감] 버튼이 없습니다'; return out; }
+          bulk.click();
+          var drawer = null;
+          await waitFor(function () { drawer = document.querySelector('[data-stay-screen="calendar-bulk"]'); return !!(drawer && drawer.querySelector('[name="period_from"]')); }, 6000);
+          if (!drawer || !drawer.querySelector('[name="period_from"]')) { out.error = '판매 마감 드로어 ① 이 열리지 않았습니다 (' + where + ')'; return out; }
+          // ① 기간 · 요일(전부) · 범위 — 날은 숨은 `date_selection_0` 이 정한다(화면 스크립트가 기간 칸에서 다시 센다)
+          var set = function (el, v) { el.value = v; ['input', 'change'].forEach(function (e) { el.dispatchEvent(new Event(e, { bubbles: true })); }); };
+          set(drawer.querySelector('[name="period_from"]'), run.from);
+          set(drawer.querySelector('[name="period_to"]'), run.to);
+          [].slice.call(drawer.querySelectorAll('[name="weekdays"]')).forEach(function (b) { if (!b.checked) b.click(); });
+          var scope = drawer.querySelector('[name="scope"][value="' + (plan ? 'plan' : 'all') + '"]');
+          if (!scope) { out.error = '판매 마감 범위(' + (plan ? '이 요금제' : '객실 전체') + ') 칸이 없습니다'; return out; }
+          if (!scope.checked) scope.click();
+          var hidden = drawer.querySelector('[name="date_selection_0"]');
+          if (hidden) set(hidden, span);
+          var next = drawer.querySelector('[data-stay-action="next"]');
+          await waitFor(function () { return shown(next); }, 3000);
+          if (!shown(next)) { out.error = '[다음] 이 눌리지 않습니다 — 기간을 화면이 받지 않았습니다 (' + where + ')'; return out; }
+          next.click();
+          var review = null;
+          await waitFor(function () {
+            review = document.querySelector('[data-stay-screen="calendar-bulk"]');
+            return !!(review && !review.hasAttribute('data-calendar-selection') && (review.querySelector('[data-stay-action="save"]') || review.querySelector('[data-stay-result="error"]')));
+          }, 6000);
+          var refused = review && review.querySelector('[data-stay-result="error"]');
+          if (refused) { out.error = '판매 마감 확인 화면이 거절했습니다 — ' + clean(refused.textContent) + ' (' + where + ')'; return out; }
+          if (!review || !review.querySelector('[data-stay-action="save"]')) { out.error = '판매 마감 확인 화면이 뜨지 않았습니다 (' + where + ')'; return out; }
+          var sub = await stayRun.submit('선택 날짜 마감', { action: 'save' });
+          if (window.SUBMIT_OK.indexOf(String(sub && sub.status)) < 0 || (sub.errors || []).length) {
+            out.submit = sub && sub.status; out.errors = sub && sub.errors; out.error = '판매 마감을 저장하지 못했습니다 (' + where + ' · ' + span + ')'; return out;
+          }
+          out.closed.push(where + ' · ' + span);
+        }
+      }
+    }
+    out.submitted = true; out.submit = 'ok';
+    out.note = '판매 마감 ' + spans.join(', ') + ' · ' + rooms.length + '룸' + (outside.length ? ' — 시즌 밖 ' + outside.length + '일은 닫지 않았습니다' : '');
+    if (outside.length) out.warn = ['시즌 `' + season + '` 밖의 날 ' + outside.length + '일(' + outside.slice(0, 4).join(', ') + (outside.length > 4 ? ' …' : '') + ')은 닫지 않았습니다'];
+    return out;
+  };
+
   window.runStepCore = async function (n, opt) {
     opt = opt || {};
     var s = window.step(n);
@@ -894,14 +1176,31 @@
     if (/가격 셀/.test(s.kind || '')) return window.runCellStep(n, opt);
     if (/^재고 수량 (판매 켜기|고치기)$/.test(s.kind || '')) return window.runInventoryStep(s, opt);
     if (window.CHECK_KIND_RE.test(s.kind || '')) return window.runCheckStep(n, opt);
+    // 셀 상태 → 가격 캘린더 판매 마감(위 `runCloseStep`). 캘린더에 [판매 마감] 이 없으면 종전 시즌 드로어로 간다
+    if (s.kind === '셀 상태 바꾸기' && await window.calendarCloseAvailable()) return window.runCloseStep(s, opt);
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
+    if (stayRun.workspace) {
+      var navOffer = (s.fields || []).find(function (f) { return f.label === '오퍼' && f.kind === 'select' && f.value; });
+      var nav = await stayRun.workspace({ kind: s.kind, card: s.head.card, block: s.head.block, offer: navOffer && navOffer.value });
+      if (!/^(ok|legacy)$/.test(nav.status)) { out.error = nav.error; return out; }
+      out.navigation = nav;
+    }
+    if (s.kind === '요금제 전체 적용' && window.ratePlanFullyDeployed(s)) {
+      return { no: n, title: s.title, skipped: true, submitted: false, reason: '선택한 공통 요금제가 모든 룸에 이미 연결되어 있습니다' };
+    }
 
     // 같은 이름이 이미 있으면 만들지 않는다
     if (/만들기|추가/.test(s.kind) && !/고치기|표시명|가격|사진|이미지|넘어가기|판매 연결/.test(s.kind)) {
       var nm = window.nameOf(s);
       var offerF = (s.fields || []).find(function (x) { return x.label === '오퍼' && x.kind === 'select' && x.value; });
       var offerV = offerF ? offerF.value : null;
-      if (nm && await window.existsInListWait(nm, s.head.card, offerV)) return { no: n, title: s.title, skipped: true, reason: '이미 있음: ' + nm + (s.head.card || offerV ? ' (' + (s.head.card || offerV) + ')' : '') };
+      var existing = false;
+      if (nm && s.kind === '취소정책 만들기') {
+        var presence = await window.policyPresence(s, nm);
+        if (presence.error) return { no: n, title: s.title, submitted: false, error: presence.error };
+        existing = presence.found;
+      } else if (nm) existing = await window.existsInListWait(nm, s.head.card, offerV);
+      if (existing) return { no: n, title: s.title, skipped: true, reason: '이미 있음: ' + nm + (s.head.card || offerV ? ' (' + (s.head.card || offerV) + ')' : '') };
     }
 
     // 여는 버튼만 고른다 — 드로어 안 버튼과 행 추가류(행/구간/단/요율 행 추가)는 칸을 채우면서 도우미가 누른다
@@ -920,8 +1219,11 @@
     }
     if (bps.length) {
       var bp = bps[0];
-      if (s.kind === '택1 그룹 만들기' && bp.text === '택1 그룹 만들기') bp = Object.assign({}, bp, {text:'선택 그룹 만들기'});
-      var spec = { button: bp.text, row: bp.row, card: bp.card || s.head.card, block: s.head.block };
+      // 옛 [택1 그룹 만들기] ↔ 새 [선택 그룹 만들기] 는 도우미의 `RENAMED_BUTTONS` 가 잇는다(2026-10-28)
+      // 여는 버튼에 저장 자리 동사가 실려 왔으면 버린다 — 여는 버튼과 저장 버튼의 글자가 같은 화면이 있다([호텔 만들기])
+      var openVerb = bp.action && window.SUBMIT_VERBS.indexOf(bp.action) < 0 ? bp.action : null;
+      // 탭 패널 버튼의 대상·카드(사전 `panel_actions`) — 같은 동사가 대상마다 있어 동사만으로는 고르지 않는다
+      var spec = { button: bp.text, action: openVerb, entity: openVerb ? (bp.entity || null) : null, actionCard: openVerb ? (bp.action_card || null) : null, row: bp.row, card: bp.card || s.head.card, block: s.head.block, kind: s.kind, offer: navOffer && navOffer.value };
       // 판매 연결(오퍼 × 객실) 단계는 같은 룸 행이 오퍼마다 있으므로 제목의 `오퍼 · 룸` 을 행 이름으로 먼저 쓴다
       var th0 = window.titleHint(s);
       if (/판매 연결/.test(s.kind || '') && th0 && /[·・‧∙]/.test(th0) && bp.row) spec.row = th0;
@@ -968,9 +1270,26 @@
     var r = await stayRun.fill(F);
     // 화면에 없는 체크 칸(예: 저장 뒤에만 뜨는 `지금 모든 객실에 배포`)은 막지 않고 경고로만 남긴다
     out.warn = r.filter(function (x) { return x.status === 'not-found' && /^(check|uncheck)$/.test(x.kind); }).map(function (x) { return x.label + ': 화면에 없는 칸'; });
+    // 무엇으로 찾았는가 — 표식(hook) · 글자(label) · 자리(order). 자리 짐작은 **늘 알린다**: 표식도 글자도 안 맞아
+    // 순서로 고른 칸이라 엉뚱한 칸에 값이 들어갔을 수 있다(2026-10-28 — 표식이 다 깔리면 없앨 갈래다).
+    out.matchedBy = window.matchedByCounts(r);
     out.bad = r.filter(function (x) { return x.status !== 'ok' && x.status !== 'skipped' && x.status !== 'needs-upload' && !(x.status === 'not-found' && /^(check|uncheck)$/.test(x.kind)); })
       .map(function (x) { return x.label + ': ' + x.status + ' ' + (x.detail || '').slice(0, 140); });
+    // 자리로 짐작한 칸(`matchedBy: 'order'`)은 저장하지 않는다 — 표식도 글자도 안 맞아 엉뚱한 칸에 값이 들어갔을 수 있다
+    out.bad = out.bad.concat(r.filter(function (x) { return x.matchedBy === 'order'; }).map(function (x) {
+      return x.label + ': 순서로 짐작한 칸(' + (x.matched || '') + ') — 표식도 글자도 안 맞아 저장하지 않습니다. 지시서의 칸 이름을 화면 사전 글자로 고치세요';
+    }));
     out.uploads = r.filter(function (x) { return x.status === 'needs-upload'; }).map(function (x) { return x.label; });
+    if (opt.uploaded) {
+      F.filter(function (f) { return f.kind === 'file' && f.file; }).forEach(function (f) {
+        var result = r.find(function (x) { return x.label === f.label && x.status === 'needs-upload'; });
+        var wanted = String(f.file).split(/[\\/]/).pop();
+        var files = result && result.selectedFiles || [];
+        if (files.length !== 1 || files[0] !== wanted) {
+          out.bad.push(f.label + ': 지정한 파일 `' + wanted + '` 이 선택되어 있지 않습니다 — 저장하지 않습니다');
+        }
+      });
+    }
     var rb = stayRun.readback(F);
     out.readback = rb.ok + '/' + rb.total;
     // 되읽기 불일치를 둘로 가른다(위 `readbackTrusted`).
@@ -1005,7 +1324,7 @@
         + ' — 화면 값을 눈으로 확인하고, 맞으면 `runStep(' + n + ', {ignoreMismatch:true})` 로 다시 부르세요.';
       return out;
     }
-    var sub = await stayRun.submit(s.submit);
+    var sub = await stayRun.submit(s.submit, s.submit_action ? { action: s.submit_action } : undefined);
     // 마지막 버튼이 저장이 아니라 **파일 고르개**인 단계가 있다(룸 사진 올리기 — 지시서는
     // `→ [사진 추가]` 로 끝난다, 2026-09-04 dict-audit 합의). 그 화면에는 누를 저장 버튼이
     // 아예 없고 파일을 담는 순간 올라간다. 여기서 대안(`저장`…)을 훑으면 룸 폼의 [저장] 을
@@ -1112,7 +1431,10 @@
   // 저장이 잘 끝난 상태들 — `stayRun.submit` 은 `ok` 를 돌려주지 않는다(`closed`·`settled`·`navigated`).
   // 그래서 `submit !== 'ok'` 만 보면 저장이 성공한 단계까지 전부 실패로 세게 된다.
   // `stayed` 는 여기 없다 — 아래에서 드로어가 실제로 남았는지 보고 가른다.
-  window.SUBMIT_OK = ['ok', 'closed', 'settled', 'navigated'];
+  // `saved` = 드로어가 남아 있어도 ERP 저장 표지(`#stay_save_result[data-stay-result=saved]`)가 이번에 섰다(2026-10-29)
+  window.SUBMIT_OK = ['ok', 'closed', 'settled', 'navigated', 'saved'];
+  //: 저장 자리 동사 — 단계 마지막 줄(`submit_action`)에만 쓴다. 여는 버튼(`buttons_parsed[].action`)으로는 받지 않는다.
+  window.SUBMIT_VERBS = ['save', 'deploy', 'save_cell', 'add_cell', 'next'];
   // `stayed` = 요청은 정착했는데 드로어·모달이 안 닫혔다. 드로어 단계에서는 **저장이 막힌
   // 것**이고(폼 오류·서버 거부), 처음부터 드로어가 없는 전체 화면 폼에서는 정상이다.
   // 그래서 저장 뒤 상태를 보고 가른다 — 상태를 못 들고 온 결과는 안전한 쪽(실패)으로 읽는다.

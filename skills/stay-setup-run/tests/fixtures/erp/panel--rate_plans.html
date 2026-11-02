@@ -1,0 +1,671 @@
+
+
+
+<div id="stay_rate_plans" class="stay-root stay-readable" data-stay-panel="rate_plans" data-workspace="rate-plans">
+  
+  
+  <span hidden
+        hx-get="/stay/{master:1}/rate-plans/"
+        hx-trigger="stay:rooms-changed from:body, stay:prices-filled from:body"
+        hx-target="#stay_rate_plans"
+        hx-swap="outerHTML"></span>
+
+
+  
+  
+  
+  
+  
+  
+  
+
+  
+  
+<div class="stay-workspace-nav" aria-label="요금제">
+  
+  <div class="stay-workspace-nav__views" role="group" aria-label="요금제 보기">
+    <button type="button" class="stay-btn" data-workspace-view-button="catalog" aria-pressed="true">공통 요금제</button>
+    <button type="button" class="stay-btn" data-workspace-view-button="rooms" aria-pressed="false">객실별 요금제</button>
+  </div>
+  
+  <div class="stay-workspace-nav__filters" data-workspace-view="rooms">
+    <label for="rate_plans_offer">오퍼
+      <select id="rate_plans_offer" class="browser-default" data-workspace-filter="offer" aria-label="요금제 오퍼"><option value="*">전체 오퍼</option></select>
+    </label>
+    <label for="rate_plans_room">객실
+      <select id="rate_plans_room" class="browser-default" data-workspace-filter="room" aria-label="요금제 객실"><option value="*">전체 객실</option></select>
+    </label>
+    <p class="stay-description" data-workspace-summary role="status"></p>
+  </div>
+</div>
+
+  <div class="stay-card" data-stay-card="catalog" data-workspace-view="catalog">
+    <div class="stay-card__head">
+      <h4 class="stay-card__title">공통 요금제</h4>
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/rate-plans/catalog/new/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        공통 요금제 만들기
+      </button>
+    </div>
+
+    <div class="stay-banner stay-banner--info"><span>
+        요금제는 여기서 한 번 정의하고 객실들에 붙입니다 — 공통 요금제를 고치면 연결된 룸별 요금제가 전부 함께 바뀝니다.
+      </span></div>
+
+    
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup>
+          <col style="width:26%"><col style="width:32%"><col style="width:12%">
+          <col style="width:14%"><col style="width:16%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>요금제</th>
+            <th>조건</th>
+            <th>새 룸에도 붙이기</th>
+            <th class="stay-numeric">붙은 룸</th>
+            <th class="stay-column-center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr data-stay-entity="rate_plan_catalog" data-stay-name="조식 포함" data-stay-entity-id="{catalog:1}">
+            <td>
+              
+              <span aria-hidden="true"
+                    style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:#{color}"></span>
+              <span class="stay-card__title">조식 포함</span>
+              
+              <br><small>고객 노출명: 조식 포함</small>
+              <br><small>정렬: 0</small>
+            </td>
+            <td>
+              
+              
+              <dl class="stay-facts">
+                  <dt>최소 숙박</dt> <dd>제한 없음</dd>
+                  <dt>최대 숙박</dt> <dd>제한 없음</dd>
+                  <dt>얼리버드</dt> <dd>제한 없음</dd>
+                  <dt>취소정책</dt> <dd>오퍼 기본 정책 사용</dd>
+                </dl>
+              
+              
+            </td>
+            <td>
+              <span title="앞으로 판매 연결하는 룸에 이 요금제를 저절로 붙입니다. 이미 연결된 룸에는 붙이지 않습니다.">꺼짐</span>
+            </td>
+            <td class="stay-numeric">
+              2 / 2개 룸
+              
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="공통 요금제 내용을 고칩니다 — 저장하면 이미 연결된 룸별 요금제가 전부 함께 바뀝니다"
+                      hx-get="/stay/{master:1}/rate-plans/catalog/{catalog:1}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="공통 요금제와 연결된 룸별 요금제, 그 룸별 요금제의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 쓰거나 어느 객실의 마지막 요금제인 룸별 요금제가 있으면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/catalog/{catalog:1}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 공통 요금제를 삭제할까요? 연결된 룸별 요금제 2개와 가격 셀 1개가 함께 지워집니다 — 되돌릴 수 없습니다."
+                      hx-disable="this">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="rate_plan_catalog" data-stay-name="룸온리" data-stay-entity-id="{catalog:2}">
+            <td>
+              
+              <span aria-hidden="true"
+                    style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:#{color}"></span>
+              <span class="stay-card__title">룸온리</span>
+              
+              <br><small>고객 노출명: 룸온리</small>
+              <br><small>정렬: 0</small>
+            </td>
+            <td>
+              
+              
+              <dl class="stay-facts">
+                  <dt>최소 숙박</dt> <dd>제한 없음</dd>
+                  <dt>최대 숙박</dt> <dd>제한 없음</dd>
+                  <dt>얼리버드</dt> <dd>제한 없음</dd>
+                  <dt>취소정책</dt> <dd>오퍼 기본 정책 사용</dd>
+                </dl>
+              
+              
+            </td>
+            <td>
+              <span title="앞으로 판매 연결하는 룸에 이 요금제를 저절로 붙입니다. 이미 연결된 룸에는 붙이지 않습니다.">꺼짐</span>
+            </td>
+            <td class="stay-numeric">
+              2 / 2개 룸
+              
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="공통 요금제 내용을 고칩니다 — 저장하면 이미 연결된 룸별 요금제가 전부 함께 바뀝니다"
+                      hx-get="/stay/{master:1}/rate-plans/catalog/{catalog:2}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="공통 요금제와 연결된 룸별 요금제, 그 룸별 요금제의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 쓰거나 어느 객실의 마지막 요금제인 룸별 요금제가 있으면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/catalog/{catalog:2}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 공통 요금제를 삭제할까요? 연결된 룸별 요금제 2개와 가격 셀 0개가 함께 지워집니다 — 되돌릴 수 없습니다."
+                      hx-disable="this">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="rate_plan_catalog" data-stay-name="하프보드" data-stay-entity-id="{catalog:3}">
+            <td>
+              
+              <span aria-hidden="true"
+                    style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:#{color}"></span>
+              <span class="stay-card__title">하프보드</span>
+              
+              <br><small>고객 노출명: 하프보드</small>
+              <br><small>정렬: 0</small>
+            </td>
+            <td>
+              
+              
+              <dl class="stay-facts">
+                  <dt>최소 숙박</dt> <dd>제한 없음</dd>
+                  <dt>최대 숙박</dt> <dd>제한 없음</dd>
+                  <dt>얼리버드</dt> <dd>제한 없음</dd>
+                  <dt>취소정책</dt> <dd>오퍼 기본 정책 사용</dd>
+                </dl>
+              
+              
+            </td>
+            <td>
+              <span title="앞으로 판매 연결하는 룸에 이 요금제를 저절로 붙입니다. 이미 연결된 룸에는 붙이지 않습니다.">꺼짐</span>
+            </td>
+            <td class="stay-numeric">
+              0 / 2개 룸
+              
+              <br><small>연결하지 않은 룸 2곳</small>
+              
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="공통 요금제 내용을 고칩니다 — 저장하면 이미 연결된 룸별 요금제가 전부 함께 바뀝니다"
+                      hx-get="/stay/{master:1}/rate-plans/catalog/{catalog:3}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--secondary" data-stay-action="apply"
+                      title="아직 이 공통 요금제에 연결되지 않은 2개 룸에 붙입니다. 이름이 같은 수동 요금제가 있으면 공통에 연결하고 조건을 맞춥니다"
+                      hx-post="/stay/{master:1}/rate-plans/catalog/{catalog:3}/apply/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      
+                      hx-disable="this">
+                빠진 룸에 붙이기
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="공통 요금제와 연결된 룸별 요금제, 그 룸별 요금제의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 쓰거나 어느 객실의 마지막 요금제인 룸별 요금제가 있으면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/catalog/{catalog:3}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 공통 요금제를 삭제할까요? 되돌릴 수 없습니다."
+                      hx-disable="this">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+
+  <section data-workspace-view="rooms">
+  
+
+  
+  <h4 class="stay-subsection-title stay-subsection-title--major">객실별 요금제</h4>
+  <div class="table1 stay-table-scroll">
+    <table class="bs-table stay-table stay-aligned-table">
+      <colgroup>
+        <col style="width:12%"><col style="width:14%"><col style="width:16%">
+        <col style="width:24%"><col style="width:6%"><col style="width:6%">
+        <col style="width:8%"><col style="width:14%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>오퍼</th>
+          <th>객실</th>
+          <th>요금제</th>
+          <th>조건</th>
+          <th>기준 요금제</th>
+          <th class="stay-numeric">정렬</th>
+          <th class="stay-numeric">가격 셀</th>
+          <th class="stay-column-center">액션</th>
+        </tr>
+      </thead>
+        
+        
+      <tbody data-workspace-item data-workspace-offer="{offer:1}" data-workspace-offer-name="〈오퍼 관리용 이름〉" data-workspace-offer-label="〈오퍼 관리용 이름〉 · 시작 제한 없음 ~ 종료 제한 없음 · #{offer:1}" data-workspace-room="{room:1}" data-workspace-room-name="디럭스">
+        
+        
+          
+          <tr data-stay-entity="rate_plan" data-stay-name="조식 포함" data-stay-entity-id="{rate_plan:1}">
+            
+            <td rowspan="3" style="vertical-align:top" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+              
+
+
+<span class="stay-card__title">〈오퍼 관리용 이름〉</span>
+<small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+
+
+<small style="color:var(--stay-text-tertiary)">룸 2개</small>
+
+            </td>
+            
+            
+            <td rowspan="3" style="vertical-align:top" data-stay-entity="room" data-stay-name="디럭스" data-stay-entity-id="{room:1}">
+              
+
+
+<div class="stay-room-summary">
+<span class="stay-card__title">디럭스</span>
+
+
+
+
+
+<span class="stay-cond stay-cond--restricted">
+  <span class="stay-cond__icon" aria-hidden="true">!</span>
+  <span>기준 요금제 없음</span>
+  <span class="stay-info stay-info--warning" tabindex="0"
+        aria-label="대표로 보여줄 요금제가 지정되지 않았습니다 — 요금제 하나의 [편집]에서 기준을 켜 주세요.">!</span>
+</span>
+
+
+
+<button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+        hx-get="/stay/{master:1}/rooms/{room:1}/rate-plans/create/"
+        hx-target="#stay_drawer_body" hx-swap="innerHTML">
+  요금제 추가
+</button>
+
+</div>
+
+            </td>
+            
+            <td>
+              
+              <span class="stay-card__title">조식 포함</span>
+              
+              
+              <span class="stay-badge" style="background:#{color};color:var(--stay-text-inversed)"
+                    title="이 요금제는 위 [공통 요금제] 표의 같은 색 줄에서 왔습니다">공통</span>
+              
+              
+            </td>
+            
+            <td>
+              
+              
+              
+              
+              <div class="stay-cond">
+                <span class="stay-cond__icon">?</span>환불 규정 미지정
+                <span class="stay-info" tabindex="0"
+                      aria-label="계약서에서 환불 가능 여부를 읽지 못했습니다. 판매를 막지는 않지만, 지정하기 전까지는 이 요금제의 환불 조건을 아무도 알 수 없습니다 — [편집]에서 가능/불가를 골라 주세요.">i</span>
+              </div>
+              
+              
+            </td>
+            <td>
+              -
+            </td>
+            <td class="stay-numeric">0</td>
+            <td class="stay-numeric">
+              
+              1
+              
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="이 객실의 룸별 요금제만 고칩니다 — 이름·조건·정렬은 공통 요금제를 저장할 때 공통 요금제 값으로 다시 덮입니다. 룸별 요금제에만 남는 것은 기준 요금제 여부입니다"
+                      hx-get="/stay/{master:1}/rate-plans/{rate_plan:1}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 객실에서 이 요금제 줄과 그 줄의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 이 요금제를 쓰거나 이 객실의 마지막 요금제이면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/{rate_plan:1}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 요금제를 삭제할까요? 가격 셀 1개가 함께 지워집니다 — 되돌릴 수 없습니다.">
+                삭제
+              </button>
+              
+              </div>
+              
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="rate_plan" data-stay-name="룸온리" data-stay-entity-id="{rate_plan:2}">
+            
+            
+            <td>
+              
+              <span class="stay-card__title">룸온리</span>
+              
+              
+              <span class="stay-badge" style="background:#{color};color:var(--stay-text-inversed)"
+                    title="이 요금제는 위 [공통 요금제] 표의 같은 색 줄에서 왔습니다">공통</span>
+              
+              
+            </td>
+            
+            <td>
+              
+              
+              
+              
+              <div class="stay-cond">
+                <span class="stay-cond__icon">?</span>환불 규정 미지정
+                <span class="stay-info" tabindex="0"
+                      aria-label="계약서에서 환불 가능 여부를 읽지 못했습니다. 판매를 막지는 않지만, 지정하기 전까지는 이 요금제의 환불 조건을 아무도 알 수 없습니다 — [편집]에서 가능/불가를 골라 주세요.">i</span>
+              </div>
+              
+              
+            </td>
+            <td>
+              -
+            </td>
+            <td class="stay-numeric">0</td>
+            <td class="stay-numeric">
+              
+              <span class="stay-badge stay-badge--blocking">가격 없음</span>
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="이 객실의 룸별 요금제만 고칩니다 — 이름·조건·정렬은 공통 요금제를 저장할 때 공통 요금제 값으로 다시 덮입니다. 룸별 요금제에만 남는 것은 기준 요금제 여부입니다"
+                      hx-get="/stay/{master:1}/rate-plans/{rate_plan:2}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 객실에서 이 요금제 줄과 그 줄의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 이 요금제를 쓰거나 이 객실의 마지막 요금제이면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/{rate_plan:2}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 요금제를 삭제할까요?">
+                삭제
+              </button>
+              
+              </div>
+              
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="rate_plan" data-stay-name="직접 만든 요금제" data-stay-entity-id="{rate_plan:5}">
+            
+            
+            <td>
+              
+              <span class="stay-card__title">직접 만든 요금제</span>
+              
+              
+              <span class="stay-badge">수동</span>
+              
+              
+            </td>
+            
+            <td>
+              
+              
+              
+              
+              <div class="stay-cond">
+                <span class="stay-cond__icon">?</span>환불 규정 미지정
+                <span class="stay-info" tabindex="0"
+                      aria-label="계약서에서 환불 가능 여부를 읽지 못했습니다. 판매를 막지는 않지만, 지정하기 전까지는 이 요금제의 환불 조건을 아무도 알 수 없습니다 — [편집]에서 가능/불가를 골라 주세요.">i</span>
+              </div>
+              
+              
+            </td>
+            <td>
+              -
+            </td>
+            <td class="stay-numeric">0</td>
+            <td class="stay-numeric">
+              
+              <span class="stay-badge stay-badge--blocking">가격 없음</span>
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      
+                      hx-get="/stay/{master:1}/rate-plans/{rate_plan:5}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 객실에서 이 요금제 줄과 그 줄의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 이 요금제를 쓰거나 이 객실의 마지막 요금제이면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/{rate_plan:5}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 요금제를 삭제할까요?">
+                삭제
+              </button>
+              
+              </div>
+              
+            </td>
+          </tr>
+          
+        
+      </tbody>
+        
+      <tbody data-workspace-item data-workspace-offer="{offer:1}" data-workspace-offer-name="〈오퍼 관리용 이름〉" data-workspace-offer-label="〈오퍼 관리용 이름〉 · 시작 제한 없음 ~ 종료 제한 없음 · #{offer:1}" data-workspace-room="{room:2}" data-workspace-room-name="스위트">
+        
+        
+          
+          <tr data-stay-entity="rate_plan" data-stay-name="조식 포함" data-stay-entity-id="{rate_plan:3}">
+            
+            <td rowspan="2" style="vertical-align:top" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+              
+
+
+<span class="stay-card__title">〈오퍼 관리용 이름〉</span>
+<small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+
+
+<small style="color:var(--stay-text-tertiary)">룸 2개</small>
+
+            </td>
+            
+            
+            <td rowspan="2" style="vertical-align:top" data-stay-entity="room" data-stay-name="스위트" data-stay-entity-id="{room:2}">
+              
+
+
+<div class="stay-room-summary">
+<span class="stay-card__title">스위트</span>
+
+
+
+
+
+<span class="stay-cond stay-cond--restricted">
+  <span class="stay-cond__icon" aria-hidden="true">!</span>
+  <span>기준 요금제 없음</span>
+  <span class="stay-info stay-info--warning" tabindex="0"
+        aria-label="대표로 보여줄 요금제가 지정되지 않았습니다 — 요금제 하나의 [편집]에서 기준을 켜 주세요.">!</span>
+</span>
+
+
+
+<button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+        hx-get="/stay/{master:1}/rooms/{room:2}/rate-plans/create/"
+        hx-target="#stay_drawer_body" hx-swap="innerHTML">
+  요금제 추가
+</button>
+
+</div>
+
+            </td>
+            
+            <td>
+              
+              <span class="stay-card__title">조식 포함</span>
+              
+              
+              <span class="stay-badge" style="background:#{color};color:var(--stay-text-inversed)"
+                    title="이 요금제는 위 [공통 요금제] 표의 같은 색 줄에서 왔습니다">공통</span>
+              
+              
+            </td>
+            
+            <td>
+              
+              
+              
+              
+              <div class="stay-cond">
+                <span class="stay-cond__icon">?</span>환불 규정 미지정
+                <span class="stay-info" tabindex="0"
+                      aria-label="계약서에서 환불 가능 여부를 읽지 못했습니다. 판매를 막지는 않지만, 지정하기 전까지는 이 요금제의 환불 조건을 아무도 알 수 없습니다 — [편집]에서 가능/불가를 골라 주세요.">i</span>
+              </div>
+              
+              
+            </td>
+            <td>
+              -
+            </td>
+            <td class="stay-numeric">0</td>
+            <td class="stay-numeric">
+              
+              <span class="stay-badge stay-badge--blocking">가격 없음</span>
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="이 객실의 룸별 요금제만 고칩니다 — 이름·조건·정렬은 공통 요금제를 저장할 때 공통 요금제 값으로 다시 덮입니다. 룸별 요금제에만 남는 것은 기준 요금제 여부입니다"
+                      hx-get="/stay/{master:1}/rate-plans/{rate_plan:3}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 객실에서 이 요금제 줄과 그 줄의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 이 요금제를 쓰거나 이 객실의 마지막 요금제이면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/{rate_plan:3}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 요금제를 삭제할까요?">
+                삭제
+              </button>
+              
+              </div>
+              
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="rate_plan" data-stay-name="룸온리" data-stay-entity-id="{rate_plan:4}">
+            
+            
+            <td>
+              
+              <span class="stay-card__title">룸온리</span>
+              
+              
+              <span class="stay-badge" style="background:#{color};color:var(--stay-text-inversed)"
+                    title="이 요금제는 위 [공통 요금제] 표의 같은 색 줄에서 왔습니다">공통</span>
+              
+              
+            </td>
+            
+            <td>
+              
+              
+              
+              
+              <div class="stay-cond">
+                <span class="stay-cond__icon">?</span>환불 규정 미지정
+                <span class="stay-info" tabindex="0"
+                      aria-label="계약서에서 환불 가능 여부를 읽지 못했습니다. 판매를 막지는 않지만, 지정하기 전까지는 이 요금제의 환불 조건을 아무도 알 수 없습니다 — [편집]에서 가능/불가를 골라 주세요.">i</span>
+              </div>
+              
+              
+            </td>
+            <td>
+              -
+            </td>
+            <td class="stay-numeric">0</td>
+            <td class="stay-numeric">
+              
+              <span class="stay-badge stay-badge--blocking">가격 없음</span>
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      title="이 객실의 룸별 요금제만 고칩니다 — 이름·조건·정렬은 공통 요금제를 저장할 때 공통 요금제 값으로 다시 덮입니다. 룸별 요금제에만 남는 것은 기준 요금제 여부입니다"
+                      hx-get="/stay/{master:1}/rate-plans/{rate_plan:4}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 객실에서 이 요금제 줄과 그 줄의 가격 셀을 함께 지웁니다 — 예약이 걸렸거나 부가옵션·프로모션이 이 요금제를 쓰거나 이 객실의 마지막 요금제이면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/rate-plans/{rate_plan:4}/delete/"
+                      hx-target="#stay_rate_plans" hx-swap="outerHTML"
+                      hx-confirm="이 요금제를 삭제할까요?">
+                삭제
+              </button>
+              
+              </div>
+              
+            </td>
+          </tr>
+          
+        
+      </tbody>
+        
+        
+    </table>
+  </div>
+  </section>
+</div>

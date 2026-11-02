@@ -7,7 +7,7 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Current release: plugin `stay-setup` 1.6.1 (`stay-setup-guide` 1.6.1, `stay-setup-run` 0.13.1).
+Release candidate: plugin `stay-setup` 1.7.0 (`stay-setup-guide` 1.7.0, `stay-setup-run` 0.14.0). Publishing requires the matched ERP release and a successful Claude browser installation rehearsal.
 
 ## 2026-10-23 operations guide update
 

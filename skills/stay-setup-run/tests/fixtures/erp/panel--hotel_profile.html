@@ -1,0 +1,181 @@
+
+
+
+
+<div id="stay_hotel_profile_00000000" class="stay-root" data-stay-screen="hotel-profile"
+     x-data="{ hasCoordinates: false, syncCoordinates() { this.hasCoordinates = Array.from(this.$el.querySelectorAll('[name=latitude], [name=longitude]')).some(input => input.value.trim() !== ''); }, hl: JSON.parse(document.getElementById('stay_highlight_rows_00000000').textContent) || [] }" x-init="syncCoordinates()" x-on:input="syncCoordinates()">
+  
+  <script id="stay_highlight_rows_00000000" type="application/json">[]</script>
+  <div class="stay-card" data-stay-card="facts">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title">호텔 정보</h4>
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+              hx-post="/stay/{master:1}/hotel-profile/"
+              hx-include="#stay_hotel_profile_00000000 :is(input,select,textarea)"
+              hx-target="#stay_hotel_profile_00000000" hx-swap="outerHTML"
+              hx-disabled-elt="this">저장</button>
+    </div>
+
+    
+    <input type="hidden" name="_rendered_fields" value="address,breakfast_info,child_policy,email,front_desk_hours,hotel_amenities,languages,latitude,longitude,min_guest_age,name_en,opened_year,payment_info,pets_allowed,phone,renovated_year,room_count,star_grade">
+
+    
+    
+    
+
+    <div class="stay-banner stay-banner--info"><span>
+        전부 선택 입력입니다.
+      </span></div>
+
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:160px"><col></colgroup>
+        <tbody>
+          <tr><th colspan="2"><b>기본</b></th></tr>
+          <tr>
+            <th>호텔 영문명</th>
+            <td><input type="text" name="name_en" maxlength="200" data-stay-field="name_en" data-stay-kind="text" aria-label="호텔 영문명" id="id_stay_name_en"><small>고객 화면 부제·검색·바우처에 쓴다. fit 의 &#x27;영문이름&#x27; 체크박스와 무관하다.</small>
+              </td>
+          </tr>
+          <tr>
+            <th>연식</th>
+            <td>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span><small data-stay-label-for="opened_year">개장 연도</small> <input type="text" name="opened_year" inputmode="numeric" placeholder="예: 2016" data-stay-field="opened_year" data-stay-kind="number" id="id_stay_opened_year"></span>
+                <span><small data-stay-label-for="renovated_year">리노베이션 연도</small> <input type="text" name="renovated_year" inputmode="numeric" placeholder="예: 2024" data-stay-field="renovated_year" data-stay-kind="number" id="id_stay_renovated_year"></span>
+              </div>
+              <small>웹 헤더의 '리모델링 2024년' 표기가 여기서 나온다 — 둘 다 있으면 리노베이션이 이긴다.</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>성급</th>
+            <td><input type="text" name="star_grade" inputmode="numeric" placeholder="예: 5" data-stay-field="star_grade" data-stay-kind="number" aria-label="성급" id="id_stay_star_grade"><small>고객 화면 헤더·주변 숙소·예약 요약의 &#x27;N성급&#x27; 배지에 표시됩니다. 비우면 배지가 없습니다. 1~5 사이 숫자만 (예: 5)</small>
+              </td>
+          </tr>
+          <tr>
+            <th>총 객실 수</th>
+            <td><input type="text" name="room_count" inputmode="numeric" placeholder="예: 99" data-stay-field="room_count" data-stay-kind="number" aria-label="총 객실 수" id="id_stay_room_count">
+              </td>
+          </tr>
+          <tr>
+            <th>프런트 운영</th>
+            <td><input type="text" name="front_desk_hours" maxlength="100" data-stay-field="front_desk_hours" data-stay-kind="text" aria-label="프런트 운영" id="id_stay_front_desk_hours">
+              </td>
+          </tr>
+
+          <tr><th colspan="2"><b>위치</b></th></tr>
+          <tr>
+            <th>주소(도로명 전체)</th>
+            <td><input type="text" name="address" maxlength="255" data-stay-field="address" data-stay-kind="text" aria-label="주소(도로명 전체)" id="id_stay_address">
+              </td>
+          </tr>
+          <tr>
+            <th>좌표</th>
+            <td>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span><small data-stay-label-for="latitude">위도 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="hasCoordinates">*</span></small> <input type="text" name="latitude" inputmode="decimal" placeholder="예: 16.068000" data-stay-field="latitude" data-stay-kind="number" id="id_stay_latitude"></span>
+                <span><small data-stay-label-for="longitude">경도 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="hasCoordinates">*</span></small> <input type="text" name="longitude" inputmode="decimal" placeholder="예: 108.245000" data-stay-field="longitude" data-stay-kind="number" id="id_stay_longitude"></span>
+              </div>
+              <small>지도·구조화 데이터에 쓴다. 모르면 둘 다 비운다 — 0,0 은 대서양 한가운데다.</small>
+              
+            </td>
+          </tr>
+
+          
+          <tr><th colspan="2"><b>연락처</b></th></tr>
+          <tr>
+            <th>전화</th>
+            <td><input type="text" name="phone" maxlength="50" data-stay-field="phone" data-stay-kind="text" aria-label="전화" id="id_stay_phone">
+              </td>
+          </tr>
+          <tr>
+            <th>이메일</th>
+            <td><input type="text" name="email" inputmode="email" placeholder="예: sales@example.com" maxlength="254" data-stay-field="email" data-stay-kind="text" aria-label="이메일" id="id_stay_email">
+              </td>
+          </tr>
+
+          <tr><th colspan="2"><b>정책</b></th></tr>
+          <tr>
+            <th>체크인 최소 연령</th>
+            <td><input type="text" name="min_guest_age" placeholder="예: 만 18세" maxlength="50" data-stay-field="min_guest_age" data-stay-kind="text" aria-label="체크인 최소 연령" id="id_stay_min_guest_age">
+              </td>
+          </tr>
+          <tr>
+            <th>조식 정보</th>
+            <td><input type="text" name="breakfast_info" maxlength="255" data-stay-field="breakfast_info" data-stay-kind="text" aria-label="조식 정보" id="id_stay_breakfast_info"><small>형태·시간·가격 한 줄 (예: 뷔페 · 06:30~09:30 · 성인 VND 250,000)</small>
+              </td>
+          </tr>
+          <tr>
+            <th>아동 정책</th>
+            <td><input type="text" name="child_policy" maxlength="255" data-stay-field="child_policy" data-stay-kind="text" aria-label="아동 정책" id="id_stay_child_policy"><small>연령 기준·무료 조건 한 줄 — 금액 계산은 가격·애드온 축이 한다</small>
+              </td>
+          </tr>
+          <tr>
+            <th>현장 결제</th>
+            <td><input type="text" name="payment_info" maxlength="120" data-stay-field="payment_info" data-stay-kind="text" aria-label="현장 결제" id="id_stay_payment_info">
+              </td>
+          </tr>
+          <tr>
+            <th>반려동물</th>
+            <td><select name="pets_allowed" class="browser-default" data-stay-field="pets_allowed" data-stay-kind="tristate" aria-label="반려동물" id="id_stay_pets_allowed">
+  <option value="unknown" selected>모르겠음</option>
+
+  <option value="true">가능</option>
+
+  <option value="false">불가능</option>
+
+</select><small>계약에 없으면 &#x27;모르겠음&#x27;으로 두세요 — 모르겠음을 &#x27;불가능&#x27;으로 굳히지 않습니다.</small>
+              </td>
+          </tr>
+          <tr>
+            <th>사용 언어</th>
+            <td><input type="text" name="languages" data-stay-field="languages" data-stay-kind="text" aria-label="사용 언어" id="id_stay_languages"><small></small>
+              </td>
+          </tr>
+
+          <tr><th colspan="2"><b>시설·서비스</b></th></tr>
+          <tr>
+            <th>호텔 시설·서비스</th>
+            <td><input type="text" name="hotel_amenities" data-stay-field="hotel_amenities" data-stay-kind="text" aria-label="호텔 시설·서비스" id="id_stay_hotel_amenities"><small>콤마로 구분. 고객 화면 시설 줄과 상세 섹션에 그대로 나갑니다 (예: 실내수영장, 스파, 피트니스센터)</small>
+              </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="stay-card" data-stay-card="highlights">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="highlights">추천 포인트</h4>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
+              x-on:click="hl.push({ title: '', body: '' })">행 추가</button>
+    </div>
+    
+    <div class="table1">
+      
+      <input type="hidden" name="highlights_submitted" value="1">
+      <table class="bs-table stay-table" data-stay-field="highlights" data-stay-kind="rows" data-stay-rows="highlights">
+        <colgroup><col style="width:200px"><col><col style="width:80px"></colgroup>
+        <thead><tr><th>제목 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="hl.length > 0">*</span></th><th>설명 (한 줄)</th><th></th></tr></thead>
+        <tbody>
+          <template x-for="(row, index) in hl" :key="index">
+            <tr>
+              <td><input type="text" name="highlights_title" data-stay-col="title" maxlength="40" x-model="row.title"
+                         placeholder="예: 전 빌라 프라이빗 풀"></td>
+              <td><input type="text" name="highlights_body" data-stay-col="body" x-model="row.body"
+                         placeholder="예: 모든 빌라에 전용 수영장과 야외 가구가 있습니다."></td>
+              <td><button type="button" class="stay-btn stay-btn--ghost" data-stay-action="remove_row"
+                          x-on:click="hl.splice(index, 1)">삭제</button></td>
+            </tr>
+          </template>
+          <tr x-show="hl.length === 0">
+            <td colspan="3"><small>고객 상세 상단에 나갈 이 호텔의 소구점입니다. 3~7개를 권합니다 — 없으면 섹션이 빠집니다.</small></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+</div>

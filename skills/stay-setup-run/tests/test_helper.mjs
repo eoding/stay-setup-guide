@@ -651,11 +651,88 @@ const run = async () => {
   // 11. 2026-09-04 화면의 위험 버튼 — 이름만으로도 거부한다
   win.closeDrawer();
   const danger = { card: '위험 버튼' };
-  for (const [label, reason] of [['전용으로 분리', 'dangerous'], ['2026-01 닫기', 'dangerous'],
-                                 ['판매 재개', 'dangerous'], ['세후가로 확정', 'dangerous']]) {
+  for (const [label, reason] of [['이건 넘어가기', 'dangerous'], ['2026-01 닫기', 'dangerous'],
+                                 ['판매 재개', 'dangerous'], ['세후가로 확정', 'dangerous'], ['비우기', 'dangerous']]) {
     const r = await R.submit(label, danger);
     ok(r.status === 'refused' && r.reason === reason, 'submit: [' + label + '] 거부', r);
   }
+
+  // 11a. 글자가 어느 정규식에도 안 걸려도 **표식 동사**로 거부한다(2026-10-28 이름 변경 대비).
+  //      손 픽스처로 남긴다 — 실제 렌더의 버튼 글자는 정규식에도 걸리는 지금 글자라 「글자가 바뀐 날」 을 만들 수 없다.
+  //      [판매 시작] 은 동사 `activate` 나 판매 시작 카드(`gate`) 안이면 force 로도 못 누른다.
+  const hooked = { card: '표식 위험 버튼' };
+  const hookedClicks = {};
+  win.document.querySelectorAll('#stay_hooked_danger button').forEach((b) => {
+    hookedClicks[b.textContent.trim()] = 0;
+    b.addEventListener('click', () => { hookedClicks[b.textContent.trim()]++; });
+  });
+  for (const label of ['판매 연결 삭제', '되살리기', '이 경고 접기', '금액 환산']) {
+    const r = await R.submit(label, hooked);
+    ok(r.status === 'refused' && r.reason === 'dangerous' && hookedClicks[label] === 0,
+       'submit: 표식 동사로 [' + label + '] 거부 (글자 정규식 없이)', { r, clicks: hookedClicks[label] });
+    const o = await R.open(Object.assign({ button: label }, hooked));
+    ok(o.status === 'refused' && o.reason === 'dangerous' && hookedClicks[label] === 0,
+       'open: 표식 동사로 [' + label + '] 거부', { o, clicks: hookedClicks[label] });
+  }
+  for (const label of ['판매 열기', '고객에게 공개']) {
+    const s1 = await R.submit(label, Object.assign({ force: true }, hooked));
+    ok(s1.status === 'refused' && s1.reason === 'sale-start', 'submit: [' + label + '] 은 표식만으로 force 로도 거부', s1);
+    const o1 = await R.open(Object.assign({ button: label, force: true }, hooked));
+    ok(o1.status === 'refused' && o1.reason === 'sale-start', 'open: [' + label + '] 은 표식만으로 force 로도 거부', o1);
+    const a1 = await R.addRow(label, 1, hooked);
+    ok(a1.status === 'refused' && a1.reason === 'sale-start', 'addRow: [' + label + '] 도 누르지 않는다', a1);
+    ok(hookedClicks[label] === 0, '[' + label + '] 은 한 번도 눌리지 않았다', hookedClicks[label]);
+  }
+  // open() 도 submit() 처럼 글자 [판매 시작] 을 force 로 못 누른다(종전에는 open 의 force 가 통했다)
+  const oSale = await R.open({ button: '판매 시작', force: true });
+  ok(oSale.status === 'refused' && oSale.reason === 'sale-start', 'open: 글자 [판매 시작] 도 force 로 거부', oSale);
+  // 표식 동사로 막힌 버튼도 force 면 누른다(사용자 확인 뒤의 길) — [판매 시작] 만 예외다
+  const delHooked = await R.submit('판매 연결 삭제', Object.assign({ force: true }, hooked));
+  ok(delHooked.status !== 'refused' && hookedClicks['판매 연결 삭제'] === 1,
+     'submit: force 면 표식 위험 버튼을 누른다', { st: delHooked.status, clicks: hookedClicks['판매 연결 삭제'] });
+
+  // 11b. 2026-10-28 이름이 바뀐 칸 — 옛 지시서 글자로 새 화면의 칸을 채우고 되읽는다.
+  //      손 픽스처로 남긴다 — 글자 길(표식 key 없는 옛 지시서)로 반복 행을 채우려면 행이 그려져 있어야 하는데,
+  //      실제 렌더의 할인 단계 행은 Alpine(`<template x-for>`)이 그려 정적 HTML 에 없다.
+  //      반복 행 묶음 `단(tier)` 은 제목 `할인 단계` 를 별칭으로 찾고 [단 추가] 로 행을 늘린다.
+  win.openFragment('stay_renamed_20261028', '이름 바뀐 칸');
+  const renamed = { card: '이름 바뀐 칸' };
+  const rnRoot = win.document.getElementById('stay_renamed_20261028');
+  const rnFields = [
+    { label: '적용 룸 scope', kind: 'typed', value: 'Deluxe' },
+    { label: '최소 숙박 override', kind: 'typed', value: '2' },
+    { label: '공급 원가(net, 선택)', kind: 'typed', value: '80' },
+    { label: '단(tier) 1 · 기준', kind: 'typed', value: '3' },
+    { label: '단(tier) 1 · 값', kind: 'typed', value: '10' },
+    { label: '할인 단계 2 · 기준', kind: 'typed', value: '5' },
+    { label: '할인 단계 2 · 값', kind: 'typed', value: '15' }
+  ];
+  const rnFill = await R.fill(rnFields, renamed);
+  ok(rnFill.every((r) => r.status === 'ok'), 'fill: 옛 글자(2026-10-28 이전)로 새 화면의 칸을 채운다', rnFill);
+  ok(rnRoot.querySelector('[name=room_scope_text]').value === 'Deluxe'
+     && rnRoot.querySelector('[name=min_nights]').value === '2'
+     && rnRoot.querySelector('[name=net_price]').value === '80', 'fill: 별칭 칸에 값이 들어갔다');
+  const tierRows = [].slice.call(rnRoot.querySelectorAll('#promo_tiers tr'));
+  ok(tierRows.length === 2
+     && tierRows.map((r) => [].slice.call(r.querySelectorAll('input')).map((i) => i.value).join('/')).join(',') === '3/10,5/15',
+     'fill: `단(tier) N` · `할인 단계 N` 이 [단 추가] 로 늘린 행에 들어간다',
+     tierRows.map((r) => [].slice.call(r.querySelectorAll('input')).map((i) => i.value)));
+  const rnBack = R.readback(rnFields, renamed);
+  ok(rnBack.mismatch.length === 0, 'readback: 옛 글자로 새 화면을 되읽는다', rnBack.mismatch);
+  win.closeDrawer();
+
+  // 11c. 시즌 날짜 — 날짜 선택 칸이 서 있는 화면은 실제 렌더(`tests/test_erp_fixtures.mjs` 1·1-c)로 본다.
+  //      여기 남긴 것은 **배포 전 화면**(날짜 선택 칸 없음 — 운영 2026-10-28)이다. 실제 렌더 사본에는 그 판이 없다.
+  // ⑤ 날짜 선택 칸이 없는 화면(배포 전)은 종전처럼 라벨로 채운다
+  win.openFragment('stay_season_dates_old', '시즌 만들기 — Peak');
+  const sdOld = await R.fill([{ label: '날짜 규칙 유형', kind: 'select', value: '기간 범위' },
+                               { label: '기간 시작', kind: 'typed', value: '2027-10-01' }, { label: '기간 종료', kind: 'typed', value: '2027-11-30' }]);
+  const oldRoot = win.document.getElementById('stay_season_dates_old');
+  ok(sdOld.every((r) => r.status === 'ok') && oldRoot.querySelector('[name=range_start]').value === '2027-10-01'
+     && oldRoot.querySelector('[name=range_end]').value === '2027-11-30', 'fill: 옛 화면은 기간 두 칸에 그대로 넣는다', sdOld);
+  win.closeDrawer();
+
+  // 11d·11e(표식 먼저 · 행 없는 할인 단계 · 동사로 저장 · 패널 버튼 · 사전 표시 동사)는 실제 렌더로 옮겼다(`test_erp_fixtures.mjs`).
 
   // 12. 가격 캘린더의 2층 모달은 `.modal.open` 이 아니라 `.stay-modal` 이다
   ok(R.state().modal.open === false, 'state: 닫힌 `.stay-modal` 은 열린 것으로 세지 않는다');
@@ -1023,13 +1100,7 @@ const run = async () => {
     win.__pageSaveClicks = 0;
     pbtn3.onclick = () => {
       win.__pageSaveClicks++;
-      const h = R.hx;                                            // `window.__stayRunHtmx` 와 같은 객체다
-      h.xhrPending = (h.xhrPending || 0) + 1;
-      win.setTimeout(() => {                                     // 302 를 따라간 뒤 200 으로 끝난다
-        h.xhrPending = 0;
-        h.xhrDone = (h.xhrDone || 0) + 1;
-        h.xhrLast = { url: '/fit/master/43900/change/', status: 200 };
-      }, 120);
+      win.fetch('/fit/master/43900/change/', { method: 'POST' });
     };
     const t3k = Date.now();
     const ps3 = await R.pageSave();
@@ -1046,13 +1117,7 @@ const run = async () => {
     win.__pageSaveClicks = 0;
     pbtn3.onclick = () => {
       win.__pageSaveClicks++;
-      const h = R.hx;
-      h.xhrPending = (h.xhrPending || 0) + 1;
-      win.setTimeout(() => {
-        h.xhrPending = 0;
-        h.xhrDone = (h.xhrDone || 0) + 1;
-        h.xhrLast = { url: '/common/ping/', status: 200 };
-      }, 120);
+      win.fetch('/common/ping/');
     };
     R.config({ waitMs: 1200 });                                  // 천장까지 가는 시험이라 잠깐 낮춘다
     const ps4 = await R.pageSave();

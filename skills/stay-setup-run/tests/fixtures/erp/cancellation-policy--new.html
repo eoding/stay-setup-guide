@@ -1,0 +1,171 @@
+
+
+
+
+
+
+<div id="stay_policy_form_00000000" data-stay-screen="cancellation-policy"
+     x-data="{ refundable: true, allowDuplicate: false }">
+  
+  <input type="hidden" name="allow_duplicate" :value="allowDuplicate ? '1' : ''">
+  <input type="hidden" name="master" value="{master:1}">
+
+  
+  
+
+  
+
+  
+  
+
+  
+  <div class="stay-banner stay-banner--info">
+    <span>
+      여기 적는 수수료는 고객에게 보여줄 안내입니다. 실제 환불금액은 취소 처리에서 담당자가 입력하니, 계약서 문구를 그대로 옮겨 주세요.
+    </span>
+  </div>
+
+  <div class="stay-card" data-stay-card="main">
+    <div class="table1">
+      <table class="bs-table stay-table stay-form-table">
+        <colgroup><col style="width:22%"><col></colgroup>
+        <tbody>
+          <tr>
+            <th>정책명 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td>
+              <input type="text" name="name" placeholder="표준 D-7 / 성수기 D-30 / NRF" maxlength="100" data-stay-field="name" data-stay-kind="text" data-stay-required="1" aria-label="정책명" required id="id_stay_name">
+              <small>담당자가 오퍼에서 고를 이름입니다. 계약서 문구보다 &#x27;표준 D-7&#x27; 처럼 조건이 드러나게 씁니다.</small>
+              
+            </td>
+          </tr>
+          
+          
+          <tr>
+            <th>사용 범위</th>
+            <td>
+              
+              <label class="check_form" style="margin-bottom:4px">
+                <input class="with-gap" type="radio" name="scope" data-stay-field="scope" data-stay-kind="radio"
+                       value="shared" id="id_stay_scope_0"
+                       checked>
+                <span for="id_stay_scope_0">공용 — 이 여행사의 모든 호텔이 고를 수 있습니다</span>
+              </label>
+              
+              <label class="check_form" style="margin-bottom:4px">
+                <input class="with-gap" type="radio" name="scope" data-stay-field="scope" data-stay-kind="radio"
+                       value="master" id="id_stay_scope_1"
+                       >
+                <span for="id_stay_scope_1">이 호텔 전용 — 〈호텔명〉 에서만 보입니다</span>
+              </label>
+              
+              
+            </td>
+          </tr>
+          
+          <tr>
+            <th>환불 가능</th>
+            <td>
+              
+              <label class="check_form">
+                <input class="filled-in" type="checkbox" name="refundable" data-stay-field="refundable" data-stay-kind="checkbox"
+                       id="id_stay_refundable"
+                       x-model="refundable" checked>
+                <span for="id_stay_refundable">환불 가능</span>
+              </label>
+              <small>끄면 비환불(NRF)입니다. 언제 취소해도 100% 라 아래 구간을 저장하지 않습니다.</small>
+              
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <script id="stay_policy_tier_rows_initial" type="application/json">[]</script>
+  <div class="stay-card" data-stay-card="tiers" x-show="refundable" x-cloak
+       x-data="{ tiers: JSON.parse(document.getElementById('stay_policy_tier_rows_initial').textContent) || [] }">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="tiers">취소 수수료 구간 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="refundable">*</span></h4>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
+              x-on:click="tiers.push({ cutoff_days: '', penalty_basis: '0', value: '' })">
+        구간 추가
+      </button>
+    </div>
+    
+    <p>
+      <small>
+        계약서의 구간을 그대로 옮깁니다. 체크인에서 먼 구간부터 훑어 처음 걸리는 구간이 적용됩니다. 예: D-15 0% / D-8 50% / D-4 1박 / D-0 100%.
+      </small>
+    </p>
+    <div class="table1">
+      
+      <input type="hidden" name="tiers_submitted" value="1">
+      <table class="bs-table stay-table" data-stay-field="tiers" data-stay-kind="rows" data-stay-rows="tiers">
+        <colgroup><col style="width:26%"><col style="width:30%"><col style="width:26%"><col style="width:18%"></colgroup>
+        <thead>
+          <tr>
+            <th>체크인 D-N일 전까지 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <th>수수료 방식 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <th>수수료 값 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <template x-for="(tier, index) in tiers" :key="index">
+            <tr :data-stay-row="index">
+              <td><input type="number" name="tiers_cutoff_days" aria-label="체크인 D-N일 전까지" data-stay-col="cutoff_days" min="0" step="1" x-model="tier.cutoff_days"></td>
+              <td>
+                
+                <select name="tiers_penalty_basis" aria-label="수수료 방식" data-stay-col="penalty_basis" class="browser-default" x-model="tier.penalty_basis">
+                  
+                  <option value="0">결제액 %</option>
+                  
+                  <option value="1">박수</option>
+                  
+                  <option value="2">정액</option>
+                  
+                </select>
+              </td>
+              <td><input type="number" name="tiers_value" aria-label="수수료 값" data-stay-col="value" step="0.01" min="0" x-model="tier.value"></td>
+              <td>
+                <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="remove_row"
+                        x-on:click="tiers.splice(index, 1)">삭제</button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="tiers.length === 0">
+            <td colspan="4">
+              <small>아직 구간이 없습니다. <span class="stay-action-guide__btn stay-action-guide__btn--ghost">구간 추가</span>로 계약서의 구간을 하나씩 옮기세요. 체크인 당일은 0 입니다.</small>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="stay-card" data-stay-card="no_tiers" x-show="!refundable" x-cloak>
+    <p><small>비환불(NRF) 정책입니다. 언제 취소해도 100% 라 수수료 구간을 저장하지 않습니다. 구간별 수수료가 있으면 위의 '환불 가능'을 켜세요.</small></p>
+  </div>
+
+  
+  <div class="stay-card" data-stay-card="force_majeure_note">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="force_majeure_note">천재지변 등 예외 안내 (고객에게 보임)</h4>
+    </div>
+    <textarea name="force_majeure_note" cols="40" rows="3" placeholder="예: 태풍 등 천재지변으로 항공기가 결항되면 수수료 없이 취소됩니다." data-stay-field="force_majeure_note" data-stay-kind="textarea" aria-label="천재지변 등 예외 안내 (고객에게 보임)" id="id_stay_force_majeure_note">
+</textarea>
+    <small>계약서에 태풍·천재지변 같은 예외 조항이 있을 때만 그 문장을 그대로 적으세요. 예: &quot;태풍 등 천재지변으로 항공기가 결항되면 수수료 없이 취소됩니다.&quot; 없으면 비워 두세요.</small>
+    
+  </div>
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save" x-ref="save"
+            hx-post="/stay/cancellation-policies/new/"
+            hx-include="#stay_policy_form_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">추가</button>
+  </div>
+</div>
