@@ -1,0 +1,1020 @@
+
+
+<div id="stay_calendar" class="stay-root stay-readable" data-stay-panel="calendar"
+     data-cal-month="2026-07" data-stay-month="2026-07"
+     data-cal-view="coord"
+     data-cal-offer="{offer:1}"
+     data-cal-option="{room:1}"
+     data-cal-rate-plan="{rate_plan:1}"
+     data-cal-promo="1"
+     x-data
+     x-init='
+       if (location.hash === "#stay_tab_calendar") {
+         const p = new URLSearchParams(location.search);
+         const d = $el.dataset;
+         const prevView = p.get("view");
+         const viewChanged = prevView !== null && prevView !== d.calView;
+         p.set("month", d.calMonth);
+         p.set("view", d.calView);
+         d.calOffer ? p.set("offer", d.calOffer) : p.delete("offer");
+         d.calOption ? p.set("option", d.calOption) : p.delete("option");
+         d.calRatePlan ? p.set("rate_plan", d.calRatePlan) : p.delete("rate_plan");
+         p.set("promo", d.calPromo);
+         const qs = p.toString();
+         const newUrl = location.pathname + (qs ? "?" + qs : "") + location.hash;
+         if (viewChanged) {
+           history.pushState({ stayCalView: true }, "", newUrl);
+           $el.scrollIntoView({ block: "start" });
+         } else {
+           history.replaceState(null, "", newUrl);
+         }
+       }
+     '
+     @popstate.window='
+       if (location.hash !== "#stay_tab_calendar") return;
+       const p = new URLSearchParams(location.search);
+       const d = $el.dataset;
+       const same = p.get("month") === d.calMonth && p.get("view") === d.calView
+         && (p.get("offer") || "") === (d.calOffer || "") && (p.get("option") || "") === (d.calOption || "")
+         && (p.get("rate_plan") || "") === (d.calRatePlan || "") && p.get("promo") === d.calPromo;
+       if (same) return;
+       htmx.ajax("GET", "/stay/{master:1}/calendar/" + location.search, { target: "#stay_calendar", swap: "outerHTML" });
+     '>
+  
+  
+  <span hidden
+        hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1"
+        hx-trigger="stay:rooms-changed from:body, stay:offers-changed from:body, stay:prices-filled from:body, stay:cells-removed from:body, stay:inventory-changed from:body"
+        hx-target="#stay_calendar"
+        hx-swap="outerHTML"></span>
+
+  
+  <style>
+    /* ── 격자 바닥 ── 카드가 떠 보이려면 바닥이 있어야 한다(카드 대비). */
+    #stay_calendar .stay-cal-table {
+      width: 100%;
+      table-layout: fixed;
+      background: var(--stay-bg-page);
+      border-radius: var(--stay-radius-md);
+    }
+    /* 폭은 % 다 — 고정 px 를 쓰면 다시 가로 스크롤이 생긴다(이 재설계가 없앤 것). */
+    #stay_calendar .stay-cal-table td { padding: 3px; vertical-align: top; border: 0; }
+    #stay_calendar .stay-cal-table th { text-align: center; border: 0; background: none; }
+    /* 공용 행 hover 는 끈다 — 주 전체가 물드는 대신 **칸 하나**가 반응해야 한다. */
+    #stay_calendar .stay-cal-table tbody tr:hover td { background: none; }
+
+    
+    #stay_calendar .bs-table td .stay-cal-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 2px;
+      width: 100%;
+      min-height: 58px;
+      margin: 0;
+      padding: 5px 6px;
+      background: none;
+      /* 투명 테두리를 미리 둘러 둔다 — 카드와 바닥의 글자 시작점이 같아야 격자가 안 흔들린다. */
+      border: 1px solid transparent;
+      border-left-width: 4px;
+      border-radius: var(--stay-radius-sm);
+      box-shadow: none;
+      font: inherit;
+      line-height: 1.2;
+      color: inherit;
+      text-transform: none;
+      letter-spacing: normal;
+      text-align: left;
+      cursor: pointer;
+    }
+    
+    #stay_calendar .bs-table td .stay-cal-cell--open {
+      background: var(--season-tint, var(--stay-bg-surface));
+      border-color: var(--stay-n3);
+      border-left-color: var(--season-deep, var(--stay-n4));
+    }
+    /* 열림 전용 hover — "눌린다"를 색·그림자로 말한다(카드가 살짝 떠오른다). */
+    #stay_calendar .bs-table td .stay-cal-cell--open:hover {
+      background: var(--season-hover, var(--stay-n1));
+      box-shadow: var(--stay-shadow-dropdown);
+    }
+    /* 시즌명 — James 지적("글씨가 너무 작음") 이후 11px/600. 칸이 좁아 넘치면 말줄임. */
+    #stay_calendar .stay-cal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+    #stay_calendar .stay-cal-season-tag {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--season-deep, var(--stay-text-tertiary));
+    }
+    #stay_calendar .bs-table td .stay-cal-cell--closed {
+      background: none;
+      color: var(--stay-n4);
+      cursor: default;
+    }
+    #stay_calendar .bs-table td .stay-cal-cell__day {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--stay-text-secondary);
+    }
+    #stay_calendar .bs-table td .stay-cal-cell--closed .stay-cal-cell__day {
+      font-weight: 400;
+      color: var(--stay-n4);
+    }
+    /* 안 열린 날의 상태 이름 — 흐리게, 칸 폭을 넘으면 말줄임(전체 이름은 칸 title). 두 뷰가 같은 규칙이다. */
+    #stay_calendar .bs-table td .stay-cal-cell--closed .stay-cal-cell__note {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      color: var(--stay-text-tertiary);
+    }
+    /* 금액은 칸에서 유일하게 진한 글자 — 눈이 금액부터 잡게 한다. 우하 정렬은 감싼 줄이 잡는다
+       (인라인 요소에 `text-align` 을 걸면 아무 일도 일어나지 않는다 — 그 속성은 블록의 것이다). */
+    #stay_calendar .bs-table td .stay-cal-cell__foot { text-align: right; }
+    /* 가격 숫자도 시즌 색이다(James 제안) — 칸에서 가장 진한 글자가 곧 시즌을 말한다. */
+    #stay_calendar .bs-table td .stay-cal-cell__price { font-weight: 700; color: var(--season-deep, var(--stay-n10)); }
+    #stay_calendar .bs-table td .stay-cal-cell__price--empty { font-weight: 400; color: var(--stay-n4); }
+    
+    #stay_calendar .bs-table td .stay-cal-cell[data-today],
+    #stay_calendar .bs-table td .stay-ov-cell[data-today] {
+      outline: 2px solid var(--stay-blue-6);
+      outline-offset: -2px;
+    }
+
+    /* ── 전체 보기 칸 ── 칸 하나가 그 날의 룸 목록이다. */
+    /* 두 뷰가 **같은 변수·같은 규칙**을 쓴다 — 뷰를 오가도 같은 날이 같은 색이라야 한다. */
+    #stay_calendar .bs-table td .stay-ov-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-height: 92px;
+      padding: 4px;
+      background: var(--season-tint, var(--stay-bg-surface));
+      border: 1px solid var(--stay-n3);
+      border-left: 4px solid var(--season-deep, var(--stay-n4));
+      border-radius: var(--stay-radius-sm);
+    }
+    #stay_calendar .stay-ov-cell__head { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
+    #stay_calendar .stay-ov-cell__season {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--season-deep, var(--stay-text-tertiary));
+    }
+    #stay_calendar .stay-ov-row,
+    #stay_calendar .stay-ov-more,
+    #stay_calendar .stay-ov-rest {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+      width: 100%;
+      margin: 0;
+      padding: 1px 3px;
+      background: none;
+      border: 0;
+      border-radius: var(--stay-radius-xs);
+      box-shadow: none;
+      font: inherit;
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--stay-text-secondary);
+      text-align: left;
+      text-transform: none;
+      letter-spacing: normal;
+      cursor: pointer;
+    }
+    
+    #stay_calendar .stay-ov-row:hover,
+    #stay_calendar .stay-ov-more:hover {
+      background: var(--season-hover, var(--stay-n1));
+      color: var(--season-deep, var(--stay-text));
+    }
+    
+    #stay_calendar .stay-ov-row__name {
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #stay_calendar .stay-ov-row__price { flex: 0 0 auto; font-weight: 600; color: var(--season-deep, var(--stay-n10)); }
+    #stay_calendar .stay-ov-row__price--empty { font-weight: 400; color: var(--stay-n4); }
+    #stay_calendar .stay-ov-more { font-size: 10px; color: var(--stay-text-tertiary); }
+    /* 칸의 남은 여백도 누를 수 있다 — 미니 행 사이를 눌렀을 때 아무 일도 안 일어나면 고장으로 읽힌다. */
+    #stay_calendar .stay-ov-rest { flex: 1; min-height: 6px; padding: 0; }
+
+    
+    #stay_calendar .stay-promo-row td { padding: 0 3px 5px; border: 0; }
+    #stay_calendar .stay-promo-lane { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 2px; }
+    #stay_calendar .stay-promo-bar {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      padding: 1px 8px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    #stay_calendar .stay-promo-bar--muted { opacity: 0.7; border-style: dashed; border-color: currentColor; }
+    #stay_calendar .stay-promo-bar--blocking {
+      background: var(--stay-blocking-tinted);
+      color: var(--stay-blocking);
+      border-color: var(--stay-blocking-border);
+    }
+    /* 앞뒤로 이어지는 토막은 그 쪽 모서리를 각지게 — 잘린 것이 아니라 이어진다는 뜻이다. */
+    #stay_calendar .stay-promo-bar--from { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+    #stay_calendar .stay-promo-bar--to { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    #stay_calendar .stay-promo-more { display: block; margin-top: 2px; font-size: 10px; color: var(--stay-text-tertiary); }
+
+    /* ── 머리 ── */
+    #stay_calendar .stay-cal-pill {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 2px 10px;
+      border: 1px solid var(--stay-ok-border);
+      border-radius: 999px;
+      background: var(--stay-ok-tinted);
+      color: var(--stay-ok);
+      font-size: 12px;
+    }
+    #stay_calendar .stay-cal-pill--quiet {
+      background: var(--stay-n1);
+      border-color: var(--stay-n3);
+      color: var(--stay-text-secondary);
+    }
+    /* 범례도 키웠다(James: "눈에 안 띄고 글씨가 너무 작음") — 시즌명은 색 위에 굵게 세운다. */
+    #stay_calendar .stay-cal-season {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-right: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--stay-text);
+    }
+    #stay_calendar .stay-cal-season small { font-size: 12px; font-weight: 400; color: var(--stay-text-tertiary); }
+    #stay_calendar .stay-cal-season__dot { display: inline-block; width: 14px; height: 14px; border-radius: var(--stay-radius-xs); }
+    /* 선택기 — 버튼이 줄바꿈된다(룸×요금제가 많아도 가로로 안 넘친다). */
+    #stay_calendar .stay-coord-group { margin-bottom: 6px; }
+    #stay_calendar .stay-coord-group > .stay-btn { margin: 0 4px 4px 0; }
+  </style>
+
+  <div class="erp_cont_head">
+    <h4 class="stay-section-title">2026-07</h4>
+    <div class="erp_cont_head_right">
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="goto"
+              hx-get="/stay/{master:1}/calendar/?month=2026-06&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1"
+              hx-target="#stay_calendar" hx-swap="outerHTML">◀ 이전 달</button>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="goto"
+              hx-get="/stay/{master:1}/calendar/?month=2026-08&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1"
+              hx-target="#stay_calendar" hx-swap="outerHTML">다음 달 ▶</button>
+      
+      <button type="button" class="stay-view-btn stay-btn stay-btn--ghost" data-stay-action="goto"
+              aria-pressed="false"
+              hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=overview&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1"
+              hx-target="#stay_calendar" hx-swap="outerHTML">전체 보기</button>
+      <button type="button" class="stay-view-btn stay-btn stay-btn--primary" data-stay-action="goto"
+              aria-pressed="true"
+              hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1"
+              hx-target="#stay_calendar" hx-swap="outerHTML">룸별 입력</button>
+      
+      <button type="button" class="stay-promo-btn stay-btn stay-btn--primary" data-stay-action="goto"
+              aria-pressed="true"
+              hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=0"
+              hx-target="#stay_calendar" hx-swap="outerHTML">✓ 프로모션 표시</button>
+    </div>
+  </div>
+
+  
+  
+  
+  <div class="stay-offer-label stay-selection-group">
+
+
+<span class="stay-card__title">〈오퍼 관리용 이름〉</span>
+<small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+
+
+<small style="color:var(--stay-text-tertiary)">룸 2개</small>
+</div>
+  
+
+  
+  
+  <div class="stay-coord-group stay-selection-group">
+    
+    <button type="button"
+            class="stay-coord-btn stay-btn stay-btn--primary"
+            data-stay-action="goto" data-stay-entity="rate_plan" data-stay-name="디럭스 · 조식 포함" data-stay-entity-id="{rate_plan:1}"
+            hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1"
+            hx-target="#stay_calendar" hx-swap="outerHTML">
+      <span aria-hidden="true"
+            style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;background:#{color}"></span>
+      디럭스 · 조식 포함
+    </button>
+    
+    <button type="button"
+            class="stay-coord-btn stay-btn stay-btn--ghost"
+            data-stay-action="goto" data-stay-entity="rate_plan" data-stay-name="디럭스 · 룸온리" data-stay-entity-id="{rate_plan:2}"
+            hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:2}&amp;promo=1"
+            hx-target="#stay_calendar" hx-swap="outerHTML">
+      <span aria-hidden="true"
+            style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;background:#{color}"></span>
+      디럭스 · 룸온리
+    </button>
+    
+    <button type="button"
+            class="stay-coord-btn stay-btn stay-btn--ghost"
+            data-stay-action="goto" data-stay-entity="rate_plan" data-stay-name="디럭스 · 직접 만든 요금제" data-stay-entity-id="{rate_plan:5}"
+            hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:5}&amp;promo=1"
+            hx-target="#stay_calendar" hx-swap="outerHTML">
+      
+      디럭스 · 직접 만든 요금제
+    </button>
+    
+    <button type="button"
+            class="stay-coord-btn stay-btn stay-btn--ghost"
+            data-stay-action="goto" data-stay-entity="rate_plan" data-stay-name="스위트 · 조식 포함" data-stay-entity-id="{rate_plan:3}"
+            hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:2}&amp;rate_plan={rate_plan:3}&amp;promo=1"
+            hx-target="#stay_calendar" hx-swap="outerHTML">
+      <span aria-hidden="true"
+            style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;background:#{color}"></span>
+      스위트 · 조식 포함
+    </button>
+    
+    <button type="button"
+            class="stay-coord-btn stay-btn stay-btn--ghost"
+            data-stay-action="goto" data-stay-entity="rate_plan" data-stay-name="스위트 · 룸온리" data-stay-entity-id="{rate_plan:4}"
+            hx-get="/stay/{master:1}/calendar/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:2}&amp;rate_plan={rate_plan:4}&amp;promo=1"
+            hx-target="#stay_calendar" hx-swap="outerHTML">
+      <span aria-hidden="true"
+            style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;background:#{color}"></span>
+      스위트 · 룸온리
+    </button>
+    
+  </div>
+  
+
+  
+  
+  
+  <div class="stay-calendar-bulk-actions">
+    <button type="button" class="stay-btn stay-btn--secondary" data-calendar-bulk-action="price" hx-get="/stay/{master:1}/calendar/bulk/?operation=price&amp;month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">선택 날짜 가격 수정</button>
+    <button type="button" class="stay-btn stay-btn--secondary" data-calendar-bulk-action="close" hx-get="/stay/{master:1}/calendar/bulk/?operation=close&amp;month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">판매 마감</button>
+    <button type="button" class="stay-btn stay-btn--secondary" data-calendar-bulk-action="reopen" hx-get="/stay/{master:1}/calendar/bulk/?operation=reopen&amp;month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">마감 해제</button>
+  </div>
+  
+
+  <div class="stay-calendar-legend">
+    <h5 class="stay-subsection-title">판매일 요약 · 시즌 범례</h5>
+    
+    <span class="stay-cal-pill">판매일 열림 7/1 · 1일</span>
+    <span class="stay-cal-pill stay-cal-pill--quiet">가격 입력 1/1일</span>
+    
+    
+    <span class="stay-cal-season" title="PEAK · 7/1">
+      <span class="stay-cal-season__dot" aria-hidden="true" style="background:#{color}"></span>
+      PEAK <small>7/1</small>
+    </span>
+    
+  </div>
+
+  
+  
+
+  
+  
+  <div class="stay-action-guide">
+    <dl>
+    
+    <div><dt>날짜 상태</dt><dd>
+    '가격 판매 가능'은 가격의 상태입니다.<br>예약 기간·재고 등 다른 조건도 맞아야 실제로 팔립니다.
+    </dd></div>
+    
+    <div><dt>프로모션</dt><dd>
+    가로 바는 프로모션 기간, 점선은 지금 예약을 못 받는 기간입니다.<br>빨간 바는 설정이 덜 된 할인이라 프로모션 탭에서 확인합니다.
+    </dd></div>
+    
+    </dl>
+  </div>
+  
+
+  <div class="table1">
+    <table class="bs-table stay-table stay-cal-table">
+      <colgroup><col style="width:14.28%"><col style="width:14.28%"><col style="width:14.28%"><col style="width:14.28%"><col style="width:14.28%"><col style="width:14.28%"><col style="width:14.28%"></colgroup>
+      <thead>
+        <tr><th>일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>토</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr>
+          
+          
+          
+          <td></td>
+          
+          
+          
+          
+          <td></td>
+          
+          
+          
+          
+          <td></td>
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-01">
+  <div class="stay-calendar-day-status">가격 판매 가능</div>
+  
+  <button type="button" class="stay-cal-cell stay-cal-cell--open" data-stay-action="open_cell" style="--season-deep:#{color};--season-tint:#{color};--season-hover:#{color}" title="PEAK · 7/1"
+          hx-get="/stay/{master:1}/cells/?option={room:1}&amp;rate_plan={rate_plan:1}&amp;date=2026-07-01"
+          hx-target="#stay_cell_slot" hx-swap="innerHTML">
+    
+    <span class="stay-cal-head">
+      <span class="stay-cal-cell__day">1</span>
+      <span class="stay-cal-season-tag">PEAK</span>
+    </span>
+    <span class="stay-cal-cell__foot">
+      
+      
+      
+      <span class="stay-cal-cell__price">120000</span>
+      
+    </span>
+  </button>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-02">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">2</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-03">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">3</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-04">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">4</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+        </tr>
+        
+
+
+        
+        <tr>
+          
+          
+          
+
+<td data-stay-date="2026-07-05">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">5</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-06">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">6</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-07">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">7</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-08">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">8</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-09">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">9</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-10">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">10</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-11">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">11</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+        </tr>
+        
+
+
+        
+        <tr>
+          
+          
+          
+
+<td data-stay-date="2026-07-12">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">12</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-13">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">13</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-14">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">14</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-15">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">15</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-16">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">16</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-17">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">17</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-18">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">18</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+        </tr>
+        
+
+
+        
+        <tr>
+          
+          
+          
+
+<td data-stay-date="2026-07-19">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">19</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-20">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">20</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-21">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">21</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-22">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">22</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-23">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">23</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-24">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">24</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-25">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">25</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+        </tr>
+        
+
+
+        
+        <tr>
+          
+          
+          
+
+<td data-stay-date="2026-07-26">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">26</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-27">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">27</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-28">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">28</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-29">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">29</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-30">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">30</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+
+<td data-stay-date="2026-07-31">
+  <div class="stay-calendar-day-status">가격 없음 · 판매일 미개설</div>
+  
+  <span class="stay-cal-cell stay-cal-cell--closed"
+        title="판매일이 안 열린 날입니다 — [판매일] 탭에서 날짜를 먼저 열어야 가격을 넣을 수 있습니다.">
+    <span class="stay-cal-cell__day">31</span>
+    
+    <span class="stay-cal-cell__note">판매일 없음</span>
+  </span>
+  
+</td>
+
+          
+          
+          
+          
+          <td></td>
+          
+          
+        </tr>
+        
+
+
+        
+        
+      </tbody>
+    </table>
+  </div>
+  
+
+  
+  <div id="stay_cell_slot"></div>
+</div>

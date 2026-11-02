@@ -1,0 +1,176 @@
+
+
+
+<div id="stay_room_types" class="stay-root stay-readable" data-stay-panel="room_types">
+  
+  <span hidden
+        hx-get="/stay/{master:1}/room-types/"
+        hx-trigger="stay:sale-links-changed from:body"
+        hx-target="#stay_room_types"
+        hx-swap="outerHTML"></span>
+
+  <div class="erp_cont_head">
+    <h4 class="stay-section-title">객실 (룸 타입)</h4>
+    <div class="erp_cont_head_right">
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/room-types/new/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">룸 추가</button>
+    </div>
+  </div>
+
+  
+  
+  
+  
+  
+
+  <div class="stay-banner stay-banner--info"><span>
+      여기서 정한 면적·전망·침대·인원이 고객 화면의 객실 정보가 됩니다. 어느 오퍼에서 이 객실을 파는지는 아래 [판매 연결]에서 잇습니다.
+    </span></div>
+  
+
+  <div class="table1 stay-table-scroll">
+    <table class="bs-table stay-table stay-aligned-table">
+      <colgroup><col style="width:14%"><col style="width:6%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:11%"><col style="width:4%"><col style="width:11%"><col style="width:12%"></colgroup>
+      <thead>
+        <tr>
+          <th>룸 이름</th>
+          <th>면적</th>
+          <th>전망</th>
+          <th>침대</th>
+          <th>인원(기준/최대)</th>
+          <th>허용 인원 조합</th>
+          <th>추가 침대·설비</th>
+          <th class="stay-numeric">사진</th>
+          <th>판매 오퍼</th>
+          <th class="stay-column-center">액션</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr data-stay-entity="room_type" data-stay-name="디럭스" data-stay-entity-id="{room_type:1}">
+          <td>
+            
+            <span class="stay-card__title">디럭스</span>
+            
+            
+          </td>
+          <td>미설정</td>
+          <td><dl class="stay-facts">
+  <dt>전망</dt> <dd>미설정</dd>
+  <dt>층</dt> <dd>미설정</dd>
+</dl></td>
+          <td>
+            -
+          </td>
+          <td>
+            <dl class="stay-facts">
+                <dt>기준 성인</dt> <dd>미설정</dd>
+                <dt>최대 성인</dt> <dd>미설정</dd>
+                <dt>최대 소아</dt> <dd>미설정</dd>
+                <dt>최대 총원</dt> <dd>미설정</dd>
+              </dl>
+          </td>
+          <td>조합 제한 없음 — 인원 상한 적용</td>
+          <td>
+            <dl class="stay-facts">
+                <dt>추가 침대</dt> <dd>미설정</dd>
+                <dt>최대 수량</dt> <dd>미설정</dd>
+                <dt>설비</dt> <dd>미설정</dd>
+                <dt>재고 상한</dt> <dd>미설정</dd>
+              </dl>
+          </td>
+          <td class="stay-numeric">0</td>
+          <td>
+            〈오퍼 관리용 이름〉
+            <small>판매일 1일</small>
+          </td>
+          <td class="td_actions">
+            <div class="stay-actions">
+            <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                    hx-get="/stay/{master:1}/room-types/{room_type:1}/"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">편집</button>
+            
+            
+            <span title="이 룸을 파는 오퍼가 있습니다 — 아래 [판매 연결]에서 먼저 지우세요">
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete" disabled
+                      aria-label="이 룸을 파는 오퍼가 있습니다 — 아래 [판매 연결]에서 먼저 지우세요">삭제</button>
+            </span>
+
+            
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="stay-note-row" data-stay-room-note="{room_type:1}">
+          <td colspan="10"><div class="stay-row-note"><strong>삭제 안내</strong><span>이 룸을 파는 오퍼가 있습니다 — 아래 [판매 연결]에서 먼저 지우세요</span></div></td>
+        </tr>
+        
+        
+        <tr data-stay-entity="room_type" data-stay-name="스위트" data-stay-entity-id="{room_type:2}">
+          <td>
+            
+            <span class="stay-card__title">스위트</span>
+            
+            
+          </td>
+          <td>미설정</td>
+          <td><dl class="stay-facts">
+  <dt>전망</dt> <dd>미설정</dd>
+  <dt>층</dt> <dd>미설정</dd>
+</dl></td>
+          <td>
+            -
+          </td>
+          <td>
+            <dl class="stay-facts">
+                <dt>기준 성인</dt> <dd>미설정</dd>
+                <dt>최대 성인</dt> <dd>미설정</dd>
+                <dt>최대 소아</dt> <dd>미설정</dd>
+                <dt>최대 총원</dt> <dd>미설정</dd>
+              </dl>
+          </td>
+          <td>조합 제한 없음 — 인원 상한 적용</td>
+          <td>
+            <dl class="stay-facts">
+                <dt>추가 침대</dt> <dd>미설정</dd>
+                <dt>최대 수량</dt> <dd>미설정</dd>
+                <dt>설비</dt> <dd>미설정</dd>
+                <dt>재고 상한</dt> <dd>미설정</dd>
+              </dl>
+          </td>
+          <td class="stay-numeric">0</td>
+          <td>
+            〈오퍼 관리용 이름〉
+            
+          </td>
+          <td class="td_actions">
+            <div class="stay-actions">
+            <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                    hx-get="/stay/{master:1}/room-types/{room_type:2}/"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">편집</button>
+            
+            
+            <span title="이 룸을 파는 오퍼가 있습니다 — 아래 [판매 연결]에서 먼저 지우세요">
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete" disabled
+                      aria-label="이 룸을 파는 오퍼가 있습니다 — 아래 [판매 연결]에서 먼저 지우세요">삭제</button>
+            </span>
+
+            
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="stay-note-row" data-stay-room-note="{room_type:2}">
+          <td colspan="10"><div class="stay-row-note"><strong>삭제 안내</strong><span>이 룸을 파는 오퍼가 있습니다 — 아래 [판매 연결]에서 먼저 지우세요</span></div></td>
+        </tr>
+        
+        
+      </tbody>
+    </table>
+  </div>
+
+  
+</div>
+
+

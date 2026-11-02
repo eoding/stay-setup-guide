@@ -1,0 +1,256 @@
+{
+  "files": [
+    {
+      "file": "room-type--new.html",
+      "screen": "room-type",
+      "url": "/stay/{master:1}/room-types/new/",
+      "note": "신설"
+    },
+    {
+      "file": "room-type--edit.html",
+      "screen": "room-type",
+      "url": "/stay/{master:1}/room-types/{room_type:1}/",
+      "note": "편집"
+    },
+    {
+      "file": "offer--new.html",
+      "screen": "offer",
+      "url": "/stay/{master:1}/offers/new/",
+      "note": "신설"
+    },
+    {
+      "file": "offer--edit.html",
+      "screen": "offer",
+      "url": "/stay/{master:1}/offers/{offer:1}/edit/",
+      "note": "편집"
+    },
+    {
+      "file": "season--new.html",
+      "screen": "season",
+      "url": "/stay/{master:1}/offers/{offer:1}/seasons/new/",
+      "note": "신설"
+    },
+    {
+      "file": "season--edit.html",
+      "screen": "season",
+      "url": "/stay/{master:1}/seasons/{season:1}/",
+      "note": "편집"
+    },
+    {
+      "file": "rate-plan-catalog--new.html",
+      "screen": "rate-plan-catalog",
+      "url": "/stay/{master:1}/rate-plans/catalog/new/",
+      "note": "신설"
+    },
+    {
+      "file": "rate-plan-catalog--edit.html",
+      "screen": "rate-plan-catalog",
+      "url": "/stay/{master:1}/rate-plans/catalog/{catalog:1}/",
+      "note": "편집"
+    },
+    {
+      "file": "rate-plan-deploy.html",
+      "screen": "rate-plan-deploy",
+      "url": "/stay/{master:1}/rooms/{room:1}/rate-plans/create/",
+      "note": "룸에 요금제 붙이기"
+    },
+    {
+      "file": "charge--new.html",
+      "screen": "charge",
+      "url": "/stay/{master:1}/offers/{offer:1}/charges/new/",
+      "note": "신설"
+    },
+    {
+      "file": "charge--edit.html",
+      "screen": "charge",
+      "url": "/stay/{master:1}/charges/{charge:1}/edit/",
+      "note": "편집"
+    },
+    {
+      "file": "addon--new.html",
+      "screen": "addon",
+      "url": "/stay/{master:1}/addons/new/",
+      "note": "신설"
+    },
+    {
+      "file": "addon--edit.html",
+      "screen": "addon",
+      "url": "/stay/{master:1}/addons/{addon:1}/edit/",
+      "note": "편집"
+    },
+    {
+      "file": "promotion--zero-tiers.html",
+      "screen": "promotion",
+      "url": "/stay/{master:1}/offers/{offer:1}/promotions/new/",
+      "note": "신설 — 할인 단계 0줄"
+    },
+    {
+      "file": "promotion--with-tiers.html",
+      "screen": "promotion",
+      "url": "/stay/{master:1}/promotions/{promotion:2}/edit/",
+      "note": "편집 — 연박 정률 할인 단계 2줄"
+    },
+    {
+      "file": "benefit--new.html",
+      "screen": "benefit",
+      "url": "/stay/{master:1}/offers/{offer:1}/benefits/new/",
+      "note": "신설"
+    },
+    {
+      "file": "benefit--edit.html",
+      "screen": "benefit",
+      "url": "/stay/{master:1}/benefits/{benefit:1}/edit/",
+      "note": "편집"
+    },
+    {
+      "file": "cancellation-policy--new.html",
+      "screen": "cancellation-policy",
+      "url": "/stay/cancellation-policies/new/?master={master:1}",
+      "note": "신설"
+    },
+    {
+      "file": "cancellation-policy--edit.html",
+      "screen": "cancellation-policy",
+      "url": "/stay/cancellation-policies/{policy:1}/?master={master:1}",
+      "note": "편집"
+    },
+    {
+      "file": "calendar-bulk--price-step1.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/?option={room:1}&rate_plan={rate_plan:1}&month=2026-07&operation=price",
+      "note": "가격 수정 1단계(기간·요일)"
+    },
+    {
+      "file": "calendar-bulk--price-step2.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/?option={room:1}&rate_plan={rate_plan:1}&month=2026-07&operation=price&date_selection_0=2026-07-01",
+      "note": "가격 수정 2단계(확인·새 값)"
+    },
+    {
+      "file": "calendar-bulk--close-step1.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/?option={room:1}&rate_plan={rate_plan:1}&month=2026-07&operation=close",
+      "note": "판매 마감 1단계"
+    },
+    {
+      "file": "calendar-bulk--close-step2.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/?option={room:1}&rate_plan={rate_plan:1}&month=2026-07&operation=close&date_selection_0=2026-07-01",
+      "note": "판매 마감 2단계(확인)"
+    },
+    {
+      "file": "inventory-bulk.html",
+      "screen": "inventory-bulk",
+      "url": "/stay/{master:1}/inventory/bulk/",
+      "note": "재고 한꺼번에 넣기"
+    },
+    {
+      "file": "inventory-cell.html",
+      "screen": "inventory-cell",
+      "url": "/stay/{master:1}/inventory/links/{room:1}/days/2026-07-01/",
+      "note": "재고 칸 고치기"
+    },
+    {
+      "file": "validation.html",
+      "screen": "validation",
+      "url": "/stay/{master:1}/validation/",
+      "note": "검증 배너"
+    },
+    {
+      "file": "panel--hotel_profile.html",
+      "screen": "panel:hotel_profile",
+      "url": "/stay/{master:1}/hotel-profile/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--room_types--1.html",
+      "screen": "panel:room_types",
+      "url": "/stay/{master:1}/room-types/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--room_types--2.html",
+      "screen": "panel:room_types",
+      "url": "/stay/{master:1}/rooms/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--offers.html",
+      "screen": "panel:offers",
+      "url": "/stay/{master:1}/age-bands/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--seasons.html",
+      "screen": "panel:seasons",
+      "url": "/stay/{master:1}/seasons/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--rate_plans.html",
+      "screen": "panel:rate_plans",
+      "url": "/stay/{master:1}/rate-plans/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--sale_days.html",
+      "screen": "panel:sale_days",
+      "url": "/stay/{master:1}/sale-days/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--inventory.html",
+      "screen": "panel:inventory",
+      "url": "/stay/{master:1}/inventory/?month=2026-07",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--calendar--1.html",
+      "screen": "panel:calendar",
+      "url": "/stay/{master:1}/calendar/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--calendar--2.html",
+      "screen": "panel:calendar",
+      "url": "/stay/{master:1}/calendar/?view=coord&offer={offer:1}&option={room:1}&rate_plan={rate_plan:1}&month=2026-07",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--charges.html",
+      "screen": "panel:charges",
+      "url": "/stay/{master:1}/charges/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--addons.html",
+      "screen": "panel:addons",
+      "url": "/stay/{master:1}/addons/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--promotions.html",
+      "screen": "panel:promotions",
+      "url": "/stay/{master:1}/promotions/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--policies.html",
+      "screen": "panel:policies",
+      "url": "/stay/{master:1}/cancellation-policies/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--benefits.html",
+      "screen": "panel:benefits",
+      "url": "/stay/{master:1}/benefits/",
+      "note": "탭 패널"
+    },
+    {
+      "file": "panel--offers--0.html",
+      "screen": "panel:offers",
+      "url": "",
+      "note": "오퍼 목록(편집 화면이 include)"
+    }
+  ]
+}

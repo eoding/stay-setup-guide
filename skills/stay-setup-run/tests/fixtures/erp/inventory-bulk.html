@@ -1,0 +1,176 @@
+
+
+
+
+
+<div id="stay_inventory_bulk_00000000" data-stay-screen="inventory-bulk">
+  
+  
+  
+
+  <input type="hidden" name="month" value="2026-10">
+  <div class="table1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:140px"><col></colgroup>
+      <tbody>
+        
+        <tr>
+          <th>시작일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <div class="select-field required"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="date_from" value="2026-10-01" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" data-stay-field="date_from" data-stay-kind="date" data-stay-required="1" aria-label="시작일" required id="id_stay_date_from">
+        </dmc-datetime>
+    </div>
+</div>
+            
+            <small>달력에서 고르거나 직접 입력 (예: 2026-01-01)</small>
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>종료일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <div class="select-field required"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="date_to" value="2026-10-31" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" data-stay-field="date_to" data-stay-kind="date" data-stay-required="1" aria-label="종료일" required id="id_stay_date_to">
+        </dmc-datetime>
+    </div>
+</div>
+            
+            <small>달력에서 고르거나 직접 입력 (예: 2026-01-01)</small>
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>요일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="0" id="id_stay_weekdays_0"
+                     checked>
+              <span for="id_stay_weekdays_0">월</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="1" id="id_stay_weekdays_1"
+                     checked>
+              <span for="id_stay_weekdays_1">화</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="2" id="id_stay_weekdays_2"
+                     checked>
+              <span for="id_stay_weekdays_2">수</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="3" id="id_stay_weekdays_3"
+                     checked>
+              <span for="id_stay_weekdays_3">목</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="4" id="id_stay_weekdays_4"
+                     checked>
+              <span for="id_stay_weekdays_4">금</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="5" id="id_stay_weekdays_5"
+                     checked>
+              <span for="id_stay_weekdays_5">토</span>
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px">
+              <input class="filled-in" type="checkbox" name="weekdays"
+                     data-stay-field="weekdays" data-stay-kind="multicheck" data-stay-required="1"
+                     value="6" id="id_stay_weekdays_6"
+                     checked>
+              <span for="id_stay_weekdays_6">일</span>
+            </label>
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>판매 연결 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            
+            
+            <label class="check_form" style="display:block">
+              <input class="filled-in" type="checkbox" name="rooms"
+                     data-stay-field="rooms" data-stay-kind="multicheck" data-stay-required="1"
+                     value="{room:2}" id="id_stay_rooms_0"
+                     checked>
+              <span for="id_stay_rooms_0">〈오퍼 관리용 이름〉 · 스위트</span>
+            </label>
+            
+            
+            <small>수량으로 판매를 켠 판매 연결만 나옵니다.</small>
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>총 수량 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span><small>넣기 시 필수</small></th>
+          <td>
+            
+            <input type="text" name="total_qty" inputmode="numeric" placeholder="10" data-stay-field="total_qty" data-stay-kind="number" aria-label="총 수량" id="id_stay_total_qty">
+            
+            <small>그날 그 판매 연결로 팔 객실 수입니다. [비우기]는 이 칸을 보지 않습니다.</small>
+            
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+            hx-post="/stay/{master:1}/inventory/bulk/"
+            hx-include="#stay_inventory_bulk_00000000 :is(input,select)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">
+      넣기
+    </button>
+    <button type="button" class="stay-btn stay-btn--secondary" data-stay-action="clear"
+            hx-post="/stay/{master:1}/inventory/bulk/clear/"
+            hx-include="#stay_inventory_bulk_00000000 :is(input,select)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-confirm="고른 기간·요일·판매 연결의 총 수량을 지웁니다. 지운 날은 '안 팖'이 되어 그 판매 연결로 팔리지 않습니다. 비울까요?"
+            hx-disable="this">
+      비우기
+    </button>
+  </div>
+  
+</div>

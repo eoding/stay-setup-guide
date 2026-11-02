@@ -1,0 +1,137 @@
+
+
+
+<div id="stay_offer_age_bands" class="stay-root stay-readable" data-stay-panel="offer_age_bands">
+  
+  <span hidden
+        hx-get="/stay/{master:1}/age-bands/"
+        hx-trigger="stay:offers-changed from:body"
+        hx-target="#stay_offer_age_bands"
+        hx-swap="outerHTML"></span>
+
+  
+  
+  
+  
+
+  <div class="erp_cont_head stay-subsection-head">
+    <h4 class="stay-section-title">연령 구간</h4>
+  </div>
+  <p class="stay-subsection-description">
+    부과금의 연령별 단가·아동 정책 표가 이 구간을 참조합니다. 초등학생·미취학·유아처럼 성인과 요금이 다른 나이대를 오퍼마다 나눠 둡니다.
+  </p>
+
+  
+  <div class="stay-card" data-workspace-item data-workspace-offer="{offer:1}" data-workspace-offer-name="〈오퍼 관리용 이름〉" data-workspace-offer-label="〈오퍼 관리용 이름〉 · 시작 제한 없음 ~ 종료 제한 없음 · #{offer:1}" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+    <div class="stay-card__head">
+      
+      <h4 class="stay-card__title">〈오퍼 관리용 이름〉 <small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+</h4>
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/offers/{offer:1}/age-bands/new/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        연령 구간 추가
+      </button>
+    </div>
+
+    
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup>
+          <col style="width:12%"><col style="width:16%"><col style="width:14%"><col style="width:10%">
+          <col style="width:18%"><col style="width:18%"><col style="width:12%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>코드</th>
+            <th>노출명</th>
+            <th>연령 범위</th>
+            <th>인원수 포함</th>
+            <th>요금 기준</th>
+            <th>쓰는 부과금</th>
+            <th class="stay-column-center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr data-stay-entity="age_band" data-stay-name="유아" data-stay-entity-id="{age_band:1}">
+            <td>INFANT</td>
+            <td>유아</td>
+            <td>만 0세 이상 ~ 만 4세 미만</td>
+            <td>
+              
+              
+              <span class="stay-badge stay-badge--tinted">포함</span>
+              
+            </td>
+            <td>
+              
+              정액 0.00
+              
+            </td>
+            <td>
+              
+              <small>없음</small>
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/age-bands/{age_band:1}/edit/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 연령 구간을 지웁니다 — 부과금의 연령별 단가가 쓰고 있으면 지워지지 않고 어느 부과금인지 표시됩니다"
+                      hx-post="/stay/{master:1}/age-bands/{age_band:1}/delete/"
+                      hx-target="#stay_offer_age_bands" hx-swap="outerHTML"
+                      hx-confirm="이 연령 구간을 지울까요? 부과금의 연령별 단가가 쓰고 있으면 지워지지 않습니다.">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="age_band" data-stay-name="소아" data-stay-entity-id="{age_band:2}">
+            <td>CHILD</td>
+            <td>소아</td>
+            <td>만 4세 이상 ~ 만 12세 미만</td>
+            <td>
+              
+              
+              <span class="stay-badge stay-badge--tinted">포함</span>
+              
+            </td>
+            <td>
+              
+              정액 30,000.00
+              
+            </td>
+            <td>
+              
+              <small>없음</small>
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/age-bands/{age_band:2}/edit/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 연령 구간을 지웁니다 — 부과금의 연령별 단가가 쓰고 있으면 지워지지 않고 어느 부과금인지 표시됩니다"
+                      hx-post="/stay/{master:1}/age-bands/{age_band:2}/delete/"
+                      hx-target="#stay_offer_age_bands" hx-swap="outerHTML"
+                      hx-confirm="이 연령 구간을 지울까요? 부과금의 연령별 단가가 쓰고 있으면 지워지지 않습니다.">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+  
+</div>

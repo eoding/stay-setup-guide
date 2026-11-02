@@ -13,6 +13,16 @@ class TestExplainField(unittest.TestCase):
     def call(self, *args):
         return subprocess.run([sys.executable, str(SCRIPT), *args], text=True, capture_output=True)
 
+    def test_legacy_season_time_labels_still_explain_the_current_fields(self):
+        for direction in ('체크인', '체크아웃'):
+            with self.subTest(direction=direction):
+                result = self.call(f'{direction} 시각 override', '--screen', 'season', '--json')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                rows = json.loads(result.stdout)['matches']
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]['label'], f'시즌 {direction} 예외 (기록용)')
+                self.assertIn('반영하지 않습니다', rows[0]['effect'])
+
     def test_hotel_name_help_reports_customer_location(self):
         result = self.call('호텔명', '--screen', '호텔 만들기', '--json')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -40,7 +50,7 @@ class TestExplainField(unittest.TestCase):
         data = rsg.load_dictionary(root / 'screen-dictionary.json')
         impact = rsg.load_impact(root / 'screen-effects.json')
         page, stats = rsg.render_guide(data, version='1.5.0', impact=impact)
-        self.assertEqual(stats['fields'], 243)
+        self.assertEqual(stats['fields'], 268)  # 2026-10-29 사전 — 화면 35개 · 캘린더 일괄 ① 단계 칸 5개 포함
         self.assertIn('허용 인원 조합', page)
 
 

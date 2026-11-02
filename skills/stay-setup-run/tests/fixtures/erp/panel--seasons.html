@@ -1,0 +1,147 @@
+
+
+
+<div id="stay_seasons" data-workspace="seasons" class="stay-root stay-readable" data-stay-panel="seasons">
+  
+  <span hidden
+        hx-get="/stay/{master:1}/seasons/"
+        hx-trigger="stay:offers-changed from:body"
+        hx-target="#stay_seasons"
+        hx-swap="outerHTML"></span>
+
+
+  
+  
+  
+  
+  
+
+  <div class="stay-panel-intro"><h4 class="stay-section-title">시즌</h4></div>
+
+  
+<div class="stay-workspace-nav" aria-label="시즌">
+  
+  <div class="stay-workspace-nav__filters">
+    <label for="seasons_offer">오퍼
+      <select id="seasons_offer" class="browser-default" data-workspace-filter="offer" aria-label="시즌 오퍼"><option value="*">전체 오퍼</option></select>
+    </label>
+    
+    <p class="stay-description" data-workspace-summary role="status"></p>
+  </div>
+</div>
+
+  
+  
+<p class="stay-description">고객 안내 시각은 참조정보의 체크인·체크아웃을 우선하고, 비어 있으면 오퍼 공통값을 씁니다. 현재 고객 안내에는 시즌 예외 시각이 반영되지 않습니다.</p>
+
+  
+  <div class="stay-card" data-workspace-item data-workspace-offer="{offer:1}" data-workspace-offer-name="〈오퍼 관리용 이름〉" data-workspace-offer-label="〈오퍼 관리용 이름〉 · 시작 제한 없음 ~ 종료 제한 없음 · #{offer:1}" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+    <div class="stay-card__head">
+      
+      <h4 class="stay-card__title">〈오퍼 관리용 이름〉 <small style="margin-left:4px;font-weight:400;color:var(--stay-text-tertiary)">#{offer:1}</small>
+</h4>
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/offers/{offer:1}/seasons/new/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        시즌 추가
+      </button>
+    </div>
+
+    
+
+    
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup>
+          <col style="width:12%"><col style="width:6%"><col style="width:6%">
+          <col style="width:15%"><col style="width:6%"><col style="width:8%">
+          <col style="width:12%"><col style="width:12%"><col style="width:10%"><col style="width:13%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>시즌</th>
+            <th class="stay-numeric">우선순위</th>
+            <th class="stay-numeric">해당 날짜 수</th>
+            <th>구간</th>
+            <th class="stay-numeric">가격 입력 수</th>
+            <th>저장 가격</th>
+            <th>체크인·아웃 설정</th><th>판매 조건</th>
+            <th>점검</th>
+            <th class="stay-column-center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr data-stay-entity="season" data-stay-name="PEAK" data-stay-entity-id="{season:1}">
+            <td>
+              
+              <span class="stay-card__title">PEAK</span>
+              <dl class="stay-facts stay-facts--stacked">
+                <dt>코드</dt> <dd>PEAK</dd>
+                <dt>날짜 유형</dt> <dd>기간 범위</dd>
+              </dl>
+              
+
+            </td>
+            <td class="stay-numeric">10</td>
+            <td class="stay-numeric">1</td>
+            
+            <td>
+              <small>-</small>
+            </td>
+            <td class="stay-numeric">0</td>
+
+            
+            <td>가격 없음</td>
+            <td><dl class="stay-facts stay-facts--stacked">
+  <dt>체크인</dt> <dd>미설정 <small class="stay-fact-source">오퍼 공통</small></dd>
+  <dt>체크아웃</dt> <dd>미설정 <small class="stay-fact-source">오퍼 공통</small></dd>
+</dl></td>
+            <td><dl class="stay-facts stay-facts--stacked">
+  <dt>최소 숙박</dt> <dd>제한 없음 <small class="stay-fact-source">오퍼 공통</small></dd>
+  <dt>취소정책</dt> <dd>체크인 7일 전 100% 환불 <small class="stay-fact-source">오퍼 공통</small></dd>
+  <dt>부킹 코드</dt> <dd>미설정</dd>
+</dl></td>
+            <td>
+              
+              -
+            </td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/seasons/{season:1}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              <button type="button" class="stay-btn stay-btn--secondary" data-stay-action="fill"
+                      title="이 시즌에서 선택한 날짜에 가격을 일괄로 입력합니다"
+                      hx-get="/stay/{master:1}/seasons/{season:1}/fill/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                가격 입력
+              </button>
+              <a class="stay-btn stay-btn--secondary" data-stay-action="open_tab"
+                 href="/stay/{master:1}/?view=coord&amp;offer={offer:1}&amp;month=2026-07#stay_tab_calendar">
+                판매 마감·해제
+              </a>
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 시즌으로 만든 가격 셀이 있으면 지울 수 없습니다"
+                      hx-post="/stay/{master:1}/seasons/{season:1}/delete/"
+                      hx-target="#stay_seasons" hx-swap="outerHTML"
+                      hx-confirm="이 시즌을 삭제할까요? 이 시즌으로 만든 가격 셀이 있으면 지우지 못합니다."
+                      hx-disable="this">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+          
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+  
+
+  
+</div>

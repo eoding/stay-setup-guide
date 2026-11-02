@@ -1,0 +1,141 @@
+
+
+<div id="stay_rooms" class="stay-root stay-readable stay-subsection" data-stay-panel="rooms">
+  
+  <span hidden
+        hx-get="/stay/{master:1}/rooms/"
+        hx-trigger="stay:offers-changed from:body"
+        hx-target="#stay_rooms"
+        hx-swap="outerHTML"></span>
+
+
+  
+  
+  
+  
+
+  <div class="erp_cont_head">
+    <h4 class="stay-section-title">판매 연결 (오퍼 × 객실)</h4>
+    <div class="erp_cont_head_right">
+      
+      
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/{master:1}/rooms/create/"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">
+        객실 추가
+      </button>
+      
+    </div>
+  </div>
+
+  <div class="stay-banner stay-banner--info"><span>
+      객실은 오퍼별로 따로 연결합니다 — 같은 룸이라도 오퍼가 다르면 행이 따로 있어야 그 오퍼에서 팔립니다.
+      정원·뷰·면적·사진 같은 룸 속성은 룸 카테고리에 붙고, 카테고리는 이 호텔 것만 씁니다.
+    </span></div>
+
+  
+  <div class="stay-card" data-workspace-item data-workspace-offer="{offer:1}" data-workspace-offer-name="〈오퍼 관리용 이름〉" data-workspace-offer-label="〈오퍼 관리용 이름〉 · 시작 제한 없음 ~ 종료 제한 없음 · #{offer:1}" data-stay-entity="offer" data-stay-name="〈오퍼 관리용 이름〉" data-stay-entity-id="{offer:1}">
+    <div class="stay-card__head">
+      
+      <h4 class="stay-card__title">〈오퍼 관리용 이름〉</h4>
+      <div>
+        
+        <span class="stay-badge stay-badge--draft">작성중</span>
+        
+        <span class="stay-badge stay-badge--tinted">우선순위 10</span>
+      </div>
+    </div>
+
+    
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup>
+          <col style="width:18%"><col style="width:22%"><col style="width:32%">
+          <col style="width:8%"><col style="width:20%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>객실</th>
+            <th>오퍼별 표시명</th>
+            <th>연결된 요금제</th>
+            <th class="stay-numeric">판매일</th>
+            <th class="stay-column-center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr data-stay-entity="room" data-stay-name="디럭스" data-stay-entity-id="{room:1}">
+            <td>
+              
+              <span class="stay-card__title">디럭스</span>
+              
+              
+            </td>
+            <td>-</td>
+            <td>
+              
+              
+              조식 포함, 룸온리, 직접 만든 요금제
+              
+            </td>
+            <td class="stay-numeric">1</td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/rooms/{room:1}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 오퍼의 판매 연결을 삭제합니다. 객실 기본 정보와 다른 오퍼의 연결은 유지됩니다."
+                      hx-post="/stay/{master:1}/rooms/{room:1}/delete/"
+                      hx-target="#stay_rooms" hx-swap="outerHTML"
+                      hx-confirm="이 오퍼의 객실 판매 연결을 삭제할까요? 연결된 요금제와 재고 설정도 삭제되며 되돌릴 수 없습니다. 객실 기본 정보와 다른 오퍼의 판매 연결은 유지됩니다.">
+                판매 연결 삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+          <tr data-stay-entity="room" data-stay-name="스위트" data-stay-entity-id="{room:2}">
+            <td>
+              
+              <span class="stay-card__title">스위트</span>
+              
+              
+            </td>
+            <td>-</td>
+            <td>
+              
+              
+              조식 포함, 룸온리
+              
+            </td>
+            <td class="stay-numeric">0</td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/rooms/{room:2}/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 오퍼의 판매 연결을 삭제합니다. 객실 기본 정보와 다른 오퍼의 연결은 유지됩니다."
+                      hx-post="/stay/{master:1}/rooms/{room:2}/delete/"
+                      hx-target="#stay_rooms" hx-swap="outerHTML"
+                      hx-confirm="이 오퍼의 객실 판매 연결을 삭제할까요? 연결된 요금제와 재고 설정도 삭제되며 되돌릴 수 없습니다. 객실 기본 정보와 다른 오퍼의 판매 연결은 유지됩니다.">
+                판매 연결 삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+  
+</div>

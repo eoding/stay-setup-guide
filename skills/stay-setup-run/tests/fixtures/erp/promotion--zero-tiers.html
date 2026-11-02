@@ -1,0 +1,571 @@
+
+
+
+
+
+<script id="stay_promotion_tier_rows_initial" type="application/json">[]</script>
+<div id="stay_promotion_form_00000000" data-stay-screen="promotion"
+     x-data="{
+       tiers: JSON.parse(document.getElementById('stay_promotion_tier_rows_initial').textContent) || [],
+       trigger: 'ALWAYS',
+       basis: 'PCT',
+       bookingWindow: false,
+       thresholdLabels: {&quot;LOS&quot;: &quot;최소 숙박(박)&quot;, &quot;LEAD_TIME&quot;: &quot;체크인 D-N일 전&quot;, &quot;ROOM_COUNT&quot;: &quot;최소 객실 수&quot;, &quot;ALWAYS&quot;: &quot;기준 없음&quot;},
+       get thresholdLabel() { return this.thresholdLabels[this.trigger] || '기준값' },
+       get valueLabel() {
+         return this.basis === 'PCT' ? '할인율(%)'
+              : this.basis === 'FLAT' ? '할인 금액'
+              : '무료 숙박(박)'
+       }
+     }">
+
+  
+
+  <div class="stay-card" data-stay-card="main">
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:22%"><col style="width:78%"></colgroup>
+        <tbody>
+          <tr>
+            <th>프로모션명 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td><input type="text" name="title" maxlength="200" data-stay-field="title" data-stay-kind="text" data-stay-required="1" aria-label="프로모션명" required id="id_stay_title"></td>
+          </tr>
+          <tr>
+            <th>코드</th>
+            <td>
+              <input type="text" name="code" maxlength="64" data-stay-field="code" data-stay-kind="text" aria-label="코드" id="id_stay_code">
+              <small>계약서·채널 연동에서 이 할인을 가리키는 약칭입니다. 비워도 됩니다.</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>발동 조건 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td>
+              
+              <select name="trigger_type" class="browser-default" aria-label="발동 조건"
+                      data-stay-field="trigger_type" data-stay-kind="select" data-stay-required="1"
+                      x-model="trigger">
+                
+                <option value="ALWAYS">상시 — 조건 없이 항상</option>
+                
+                <option value="LOS">연박 — N박 이상 묵으면</option>
+                
+                <option value="LEAD_TIME">얼리버드 — 체크인 D-N일 전에 예약하면</option>
+                
+                <option value="ROOM_COUNT">객실 수 — N개 이상 잡으면</option>
+                
+              </select>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>혜택 방식 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td>
+              <select name="basis" class="browser-default" aria-label="혜택 방식"
+                      data-stay-field="basis" data-stay-kind="select" data-stay-required="1"
+                      x-model="basis">
+                
+                <option value="PCT">정률 — 요금의 %</option>
+                
+                <option value="FLAT">정액 — 금액을 뺀다</option>
+                
+                <option value="FREE_NIGHT">무료 숙박 — N박을 공짜로 (STAY5PAY4형)</option>
+                
+              </select>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>적용 단위 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td>
+              <select name="unit" class="browser-default" data-stay-field="unit" data-stay-kind="select" data-stay-required="1" aria-label="적용 단위" id="id_stay_unit">
+  <option value="0" selected>박당</option>
+
+  <option value="1">체류당 1회</option>
+
+</select>
+              <small x-show="basis === 'PCT'">정률은 밤마다 그 밤의 요금에 비례해 붙습니다 — 이 값은 정액·무료숙박에서만 뜻이 갈립니다.</small>
+              <small x-show="basis !== 'PCT'">정액·무료숙박에서만 뜻이 갈립니다 — 정률은 밤마다 요금에 비례해 붙습니다.</small>
+              
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="stay-card" data-stay-card="tiers">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="tiers">할인 단계 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></h4>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
+              x-on:click="tiers.push({ threshold: trigger === 'ALWAYS' ? '0' : '', value: '' })">
+        단 추가
+      </button>
+    </div>
+    
+    <p>
+      <small x-show="trigger === 'ALWAYS'">‘상시’ 는 기준값을 보지 않습니다 — 한 단만, 기준값 0 으로 두세요.</small>
+      <small x-show="trigger !== 'ALWAYS'">조건을 만족하는 단 중 기준값이 가장 큰 하나만 적용됩니다 — 합산이 아닙니다.</small>
+    </p>
+    <div class="table1">
+      
+      <input type="hidden" name="tiers_submitted" value="1">
+      <table class="bs-table stay-table"
+             data-stay-field="tiers" data-stay-kind="rows" data-stay-rows="tiers" data-stay-required="1">
+        <colgroup><col style="width:40%"><col style="width:40%"><col style="width:20%"></colgroup>
+        <thead>
+          <tr>
+            <th><span x-text="thresholdLabel">기준값</span> <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <th><span x-text="valueLabel">값</span> <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <template x-for="(tier, index) in tiers" :key="index">
+            <tr :data-stay-row="index">
+              <td>
+                <input type="number" name="tiers_threshold" step="1" min="0" data-stay-col="threshold" :aria-label="thresholdLabel"
+                       x-model="tier.threshold" :disabled="false">
+              </td>
+              <td><input type="number" name="tiers_value" step="0.01" min="0" data-stay-col="value" :aria-label="valueLabel" x-model="tier.value"></td>
+              <td>
+                <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="remove_row"
+                        x-on:click="tiers.splice(index, 1)">삭제</button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="tiers.length === 0">
+            <td colspan="3">
+              <small>단이 없으면 고객이 이 할인을 고르는 순간 예약이 실패합니다 — 최소 한 단은 넣으세요.</small>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="stay-card" data-stay-card="scope_and_combination">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title">적용 범위와 조합</h4>
+    </div>
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:22%"><col style="width:28%"><col style="width:22%"><col style="width:28%"></colgroup>
+        <tbody>
+          <tr>
+            <th>적용 숙박일 시작</th>
+            <td>
+              <div class="select-field"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="start_date" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" data-stay-field="start_date" data-stay-kind="date" aria-label="적용 숙박일 시작" id="id_stay_start_date">
+        </dmc-datetime>
+    </div>
+</div>
+              <small>비우면 이 오퍼의 전 기간에 붙습니다. 예약한 날이 아니라 ‘묵는 날’ 기준입니다.</small>
+              
+            </td>
+            <th>적용 숙박일 종료</th>
+            <td>
+              <div class="select-field"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="end_date" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" data-stay-field="end_date" data-stay-kind="date" aria-label="적용 숙박일 종료" id="id_stay_end_date">
+        </dmc-datetime>
+    </div>
+</div>
+              <small>시작만 채우면 그 날부터, 종료만 채우면 그 날까지입니다.</small>
+              
+            </td>
+          </tr>
+          
+          <tr>
+            <th>진행기간 제한</th>
+            <td colspan="3">
+              <label class="check_form">
+                <input class="filled-in" type="checkbox" name="promotion_apply_flag"
+                       x-on:change="bookingWindow = $event.target.checked"
+                       data-stay-field="promotion_apply_flag" data-stay-kind="checkbox"
+                       id="id_stay_promotion_apply_flag">
+                <span for="id_stay_promotion_apply_flag">이 기간에 예약한 건만</span>
+              </label>
+              <small>켜면 아래 기간에 예약한 건에만 이 할인이 붙습니다. 끄면 상시 진행입니다.</small>
+              
+            </td>
+          </tr>
+          <tr x-show="bookingWindow || false || false">
+            <th>진행기간 시작 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="bookingWindow">*</span></th>
+            <td>
+              <div class="select-field"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="promotion_apply_start_date" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" data-stay-field="promotion_apply_start_date" data-stay-kind="date" aria-label="진행기간 시작" id="id_stay_promotion_apply_start_date">
+        </dmc-datetime>
+    </div>
+</div>
+              <small>제한을 켜면 필수입니다 — 묵는 날이 아니라 예약하는 날 기준입니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01)</small>
+              
+            </td>
+            <th>진행기간 종료 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="bookingWindow">*</span></th>
+            <td>
+              <div class="select-field"
+     x-data
+     x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }">
+    <div class="select-wrapper">
+        <dmc-datetime>
+            <input type="text" name="promotion_apply_end_date" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" data-stay-field="promotion_apply_end_date" data-stay-kind="date" aria-label="진행기간 종료" id="id_stay_promotion_apply_end_date">
+        </dmc-datetime>
+    </div>
+</div>
+              <small>제한을 켜면 필수입니다 — 이 날까지 예약한 건에 붙습니다. 달력에서 고르거나 직접 입력 (예: 2026-01-01)</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>시즌 한정</th>
+            <td><select name="season" class="browser-default" data-stay-field="season" data-stay-kind="select" data-stay-options="seasons" aria-label="시즌 한정" id="id_stay_season">
+  <option value="" selected>(전 시즌)</option>
+
+  <option value="{season:1}">〈오퍼 관리용 이름〉 · PEAK</option>
+
+</select></td>
+            <th>요금제 한정</th>
+            
+            <td>
+              <select name="rate_plan" class="browser-default" data-stay-field="rate_plan" data-stay-kind="select" data-stay-options="rate_plans" aria-label="요금제 한정" id="id_stay_rate_plan">
+  <option value="" selected>(전 요금제)</option>
+
+  <option value="{rate_plan:2}">〈오퍼 관리용 이름〉 · 디럭스 · 룸온리</option>
+
+  <option value="{rate_plan:4}">〈오퍼 관리용 이름〉 · 스위트 · 룸온리</option>
+
+  <option value="{rate_plan:1}">〈오퍼 관리용 이름〉 · 디럭스 · 조식 포함</option>
+
+  <option value="{rate_plan:3}">〈오퍼 관리용 이름〉 · 스위트 · 조식 포함</option>
+
+  <option value="{rate_plan:5}">〈오퍼 관리용 이름〉 · 디럭스 · 직접 만든 요금제</option>
+
+</select>
+              <small>요금제를 한정하면 이 할인은 객실 목록 가격에는 표시되지 않고 견적·예약 단계에서만 적용됩니다.</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>다른 프로모션과 중복 적용</th>
+            <td>
+              
+              <label class="check_form">
+                <input class="filled-in" type="checkbox" name="combinability"
+                       data-stay-field="combinability" data-stay-kind="checkbox"
+                       id="id_stay_combinability">
+                <span for="id_stay_combinability">중복 허용</span>
+              </label>
+              <small>끄면 이 할인을 고르는 순간 다른 할인은 못 고릅니다(기본은 택일).</small>
+            </td>
+            <th>배타 그룹</th>
+            <td>
+              <input type="text" name="exclusivity_group" maxlength="64" data-stay-field="exclusivity_group" data-stay-kind="text" aria-label="배타 그룹" id="id_stay_exclusivity_group">
+              <small>같은 이름을 적은 프로모션끼리는 하나만 고를 수 있습니다. 비우면 제한 없음.</small>
+              
+            </td>
+          </tr>
+          <tr>
+            
+            <th>프로모션 전용 취소 정책</th>
+            <td colspan="3">
+              <select name="cancellation_policy" class="browser-default" data-stay-field="cancellation_policy" data-stay-kind="select" data-stay-options="policies" aria-label="프로모션 전용 취소 정책" id="id_stay_cancellation_policy">
+  <option value="" selected>(요금제·오퍼 정책을 따름)</option>
+
+  <option value="{policy:1}">체크인 7일 전 100% 환불</option>
+
+</select>
+              <small>이 프로모션으로 팔린 예약만의 규정. 비우면 요금제·오퍼 정책을 따릅니다.</small>
+              
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  
+
+
+<div class="stay-card" data-stay-card="scope"
+     x-data="{
+       modes: {&quot;rate_plan&quot;: &quot;0&quot;, &quot;room&quot;: &quot;0&quot;},
+       scopeOffer: '{offer:1}', scopePicks: [], scopeCleared: false, scopeIncludes: {},
+       syncScopePicks() {
+         this.scopePicks = Array.from(this.$el.querySelectorAll('[data-scope-offer]:checked'), input => input.value);
+         for (const axis of Object.keys(this.modes)) {
+           this.scopeIncludes[axis] = Array.from(this.$el.querySelectorAll('[name=scope_' + axis + '_include]')).some(input => input.checked);
+         }
+       },
+       changeScopeOffer(event) {
+         const host = this.$el.closest('[data-stay-screen=addon]');
+         if (!host || event.target.name !== 'offer' || !host.contains(event.target)) { return; }
+         this.scopeOffer = event.target.value;
+         let removed = false;
+         for (const input of this.$el.querySelectorAll('[data-scope-offer]:checked')) {
+           if (input.dataset.scopeOffer !== this.scopeOffer) { input.checked = false; removed = true; }
+         }
+         this.scopeCleared = removed;
+         this.syncScopePicks();
+       },
+       narrowing(axis) { return this.modes[axis] !== '0' },
+       denying() { return Object.values(this.modes).some(mode => mode === '2') }
+     }"
+     x-init="syncScopePicks()" x-on:change="syncScopePicks()" >
+  <div class="stay-card__head">
+    <h4 class="stay-section-title">적용 범위</h4>
+  </div>
+  <p>
+    <small>한 번 골라 여러 객실·요금제에 걸고, 예외만 제외 목록에 둡니다. '기존 범위 그대로'는 지금까지 저장된 동작을 그대로 씁니다.</small>
+  </p>
+  
+  
+
+  <div class="table1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:16%"><col style="width:84%"></colgroup>
+      <tbody>
+        
+        <tr>
+          <th>요금제 적용 범위</th>
+          <td x-on:change="modes['rate_plan'] = $event.target.value">
+            <select name="scope_rate_plan_mode" data-stay-field="scope_rate_plan_mode" data-stay-kind="select" aria-label="요금제 적용 범위" id="id_stay_scope_rate_plan_mode">
+  <option value="0" selected>기존 범위 그대로</option>
+
+  <option value="1">구조 적격 전체</option>
+
+  <option value="2">지정한 대상만</option>
+
+</select>
+            
+          </td>
+        </tr>
+        <tr x-show="modes['rate_plan'] === '2' || scopeIncludes['rate_plan'] || false">
+          <th>포함</th>
+          <td>
+            <small x-show="modes['rate_plan'] !== '2'">포함 목록은 '지정한 대상만'에서 적용됩니다. 저장된 선택은 유지됩니다.</small>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_rate_plan_include"
+                     
+                     data-stay-field="scope_rate_plan_include" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rate_plans"
+                     value="{catalog:2}" id="id_stay_scope_rate_plan_include_0"
+                     >
+              <span for="id_stay_scope_rate_plan_include_0">룸온리</span>
+              
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_rate_plan_include"
+                     
+                     data-stay-field="scope_rate_plan_include" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rate_plans"
+                     value="{catalog:1}" id="id_stay_scope_rate_plan_include_1"
+                     >
+              <span for="id_stay_scope_rate_plan_include_1">조식 포함</span>
+              
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_rate_plan_include"
+                     
+                     data-stay-field="scope_rate_plan_include" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rate_plans"
+                     value="{catalog:3}" id="id_stay_scope_rate_plan_include_2"
+                     >
+              <span for="id_stay_scope_rate_plan_include_2">하프보드</span>
+              
+            </label>
+            
+            
+          </td>
+        </tr>
+        <tr x-show="narrowing('rate_plan')">
+          <th>제외</th>
+          <td>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_rate_plan_exclude"
+                     
+                     data-stay-field="scope_rate_plan_exclude" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rate_plans"
+                     value="{catalog:2}" id="id_stay_scope_rate_plan_exclude_0"
+                     >
+              <span for="id_stay_scope_rate_plan_exclude_0">룸온리</span>
+              
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_rate_plan_exclude"
+                     
+                     data-stay-field="scope_rate_plan_exclude" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rate_plans"
+                     value="{catalog:1}" id="id_stay_scope_rate_plan_exclude_1"
+                     >
+              <span for="id_stay_scope_rate_plan_exclude_1">조식 포함</span>
+              
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_rate_plan_exclude"
+                     
+                     data-stay-field="scope_rate_plan_exclude" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rate_plans"
+                     value="{catalog:3}" id="id_stay_scope_rate_plan_exclude_2"
+                     >
+              <span for="id_stay_scope_rate_plan_exclude_2">하프보드</span>
+              
+            </label>
+            
+            
+            <small>포함과 제외에 같은 대상이 있으면 제외가 이깁니다.</small>
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>객실 적용 범위</th>
+          <td x-on:change="modes['room'] = $event.target.value">
+            <select name="scope_room_mode" data-stay-field="scope_room_mode" data-stay-kind="select" aria-label="객실 적용 범위" id="id_stay_scope_room_mode">
+  <option value="0" selected>기존 범위 그대로</option>
+
+  <option value="1">구조 적격 전체</option>
+
+  <option value="2">지정한 대상만</option>
+
+</select>
+            
+          </td>
+        </tr>
+        <tr x-show="modes['room'] === '2' || scopeIncludes['room'] || false">
+          <th>포함</th>
+          <td>
+            <small x-show="modes['room'] !== '2'">포함 목록은 '지정한 대상만'에서 적용됩니다. 저장된 선택은 유지됩니다.</small>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_room_include"
+                     
+                     data-stay-field="scope_room_include" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rooms"
+                     value="{room:1}" id="id_stay_scope_room_include_0"
+                     >
+              <span for="id_stay_scope_room_include_0">〈오퍼 관리용 이름〉 · 디럭스</span>
+              
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_room_include"
+                     
+                     data-stay-field="scope_room_include" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rooms"
+                     value="{room:2}" id="id_stay_scope_room_include_1"
+                     >
+              <span for="id_stay_scope_room_include_1">〈오퍼 관리용 이름〉 · 스위트</span>
+              
+            </label>
+            
+            
+          </td>
+        </tr>
+        <tr x-show="narrowing('room')">
+          <th>제외</th>
+          <td>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_room_exclude"
+                     
+                     data-stay-field="scope_room_exclude" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rooms"
+                     value="{room:1}" id="id_stay_scope_room_exclude_0"
+                     >
+              <span for="id_stay_scope_room_exclude_0">〈오퍼 관리용 이름〉 · 디럭스</span>
+              
+            </label>
+            
+            <label class="check_form" style="display:inline-block;margin-right:12px"
+                   >
+              <input class="filled-in" type="checkbox" name="scope_room_exclude"
+                     
+                     data-stay-field="scope_room_exclude" data-stay-kind="multicheck"
+                     
+                     data-stay-options="rooms"
+                     value="{room:2}" id="id_stay_scope_room_exclude_1"
+                     >
+              <span for="id_stay_scope_room_exclude_1">〈오퍼 관리용 이름〉 · 스위트</span>
+              
+            </label>
+            
+            
+            <small>포함과 제외에 같은 대상이 있으면 제외가 이깁니다.</small>
+            
+          </td>
+        </tr>
+        
+
+        
+        <tr x-show="denying()">
+          <th>확인 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수" x-show="Object.keys(modes).some(axis => modes[axis] === '2' && !scopeIncludes[axis])">*</span></th>
+          <td>
+            <label class="check_form">
+              <input class="filled-in" type="checkbox" name="scope_confirm_deny_all"
+                     data-stay-field="scope_confirm_deny_all" data-stay-kind="checkbox"
+                     id="id_stay_scope_confirm_deny_all"
+                     >
+              <span for="id_stay_scope_confirm_deny_all">범위를 비운 채 저장 (어디서도 판매하지 않음)</span>
+            </label>
+            <small>포함 목록을 비우면 이 항목은 아무 객실·요금제에서도 판매되지 않습니다.</small>
+            
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+  <div class="erp_cont_head">
+    <div class="erp_cont_head_right">
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+              
+              hx-post="/stay/{master:1}/offers/{offer:1}/promotions/new/"
+              
+              hx-include="#stay_promotion_form_00000000 :is(input,select,textarea)"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML"
+              hx-disable="this">
+        추가
+      </button>
+    </div>
+  </div>
+</div>

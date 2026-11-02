@@ -1,0 +1,194 @@
+
+
+
+<div id="stay_addons" class="stay-root stay-readable" data-stay-panel="addons">
+  
+  <span hidden
+        hx-get="/stay/{master:1}/addons/"
+        hx-trigger="stay:rooms-changed from:body, stay:offers-changed from:body"
+        hx-target="#stay_addons"
+        hx-swap="outerHTML"></span>
+
+  
+
+  <div class="stay-card stay-panel-intro">
+    <div class="stay-card__head">
+      
+      <h4 class="stay-section-title">부가옵션 1건</h4>
+      <span>
+        
+        
+        <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+                hx-get="/stay/{master:1}/addons/new/"
+                hx-target="#stay_drawer_body" hx-swap="innerHTML">
+          부가옵션 추가
+        </button>
+        
+      </span>
+    </div>
+    <p class="stay-description">엑스트라베드처럼 투숙 박수를 따라가는 항목은 [날짜연동], 조식처럼 고객이 먹는 날만 고르는 항목은 [일자선택]으로 만듭니다. 금액은 부가옵션을 만든 뒤 카드 안에서 <span class="stay-action-guide__btn stay-action-guide__btn--primary">가격 추가</span>로 채웁니다.</p>
+    
+  </div>
+
+  
+  
+  <div class="stay-card stay-addon" data-stay-entity="addon" data-stay-name="〈부가옵션 이름〉" data-stay-entity-id="{addon:1}">
+    <div class="stay-card__head">
+      <div class="stay-addon__ident">
+        <h4 class="stay-addon__name">〈부가옵션 이름〉</h4>
+        
+        
+      </div>
+      <span class="stay-addon__actions">
+        <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+                title="이 부가옵션의 금액 줄을 하나 더 만듭니다 — 시즌·날짜·요금제마다 금액이 다르면 줄을 나눠 넣습니다"
+                hx-get="/stay/{master:1}/addons/{addon:1}/prices/new/"
+                hx-target="#stay_drawer_body" hx-swap="innerHTML">
+          가격 추가
+        </button>
+        <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_questions"
+                hx-get="/stay/{master:1}/addons/{addon:1}/questions/new/"
+                hx-target="#stay_drawer_body" hx-swap="innerHTML">
+          정보 수집 폼
+        </button>
+        <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                hx-get="/stay/{master:1}/addons/{addon:1}/edit/"
+                hx-target="#stay_drawer_body" hx-swap="innerHTML">
+          편집
+        </button>
+        
+        <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                title="이 부가옵션과 아래 가격 줄을 통째로 지웁니다 — 막는 조건이 없어 누르면 바로 지워지고 되돌릴 수 없습니다"
+                hx-post="/stay/{master:1}/addons/{addon:1}/delete/"
+                hx-target="#stay_addons" hx-swap="outerHTML"
+                hx-confirm="이 부가옵션을 삭제할까요? 등록된 가격도 함께 지워집니다.">
+          삭제
+        </button>
+      </span>
+    </div>
+
+    
+    
+
+    
+    <div class="table1 stay-addon__meta">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup><col style="width:16%"><col style="width:34%"><col style="width:16%"><col style="width:34%"></colgroup>
+        <tbody>
+          <tr>
+            <th>적용 방식</th>
+            <td>1회 적용 (박수·날짜와 무관)</td>
+            <th>화면 섹션</th>
+            <td>공항 이동</td>
+          </tr>
+          <tr>
+            <th>연결 룸</th>
+            <td>—</td>
+            <th>인원 밴드</th>
+            <td>전체</td>
+          </tr>
+          <tr>
+            
+            <th>오퍼</th>
+            <td>〈오퍼 관리용 이름〉</td>
+            <th>기존 요금제 (미사용)</th>
+            <td><small>미설정</small></td>
+          </tr>
+          <tr>
+            
+            <th>수량 상한</th>
+            <td>—</td>
+            <th>무료 제공 수량</th>
+            <td>—</td>
+          </tr>
+          
+          <tr><th>적용 범위</th><td colspan="3">
+<div data-stay-saved-scope>
+
+  <div><strong>요금제</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+  <div><strong>객실</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+</div>
+</td></tr>
+          <tr><th>고객 안내</th><td colspan="3">없음</td></tr>
+          <tr><th>옵션 유형</th><td>단일선택</td><th>정렬</th><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    
+    <h5 class="stay-addon__sub">가격</h5>
+    
+    <div class="table1 stay-addon__prices stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <colgroup><col style="width:16%"><col style="width:12%"><col style="width:14%"><col style="width:14%"><col style="width:24%"><col style="width:8%"><col style="width:12%"></colgroup>
+        <thead>
+          <tr>
+            <th>가격행 이름</th>
+            <th class="stay-numeric">판매가</th>
+            <th>통화별 금액</th>
+            <th>적용 대상</th>
+            <th>적용 범위</th>
+            <th>인원 밴드</th>
+            <th class="stay-column-center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr data-stay-entity="addon_price" data-stay-name="성인" data-stay-entity-id="{addon_price:1}">
+            <td>성인</td>
+            <td class="stay-numeric">30000.00 공급 통화</td>
+            <td><small>별도 금액 없음</small></td>
+            <td>전체</td>
+            <td>
+<div data-stay-saved-scope>
+
+  <div><strong>요금제</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+  <div><strong>객실</strong>: 기존 범위 그대로
+    
+    
+    
+  </div>
+
+</div>
+<small>부가옵션 범위와 모두 일치하는 대상에만 적용</small></td>
+            <td>전체</td>
+            <td class="td_actions">
+              <div class="stay-actions">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                      hx-get="/stay/{master:1}/addon-prices/{addon_price:1}/edit/"
+                      hx-target="#stay_drawer_body" hx-swap="innerHTML">
+                편집
+              </button>
+              <button type="button" class="stay-btn stay-btn--danger" data-stay-action="delete"
+                      title="이 금액 줄만 지웁니다 — 부가옵션 자체는 남습니다"
+                      hx-post="/stay/{master:1}/addon-prices/{addon_price:1}/delete/"
+                      hx-target="#stay_addons" hx-swap="outerHTML"
+                      hx-confirm="이 가격을 삭제할까요?">
+                삭제
+              </button>
+              </div>
+            </td>
+          </tr>
+          
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+  
+</div>

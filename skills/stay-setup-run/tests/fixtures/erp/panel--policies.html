@@ -1,0 +1,149 @@
+
+
+
+<div id="stay_policies" class="stay-root stay-readable" data-stay-panel="policies">
+
+  <div class="erp_cont_head">
+    <h4 class="stay-section-title">취소정책</h4>
+    <div class="erp_cont_head_right">
+      
+      <button type="button" class="stay-btn stay-btn--primary" data-stay-action="open_create"
+              hx-get="/stay/cancellation-policies/new/?master={master:1}"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">정책 만들기</button>
+    </div>
+  </div>
+
+  <div class="stay-banner stay-banner--info">
+    <span>
+      이 목록은 여행사 공용입니다. 여기서 고치면 같은 정책을 쓰는 다른 호텔의 고객 화면도 같이 바뀝니다.
+      오퍼에 붙일 때는 오퍼 탭을, 시즌만 다르게 할 때는 시즌 편집을 씁니다.
+      수수료 구간은 고객에게 보여줄 안내이고, 실제 환불금액은 취소 처리에서 담당자가 입력합니다.
+    </span>
+  </div>
+
+  
+  <div class="cont_search_area">
+    <div class="search_form">
+      <div class="search_form_wrap" id="stay_policy_tab_search">
+        <div class="control m3">
+          <div class="head flex"><label>정책 찾기</label></div>
+          <div class="form_item">
+            <input type="hidden" name="master" value="{master:1}">
+            <input type="text" name="keyword" value="" data-stay-field="keyword" data-stay-kind="text"
+                   placeholder="이름 · 구간 문구 (예: 14일)"
+                   hx-get="/stay/cancellation-policies/rows/"
+                   hx-include="#stay_policy_tab_search input"
+                   hx-target="#stay_policy_rows" hx-swap="outerHTML"
+                   hx-trigger="keyup[key=='Enter'], search">
+          </div>
+        </div>
+        <div class="control m2">
+          <div class="head flex"><label>&nbsp;</label></div>
+          <div class="form_item">
+            <button type="button" class="stay-btn stay-btn--primary" data-stay-action="search"
+                    hx-get="/stay/cancellation-policies/rows/"
+                    hx-include="#stay_policy_tab_search input"
+                    hx-target="#stay_policy_rows" hx-swap="outerHTML">검색하기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+
+<div id="stay_policy_rows" class="stay-root stay-readable">
+
+  
+  
+  
+  
+  
+
+  
+  <div class="table1 stay-table-scroll">
+    <table class="bs-table stay-table stay-aligned-table">
+      <colgroup><col style="width:17%"><col style="width:8%"><col><col style="width:11%"><col style="width:26%"><col style="width:14%"></colgroup>
+      <thead>
+        <tr>
+          <th>정책명</th>
+          <th>환불</th>
+          <th>취소 수수료 구간</th>
+          
+          <th>범위</th>
+          <th>쓰는 곳</th>
+          <th class="td_actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr data-stay-entity="policy" data-stay-name="체크인 7일 전 100% 환불" data-stay-entity-id="{policy:1}" data-stay-owner-master-id="">
+          <td>
+            <span class="stay-card__title">체크인 7일 전 100% 환불</span>
+            
+          </td>
+          <td>
+            
+            <span class="stay-badge stay-badge--active">환불 가능</span>
+            
+          </td>
+          <td>
+            
+            
+            <small class="error">수수료 구간이 없어 고객 화면에 아무것도 보이지 않습니다.</small>
+            
+          </td>
+          <td>
+            
+            <span class="stay-badge stay-badge--tinted">공용</span>
+            <br><small>모든 호텔</small>
+            
+          </td>
+          <td>
+            
+            
+            <div class="stay-use">
+              
+              
+              <a href="#stay_tab_offers" data-stay-action="open_tab" data-stay-target="offers" x-data
+                 x-on:click.prevent="document.querySelector('li.tab a[href=&quot;#stay_tab_offers&quot;]')?.click()">
+                〈호텔명〉</a>
+              
+              <span class="stay-note">(지금 보는 호텔)</span>
+              
+              <br><small>〈오퍼 관리용 이름〉</small>
+            </div>
+            
+            
+            
+            
+            
+          </td>
+          <td class="td_actions">
+            <div class="stay-actions">
+            
+            <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="open_edit"
+                    title="이 정책을 쓰는 모든 호텔의 고객 화면이 함께 바뀝니다 — 오른쪽 [쓰는 곳]이 그 범위입니다"
+                    hx-get="/stay/cancellation-policies/{policy:1}/?master={master:1}"
+                    hx-target="#stay_drawer_body" hx-swap="innerHTML">편집</button>
+            
+            
+            
+            
+            
+            <span title="〈호텔명〉에서 쓰고 있어 삭제할 수 없습니다 — 먼저 다른 정책으로 바꿔주세요">
+              <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="delete" disabled
+                      aria-label="〈호텔명〉에서 쓰고 있어 삭제할 수 없습니다 — 먼저 다른 정책으로 바꿔주세요">삭제</button>
+            </span>
+            
+            </div>
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+  
+</div>
+
+</div>

@@ -300,7 +300,8 @@ class TestStepMarkup(unittest.TestCase):
     def test_section_and_badge_carry_the_step_number(self):
         html_text = self.render()
         for no in (1, 2, 3):
-            self.assertIn('<section class="step" data-step="%d">' % no, html_text)
+            # 화면 표식(`data-stay-screen` …)이 뒤에 붙을 수 있다(2026-10-28)
+            self.assertRegex(html_text, r'<section class="step" data-step="%d"[ >]' % no)
             self.assertIn('<span class="step-status" data-step="%d" data-status="대기">대기</span>' % no,
                           html_text)
 
@@ -325,7 +326,7 @@ class TestStepMarkup(unittest.TestCase):
     def test_unnumbered_section_has_no_step_number(self):
         html_text = self.render(WITH_PLAIN_SECTION)
         self.assertIn('<section class="step">', html_text)          # 번호 없는 절
-        self.assertEqual(sorted(set(re.findall(r'<section class="step" data-step="(\d+)">', html_text))),
+        self.assertEqual(sorted(set(re.findall(r'<section class="step" data-step="(\d+)"[ >]', html_text))),
                          ["1", "2", "3"])
 
     def test_heading_step_no_reads_only_the_heading_number(self):
@@ -486,7 +487,7 @@ class TestNewFieldPassthrough(unittest.TestCase):
 
     def test_em_dash_label_does_not_break_the_step_or_the_toc(self):
         """EM DASH 가 든 라벨이 표에 있어도 단계 번호·목차는 그대로 선다."""
-        self.assertIn('<section class="step" data-step="5">', self.html)
+        self.assertRegex(self.html, r'<section class="step" data-step="5"[ >]')
         self.assertEqual(self.stats["steps"], 5)
         self.assertEqual(self.stats["nav_items"], 5)
 
@@ -582,3 +583,77 @@ class TestRenderRegression(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestScreenHooks(unittest.TestCase):
+    """지시서 HTML 이 화면 표식(`data-stay-*`)을 싣는다(2026-10-28) — 러너가 표식으로 먼저 찾는다."""
+
+    MD = """# 시험 호텔 — 입력 지시서
+
+## 3. 시즌 만들기 (1번째, Peak)
+탭: `시즌`
+버튼: [시즌 추가]
+
+| 칸 | 값 |
+|---|---|
+| 시즌명 | Peak |
+| 날짜 규칙 유형 | 선택: 기간 범위 |
+| 기간 시작 | 2027-10-01 |
+| 기간 종료 | 2027-11-30 |
+| 최소 숙박 override | 2 |
+| 사전에 없는 칸 | 1 |
+
+→ [추가]
+
+## 4. 룸 만들기 (1번째, Single)
+탭: `객실`
+버튼: 드로어 안 `침대 구성` 의 [침대 행 추가] 1번
+
+| 칸 | 값 |
+|---|---|
+| 룸 이름 | Single |
+| 침대 구성 1 · 침대 종류 | 선택: 싱글 |
+
+→ [저장]
+"""
+
+    def render(self):
+        page, _stats = rc.render_card(self.MD, "manual.md", None, None)
+        return page
+
+    def test_step_rows_and_buttons_carry_keys(self):
+        page = self.render()
+        self.assertIn('<section class="step" data-step="3" data-stay-screen="season" data-stay-tab="seasons">', page)
+        self.assertIn('<tr data-stay-field="name">', page)
+        self.assertIn('<tr data-stay-field="date_selection_0">', page)
+        self.assertIn('<tr data-stay-field="min_nights" data-stay-renamed="1">', page)
+        self.assertIn('<div class="action-box" data-stay-action="save">', page)
+        self.assertIn('<tr data-stay-field="bed_configs" data-stay-row="1" data-stay-col="침대 종류">', page)
+        self.assertIn('<span class="btn-look" data-stay-action="add_row">', page)
+
+    def test_opener_buttons_never_carry_a_submit_verb(self):
+        """[호텔 만들기] 는 여는 버튼이자 저장 버튼 글자다 — `버튼:` 줄에는 `save` 를 싣지 않는다(러너가 저장을 누른다)."""
+        md = ("# 시험 호텔 — 입력 지시서\n\n## 4. 호텔 만들기\n버튼: [호텔 만들기]\n\n| 칸 | 값 |\n|---|---|\n"
+              "| 호텔명 | 시험 |\n\n→ [호텔 만들기]\n")
+        page, _stats = rc.render_card(md, "manual.md", None, None)
+        self.assertIn('<span class="btn-look">호텔 만들기</span>', page)
+        self.assertIn('<div class="action-box" data-stay-action="save">', page)
+
+    def test_panel_openers_and_action_flags(self):
+        """여는 버튼은 사전 `panel_actions` 의 동사·대상을 싣고, 지시서 끝에 사전의 위험·금지 동사 표가 선다."""
+        md = ("# 시험 호텔 — 입력 지시서\n\n## 4. 룸 만들기 (1번째, Single)\n탭: `객실`\n버튼: `Single` 행의 [편집]\n\n"
+              "| 칸 | 값 |\n|---|---|\n| 룸 이름 | Single |\n\n→ [저장]\n")
+        page, _stats = rc.render_card(md, "manual.md", None, None)
+        self.assertIn('<span class="btn-look" data-stay-action="open_edit" data-stay-entity="room_type">편집</span>', page)
+        flags = re.search(r'<div id="stay-action-flags" hidden data-danger="([^"]*)" data-never-press="([^"]*)"></div>', page)
+        self.assertIsNotNone(flags)
+        self.assertIn("delete", flags.group(1).split(","))
+        self.assertEqual(flags.group(2), "activate")
+
+    def test_unresolved_lines_carry_no_hook(self):
+        """못 푼 칸·버튼은 속성을 빼고 그린다 — 틀린 key 를 싣지 않는다."""
+        page = self.render()
+        row = re.search(r'<tr[^>]*>(?:(?!</tr>).)*사전에 없는 칸', page, re.S).group(0)
+        self.assertTrue(row.startswith("<tr>"), row[:60])
+        # 패널 버튼은 사전 `panel_actions` 로 동사·대상을 싣는다(2026-10-28 사전부터)
+        self.assertIn('<span class="btn-look" data-stay-action="open_create" data-stay-entity="offer">시즌 추가</span>', page)

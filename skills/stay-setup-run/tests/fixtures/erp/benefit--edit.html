@@ -1,0 +1,207 @@
+
+
+
+
+
+<div id="stay_benefit_grant_form_00000000" data-stay-screen="benefit"
+     x-data="{
+       fulfillment: '', hasRequestDetails: false,
+       syncRequestDetails() {
+         this.hasRequestDetails = Array.from(this.$el.querySelectorAll('[name=fulfillment_channel], [name=fulfillment_leadtime_days], [name=fulfillment_subject_to_availability]')).some(input => input.type === 'checkbox' ? input.checked : input.value.trim() !== '');
+       }
+     }" x-init="syncRequestDetails()" x-on:input="syncRequestDetails()" x-on:change="syncRequestDetails()">
+
+  
+
+  <div class="stay-card" data-stay-card="main">
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:22%"><col style="width:78%"></colgroup>
+        <tbody>
+          <tr>
+            <th>소속 택1 그룹</th>
+            <td>
+              <select name="selectable_benefit" class="browser-default" data-stay-field="selectable_benefit" data-stay-kind="select" data-stay-options="benefit_groups" aria-label="소속 택1 그룹" id="id_stay_selectable_benefit">
+  <option value="">(그룹 없음 — 상시 포함되는 단독 혜택)</option>
+
+  <option value="{benefit_group:1}" selected>택1 혜택</option>
+
+</select>
+              <small>선택 그룹의 상한과 필수 여부가 적용됩니다. 비우면 예약에 항상 포함됩니다</small>
+              
+              
+              
+            </td>
+          </tr>
+          <tr>
+            <th>혜택 이름 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+            <td>
+              <input type="text" name="name" value="스파 이용권" maxlength="100" data-stay-field="name" data-stay-kind="text" data-stay-required="1" aria-label="혜택 이름" required id="id_stay_name">
+              <small>고객이 읽을 한 줄 (예: 웰컴 드링크 제공, 체크인 당일 조식 1회)</small>
+              
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="stay-card" data-stay-card="terms">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title">제공 조건</h4>
+    </div>
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:22%"><col style="width:78%"></colgroup>
+        <tbody>
+          <tr>
+            <th data-stay-label-for="quantity">수량</th>
+            <td>
+              <input type="text" name="quantity" inputmode="numeric" data-stay-field="quantity" data-stay-kind="number" aria-label="수량" id="id_stay_quantity">
+              <small>계약서의 숫자만 적으세요 (예: 스파 1회 제공 → 1). 고객 화면에 “제공 수량 — 1회” 로 나옵니다</small>
+              
+              
+              <label class="check_form">
+                <input class="filled-in" type="checkbox"
+                       name="frequency_per_night"
+                       data-stay-field="frequency_per_night" data-stay-kind="checkbox"
+                       id="id_stay_frequency_per_night"
+                       >
+                <span for="id_stay_frequency_per_night"
+                      data-stay-label-for="frequency_per_night">1박당 제공 (비우면 체류당)</span>
+              </label>
+              <small>체크하면 “1박당”, 비우면 “체류당”입니다. 위 [수량]을 채워야 고객 화면에 나옵니다</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>수량 단위</th>
+            <td>
+              <input type="text" name="unit" maxlength="16" data-stay-field="unit" data-stay-kind="text" aria-label="수량 단위" id="id_stay_unit">
+              <small>“회”가 아닌 단위일 때만 적으세요 (예: 케이블카 2매 → 매). 고객 화면은 아직 수량 뒤에 “회”만 붙이므로, 다른 단위는 위 [혜택 이름]에도 적어 주세요</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>적용 인원 수</th>
+            <td>
+              <input type="text" name="person_count" inputmode="numeric" data-stay-field="person_count" data-stay-kind="number" aria-label="적용 인원 수" id="id_stay_person_count">
+              <small>“2인 조식 포함”이면 2. 아직 고객 화면에는 안 나옵니다 — 계약 대조용으로 받습니다</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>제공 시간(분)</th>
+            <td>
+              <input type="text" name="duration_minutes" inputmode="numeric" data-stay-field="duration_minutes" data-stay-kind="number" aria-label="제공 시간(분)" id="id_stay_duration_minutes">
+              <small>“스파 60분”이면 60. 세션 전체와 시술 시간이 다르면 계약서가 값으로 적은 쪽만 넣고 나머지는 아래 메모에 문장으로 적으세요. 아직 고객 화면에는 안 나옵니다</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>금액 가치 (공급 통화)</th>
+            <td>
+              <input type="text" name="amount" inputmode="decimal" placeholder="30000" data-stay-field="amount" data-stay-kind="number" aria-label="금액 가치 (공급 통화)" id="id_stay_amount">
+              <small>리조트 크레딧처럼 금액으로 적힌 혜택 (예: USD 25 상당). 이 호텔의 공급 통화로 적으세요. 아직 고객 화면에 안 나오고 요금 계산에도 안 들어갑니다</small>
+              
+            </td>
+          </tr>
+          <tr>
+            <th>할인율 가치(%)</th>
+            <td>
+              <input type="text" name="pct" inputmode="decimal" data-stay-field="pct" data-stay-kind="number" aria-label="할인율 가치(%)" id="id_stay_pct">
+              <small>“스파 15% 할인”이면 15. 아직 고객 화면에 안 나오고, 여기 적어도 요금은 깎이지 않습니다 — 깎이는 할인은 [프로모션]에서 만드세요</small>
+              
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="stay-card" data-stay-card="fulfillment">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title">수령 절차</h4>
+    </div>
+    <div class="table1">
+      <table class="bs-table stay-table">
+        <colgroup><col style="width:22%"><col style="width:78%"></colgroup>
+        <tbody>
+          <tr>
+            <th>지급 방식</th>
+            <td>
+              <select name="fulfillment_mode" x-model="fulfillment" class="browser-default" data-stay-field="fulfillment_mode" data-stay-kind="select" aria-label="지급 방식" id="id_stay_fulfillment_mode">
+  <option value="" selected>계약서에 절차 없음 — 자동 제공으로 안내</option>
+
+  <option value="REQUEST">요청 필요 — 고객이 요청해야 제공</option>
+
+</select>
+              <small>고객 화면에 그대로 나옵니다. 계약서에 요청 절차가 적혀 있는데 비워 두면 화면이 &#x27;자동 제공&#x27;이라고 안내합니다</small>
+              
+            </td>
+          </tr>
+          
+          <tr x-show="fulfillment === 'REQUEST' || hasRequestDetails">
+            <th>요청 창구</th>
+            <td>
+              <input type="text" name="fulfillment_channel" maxlength="50" data-stay-field="fulfillment_channel" data-stay-kind="text" aria-label="요청 창구" id="id_stay_fulfillment_channel">
+              <small>계약서 표기 그대로 적으세요 (예: 카카오톡 고객센터) — 나중에 시트와 대조합니다</small>
+              <small class="error" x-show="fulfillment !== 'REQUEST' && hasRequestDetails">요청 상세가 남아 있습니다. '요청 필요'로 되돌리거나 창구·기한·재고 조건을 비워야 저장할 수 있습니다.</small>
+              
+            </td>
+          </tr>
+          <tr x-show="fulfillment === 'REQUEST' || hasRequestDetails">
+            <th>요청 기한 (체크인 D-N)</th>
+            <td>
+              <input type="text" name="fulfillment_leadtime_days" inputmode="numeric" data-stay-field="fulfillment_leadtime_days" data-stay-kind="number" aria-label="요청 기한 (체크인 D-N)" id="id_stay_fulfillment_leadtime_days">
+              <small>&#x27;체크인 3일 전까지 요청&#x27; 이면 3. 안 적혔으면 비웁니다</small>
+              
+            </td>
+          </tr>
+          <tr x-show="fulfillment === 'REQUEST' || hasRequestDetails">
+            <th>재고 조건부</th>
+            <td>
+              
+              <label class="check_form">
+                <input class="filled-in" type="checkbox"
+                       name="fulfillment_subject_to_availability"
+                       data-stay-field="fulfillment_subject_to_availability" data-stay-kind="checkbox"
+                       id="id_stay_fulfillment_subject_to_availability"
+                       >
+                <span for="id_stay_fulfillment_subject_to_availability">가능 시에만 제공</span>
+              </label>
+              <small>&#x27;객실 상황에 따름&#x27; · &#x27;가능 시 제공&#x27; 처럼 확약이 아닌 경우 체크</small>
+              
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="stay-card" data-stay-card="description">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="description">조건·안내 메모</h4>
+    </div>
+    <textarea name="description" cols="40" rows="2" data-stay-field="description" data-stay-kind="textarea" aria-label="조건·안내 메모" id="id_stay_description">
+</textarea>
+    <small>적용 범위·예외를 문장 그대로 적으세요 (예: 가든 슈퍼리어 &amp; 가든 디럭스 객실 제외) — 아직 구조 칸이 없습니다</small>
+    
+  </div>
+
+  <div class="stay-card" data-stay-card="questions">
+    
+      <div hx-get="/stay/{master:1}/benefits/{benefit:1}/questions/new/" hx-trigger="load" hx-swap="outerHTML"></div>
+    
+  </div>
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+            hx-post="/stay/{master:1}/benefits/{benefit:1}/edit/"
+            hx-include="#stay_benefit_grant_form_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">저장</button>
+  </div>
+</div>

@@ -10,6 +10,7 @@
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -587,7 +588,19 @@ class TestPreflight(unittest.TestCase):
     def test_age_rate_before_room_scope_is_flagged(self):
         pre = parse_guide.preflight(self._steps(BAD_ORDER))
         self.assertEqual([x["no"] for x in pre["charge_order"]], [2])
-        self.assertIn("적용 룸 scope", pre["charge_order"][0]["why"])
+        self.assertIn("적용 룸 (선택)", pre["charge_order"][0]["why"])
+
+    def test_age_rate_before_renamed_room_scope_is_flagged(self):
+        """화면 글자가 `적용 룸 (선택)` 으로 바뀌었다(2026-10-28) — 새 글자로 적은 지시서도 차례 검사를 받는다.
+
+        종전에는 새 글자가 표에 없어 그 줄을 못 알아보고 검사를 **조용히 건너뛰었다**.
+        """
+        for label in ("적용 룸 (선택)", "적용 룸(선택)"):
+            bad = BAD_ORDER.replace("적용 룸 scope", label)
+            pre = parse_guide.preflight(self._steps(bad))
+            self.assertEqual([x["no"] for x in pre["charge_order"]], [2], label)
+            good = AGE_BAND.replace("적용 룸 scope", label)
+            self.assertEqual(parse_guide.preflight(self._steps(good))["charge_order"], [], label)
 
     def test_age_rate_without_charge_unit_is_flagged(self):
         """카드를 세우는 것은 [부과 단위]=인당 이다 — [부과 방식] 은 정액/정률 축이라 다른 칸이다."""
@@ -1394,3 +1407,66 @@ class TestScopeRows(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestScreenHooksInSteps(unittest.TestCase):
+    """지시서 HTML 의 화면 표식 → steps.json(2026-10-28). 원고(.md)·옛 HTML 은 글자만 — 러너는 글자로 되돌아간다."""
+
+    MD = """# 시험 호텔 — 입력 지시서
+
+## 4. 룸 만들기 (1번째, Single)
+탭: `객실`
+버튼: [룸 추가]
+버튼: 드로어 안 `침대 구성` 의 [침대 행 추가] 1번
+
+| 칸 | 값 |
+|---|---|
+| 룸 이름 | Single |
+| 침대 구성 1 · 침대 종류 | 선택: 싱글 |
+
+→ [저장]
+
+## 5. 판매 연결 한 번에 만들기 (룸 1개)
+탭: `객실`
+
+| 칸 | 값 |
+|---|---|
+| 오퍼별 표시명 · Single | 싱글룸 |
+
+→ [추가]
+"""
+
+    def steps_from(self, text, html=True):
+        if html:
+            page, _ = render_card.render_card(text, "manual.md", None, None)
+            _, raws = parse_guide.parse_html(page)
+        else:
+            _, raws = parse_guide.parse_markdown(text)
+        return [parse_guide.build_step(r) for r in raws]
+
+    def test_html_hooks_reach_steps_json(self):
+        room, link = self.steps_from(self.MD)
+        self.assertEqual((room["screen"], room["head"]["tab_key"], room["submit_action"]), ("room-type", "room_types", "save"))
+        by = {f["label"]: f for f in room["fields"]}
+        self.assertEqual(by["룸 이름"]["field"], "name")
+        self.assertEqual((by["침대 구성 1 · 침대 종류"]["field"], by["침대 구성 1 · 침대 종류"]["field_row"],
+                          by["침대 구성 1 · 침대 종류"]["field_col"]), ("bed_configs", 1, "침대 종류"))
+        self.assertEqual([b["action"] for b in room["head"]["buttons_parsed"]], ["open_create", "add_row"])
+        self.assertEqual(parse_guide.ACTION_FLAGS["never_press"], ["activate"])
+        self.assertIn("delete", parse_guide.ACTION_FLAGS["danger"])
+        named = link["fields"][0]
+        self.assertEqual((named["field"], named["field_name"]), ("display_name_*", "Single"))
+
+    def test_markdown_and_old_html_still_parse_by_label(self):
+        room = self.steps_from(self.MD, html=False)[0]
+        self.assertIsNone(room["screen"])
+        self.assertIsNone(room["submit_action"])
+        self.assertTrue(all("field" not in f for f in room["fields"]))
+        self.assertEqual([b["action"] for b in room["head"]["buttons_parsed"]], [None, None])
+        # 표식을 걷어 낸 HTML(배포 전에 그린 지시서) — 같은 칸·같은 값이고 key 만 없다
+        page, _ = render_card.render_card(self.MD, "manual.md", None, None)
+        old = re.sub(r'\s*data-stay-[a-z-]+="[^"]*"', "", page)
+        _, raws = parse_guide.parse_html(old)
+        steps = [parse_guide.build_step(r) for r in raws]
+        self.assertEqual([f["label"] for f in steps[0]["fields"]], ["룸 이름", "침대 구성 1 · 침대 종류"])
+        self.assertTrue(all("field" not in f for s in steps for f in s["fields"]))

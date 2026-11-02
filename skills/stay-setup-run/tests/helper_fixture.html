@@ -137,6 +137,41 @@
      (패널 자리에 그대로 두면 도우미의 범위 규칙 `드로어 → 모달 → 활성 탭` 에서 탭 밖이라 안 잡힌다 —
       실제 화면과 다른 자리에 둔 시험용 마크업이 시험을 거짓으로 통과시키는 자리다.) -->
 <div id="stay_fragments" style="display:none">
+<!-- 같은 드로어의 배포 전 화면(운영 2026-10-28) — 날짜 선택 칸이 없고 기간 두 칸 · 날짜 나열 칸이 선다. -->
+<section id="stay_season_dates_old" class="card" data-stay-screen="season"><h3 class="card-title">시즌 날짜 옛 화면</h3>
+  <table><tbody>
+    <tr><th>날짜 규칙 유형</th><td><select name="dateset_rule_type"><option value="">---------</option>
+      <option value="0">기간 범위</option><option value="3">비연속 날짜 나열</option></select></td></tr>
+    <tr><th>기간 시작</th><td><input type="text" name="range_start"></td></tr>
+    <tr><th>기간 종료</th><td><input type="text" name="range_end"></td></tr>
+    <tr><th>날짜 나열</th><td><textarea name="explicit_dates"></textarea></td></tr>
+  </tbody></table>
+</section>
+
+<!-- 2026-10-28 이름이 바뀐 칸 — 화면은 새 글자, 옛 지시서는 옛 글자를 적는다(`RENAMED_LABELS`).
+     프로모션 단 묶음은 제목이 `할인 단계` 로 바뀌었고 버튼 글자는 그대로 [단 추가]다(`_promotion_form.html`). -->
+<section id="stay_renamed_20261028" class="card"><h3 class="card-title">이름 바뀐 칸</h3>
+  <table><tbody>
+    <tr><th>적용 룸 (선택)</th><td><input type="text" name="room_scope_text"></td></tr>
+    <tr><th>최소 숙박 (시즌 예외)</th><td><input type="text" name="min_nights"></td></tr>
+    <tr><th>공급 원가 (선택)</th><td><input type="text" name="net_price"></td></tr>
+  </tbody></table>
+  <div class="stay-card" data-stay-card="tiers">
+    <div class="stay-card__head">
+      <h4 class="stay-section-title" data-stay-label-for="tiers">할인 단계</h4>
+      <button type="button" data-stay-action="add_row" onclick="addPromoTier()">단 추가</button>
+    </div>
+    <table><thead><tr><th>기준</th><th>값</th></tr></thead><tbody id="promo_tiers"><tr><td><input type="text" name="tiers_threshold"></td><td><input type="text" name="tiers_value"></td></tr></tbody></table>
+  </div>
+  <script>
+    function addPromoTier() {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><input type="text" name="tiers_threshold"></td><td><input type="text" name="tiers_value"></td>';
+      document.getElementById('promo_tiers').appendChild(tr);
+    }
+  </script>
+</section>
+
 
 <!-- 판매 연결 일괄 추가 드로어의 룸별 [오퍼별 표시명] (2026-09-04).
      운영 화면의 마크업 그대로다: 라벨 요소가 없고 자리표시 글자가 칸마다 같아서,
@@ -337,10 +372,25 @@
 <!-- 위험 버튼 — 러너가 거부해야 하는 것들 (운영 2026-09-04 화면의 글자 그대로).
      이것들은 조각이 아니라 패널의 행 버튼이라 화면에 그대로 서 있다. -->
 <section id="stay_danger" class="card"><h3 class="card-title">위험 버튼</h3>
-  <button type="button">전용으로 분리</button>
+  <button type="button">이건 넘어가기</button>
   <button type="button">2026-01 닫기</button>
   <button type="button">판매 재개</button>
   <button type="button">세후가로 확정</button>
+  <button type="button">비우기</button>
+</section>
+
+<!-- 표식(`data-stay-action` · `data-stay-card="gate"`)으로만 알아보는 위험 버튼. 글자는 일부러 위 정규식에
+     하나도 안 걸리게 적었다 — ERP 가 글자를 바꿔도(`삭제` → `판매 연결 삭제`, 2026-10-28) 표식으로 막는지 본다.
+     확인창(`hx-confirm`)도 일부러 안 붙였다. 붙이면 확인창 층이 대신 막아 동사 검사가 돌았는지 모른다. -->
+<section id="stay_hooked_danger" class="card"><h3 class="card-title">표식 위험 버튼</h3>
+  <button type="button" data-stay-action="delete">판매 연결 삭제</button>
+  <button type="button" data-stay-action="unarchive">되살리기</button>
+  <button type="button" data-stay-action="dismiss">이 경고 접기</button>
+  <button type="button" data-stay-action="apply_tax">금액 환산</button>
+  <div class="stay-gate" data-stay-card="gate">
+    <button type="button" data-stay-action="activate">판매 열기</button>
+  </div>
+  <div class="stay-gate" data-stay-card="gate"><button type="button">고객에게 공개</button></div>
 </section>
 
 <!-- 가격 캘린더의 2층 모달 — `.modal.open` 이 아니라 `.stay-modal` 이다.
@@ -807,15 +857,18 @@ function closeImageModal() {
    칸에 `.not-valid` 만 붙인다(`common/error.ts`). 둘 다 흉내 낸다. */
 window.__pageSaveClicks = 0;
 window.__pageSaveInvalid = false;
+window.fetch = function () {
+  return new Promise(function (resolve) { setTimeout(function () { resolve({status: 200}); }, 120); });
+};
 function fakePageSave() {
   window.__pageSaveClicks++;
   if (window.__pageSaveInvalid) {
     document.getElementById('id_hotel_name').classList.add('not-valid');
     return;
   }
-  setTimeout(function () {
+  window.fetch('/fit/master/43900/change/', {method: 'POST'}).then(function () {
     document.getElementById('toast-container').innerHTML = '<div class="toast">저장되었습니다.</div>';
-  }, 200);
+  });
 }
 
 /* ── 판매 연결 패널 머리의 거부 띠 (진짜 오류) ────────────── */
