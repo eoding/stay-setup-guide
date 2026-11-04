@@ -632,11 +632,22 @@ function addBed() {
   var tb = document.getElementById('bed-rows');
   tb.insertAdjacentHTML('beforeend', BED_ROW);
 }
+function toggleBedDescription(select) {
+  var row = select.closest('tr');
+  var field = row && row.querySelector('.bed-description-field');
+  if (field) field.hidden = select.value !== 'OTHER';
+}
 
 /* ── 드로어 본문(표 구조 = 실제 화면과 같은 모양) ─────────────── */
 var BED_ROW =
-  '<tr><td><select name="bed_type"><option value="">선택</option><option>싱글</option><option>더블</option>' +
-  '<option>벙크 (2층 침대)</option></select></td><td><input type="text" name="bed_qty"></td></tr>';
+  '<tr><td><input type="hidden" name="bed_configs_original_index">' +
+  '<select name="bed_configs_code" onchange="toggleBedDescription(this)"><option value="">선택하세요</option>' +
+  '<option value="SINGLE">싱글</option><option value="DOUBLE">더블</option>' +
+  '<option value="BUNK">벙크 (2층 침대)</option><option value="OTHER">직접입력</option></select></td>' +
+  '<td><input type="number" name="bed_configs_count"></td>' +
+  '<td><label class="bed-description-field" hidden>직접입력 내용' +
+  '<input type="text" name="bed_configs_description"></label></td>' +
+  '<td></td></tr>';
 
 var DRAWER_HTML = [
   '<table><tbody>',
@@ -648,7 +659,7 @@ var DRAWER_HTML = [
   '<tr><th>엑스트라베드 가능</th><td><select class="browser-default" name="extra">',
   '<option value="">모르겠음</option><option value="y">가능</option><option value="n">불가능</option></select></td></tr>',
   '<tr><th>침대 구성</th><td>',
-  '  <table class="beds"><thead><tr><th>침대 종류</th><th>개수</th></tr></thead>',
+  '  <table class="beds"><thead><tr><th>침대 종류</th><th>개수</th><th>직접입력 내용</th><th></th></tr></thead>',
   '  <tbody id="bed-rows">' + BED_ROW + '</tbody></table>',
   '  <button type="button" onclick="addBed()">침대 행 추가</button>',
   '</td></tr>',

@@ -1,7 +1,7 @@
 ---
 name: stay-setup-run
 description: "검사를 통과한 입력 지시서(`<이름>_입력지시서.html`)를 사용자가 로그인해 둔 크롬 탭에서 그대로 실행해 ERP Stay 화면을 1단계부터 채우고 저장한다. '설명서대로 ERP에 깔아줘', '입력지시서 실행', '호텔 자동 세팅', '지시서대로 브라우저에서 입력해줘', 'run the stay setup guide in the browser' 요청에 쓴다. [판매 시작] 은 절대 누르지 않는다."
-version: 0.14.0
+version: 0.14.1
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -10,6 +10,10 @@ metadata:
 ---
 
 # 입력 지시서 실행하기
+
+## 0.14.1 · 침대 직접입력 설명 칸
+
+침대 종류 `직접입력` 선택 뒤 같은 반복 행의 `직접입력 내용` 칸을 채운다.
 
 ## 0.14.0 · 새 ERP 화면과 함께 배포
 

@@ -290,8 +290,9 @@ const FIELDS = [
   { label: '엑스트라베드 가능', kind: 'select', value: '불가능' },
   { label: '침대 구성 1 · 침대 종류', kind: 'select', value: '싱글' },
   { label: '침대 구성 1 · 개수', kind: 'typed', value: '1' },
-  { label: '침대 구성 2 · 침대 종류', kind: 'select', value: '벙크 (2층 침대)' },
+  { label: '침대 구성 2 · 침대 종류', kind: 'select', value: '직접입력' },
   { label: '침대 구성 2 · 개수', kind: 'typed', value: '1' },
+  { label: '침대 구성 2 · 직접입력 내용', kind: 'typed', value: '킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정' },
   { label: '어메니티', kind: 'multi', values: ['욕조', '무료 Wi-Fi'] },
   { label: '직접 입력 (목록에 없을 때만, 콤마로 구분)', kind: 'typed', value: '비데, 짐받이' },
   { label: '종류', kind: 'select', value: '리조트피' },
@@ -324,6 +325,9 @@ const run = async () => {
   ok(by['룸 이름'].status === 'ok', 'fill: 표 안 텍스트 칸(같은 행 th 라벨)');
   ok(by['전망'].detail === '', 'fill: 비움은 값을 지운다', by['전망']);
   ok(by['침대 구성 2 · 침대 종류'].status === 'ok', 'fill: 행이 모자라면 [침대 행 추가] 를 눌러 만든다', by['침대 구성 2 · 침대 종류']);
+  ok(by['침대 구성 2 · 직접입력 내용'].status === 'ok',
+    'fill: 직접입력 종류를 고르면 같은 행의 자유 입력 칸을 채운다',
+    by['침대 구성 2 · 직접입력 내용']);
   ok(/2칸 켬/.test(by['어메니티'].detail), 'fill: 체크 묶음은 라벨 글자로 켠다', by['어메니티'].detail);
   ok(by['종류'].status === 'ok', 'fill: 한 칸에 입력이 둘이면 값 종류로 고른다', by['종류']);
   ok(by['반려동물'].status === 'ok', 'fill: Materialize 셀렉트', by['반려동물']);
@@ -346,9 +350,9 @@ const run = async () => {
     { label: '침대 구성' + NBSP + '2' + SP + DOT + SP + '개수', kind: 'typed', value: '9' }  // 붙임 빈칸(NBSP)
   ]);
   ok(rep.every((r) => r.status !== 'ok'), 'fill: 정본이 아닌 반복 행 이름은 받지 않는다', rep);
-  ok([].slice.call(win.document.querySelectorAll('[name=bed_qty]')).every((i) => i.value !== '9'),
+  ok([].slice.call(win.document.querySelectorAll('[name=bed_configs_count]')).every((i) => i.value !== '9'),
     'fill: 정본이 아닌 이름이 엉뚱한 침대 행에 값을 넣지 않는다',
-    [].slice.call(win.document.querySelectorAll('[name=bed_qty]')).map((i) => i.value));
+    [].slice.call(win.document.querySelectorAll('[name=bed_configs_count]')).map((i) => i.value));
 
   // 실제 DOM 값 확인
   const q = (sel) => win.document.querySelector(sel);
@@ -358,6 +362,11 @@ const run = async () => {
   ok(q('[name=pet]').value === '가능', 'DOM: Materialize 숨은 select 가 바뀌었다', q('[name=pet]').value);
   ok(q('[name=agent]').value === '자사', 'DOM: select2 가 값을 넣었다', q('[name=agent]').value);
   ok(win.document.querySelectorAll('#bed-rows tr').length === 2, 'DOM: 침대 행이 2개다');
+  ok(q('#bed-rows tr:nth-child(2) select[name=bed_configs_code]').value === 'OTHER',
+    'DOM: 직접입력 옵션은 OTHER 코드로 고른다');
+  ok(q('#bed-rows tr:nth-child(2) [name=bed_configs_description]').value ===
+    '킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정',
+    'DOM: 설명을 해당 침대 행에 그대로 적는다');
 
   // 4. 되읽어 대조
   const rb = R.readback(FIELDS);

@@ -1434,7 +1434,7 @@
               "required": false,
               "options": null,
               "options_note": null,
-              "format": "",
+              "format": "「직접입력」 선택 시 같은 행에 필수 「직접입력 내용」 입력칸이 나타납니다 — 100자까지.",
               "help": "",
               "checkbox_text": null,
               "_note": null,
@@ -1444,7 +1444,8 @@
               "reject": [],
               "columns": [
                 "침대 종류",
-                "개수"
+                "개수",
+                "직접입력 내용"
               ],
               "column_options": [
                 [
@@ -1459,7 +1460,7 @@
                   "퀸",
                   "벙크 (2층 침대)",
                   "소파베드",
-                  "기타"
+                  "직접입력"
                 ]
               ]
             },

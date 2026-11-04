@@ -7,7 +7,11 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.7.0 (`stay-setup-guide` 1.7.0, `stay-setup-run` 0.14.0). Publishing requires the matched ERP release and a successful Claude browser installation rehearsal.
+Release candidate: plugin `stay-setup` 1.7.1 (`stay-setup-guide` 1.7.1, `stay-setup-run` 0.14.1). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+
+## 2026-11-04 bed directinput
+
+The guide and runner now carry assignment-dependent bed wording in the required same-row `직접입력 내용` field. Existing bed choices remain compatible.
 
 ## 2026-10-23 operations guide update
 

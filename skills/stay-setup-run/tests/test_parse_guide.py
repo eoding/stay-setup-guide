@@ -158,6 +158,32 @@ class TestManual(unittest.TestCase):
         self.assertEqual((f["row_group"], f["row_index"], f["row_field"]),
                          ("침대 구성", 1, "침대 종류"))
 
+    def test_direct_input_bed_description_is_a_repeated_row_field(self):
+        text = """# 시험 호텔 — 입력 지시서
+
+## 4. 룸 만들기 (1번째, Single)
+탭: `객실`
+카드: `객실 (룸 타입)`
+버튼: [룸 추가]
+
+| 칸 | 값 |
+|---|---|
+| 침대 구성 1 · 침대 종류 | 선택: 직접입력 |
+| 침대 구성 1 · 개수 | 1 |
+| 침대 구성 1 · 직접입력 내용 | 킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정 |
+
+→ [저장]
+"""
+        _, raw = parse_guide.parse_markdown(text)
+        step = parse_guide.build_step(raw[0])
+        bed_type = field_by_label(step, "침대 구성 1 · 침대 종류")
+        description = field_by_label(step, "침대 구성 1 · 직접입력 내용")
+        self.assertEqual((bed_type["kind"], bed_type["value"]), ("select", "직접입력"))
+        self.assertEqual(
+            (description["kind"], description["value"], description["row_index"], description["row_field"]),
+            ("typed", "킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정", 1, "직접입력 내용"),
+        )
+
     def test_row_label_takes_only_canonical_form(self):
         """반복 행 칸 이름의 정본 꼴은 `<칸 이름> <N> · <하위 칸>` 하나뿐이다.
 

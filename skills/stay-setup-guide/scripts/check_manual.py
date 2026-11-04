@@ -1278,6 +1278,52 @@ def find_hangul_room_names(steps):
     return problems
 
 
+ROOM_BED_TYPE_RE = re.compile(r"^침대 구성 (\d+) · 침대 종류$")
+ROOM_BED_DESCRIPTION_RE = re.compile(r"^침대 구성 (\d+) · 직접입력 내용$")
+ROOM_BED_BLANK_VALUES = BLANK_VALUES | {"비움"}
+
+
+def find_room_bed_description_gaps(steps):
+    """`직접입력` 침대 행에는 고객에게 보여 줄 설명을 요구한다.
+
+    침대 직접입력은 종류 `직접입력`을 고른 행에서만 보이는 필수 칸이다. 다른 종류에 설명을
+    붙이면 실제 화면에서는 그 칸이 접혀 있어 러너가 채울 수 없다.
+    """
+    problems = []
+    for step in steps:
+        if not step["title"].startswith(ROOM_CREATE_TITLE):
+            continue
+        bed_types = {}
+        descriptions = {}
+        for name, value in step["rows"]:
+            match = ROOM_BED_TYPE_RE.match(name)
+            if match:
+                bed_types[int(match.group(1))] = strip_select(value).strip()
+                continue
+            match = ROOM_BED_DESCRIPTION_RE.match(name)
+            if match:
+                descriptions[int(match.group(1))] = value.strip()
+        for row, bed_type in bed_types.items():
+            description = descriptions.get(row, "").strip()
+            if bed_type == "직접입력" and description in ROOM_BED_BLANK_VALUES:
+                problems.append(
+                    f"{step['num']}단계: `침대 구성 {row} · 직접입력 내용` 이 비었다 — "
+                    "침대 종류가 `직접입력`이면 설명을 입력한다"
+                )
+            elif bed_type != "직접입력" and description not in ROOM_BED_BLANK_VALUES:
+                problems.append(
+                    f"{step['num']}단계: `침대 구성 {row} · 직접입력 내용` 에 값이 있다 — "
+                    "이 칸은 침대 종류 `직접입력`을 골랐을 때만 보인다"
+                )
+        for row, description in descriptions.items():
+            if row not in bed_types and description.strip() not in ROOM_BED_BLANK_VALUES:
+                problems.append(
+                    f"{step['num']}단계: `침대 구성 {row} · 직접입력 내용` 에 값이 있다 — "
+                    "해당 침대 행의 종류를 먼저 고른다"
+                )
+    return problems
+
+
 #: 나이 칸의 이름은 2026-09-08 에 `최소 연령` → `최소 연령 (만 나이)` 로 바뀌었다
 #: (`OfferAgeBandForm.__init__` — 세는 나이로 받아 적으면 한 밴드 위로 저장되고 그 한 칸이
 #: 소아가와 성인가를 가른다). **두 표기를 다 읽는다** — 옛 원고를 이사시키지 않으면서 새 원고를
@@ -4347,6 +4393,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     cell_coordinate_gaps = find_cell_step_without_filled_coordinate(parsed)
     audience_only_names = find_audience_only_names(parsed)
     hangul_room_names = find_hangul_room_names(parsed)
+    room_bed_description_gaps = find_room_bed_description_gaps(parsed)
     room_combo_gaps = find_room_combo_gaps(parsed)
     fill_keys_outside_combos = find_fill_keys_outside_room_combos(parsed)
     extra_bed_rules = find_extra_bed_optional_rules(parsed)
@@ -4477,6 +4524,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "cell_coordinate_gaps": cell_coordinate_gaps,
         "audience_only_names": audience_only_names,
         "hangul_room_names": hangul_room_names,
+        "room_bed_description_gaps": room_bed_description_gaps,
         "extra_bed_rules": extra_bed_rules,
         "child_policy_gaps": child_policy_gaps,
         "gala_addons": gala_addons,
@@ -4571,7 +4619,7 @@ def main(argv=None):
               + r["los_prices_formats"] + r["los_without_base_price"]
               + r["cell_los_nights"]
               + r["cell_occupancy_mismatch"] + r["cell_coordinate_gaps"]
-              + r["audience_only_names"] + r["gala_addons"]
+              + r["audience_only_names"] + r["room_bed_description_gaps"] + r["gala_addons"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["photo_path_gaps"] + r["folder_escapes"]

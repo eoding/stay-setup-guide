@@ -2462,6 +2462,70 @@ class HangulRoomNameTest(unittest.TestCase):
         self.assertEqual(cm.find_hangul_room_names(steps), [])
 
 
+def bed_room_step(num, bed_type, description="비움", bed_row=1):
+    return f"""
+## {num}. 룸 만들기 (1번째, Single)
+탭: `객실`
+카드: `객실 (룸 타입)`
+버튼: [룸 추가]
+
+| 칸 | 값 |
+|---|---|
+| 룸 이름 | Single |
+| 침대 구성 {bed_row} · 침대 종류 | 선택: {bed_type} |
+| 침대 구성 {bed_row} · 개수 | 1 |
+| 침대 구성 {bed_row} · 직접입력 내용 | {description} |
+
+→ [저장]
+"""
+
+
+class RoomBedDescriptionTest(unittest.TestCase):
+    """자유 입력 침대 구성은 표시할 설명을 해당 행에 함께 입력한다."""
+
+    def problems(self, bed_type, description="비움"):
+        return cm.find_room_bed_description_gaps(
+            steps_of(HEAD + bed_room_step(4, bed_type, description))
+        )
+
+    def test_other_bed_with_description_passes_verbatim(self):
+        text = "킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정"
+        self.assertEqual(self.problems("직접입력", text), [])
+
+    def test_other_bed_without_description_fails(self):
+        problems = self.problems("직접입력")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("침대 종류가 `직접입력`이면 설명을 입력한다", problems[0])
+
+    def test_other_bed_with_blank_marker_fails(self):
+        self.assertEqual(len(self.problems("직접입력", "비움")), 1)
+
+    def test_regular_bed_without_description_passes(self):
+        self.assertEqual(self.problems("싱글"), [])
+
+    def test_description_on_regular_bed_fails(self):
+        problems = self.problems("싱글", "킹 베드")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("침대 종류 `직접입력`을 골랐을 때만 보인다", problems[0])
+
+    def test_different_repeated_rows_are_checked_independently(self):
+        md = HEAD + bed_room_step(4, "싱글", bed_row=1) + bed_room_step(
+            5, "직접입력", "킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정", bed_row=2
+        )
+        self.assertEqual(cm.find_room_bed_description_gaps(steps_of(md)), [])
+
+    def test_description_column_is_known_to_the_manual_checker(self):
+        md = HEAD + bed_room_step(
+            4, "직접입력", "킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(md)
+            result = cm.check(path, dictionary_path=DICTIONARY)
+        self.assertNotIn("침대 구성 1 · 직접입력 내용", result["unknown_fields"])
+
+
 def extra_bed_step(num, name="엑스트라베드 (1대)",
                    rule="선택: 기준 성인 초과 시 의무 (엑스트라베드)"):
     """엑스트라베드 부가옵션 단계 — `의무 규칙` 만 바꿔 가며 쓴다."""
