@@ -3,7 +3,18 @@
 
 <div id="stay_calendar_bulk_00000000" class="stay-root stay-readable" data-stay-screen="calendar-bulk">
   <input type="hidden" name="option" value="{room:1}" id="id_stay_option"><input type="hidden" name="rate_plan" value="{rate_plan:1}" id="id_stay_rate_plan"><input type="hidden" name="operation" value="price" id="id_stay_operation"><input type="hidden" name="month" value="2026-07" id="id_stay_month">
-  <section class="stay-card">
+  
+<style>
+  .stay-root [data-stay-summary] > .stay-section-title { margin: 0 0 10px; }
+  .stay-root [data-stay-summary] > .stay-facts { border-radius: 8px; overflow: hidden; font-size: 14px; line-height: 1.55; }
+  .stay-root [data-stay-summary] > .stay-facts > dt,
+  .stay-root [data-stay-summary] > .stay-facts > dd { padding: 9px 14px; }
+  .stay-root [data-stay-summary] > .stay-facts > dt { min-width: 104px; }
+  .stay-root [data-stay-summary] > .stay-facts > dd { font-weight: 500; }
+  .stay-root [data-stay-summary] > .stay-facts + .stay-description { margin: 12px 0 0; }
+</style>
+
+  <section class="stay-card" data-stay-summary>
     <h4 class="stay-section-title">적용 대상</h4>
     <dl class="stay-facts">
       <dt>오퍼</dt><dd>〈오퍼 관리용 이름〉</dd>
@@ -48,7 +59,7 @@
           <tr class="stay-calendar-bulk-line__head"><th colspan="4" scope="rowgroup"><input type="hidden" name="prices-0-occupancy_key" id="id_stay_prices-0-occupancy_key"><input type="hidden" name="prices-0-los_nights" value="1" id="id_stay_prices-0-los_nights">인원 무관 단일가 · 1박 이상</th></tr>
           <tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>
           
-          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="number" name="prices-0-price" data-stay-col="price" min="0" step="0.01" id="id_stay_prices-0-price"></td><td class="stay-numeric"><input type="number" name="prices-0-original_price" data-stay-col="original_price" min="0" step="0.01" id="id_stay_prices-0-original_price"></td><td class="stay-numeric"><input type="number" name="prices-0-net_amount" data-stay-col="net_amount" min="0" step="0.01" id="id_stay_prices-0-net_amount"></td></tr>
+          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="text" name="prices-0-price" data-stay-col="price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-0-price"></td><td class="stay-numeric"><input type="text" name="prices-0-original_price" data-stay-col="original_price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-0-original_price"></td><td class="stay-numeric"><input type="text" name="prices-0-net_amount" data-stay-col="net_amount" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-0-net_amount"></td></tr>
         </tbody>
         
       </table>

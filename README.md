@@ -7,7 +7,18 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.7.1 (`stay-setup-guide` 1.7.1, `stay-setup-run` 0.14.1). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+Release candidate: plugin `stay-setup` 1.8.0 (`stay-setup-guide` 1.8.0, `stay-setup-run` 0.15.0). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+
+## 2026-11-13 price calendar steps and age-band gaps
+
+Two new step kinds follow the ERP price-calendar drawers: `선택 날짜 가격 수정` (set new prices for one room × one rate
+plan over a date range ∩ weekdays — either "base combination only", where the other combinations keep their current
+difference or take a new difference per row, or "every combination") and `선택 날짜 가격 가감` (move existing sell
+prices by a signed amount or percentage, through the confirmation screen). Existing step kinds and guides are unchanged.
+The checker now rejects age bands that leave an age uncovered or overlap inside one offer, because the ERP blocks
+[판매 시작] for that offer. The runner reads prices as numbers (`218,100` = `218100`), clears the remembered values of
+the season price drawer before filling it, stops before [판매 시작] with the banner's blockers in plain words, and still
+runs on the pre-bundle production screens (the new steps hand over to a person where the old screen lacks the control).
 
 ## 2026-11-04 bed directinput
 

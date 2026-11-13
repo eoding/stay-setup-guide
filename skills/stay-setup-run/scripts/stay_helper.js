@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.14.0'; // 2026-10-30: 화면 표식 우선·저장 결과·안전한 캘린더 마감
+  var VERSION = '0.15.0'; // 2026-11-13: 가격 캘린더 기준 조합·가감 · 금액 숫자 견주기 · 시즌 입력 기억 비우기
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초) — 기본값이다. 느린 서버에서는 `stayRun.config({waitMs})` 로 올린다
   var TICK = 100;
 
@@ -2013,14 +2013,17 @@
   var HOOK_KEY_RE = /^[A-Za-z0-9_-]+$/;
   // 가격 일괄 입력은 행 순번/라벨 대신 인원·최소 숙박일수·열로 한 칸을 식별한다.
   // 명시한 키가 없거나 중복이면 다른 칸으로 추측하지 않는다.
+  // `*_diff` 열(2026-11-13 `기준 조합만 입력`)은 기준이 아닌 줄의 **새 차액** 칸이다 — 표식이 `data-stay-col-diff` 다.
   function priceRowControl(scope, f) {
     var hasKey = Object.prototype.hasOwnProperty.call(f, 'occupancy_key');
     var hasLos = Object.prototype.hasOwnProperty.call(f, 'los_nights');
     if (f.field !== 'prices' && !hasKey && !hasLos) return null;
-    var invalid = { error: '가격 칸에는 field=prices, occupancy_key, 양수 los_nights, field_col(price/original_price/net_amount)이 필요합니다' };
+    var invalid = { error: '가격 칸에는 field=prices, occupancy_key, 양수 los_nights, field_col(price/original_price/net_amount, 차액이면 뒤에 _diff)이 필요합니다' };
     if (f.field !== 'prices' || !hasKey || typeof f.occupancy_key !== 'string' || !hasLos ||
         !/^[1-9][0-9]*$/.test(String(f.los_nights)) ||
-        !/^(price|original_price|net_amount)$/.test(f.field_col || '') || !/^(typed|empty)$/.test(f.kind)) return invalid;
+        !/^(price|original_price|net_amount)(_diff)?$/.test(f.field_col || '') || !/^(typed|empty)$/.test(f.kind)) return invalid;
+    var colHook = /_diff$/.test(f.field_col) ? 'data-stay-col-diff' : 'data-stay-col';
+    var colName = f.field_col.replace(/_diff$/, '');
     var tables = [].slice.call(scope.querySelectorAll('[data-stay-rows="prices"]'));
     if (scope.matches && scope.matches('[data-stay-rows="prices"]')) tables.unshift(scope);
     var rows = [];
@@ -2032,7 +2035,7 @@
       });
     });
     if (rows.length !== 1) return { error: '지정한 인원·숙박일수의 가격 행이 ' + rows.length + '개입니다 — 입력을 멈췄습니다' };
-    var controls = [].slice.call(rows[0].querySelectorAll('[data-stay-col="' + f.field_col + '"]')).filter(function (el) {
+    var controls = [].slice.call(rows[0].querySelectorAll('[' + colHook + '="' + colName + '"]')).filter(function (el) {
       return isCtrl(el) && usable(el);
     });
     if (controls.length !== 1) return { error: '지정한 가격 열의 입력 칸이 ' + controls.length + '개입니다 — 입력을 멈췄습니다' };
@@ -2855,8 +2858,28 @@
       out.actual = el.checked; out.same = f.kind === 'uncheck' || f.kind === 'empty' ? !el.checked : !!el.checked; return out;
     }
     out.actual = el.value;
+    if (f.kind !== 'empty' && values.length === 1) {
+      var amountSame = sameAmount(el.value, values[0]);
+      if (amountSame !== null) { out.same = amountSame; out.numeric = true; return out; }
+    }
     out.same = f.kind === 'empty' ? !clean(el.value) : (values.length ? norm(el.value) === norm(values.join(', ')) : null);
     return out;
+  }
+
+  // ── 금액은 숫자로 견준다 (2026-11-13) ─────────────────────────────────────────
+  // ERP 가 금액을 `218,100` · `1,234.50` 처럼 천 단위 쉼표와 통화 자릿수로 그리기 시작했다(가격 칸의 지금 값 포함).
+  // 글자 견주기(`norm`)는 문장부호를 지워서 `1,234.50` 과 `1234.5` 를 다르다고 하고, 거꾸로 `1.5` 와 `15` 는 같다고 한다.
+  // 두 쪽이 다 금액 꼴(부호 · 제자리 쉼표 · 소수 · 끝의 %)이면 숫자로 견준다 — 아니면 null(글자 견주기로 간다).
+  var AMOUNT_TEXT_RE = /^([+-]?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(%?)$/;
+  function amountOf(text) {
+    var m = clean(text).replace(/\s+/g, '').match(AMOUNT_TEXT_RE);
+    if (!m) return null;
+    return { value: (m[1] === '-' ? -1 : 1) * Number(m[2].replace(/,/g, '') + (m[3] || '')), pct: m[4] === '%' };
+  }
+  function sameAmount(a, b) {
+    var x = amountOf(a), y = amountOf(b);
+    if (!x || !y) return null;
+    return x.pct === y.pct && x.value === y.value;
   }
 
   function readback(fields, opts) {

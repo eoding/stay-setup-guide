@@ -1148,7 +1148,8 @@ class TestCheckModeStale(unittest.TestCase):
         self.assertIn("나이 범위가 겹치는 단계: 1", r.stdout)
 
     def test_check_passes_on_new_child_fields(self):
-        render_guide(self.dir, SEASON_CHILD)
+        # 구간은 만 0세부터 — `5~11.99` 하나면 만 0~4세가 비어 빈 나이 훑기(2026-11-13)가 먼저 막는다
+        render_guide(self.dir, SEASON_CHILD.replace("| 최소 연령 (만 나이) | 5 |", "| 최소 연령 (만 나이) | 0 |"))
         r = run(str(self.dir), "--check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("값 형식이 어긋난 단계: 0", r.stdout)

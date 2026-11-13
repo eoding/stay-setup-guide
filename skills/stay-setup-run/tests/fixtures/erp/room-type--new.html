@@ -226,15 +226,15 @@
     <div class="stay-card__head">
       <h4 class="stay-section-title" data-stay-label-for="bed_configs">침대 구성</h4>
       <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
-              x-on:click="beds.push({ code: '', count: 1 })">침대 행 추가</button>
+              x-on:click="beds.push({ code: '', count: 1, description: '', original_index: null })">침대 행 추가</button>
     </div>
     <div class="table1">
       
       <input type="hidden" name="bed_configs_submitted" value="1">
       <table class="bs-table stay-table" data-stay-field="bed_configs" data-stay-kind="rows" data-stay-rows="bed_configs">
-        <colgroup><col><col style="width:120px"><col style="width:80px"></colgroup>
+        <colgroup><col><col style="width:120px"><col><col style="width:80px"></colgroup>
         <thead><tr>
-          <th>침대 종류</th><th>개수</th><th></th>
+          <th>침대 종류</th><th>개수</th><th>직접입력 내용</th><th></th>
         </tr></thead>
         <tbody>
           
@@ -242,12 +242,21 @@
             <tr>
               <td>
                 
-                <select name="bed_configs_code" data-stay-col="code" class="browser-default" x-model="bed.code">
+                <input type="hidden" name="bed_configs_original_index" x-model="bed.original_index">
+                <select name="bed_configs_code" data-stay-col="code" class="browser-default" x-model="bed.code"
+                        x-on:change="if (bed.code !== 'OTHER') bed.description = ''">
                   <option value="">선택하세요</option>
-                  <option value="DOUBLE">더블</option><option value="TWIN">트윈</option><option value="SINGLE">싱글</option><option value="KING">킹</option><option value="QUEEN">퀸</option><option value="BUNK">벙크 (2층 침대)</option><option value="SOFA">소파베드</option><option value="OTHER">기타</option>
+                  <option value="DOUBLE">더블</option><option value="TWIN">트윈</option><option value="SINGLE">싱글</option><option value="KING">킹</option><option value="QUEEN">퀸</option><option value="BUNK">벙크 (2층 침대)</option><option value="SOFA">소파베드</option><option value="OTHER">직접입력</option>
                 </select>
               </td>
               <td><input type="number" name="bed_configs_count" data-stay-col="count" min="1" step="1" x-model="bed.count"></td>
+              <td>
+                <label x-show="bed.code === 'OTHER'">직접입력 내용
+                  <input type="text" name="bed_configs_description" data-stay-col="description" maxlength="100"
+                         placeholder="예: 킹 베드1 or 퀸 베드1+싱글 베드1 랜덤배정"
+                         x-model="bed.description" x-show="bed.code === 'OTHER'" :required="bed.code === 'OTHER'">
+                </label>
+              </td>
               <td>
                 
                 <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="remove_row"
@@ -256,7 +265,7 @@
             </tr>
           </template>
           <tr x-show="beds.length === 0">
-            <td colspan="3"><small>계약서에 침대 구성이 없으면 비워 두세요 — 지어내지 않습니다.</small></td>
+            <td colspan="4"><small>계약서에 침대 구성이 없으면 비워 두세요 — 지어내지 않습니다.</small></td>
           </tr>
         </tbody>
       </table>

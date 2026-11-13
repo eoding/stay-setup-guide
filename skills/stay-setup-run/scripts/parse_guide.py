@@ -521,17 +521,198 @@ def build_step(raw):
             f.update(row_hook_list[i])
         fields.append(f)
 
+    title = raw["title"]
+    if title_kind(title) == CAL_PRICE_KIND:
+        annotate_calendar_price_lines(fields)
+
     photos = [{"file": f, "source": s} for f, s in raw["files"]]
     for f in fields:
         if f["kind"] == "file" and f.get("file"):
             photos.append({"file": f["file"], "source": None, "from_field": f["label"]})
 
-    title = raw["title"]
     return {"no": raw["no"], "title": title, "kind": title_kind(title), "head": head,
             "screen": hooks.get("screen"), "submit_action": hooks.get("submit"),
             "fields": fields,
             "longtexts": [{"label": l, "text": t} for l, t in raw["longtexts"]],
             "photos": photos, "submit": raw["submit"], "raw": raw.get("raw", "")}
+
+
+# ---------------------------------------------------------------------------
+# 가격 캘린더 일괄 단계 (2026-11-13) — `선택 날짜 가격 수정` · `선택 날짜 가격 가감`
+#
+# 원고 꼴의 정본은 지시서 규칙서 §가격 캘린더 일괄 단계(검사기 `check_manual.find_calendar_*`)다. 가격 줄
+# `<인원 조합 키> · <N>박 이상 · <열>` 은 드로어 ② 표의 한 칸이다 — 파서가 그 줄을 화면 표식(`field=prices` ·
+# `occupancy_key` · `los_nights` · `field_col`)으로 옮겨 두면 도우미가 줄 순서·라벨이 아니라 그 표식으로 칸을 찾는다
+# (`stay_helper.js` `priceRowControl`). 값의 천 단위 쉼표는 여기서 뗀다 — 묶음 전 화면의 금액 칸은 `type=number` 라
+# 쉼표를 받지 않는다(원문은 `raw_value` 에 남는다).
+# ---------------------------------------------------------------------------
+
+CAL_PRICE_KIND = "선택 날짜 가격 수정"
+CAL_ADJUST_KIND = "선택 날짜 가격 가감"
+CAL_BLANK_KEY = "인원 무관 단일가"
+CAL_PRICE_LINE_RE = re.compile(
+    r"^(?P<key>\S(?:.*?\S)?) \u00b7 (?P<nights>\d+)박 이상 \u00b7 (?P<col>판매가|정가|공급 원가)(?P<diff> 차액)?$")
+CAL_COLUMN_KEYS = {"판매가": "price", "정가": "original_price", "공급 원가": "net_amount"}
+CAL_PRICE_FIXED = ("오퍼", "객실", "요금제", "시작일", "종료일", "요일", "연동 방식", "기준 조합")
+CAL_LINK_FULL = {"기준 조합만 입력 \u2014 나머지는 현재 차액 유지": "base", "조합마다 직접 입력": "manual",
+                 "기준 조합만 입력": "base"}
+CAL_NEW_VALUE_RE = re.compile(r"^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$")
+CAL_DIFF_VALUE_RE = re.compile(r"^(?:[+-](?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?|0(?:\.0{1,2})?)$")
+CAL_ADJUST_VALUE_RE = re.compile(
+    r"^(?P<sign>[+-])\s*(?P<num>\d{1,3}(?:,\d{3})+|\d+)(?:\.(?P<frac>\d{1,2}))?\s*(?P<pct>%?)$")
+CAL_ADJUST_CHECKS = ("정가도 같이 조정", "날짜별로 직접 고친 가격도 같이 바꾸기", "추가 인원 요금도 같이 조정")
+CAL_ADJUST_FIXED = ("오퍼", "객실", "요금제", "시작일", "종료일", "요일", "인원 조합", "박수 층", "가감") + CAL_ADJUST_CHECKS
+
+
+def annotate_calendar_price_lines(fields):
+    """`선택 날짜 가격 수정` 의 가격 줄에 화면 표식을 단다(위 머리 주석). 꼴이 어긋난 줄은 건드리지 않는다(preflight 가 막는다)."""
+    for f in fields:
+        m = CAL_PRICE_LINE_RE.match(f.get("label_base") or f["label"])
+        if not m:
+            continue
+        key = m.group("key")
+        f["field"] = "prices"
+        f["occupancy_key"] = "" if key == CAL_BLANK_KEY else key
+        f["los_nights"] = int(m.group("nights"))
+        f["field_col"] = CAL_COLUMN_KEYS[m.group("col")] + ("_diff" if m.group("diff") else "")
+        if f.get("kind") == "typed" and "," in str(f.get("value") or ""):
+            f["value"] = str(f["value"]).replace(",", "")
+            f["normalized"] = True
+
+
+def _field(step, label):
+    return next((f for f in step["fields"] if (f.get("label_base") or f["label"]) == label), None)
+
+
+def _cal_one(f):
+    """`선택: X` 하나의 X — 아니면 None."""
+    if f is None or f.get("kind") != "select":
+        return None
+    return str(f.get("value") or "").strip() or None
+
+
+def calendar_step_problem(step):
+    """가격 캘린더 일괄 단계가 러너가 실행할 수 있는 꼴인가 — 이유 한 줄, 아니면 None.
+
+    검사기(`check_manual.find_calendar_*`)와 **같은 판정**의 줄인 부분이다 — 그쪽이 지시서를 만들 때 막고, 여기서는
+    손으로 고친 지시서가 브라우저까지 가지 않게 한 번 더 본다. 날짜·요일·과거 날짜 같은 나머지는 검사기 몫이다.
+    """
+    kind = step.get("kind")
+    if kind == CAL_PRICE_KIND:
+        for label in ("오퍼", "객실", "요금제"):
+            if _cal_one(_field(step, label)) is None:
+                return "[%s] 는 `선택: <하나>` 다 — 한 단계 = 객실 하나 × 요금제 하나" % label
+        link = _cal_one(_field(step, "연동 방식"))
+        mode = CAL_LINK_FULL.get(link or "")
+        if mode is None:
+            return "[연동 방식] `%s` 를 읽지 못합니다 — `기준 조합만 입력 — 나머지는 현재 차액 유지` 또는 `조합마다 직접 입력`" % (link or "")
+        base = _cal_one(_field(step, "기준 조합"))
+        base_key = None
+        if mode == "base":
+            if base is None:
+                return "[기준 조합] 줄이 없습니다 — 기준 방식은 `선택: <키>` 로 기준 조합을 적습니다"
+            base_key = base.split(" \u00b7 ")[0].strip()
+            base_key = "" if base_key == CAL_BLANK_KEY else base_key
+        elif _field(step, "기준 조합") is not None:
+            return "[기준 조합] 은 `조합마다 직접 입력` 에서 쓰지 않습니다"
+        lines = []
+        for f in step["fields"]:
+            label = f.get("label_base") or f["label"]
+            if label in CAL_PRICE_FIXED:
+                continue
+            m = CAL_PRICE_LINE_RE.match(label)
+            if not m:
+                return "`%s` 는 이 단계의 줄이 아닙니다 — 가격 줄은 `<인원 조합 키> · <N>박 이상 · <열>`" % label
+            if f.get("label_base"):
+                return "`%s` 줄이 두 번 적혔습니다" % label
+            diff = bool(m.group("diff"))
+            raw = str(f.get("raw_value") or "").strip()
+            if f.get("kind") != "empty":
+                regex = CAL_DIFF_VALUE_RE if diff else CAL_NEW_VALUE_RE
+                if not regex.match(raw):
+                    return "`%s` 의 값 `%s` 를 읽지 못합니다 — %s" % (
+                        label, raw, "부호를 붙인 차액(`+99000` · `-5000` · `0`)" if diff else "부호 없는 새 값(`220000`)")
+            lines.append((f.get("occupancy_key", ""), m.group("col"), diff, f.get("kind") != "empty", label))
+        if mode == "base":
+            for key, _col, diff, _filled, label in lines:
+                if (key == base_key) == diff:
+                    return ("기준 방식에서 기준 조합 줄은 새 값 열, 다른 조합 줄은 차액 열만 씁니다 — `%s`" % label)
+            if not any(key == base_key and col == "판매가" and filled for key, col, _diff, filled, _label in lines):
+                return "기준 조합 `%s` 의 `판매가` 를 숫자로 적어야 합니다" % (base_key or CAL_BLANK_KEY)
+        else:
+            if any(diff for _k, _c, diff, _f, _l in lines):
+                return "차액 열은 `기준 조합만 입력` 에서만 씁니다"
+            if not any(filled for _k, _c, _d, filled, _l in lines):
+                return "값을 적은 가격 줄이 하나도 없습니다 — 저장할 것이 없습니다"
+        return None
+    if kind == CAL_ADJUST_KIND:
+        labels = [f.get("label_base") or f["label"] for f in step["fields"]]
+        extra = [label for label in labels if label not in CAL_ADJUST_FIXED]
+        if extra:
+            return "`%s` 는 이 단계의 줄이 아닙니다" % extra[0]
+        missing = [label for label in CAL_ADJUST_FIXED if label not in labels]
+        if missing:
+            return "줄이 빠졌습니다 — %s" % ", ".join(missing)
+        if _cal_one(_field(step, "오퍼")) is None:
+            return "[오퍼] 는 `선택: <하나>` 다"
+        for label in ("객실", "요금제", "인원 조합"):
+            f = _field(step, label)
+            if f.get("kind") not in ("select", "multi"):
+                return "[%s] 는 `선택: <항목>, …` 로 하나 이상 고릅니다" % label
+        if _cal_one(_field(step, "박수 층")) not in ("전 층", "1박 층만"):
+            return "[박수 층] 은 `선택: 전 층` 또는 `선택: 1박 층만` 입니다"
+        raw = str(_field(step, "가감").get("raw_value") or "").strip()
+        m = CAL_ADJUST_VALUE_RE.match(raw)
+        if not m:
+            return "[가감] `%s` 를 읽지 못합니다 — 부호를 붙인 금액이나 %%(`+12` · `-5%%` · `+1,000`, 소수 둘째 자리까지)" % raw
+        number = Decimal(m.group("num").replace(",", "") + ("." + m.group("frac") if m.group("frac") else ""))
+        if number == 0:
+            return "[가감] 이 0 입니다"
+        if m.group("pct") and m.group("sign") == "-" and number > 100:
+            return "[가감] 정률은 -100% 보다 작을 수 없습니다"
+        for label in CAL_ADJUST_CHECKS:
+            if _field(step, label).get("kind") not in ("check", "uncheck"):
+                return "[%s] 는 `체크` / `해제` 입니다" % label
+        return None
+    return None
+
+
+def age_band_gaps(steps):
+    """오퍼(카드)마다 연령 구간 사이의 빈 나이 — ERP 가 [판매 시작] 을 막는다(판매 시작 검증의 연령 구간 덮임).
+
+    만 0세부터 가장 높은 `최대 연령` 의 정수 내림까지 정수 나이마다 그 나이를 품는 구간을 센다. 0 이면 빈 나이다.
+    겹침(2 이상)은 `age_band_overlaps` 가 이미 막는다(저장 단계에서 거부된다). 나이를 못 읽은 구간이 있는 오퍼는 건너뛴다.
+    """
+    bands, unreadable = {}, set()
+    for s in steps:
+        if s.get("kind") != "연령 구간 만들기":
+            continue
+        card = (s["head"].get("card") or "").strip()
+        lo, hi = _age_of(s, AGE_MIN_LABELS), _age_of(s, AGE_MAX_LABELS)
+        if lo is None or hi is None:
+            unreadable.add(card)
+            continue
+        bands.setdefault(card, []).append((s["no"], lo, hi))
+    out = []
+    for card, rows in bands.items():
+        if card in unreadable:
+            continue
+        top = int(max(hi for _no, _lo, hi in rows) // 1)
+        gaps = [age for age in range(0, top + 1) if not any(lo <= age <= hi for _no, lo, hi in rows)]
+        if not gaps:
+            continue
+        spans = []
+        for age in gaps:
+            if spans and age == spans[-1][1] + 1:
+                spans[-1][1] = age
+            else:
+                spans.append([age, age])
+        text = ", ".join("만 %d세" % a if a == b else "만 %d~%d세" % (a, b) for a, b in spans)
+        last = rows[-1]
+        out.append({"no": last[0], "title": "연령 구간 (%s)" % (card or "카드 없음"),
+                    "why": "%s가 어느 구간에도 없습니다. 이 나이는 성인 요금으로 계산됩니다 — ERP 가 [판매 시작] 을 "
+                           "막습니다. 성인 요금을 받는 나이라면 '성인 요금의 100%%' 구간으로 넣어 주세요." % text})
+    return out
 
 
 PREFIX_TARGETS = {"호텔 만들기": "호텔명", "기본정보 글 입력": "상품명"}
@@ -556,6 +737,7 @@ KNOWN_KINDS = {
     "판매 연결 한 번에 만들기", "판매 연결 표시명 넣기", "판매 연결 표시명 고치기",
     "시즌 만들기", "시즌 가격 채우기", "셀 상태 바꾸기",
     "가격 셀 손으로 고치기", "가격 셀 만들기",
+    "선택 날짜 가격 수정", "선택 날짜 가격 가감",   # 2026-11-13 신설 (가격 캘린더 [선택 날짜 가격 수정]·[선택 날짜 가격 가감])
     # 요금제는 지시서 쪽이 `요금제 고치기` 로도 적는다(정본을 고치는 것이 늘 같은 화면이라서다) —
     # 두 표기를 다 받는다. 여기서 표기를 하나로 고르는 것은 사전(`stay-setup-guide`)의 몫이다.
     "요금제 고치기", "요금제 만들기",
@@ -973,10 +1155,10 @@ def preflight(steps):
     fmt = [{"no": s["no"], "title": s["title"], "why": w}
            for s in steps
            for w in [los_prices_problem(s) or occupancy_key_problem(s) or band_code_problem(s)
-                     or los_nights_problem(s)]
+                     or los_nights_problem(s) or calendar_step_problem(s)]
            if w]
     return {"stale": stale, "unknown_kinds": unknown, "charge_order": order,
-            "age_overlap": age_band_overlaps(steps), "value_format": fmt,
+            "age_overlap": age_band_overlaps(steps), "age_gap": age_band_gaps(steps), "value_format": fmt,
             "step_order": child_extra_order(steps)}
 
 
@@ -1158,7 +1340,7 @@ def summarize(doc):
     missing = doc["guide"].get("photo_missing", [])
     unsafe = doc["guide"].get("photo_unsafe", [])  # 옛 steps.json 에는 없다
     pre = doc["guide"].get("preflight") or {"stale": [], "unknown_kinds": [], "charge_order": [], "age_overlap": []}
-    for key in ("age_overlap", "value_format", "step_order"):
+    for key in ("age_overlap", "age_gap", "value_format", "step_order"):
         pre.setdefault(key, [])  # 옛 steps.json 도 읽을 수 있게
     lines = ["단계 %d개 · 값 %d행 · 사진 %d장"
              % (len(steps), sum(len(s["fields"]) for s in steps),
@@ -1177,6 +1359,8 @@ def summarize(doc):
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["charge_order"][:20]]
     lines.append("나이 범위가 겹치는 단계: %d" % len(pre["age_overlap"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["age_overlap"][:20]]
+    lines.append("연령 구간에 빈 나이가 있는 오퍼: %d" % len(pre["age_gap"]))
+    lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["age_gap"][:20]]
     lines.append("값 형식이 어긋난 단계: %d" % len(pre["value_format"]))
     lines += ["  %d단계 · %s · %s" % (x["no"], x["title"], x["why"]) for x in pre["value_format"][:20]]
     lines.append("단계 차례가 어긋난 단계: %d" % len(pre["step_order"]))
@@ -1186,7 +1370,7 @@ def summarize(doc):
         lines.append("러너가 모르는 단계 갈래: %d" % len(pre["unknown_kinds"]))
         lines += ["  %d단계 · %s" % (x["no"], x["kind"]) for x in pre["unknown_kinds"][:20]]
     blocking = (len(unknown) + len(missing) + len(unsafe) + len(pre["stale"])
-                + len(pre["charge_order"]) + len(pre["age_overlap"])
+                + len(pre["charge_order"]) + len(pre["age_overlap"]) + len(pre["age_gap"])
                 + len(pre["value_format"]) + len(pre["step_order"]))
     return "\n".join(lines), len(unknown), len(missing), blocking
 

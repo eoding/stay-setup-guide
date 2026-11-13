@@ -369,6 +369,7 @@
   
   <div class="stay-calendar-bulk-actions">
     <button type="button" class="stay-btn stay-btn--secondary" data-calendar-bulk-action="price" hx-get="/stay/{master:1}/calendar/bulk/?operation=price&amp;month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">선택 날짜 가격 수정</button>
+    <button type="button" class="stay-btn stay-btn--secondary" data-calendar-adjust-action="open" hx-get="/stay/{master:1}/calendar/adjust/?month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">선택 날짜 가격 가감</button>
     <button type="button" class="stay-btn stay-btn--secondary" data-calendar-bulk-action="close" hx-get="/stay/{master:1}/calendar/bulk/?operation=close&amp;month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">판매 마감</button>
     <button type="button" class="stay-btn stay-btn--secondary" data-calendar-bulk-action="reopen" hx-get="/stay/{master:1}/calendar/bulk/?operation=reopen&amp;month=2026-07&amp;view=coord&amp;offer={offer:1}&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;promo=1" hx-target="#stay_drawer_body" hx-swap="innerHTML">마감 해제</button>
   </div>
@@ -452,7 +453,7 @@
       
       
       
-      <span class="stay-cal-cell__price">120000</span>
+      <span class="stay-cal-cell__price">120,000</span>
       
     </span>
   </button>

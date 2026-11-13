@@ -2109,8 +2109,9 @@ class AgeRateFieldStrictTest(unittest.TestCase):
         return path
 
     def manual(self, field="연령별 단가"):
+        # 구간은 만 0세부터 — `6~11.99` 하나면 만 0~5세가 비어 빈 나이 검사(2026-11-13)가 먼저 걸린다
         md = (self.CLEAN_HEAD + offer_step(4)
-              + age_band_step(5, name="소아", code="CHILD")
+              + age_band_step(5, name="소아", code="CHILD").replace("| 최소 연령 | 6 |", "| 최소 연령 | 0 |")
               + charge_with_age_rate(6, band="소아"))
         return md.replace("연령별 단가 · 소아", f"{field} · 소아")
 

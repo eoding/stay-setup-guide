@@ -1,0 +1,378 @@
+
+
+
+
+
+<div id="stay_season_fill_form_00000000" class="stay-card"
+     data-stay-screen="season-price-fill" data-stay-card="main"
+     
+x-data="{
+  rooms: [], plans: [], planRooms: [], occupancy: '', planAdjust: '', occupancyAdjust: '', cleared: false,
+  sync() {
+    const root = this.$root;
+    this.rooms = Array.from(root.querySelectorAll('[name=rooms]:checked'), input => input.value);
+    this.plans = Array.from(root.querySelectorAll('[name=rate_plans]:checked'), input => input.value);
+    this.planRooms = Array.from(root.querySelectorAll('[name=rate_plans]'), input => input.dataset.roomId);
+    this.occupancy = (root.querySelector('[name=occupancy_keys]')?.value || '').trim();
+    this.planAdjust = (root.querySelector('[name=plan_adjust]')?.value || '').trim();
+    this.occupancyAdjust = (root.querySelector('[name=occupancy_adjust]')?.value || '').trim();
+  },
+  roomChanged() {
+    this.sync();
+    let removed = false;
+    for (const input of this.$root.querySelectorAll('[name=rate_plans]:checked')) {
+      if (!this.rooms.includes(input.dataset.roomId)) {
+        input.checked = false;
+        removed = true;
+      }
+    }
+    this.cleared = removed;
+    this.sync();
+  }
+}"
+x-init="sync()"
+x-on:change="$event.target.name === 'rooms' ? roomChanged() : sync()"
+x-on:input="sync()"
+>
+
+  <p>
+    <small>
+      시즌 날짜 1일에 같은 가격을 넣습니다.
+      판매일이 열린 날에만 가격이 들어갑니다 — 먼저 판매일 탭에서 여세요.
+    </small>
+  </p>
+
+  
+  
+  
+
+  <div class="table1">
+    <table class="bs-table stay-table">
+      <colgroup><col style="width:150px"><col></colgroup>
+      <tbody>
+        
+        <tr>
+          <th>적용 날짜</th>
+          <td>
+            
+            <div class="stay-date-selection" data-stay-date-selection data-date-initial="2026-07" data-date-allowed="2026-07-01">
+  <div class="stay-date-selection__toolbar">
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-mode="range" aria-pressed="true">기간 선택</button>
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-mode="single" aria-pressed="false">하루씩 추가</button>
+  </div>
+  <p class="stay-date-selection__instruction" role="status" aria-live="polite">① 시작일을 선택하세요.</p>
+  <div class="stay-date-selection__progress" data-date-progress></div>
+  <div class="stay-date-selection__month">
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-month="-1" aria-label="이전 달">◀</button>
+    <strong data-date-month-label></strong>
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-month="1" aria-label="다음 달">▶</button>
+  </div>
+  <div class="stay-date-selection__grid" data-date-grid role="group" aria-label="날짜 달력"></div>
+  <p class="stay-date-selection__legend">진한 칸: 시작·종료일 / 옅은 칸: 기간에 포함 / + 표시: 추가 날짜 / 검은 테두리: 마지막 선택</p>
+  <p class="stay-description">이 시즌에 속한 날짜만 선택할 수 있습니다. 회색 날짜는 적용 대상이 아닙니다.</p>
+  <div class="stay-date-selection__selection-head">
+    <strong><output data-date-summary></output></strong>
+    <button type="button" class="stay-btn stay-btn--ghost" data-date-clear>선택 비우기</button>
+  </div>
+  <ul class="stay-date-selection__list" data-date-list aria-label="선택한 기간과 날짜"></ul>
+  <details class="stay-date-selection__direct">
+    <summary>날짜를 직접 입력하기</summary>
+    <div class="stay-date-selection__inputs">
+    <div><label for="id_stay_date_selection_0" data-stay-label-for="date_selection_0">기간 · 직접 입력</label><textarea name="date_selection_0" cols="40" rows="2" class="stay-date-ranges" allowed_dates="2026-07-01" initial_month="2026-07" aria-label="적용 날짜" id="id_stay_date_selection_0" data-stay-field="date_selection_0" data-stay-kind="textarea">
+2026-07-01</textarea>
+</div>
+    <div><label for="id_stay_date_selection_1" data-stay-label-for="date_selection_1">추가 날짜 · 직접 입력</label><textarea name="date_selection_1" cols="40" rows="2" class="stay-date-extras" allowed_dates="2026-07-01" initial_month="2026-07" aria-label="적용 날짜" id="id_stay_date_selection_1" data-stay-field="date_selection_1" data-stay-kind="textarea">
+</textarea>
+</div>
+    </div>
+    <p class="stay-description">기간은 한 줄에 YYYY-MM-DD ~ YYYY-MM-DD, 추가 날짜는 YYYY-MM-DD로 입력하세요. 시즌의 월·요일 조건이 있어도 추가 날짜는 포함됩니다.</p>
+  </details>
+</div>
+            
+            
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>판매 단가(공급 통화) <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            <input type="text" name="price" inputmode="decimal" data-stay-field="price" data-stay-kind="number" data-stay-required="1" aria-label="판매 단가(공급 통화)" required id="id_stay_price">
+            
+            <small>기준 요금제의 1박 판매가. 인원 조합이 있으면 기준 인원의 가격을 넣습니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>정가(취소선, 선택)</th>
+          <td>
+            
+            <input type="text" name="original_price" inputmode="decimal" data-stay-field="original_price" data-stay-kind="number" aria-label="정가(취소선, 선택)" id="id_stay_original_price">
+            
+            <small>고객 화면에 취소선으로 보이는 할인 전 가격. 비우면 기존 값 유지.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>공급 원가 (선택)</th>
+          <td>
+            
+            <input type="text" name="net_price" inputmode="decimal" data-stay-field="net_price" data-stay-kind="number" aria-label="공급 원가 (선택)" id="id_stay_net_price">
+            
+            <small>호텔에 내는 매입가. 고객에게 안 보이고 정산·마진에 쓰입니다. 비우면 기존 값 유지.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>대상 룸 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
+          <td>
+            
+            
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       >
+  <input class="filled-in" type="checkbox" name="rooms"
+         data-stay-field="rooms" data-stay-kind="multicheck" data-stay-required="1"
+         
+         value="{room:1}" id="id_stay_rooms_0"
+         >
+  <span for="id_stay_rooms_0">〈오퍼 관리용 이름〉 · 디럭스</span>
+</label>
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       >
+  <input class="filled-in" type="checkbox" name="rooms"
+         data-stay-field="rooms" data-stay-kind="multicheck" data-stay-required="1"
+         
+         value="{room:2}" id="id_stay_rooms_1"
+         >
+  <span for="id_stay_rooms_1">〈오퍼 관리용 이름〉 · 스위트</span>
+</label>
+
+
+
+            
+            <small>가격이 같은 룸끼리만 함께 선택하세요. 가격이 다르면 따로 입력합니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>요금제(선택)</th>
+          <td>
+            
+            
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       x-show="rooms.includes('{room:1}') || plans.includes('{rate_plan:1}')">
+  <input class="filled-in" type="checkbox" name="rate_plans"
+         data-stay-field="rate_plans" data-stay-kind="multicheck"
+         data-room-id="{room:1}"
+         value="{rate_plan:1}" id="id_stay_rate_plans_0"
+         >
+  <span for="id_stay_rate_plans_0">〈오퍼 관리용 이름〉 · 디럭스 · 조식 포함</span>
+</label>
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       x-show="rooms.includes('{room:1}') || plans.includes('{rate_plan:2}')">
+  <input class="filled-in" type="checkbox" name="rate_plans"
+         data-stay-field="rate_plans" data-stay-kind="multicheck"
+         data-room-id="{room:1}"
+         value="{rate_plan:2}" id="id_stay_rate_plans_1"
+         >
+  <span for="id_stay_rate_plans_1">〈오퍼 관리용 이름〉 · 디럭스 · 룸온리</span>
+</label>
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       x-show="rooms.includes('{room:1}') || plans.includes('{rate_plan:5}')">
+  <input class="filled-in" type="checkbox" name="rate_plans"
+         data-stay-field="rate_plans" data-stay-kind="multicheck"
+         data-room-id="{room:1}"
+         value="{rate_plan:5}" id="id_stay_rate_plans_2"
+         >
+  <span for="id_stay_rate_plans_2">〈오퍼 관리용 이름〉 · 디럭스 · 직접 만든 요금제</span>
+</label>
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       x-show="rooms.includes('{room:2}') || plans.includes('{rate_plan:3}')">
+  <input class="filled-in" type="checkbox" name="rate_plans"
+         data-stay-field="rate_plans" data-stay-kind="multicheck"
+         data-room-id="{room:2}"
+         value="{rate_plan:3}" id="id_stay_rate_plans_3"
+         >
+  <span for="id_stay_rate_plans_3">〈오퍼 관리용 이름〉 · 스위트 · 조식 포함</span>
+</label>
+
+<label class="check_form" style="display:inline-block;margin-right:10px"
+       x-show="rooms.includes('{room:2}') || plans.includes('{rate_plan:4}')">
+  <input class="filled-in" type="checkbox" name="rate_plans"
+         data-stay-field="rate_plans" data-stay-kind="multicheck"
+         data-room-id="{room:2}"
+         value="{rate_plan:4}" id="id_stay_rate_plans_4"
+         >
+  <span for="id_stay_rate_plans_4">〈오퍼 관리용 이름〉 · 스위트 · 룸온리</span>
+</label>
+
+
+<small x-show="!rooms.length">대상 룸을 먼저 선택하면 그 룸의 요금제가 표시됩니다.</small>
+<small x-show="rooms.length && !planRooms.some(room => rooms.includes(room))">선택한 룸에 연결된 요금제가 없습니다 — 요금제 탭에서 먼저 연결하세요.</small>
+<small x-show="cleared" role="status">대상 룸에서 뺀 객실의 요금제 선택을 함께 해제했습니다.</small>
+
+
+            
+            <small>비우면 각 룸의 기준 요금제에만 들어갑니다. 요금제가 여러 개면 모두 체크하세요. 체크한 요금제의 룸은 [대상 룸]에도 체크해야 합니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr x-show="plans.length || planAdjust || false">
+          <th>기준 요금제 대비 조정(선택)</th>
+          <td>
+            
+            <input type="text" name="plan_adjust" placeholder="-8 또는 -5%" maxlength="20" data-stay-field="plan_adjust" data-stay-kind="text" aria-label="기준 요금제 대비 조정(선택)" id="id_stay_plan_adjust">
+            
+            <small>기준 요금제는 판매 단가 그대로, 나머지 요금제에만 차액(+/-, %)이 붙습니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>인원 조합(선택)</th>
+          <td>
+            
+            <input type="text" name="occupancy_keys" placeholder="A2,A3" maxlength="120" data-stay-field="occupancy_keys" data-stay-kind="text" aria-label="인원 조합(선택)" id="id_stay_occupancy_keys">
+            
+            <small>인원별 가격이 다를 때만 성인 수를 적습니다(예: A2,A3). 아동 조합은 [오퍼]에서 연령 구간을 먼저 만드세요. 비우면 인원 상관없이 같은 가격입니다.</small>
+            
+            
+            <small>이 오퍼에 아동 요금이 있으면 A2처럼 기준 성인 수를 입력해야 합니다. 아동 추가 금액을 비워도 오퍼 연령 구간의 기본 요금이 적용됩니다.</small>
+            
+            
+          </td>
+        </tr>
+        
+        <tr x-show="occupancy || occupancyAdjust || false">
+          <th>인원 조합별 조정(선택)</th>
+          <td>
+            
+            <input type="text" name="occupancy_adjust" placeholder="A3:+14,A4:+26" maxlength="200" data-stay-field="occupancy_adjust" data-stay-kind="text" aria-label="인원 조합별 조정(선택)" id="id_stay_occupancy_adjust">
+            
+            <small>판매 단가 대비 차액(부호 필수, % 가능).</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>박수별 단가(선택)</th>
+          <td>
+            
+            <input type="text" name="los_prices" placeholder="3:100,5:90" maxlength="120" data-stay-field="los_prices" data-stay-kind="text" aria-label="박수별 단가(선택)" id="id_stay_los_prices">
+            
+            <small>오래 묵을수록 1박 가격이 내려갈 때만 씁니다. 차액이 아니라 가격이라 부호 없음. 기간 한정 할인은 [프로모션]에서.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr x-show="occupancy || false || false">
+          <th>아동 추가 금액 — 유아</th>
+          <td>
+            
+            <input type="text" name="child_extra_INFANT" value="0.00" inputmode="decimal" placeholder="23.18" data-stay-field="child_extra_INFANT" data-stay-kind="number" aria-label="아동 추가 금액 — 유아" id="id_stay_child_extra_INFANT">
+            
+            <small>만 0세 이상 ~ 만 4세 미만 · 아동 1명당 성인 가격에 더할 금액의 기본값입니다(공급 통화). 비우면 연령 구간에 적힌 금액이 그대로 쓰이고, 그 구간에도 금액이 없으면 이 구간의 아동 조합 가격을 넣지 않습니다. 여기 값만 고치면 이미 넣은 아동 가격은 그대로입니다. [덮기]를 켜고 [가격 적용]을 누르면 이미 넣은 아동 가격도 새 값으로 바뀝니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr x-show="occupancy || false || false">
+          <th>아동 추가 금액 — 소아</th>
+          <td>
+            
+            <input type="text" name="child_extra_CHILD" value="30000.00" inputmode="decimal" placeholder="23.18" data-stay-field="child_extra_CHILD" data-stay-kind="number" aria-label="아동 추가 금액 — 소아" id="id_stay_child_extra_CHILD">
+            
+            <small>만 4세 이상 ~ 만 12세 미만 · 아동 1명당 성인 가격에 더할 금액의 기본값입니다(공급 통화). 비우면 연령 구간에 적힌 금액이 그대로 쓰이고, 그 구간에도 금액이 없으면 이 구간의 아동 조합 가격을 넣지 않습니다. 여기 값만 고치면 이미 넣은 아동 가격은 그대로입니다. [덮기]를 켜고 [가격 적용]을 누르면 이미 넣은 아동 가격도 새 값으로 바뀝니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>이미 값이 있는 날도 덮기</th>
+          <td>
+            
+            
+            <label class="check_form">
+              <input class="filled-in" type="checkbox" name="overwrite"
+                     data-stay-field="overwrite" data-stay-kind="checkbox"
+                     id="id_stay_overwrite" checked>
+              <span for="id_stay_overwrite">이미 값이 있는 날도 덮기</span>
+            </label>
+            
+            <small>끄면 가격이 없는 날에만 넣습니다. 켜면 [가격 캘린더]에서 날짜별로 따로 고친 가격도 바뀝니다.</small>
+            <div class="stay-banner stay-banner--warning"><span>가감한 뒤 시즌 <span class="stay-action-guide__btn stay-action-guide__btn--primary">가격 적용</span>을 '이미 값이 있는 날도 덮기'로 다시 돌리면 조정한 값이 시즌 단가로 돌아갑니다.</span></div>
+            
+            
+          </td>
+        </tr>
+        
+        <tr>
+          <th>이번에 고르지 않은 인원·요금제 가격 지우기</th>
+          <td>
+            
+            
+            <label class="check_form">
+              <input class="filled-in" type="checkbox" name="stale_cleanup"
+                     data-stay-field="stale_cleanup" data-stay-kind="checkbox"
+                     id="id_stay_stale_cleanup">
+              <span for="id_stay_stale_cleanup">이번에 고르지 않은 인원·요금제 가격 지우기</span>
+            </label>
+            
+            <small>이번에 고른 룸에서, 이 시즌으로 예전에 넣었지만 이번에 고르지 않은 인원 조합·요금제·박수별 가격을 지웁니다. 예: 지난번 A2·A3로 넣고 이번엔 A2만 고르면, 이 시즌의 A3 가격이 지워집니다(예약된 날은 빼고). 끄면 예전 가격이 계속 판매됩니다. [가격 캘린더]에서 직접 넣은 가격과 다른 시즌의 가격은 지우지 않습니다.</small>
+            
+            
+            
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stay-drawer__footer">
+    
+    <p><small>처음 넣을 때 두 체크 모두 끔 / 가격만 바꿀 때 '덮기'만 켬 / 인원·요금제 구성까지 바꿀 때 둘 다 켬</small></p>
+    <button type="button" class="stay-btn stay-btn--primary"
+            data-stay-action="save"
+            hx-post="/stay/{master:1}/seasons/{season:1}/fill/"
+            hx-include="#stay_season_fill_form_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML"
+            hx-disable="this">
+      가격 적용
+    </button>
+  </div>
+</div>

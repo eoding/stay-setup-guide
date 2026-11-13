@@ -1,0 +1,39 @@
+
+
+
+<div id="stay_calendar_adjust_00000000" class="stay-root stay-readable" data-stay-screen="calendar-adjust" data-calendar-adjust="done">
+  
+
+  
+  <div class="stay-banner stay-banner--ok" data-stay-result="saved"><span>가감을 적용했습니다 — 적용 3칸 · 건너뜀 0칸</span></div>
+  
+<style>
+  .stay-root [data-stay-summary] > .stay-section-title { margin: 0 0 10px; }
+  .stay-root [data-stay-summary] > .stay-facts { border-radius: 8px; overflow: hidden; font-size: 14px; line-height: 1.55; }
+  .stay-root [data-stay-summary] > .stay-facts > dt,
+  .stay-root [data-stay-summary] > .stay-facts > dd { padding: 9px 14px; }
+  .stay-root [data-stay-summary] > .stay-facts > dt { min-width: 104px; }
+  .stay-root [data-stay-summary] > .stay-facts > dd { font-weight: 500; }
+  .stay-root [data-stay-summary] > .stay-facts + .stay-description { margin: 12px 0 0; }
+</style>
+
+  <section class="stay-card" data-stay-summary>
+    <h4 class="stay-section-title">적용 결과</h4>
+    <dl class="stay-facts">
+      <dt>적용 일시</dt><dd>2026-10-30 12:00</dd>
+      <dt>가감</dt><dd>+5%</dd>
+    </dl>
+    <p class="stay-description">바뀐 칸은 날짜를 눌러 여는 가격 창에 일괄 조정 표지가 붙습니다.</p>
+  </section>
+  <div class="stay-drawer__footer">
+    <a class="stay-btn stay-btn--ghost" href="/stay/{master:1}/calendar/adjust/{adjust_batch:1}/log.csv" data-calendar-adjust-action="log" download>적용 기록 내려받기</a>
+    
+    <button type="button" class="stay-btn stay-btn--secondary" data-stay-action="undo" data-calendar-adjust-action="undo"
+            hx-post="/stay/{master:1}/calendar/adjust/{adjust_batch:1}/undo/" hx-target="#stay_drawer_body" hx-swap="innerHTML" hx-disable="this"
+            hx-confirm="방금 적용한 가감을 되돌립니다. 그 사이 가격이 바뀐 칸과 예약이 있는 날은 그대로 둡니다.">되돌리기</button>
+    
+  </div>
+
+  
+</div>
+<div id="stay_save_result" hidden hx-swap-oob="true" data-stay-result="saved" data-stay-saved-at="2026-10-30T03:00:00.000+00:00"></div>

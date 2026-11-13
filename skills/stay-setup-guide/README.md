@@ -69,16 +69,16 @@ python3 scripts/check_manual.py examples/우에노_토우가네야/_원고/manua
 | `references/MANUAL-SPEC.md` | 지시서 원고(`_원고/manual.md`) 형식 규칙 정본 — 구조·표 표기·단계 갈래별 마지막 줄·순서·금지어 |
 | `references/screen-dictionary.md` · `references/screen-dictionary.json` | ERP Stay 화면 31개의 칸 이름·선택지·버튼·거부 문구 정본(사람용 md, 검사기용 json). **손으로 고치지 않는다** — ERP 화면 마크업에서 `scripts/sync_screen_dictionary.py` 가 두 파일을 통째로 다시 만든다 |
 | `references/operations-guide.md` | 운영 FAQ — 오퍼·시즌·요금제 구분, 시즌 재전개, 날짜별 의무 부과금, 아동 요금, 작성중 오퍼 점검 |
-| `references/price-guide.md` | 가격 도움말 — 최초 입력과 기존 가격 수정 구분, 대상 룸·요금제 선택, 덮기·지우기, 상황별 A~H 안내. 사람용 `docs/파트너-가이드-가격편.html`의 핵심 판단 기준 |
+| `references/price-guide.md` | 가격 도움말 — 최초 입력과 기존 가격 수정 구분, 대상 룸·요금제 선택, 덮기·지우기, 상황별 A~H 안내, 금액 쉼표 표기, 시즌 [가격 입력]의 입력 기억, 가격 캘린더의 선택 날짜 가격 수정(기준 조합만 입력)·가감(건너뛰는 칸·되돌리기). 사람용 `docs/파트너-가이드-가격편.html`의 핵심 판단 기준 |
 | `references/facts-guide.md` | 호텔·룸 팩트(주소·시설·면적·전망·침대·좌표·도시 코드) 수집 절차와 출처 우선순위 |
 | `examples/우에노_토우가네야/` | 예시 세트 — **호텔 정보는 실제(도쿄 우에노 토우가네야 호텔), 요금·시즌·취소 규정은 예시 값**(이 호텔과의 실제 계약이 아님). 공유 폴더 배치 그대로다: 맨 위에 지시서 `우에노_토우가네야_입력지시서.html` · `changes.md` · `사진목록.txt`(파일명 · 출처 — **사진 파일 자체는 저작권 때문에 담지 않는다**), 작업 파일은 `_원고/` 안에 `contract.md`(변환된 계약서) → `rules.md` → `facts.json` → `manual.md`(원고 정답지) |
 | `scripts/convert_contract.py` | 계약서 파일(xlsx·pdf·docx·hwp·hwpx 등) → 마크다운. 필요한 패키지는 첫 실행 때 스스로 설치 |
-| `scripts/check_manual.py` | 원고 형식 검사 — 단계=저장 1:1, 번호 연속, 금지어·원문자·좌표·절대경로 0, 사진 파일 존재, 같은 오퍼의 시즌 날짜 겹침 0, 오퍼의 `기본 취소 정책` 지정, 금지 단계(`경고 넘어가기`·`오퍼 고치기`·`캠페인 만들기`) 0, `룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 뒤, 연령 구간 나이 범위 겹침 0, 부가옵션·부과금 이름이 대상만 적히지 않았는지, 단계 갈래별 마지막 줄, 판매 구간이 지시서 만든 날부터인지(과거 투숙 시작·과거 시즌 오류, 예약 시작·종료 비움 ⚠), 룸 이름에 한글(⚠), 엑스트라베드 의무 규칙(⚠), 공급 통화 USD 여부(⚠), 적용 범위 줄(모드 값·부과금의 요금제 축·접힌 축에 적은 포함/제외·확인 없는 전면 거부는 오류, 포함/제외 이름이 앞 단계에서 만든 요금제·룸인지, 같은 대상이 양쪽에 있으면 ⚠) |
+| `scripts/check_manual.py` | 원고 형식 검사 — 단계=저장 1:1, 번호 연속, 금지어·원문자·좌표·절대경로 0, 사진 파일 존재, 같은 오퍼의 시즌 날짜 겹침 0, 오퍼의 `기본 취소 정책` 지정, 금지 단계(`경고 넘어가기`·`오퍼 고치기`·`캠페인 만들기`) 0, `룸 만들기`·`판매 연결` 이 첫 `오퍼 만들기` 뒤, 연령 구간 나이 범위 겹침 0, 연령 구간 빈 나이 0(ERP 가 판매 시작을 막는다), 가격 캘린더 일괄 단계(`선택 날짜 가격 수정`·`선택 날짜 가격 가감`)의 줄 꼴·값 꼴·연동 방식, 부가옵션·부과금 이름이 대상만 적히지 않았는지, 단계 갈래별 마지막 줄, 판매 구간이 지시서 만든 날부터인지(과거 투숙 시작·과거 시즌 오류, 예약 시작·종료 비움 ⚠), 룸 이름에 한글(⚠), 엑스트라베드 의무 규칙(⚠), 공급 통화 USD 여부(⚠), 적용 범위 줄(모드 값·부과금의 요금제 축·접힌 축에 적은 포함/제외·확인 없는 전면 거부는 오류, 포함/제외 이름이 앞 단계에서 만든 요금제·룸인지, 같은 대상이 양쪽에 있으면 ⚠) |
 | `scripts/render_card.py` | 원고 → 지시서 HTML(표 셀마다 복사 버튼, 목차, `진행 현황` 띠와 단계별 상태 표, 검사 도장, 폰트 임베드). 러너가 옆 탭에서 `stayGuide.mark(...)` 로 체크를 올릴 수 있다 |
 | `scripts/render_screen_guide.py` | 내부 도구 — 화면 사전(`references/screen-dictionary.json`)을 HTML 한 장으로 그린다. 스크린샷 없이 사전에서만 만들고, 사전의 머리 숫자와 그린 수가 다르면 종료 코드 1 로 막는다. 사람이 읽는 안내는 이제 손으로 만든 `docs/파트너-가이드.html` 이라, 사전을 다시 받아도 이 명령은 다시 돌리지 않는다. `--impact <영향지도.json>` 을 주면 칸마다 「웹에 나오는 곳」·「효과」 두 칸과 앞머리 「한눈에」 절이 붙는다 — 지도 파일은 내부 표·컬럼 이름이 들어 있어 이 저장소에 담지 않는다 |
 | `scripts/sync_screen_dictionary.py` | 화면 사전 두 파일을 ERP 화면 마크업에서 다시 받아 `references/` 에 덮어쓴다 — ERP 저장소의 `python manage.py stay_screen_dictionary --out <디렉터리>` 를 대신 돌린다(`--basecamp <ERP 저장소 경로>` 필수, `--check` 로 낡았는지만 보기, `-o` 로 다른 자리에 받기). ERP Stay 화면이 배포된 뒤 한 번 돌린다 |
 | `scripts/fonts/PretendardVariable.woff2` | HTML 지시서에 임베드하는 한글 폰트(라이선스: 같은 폴더 `LICENSE-Pretendard.txt`, SIL OFL) |
-| `tests/test_check_manual.py` · `tests/test_render_card.py` · `tests/test_render_screen_guide.py` | 검사기 시험(화면 사전 JSON 을 그대로 읽어 칸 이름·값 종류를 대조하고 예시 원고가 ALL OK 인지 본다), 렌더러의 검사 도장 시험, 화면 안내 시험(사전의 화면·칸 수와 같은지, 탭·여는 길·카드가 빠지지 않는지, 두 번 돌려 같은 바이트인지, 바깥 요청이 없는지) |
+| `tests/test_check_manual.py` · `tests/test_calendar_steps.py` · `tests/test_render_card.py` · `tests/test_render_screen_guide.py` | 검사기 시험(화면 사전 JSON 을 그대로 읽어 칸 이름·값 종류를 대조하고 예시 원고가 ALL OK 인지 본다), 렌더러의 검사 도장 시험, 화면 안내 시험(사전의 화면·칸 수와 같은지, 탭·여는 길·카드가 빠지지 않는지, 두 번 돌려 같은 바이트인지, 바깥 요청이 없는지) |
 
 ```
 python3 -m unittest discover -s tests
