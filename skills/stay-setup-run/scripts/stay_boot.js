@@ -1084,24 +1084,9 @@
         if (!offerSelected) { out.error = '오퍼 `' + offer + '` 로 이동하지 못했습니다 — 저장하지 않습니다'; return out; }
       }
     }
-    var partsOf = function (c) {
-      var parts = clean(c.getAttribute('data-stay-name') || '').split(' · ');
-      return { head: parts.slice(0, -1).join(' · '), tail: parts[parts.length - 1] };
-    };
-    // 룸 하나 = 판매 연결 하나 — 칩의 좌표(`option=`)로 센다(표시명이 같은 두 룸이 한 룸처럼 섞이지 않게)
-    var roomOf = function (c) { var m = String(c.getAttribute('hx-get') || '').match(/[?&]option=([^&]+)/); return m ? m[1] : partsOf(c).head; };
-    var chipFor = function (room, plan) {
-      var chips = [].slice.call(document.querySelectorAll('[data-stay-entity="rate_plan"][data-stay-action="goto"]'));
-      var byRoom = window.pickChips(chips, function (c) { return partsOf(c).head; }, [room].concat(window.displayNameOf(room)));
-      var roomIds = byRoom.hits.map(roomOf).filter(function (r, i, all) { return all.indexOf(r) === i; });
-      if (!roomIds.length) return { error: '캘린더에서 룸 `' + room + '` 칩을 찾지 못했습니다' };
-      if (roomIds.length > 1) return { error: '캘린더에서 룸 `' + room + '` 이 ' + roomIds.length + '개 칩 묶음에 걸립니다(' + byRoom.hits.map(function (c) { return c.getAttribute('data-stay-name'); }).join(' / ') + ') — 이름을 정확히 적어 주세요' };
-      var mine = byRoom.hits;
-      if (!plan) return { chip: mine[0] };
-      var byPlan = window.pickChips(mine, function (c) { return partsOf(c).tail; }, [plan]);
-      if (byPlan.hits.length !== 1) return { error: '룸 `' + room + '` 에서 요금제 `' + plan + '` 칩을 ' + (byPlan.hits.length ? '하나로 못 골랐습니다(' + byPlan.hits.map(function (c) { return partsOf(c).tail; }).join(' / ') + ')' : '찾지 못했습니다') };
-      return { chip: byPlan.hits[0] };
-    };
+    // 칩 고르기는 가격 캘린더 일괄 단계와 한 벌이다(아래 `calendarChipFor` · `calendarRoomOf`)
+    var roomOf = window.calendarRoomOf;
+    var chipFor = window.calendarChipFor;
     out.closed = [];
     for (var i = 0; i < rooms.length; i++) {
       var targets = plans.length ? plans : [null];
@@ -1164,6 +1149,431 @@
     return out;
   };
 
+  /* ─────────────── 가격 캘린더 일괄 단계 (2026-11-13) ───────────────
+     `선택 날짜 가격 수정` — 캘린더 [룸별 입력] → 오퍼 칩 → 객실·요금제 칩 → [선택 날짜 가격 수정] → ① 기간·요일 → [다음]
+       → ② `연동 방식`(·`기준 조합`) 셀렉트를 **먼저** 맞추고(바꾸면 드로어가 다시 그려진다) → 표의 칸 → [입력한 가격 적용].
+       칸은 파서가 단 표식(`field=prices` · `occupancy_key` · `los_nights` · `field_col`)으로 찾는다(`stayRun` `priceRowControl`).
+       저장 뒤 드로어가 닫히면 끝, 기준 방식에서 건너뛴 날·칸이 있으면 결과 조각(`[data-calendar-link-result]`)이 남는다 —
+       성공 + 경고로 그 목록을 전한다. 셀렉트가 없는 화면(묶음 전 ERP · 조합이 하나뿐인 객실)에서 `기준 조합만 입력` 원고는
+       저장하지 않고 사람에게 넘긴다(짐작해서 직접 입력으로 바꾸지 않는다).
+     `선택 날짜 가격 가감` — 캘린더 [룸별 입력] → [선택 날짜 가격 가감] → ① 오퍼(먼저 · 바꾸면 다시 그려진다)·객실·요금제·기간·요일·
+       인원 조합·박수 층·가감·체크 셋 → [다음] → ② 확인(대상·적용·건너뜀 칸 수) → [가감 적용] → 결과. [되돌리기]·[적용 기록 내려받기] 는
+       누르지 않는다. **두 번 올라가지 않게** ① 의 `최근 가감` 에 같은 오퍼·같은 가감 글자·되돌림 아닌 줄이 있으면 사람에게 묻는다
+       (`{allowRepeat:true}` 로 다시 부르면 그 확인을 건너뛴다 — 사람이 확인한 뒤에만). 가감 버튼이 없는 ERP 면 사람에게 넘긴다. */
+  window.CAL_WEEKDAYS = { '월': 0, '화': 1, '수': 2, '목': 3, '금': 4, '토': 5, '일': 6 };
+  window.CAL_MAX_DAYS = 550;
+  window.calClean = function (t) { return String(t === undefined || t === null ? '' : t).normalize('NFC').replace(/\s+/g, ' ').trim(); };
+  // 원고 줄 하나(두 번 적힌 줄은 `label_base` 로 같은 이름이다 — 첫 줄)
+  window.calField = function (s, label) {
+    return (s.fields || []).find(function (x) { return window.calClean(x.label_base || x.label) === label; }) || null;
+  };
+  window.calList = function (f) {
+    if (!f || /^(empty|auto|uncheck|check)$/.test(f.kind || '')) return [];
+    var vals = f.values && f.values.length ? f.values : String(f.value || '').split(/,\s+/);
+    return vals.map(window.calClean).filter(Boolean);
+  };
+  // `선택: A2 · 성인 2` → `A2`, `인원 무관 단일가` → ``
+  window.calKeyOf = function (t) {
+    var head = window.calClean(t).split(/\s+[·・‧∙]\s+/)[0];
+    return head === '인원 무관 단일가' ? '' : head;
+  };
+  // 기간 ∩ 요일 → 날짜 구간 줄(`YYYY-MM-DD` · `YYYY-MM-DD ~ YYYY-MM-DD`) — 드로어의 날짜 계산 스크립트와 같은 꼴
+  window.calDayRanges = function (from, to, weekdays) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '') || to < from) return { error: '`시작일`·`종료일` 을 읽지 못했습니다(' + from + ' ~ ' + to + ')' };
+    var want = {}, any = false;
+    (weekdays || []).forEach(function (w) { if (window.CAL_WEEKDAYS[w] !== undefined) { want[window.CAL_WEEKDAYS[w]] = true; any = true; } });
+    if (!any) return { error: '`요일` 을 하나도 읽지 못했습니다' };
+    var days = [];
+    for (var d = new Date(from + 'T00:00:00Z'), last = new Date(to + 'T00:00:00Z'); d <= last; d = new Date(d.getTime() + 86400000)) {
+      if (days.length > 4000) break;
+      if (want[(d.getUTCDay() + 6) % 7]) days.push(d.toISOString().slice(0, 10));
+    }
+    var span = Math.round((new Date(to + 'T00:00:00Z') - new Date(from + 'T00:00:00Z')) / 86400000) + 1;
+    if (span > window.CAL_MAX_DAYS) return { error: '기간이 ' + span + '일입니다 — 한 번에 ' + window.CAL_MAX_DAYS + '일까지입니다' };
+    if (!days.length) return { error: from + ' ~ ' + to + ' 에 고른 요일이 하루도 없습니다' };
+    var runs = [];
+    days.forEach(function (x) {
+      var prev = runs[runs.length - 1];
+      var next = prev && new Date(new Date(prev.to + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
+      if (prev && next === x) prev.to = x; else runs.push({ from: x, to: x });
+    });
+    return { days: days.length, ranges: runs.map(function (r) { return r.from === r.to ? r.from : r.from + ' ~ ' + r.to; }) };
+  };
+  // 캘린더를 [룸별 입력] 보기로 — 일괄 버튼(`data-calendar-bulk-action`)과 좌표 칩은 그 보기에만 선다
+  window.calEnsureCoord = async function () {
+    var has = function () { return !!document.querySelector('[data-calendar-bulk-action],[data-calendar-adjust-action="open"]'); };
+    if (has()) return true;
+    var vb = [].slice.call(document.querySelectorAll('.stay-view-btn')).find(function (b) { return /룸별 입력/.test(b.textContent) && !/--primary/.test(b.className); });
+    if (!vb) return false;
+    vb.click();
+    if (typeof stayRun.waitFor === 'function') await stayRun.waitFor(has, 6000);
+    return has();
+  };
+  // 오퍼 칩(둘 이상일 때만 선다) — `runCloseStep` 과 같은 고르기(꼭 같은 이름 먼저)
+  window.calSelectOffer = async function (offer) {
+    var chips = [].slice.call(document.querySelectorAll('[data-stay-entity="offer"][data-stay-action="goto"]'));
+    if (!chips.length || !offer) return { ok: true };
+    var op = window.pickChips(chips, function (c) { return c.getAttribute('data-stay-name') || ''; }, [offer]);
+    if (op.hits.length !== 1) return { error: '캘린더 오퍼 칩에서 `' + offer + '` 을 ' + (op.hits.length ? '하나로 못 골랐습니다(' + op.hits.length + '개)' : '찾지 못했습니다') };
+    var oc = op.hits[0];
+    if (/--primary/.test(oc.className)) return { ok: true };
+    oc.click();
+    var ok = await stayRun.waitFor(function () {
+      return [].slice.call(document.querySelectorAll('[data-stay-entity="offer"][data-stay-action="goto"]')).some(function (c) {
+        return c.getAttribute('data-stay-name') === oc.getAttribute('data-stay-name') && /--primary/.test(c.className);
+      });
+    }, 6000);
+    return ok ? { ok: true } : { error: '오퍼 `' + offer + '` 로 이동하지 못했습니다 — 저장하지 않습니다' };
+  };
+  window.calendarPartsOf = function (c) {
+    var parts = window.calClean(c.getAttribute('data-stay-name') || '').split(' · ');
+    return { head: parts.slice(0, -1).join(' · '), tail: parts[parts.length - 1] };
+  };
+  // 룸 하나 = 판매 연결 하나 — 칩의 좌표(`option=`)로 센다(표시명이 같은 두 룸이 한 룸처럼 섞이지 않게)
+  window.calendarRoomOf = function (c) { var m = String(c.getAttribute('hx-get') || '').match(/[?&]option=([^&]+)/); return m ? m[1] : window.calendarPartsOf(c).head; };
+  // 객실·요금제 칩 하나 — 룸 이름 또는 원고의 오퍼별 표시명, 그다음 요금제(뒤 조각). → {chip} 또는 {error}
+  window.calendarChipFor = function (room, plan) {
+    var chips = [].slice.call(document.querySelectorAll('[data-stay-entity="rate_plan"][data-stay-action="goto"]'));
+    var byRoom = window.pickChips(chips, function (c) { return window.calendarPartsOf(c).head; }, [room].concat(window.displayNameOf(room)));
+    var roomIds = byRoom.hits.map(window.calendarRoomOf).filter(function (r, i, all) { return all.indexOf(r) === i; });
+    if (!roomIds.length) return { error: '캘린더에서 룸 `' + room + '` 칩을 찾지 못했습니다' };
+    if (roomIds.length > 1) return { error: '캘린더에서 룸 `' + room + '` 이 ' + roomIds.length + '개 칩 묶음에 걸립니다(' + byRoom.hits.map(function (c) { return c.getAttribute('data-stay-name'); }).join(' / ') + ') — 이름을 정확히 적어 주세요' };
+    var mine = byRoom.hits;
+    if (!plan) return { chip: mine[0] };
+    var byPlan = window.pickChips(mine, function (c) { return window.calendarPartsOf(c).tail; }, [plan]);
+    if (byPlan.hits.length !== 1) return { error: '룸 `' + room + '` 에서 요금제 `' + plan + '` 칩을 ' + (byPlan.hits.length ? '하나로 못 골랐습니다(' + byPlan.hits.map(function (c) { return window.calendarPartsOf(c).tail; }).join(' / ') + ')' : '찾지 못했습니다') };
+    return { chip: byPlan.hits[0] };
+  };
+  window.calSelectChip = async function (chip, where) {
+    if (/--primary/.test(chip.className)) return { ok: true };
+    var nameKey = chip.getAttribute('data-stay-name'), roomKey = window.calendarRoomOf(chip);
+    chip.click();
+    var ok = await stayRun.waitFor(function () {
+      return [].slice.call(document.querySelectorAll('[data-stay-entity="rate_plan"][data-stay-action="goto"]')).some(function (c) {
+        return c.getAttribute('data-stay-name') === nameKey && window.calendarRoomOf(c) === roomKey && /--primary/.test(c.className);
+      });
+    }, 6000);
+    return ok ? { ok: true } : { error: '객실·요금제 `' + where + '` 로 이동하지 못했습니다 — 저장하지 않습니다' };
+  };
+  window.calSet = function (el, v) {
+    var proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    var dsc = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (dsc && dsc.set) dsc.set.call(el, v); else el.value = v;
+    ['input', 'change'].forEach(function (e) { el.dispatchEvent(new Event(e, { bubbles: true })); });
+  };
+  window.calCheck = function (box, on) { if (!!box.checked !== !!on) box.click(); if (!!box.checked !== !!on) { box.checked = !!on; box.dispatchEvent(new Event('change', { bubbles: true })); } };
+  // 드로어 ① 의 기간·요일 — 날은 숨은 `date_selection_0` 이 정한다(화면 스크립트가 칸에서 다시 세지만, 없는 곳을 위해 직접도 넣는다)
+  window.calSetPeriod = function (root, from, to, weekdays, ranges) {
+    var pf = root.querySelector('[name="period_from"]'), pt = root.querySelector('[name="period_to"]');
+    if (!pf || !pt) return { error: '드로어에 `시작일`·`종료일` 칸이 없습니다' };
+    window.calSet(pf, from); window.calSet(pt, to);
+    var want = {};
+    (weekdays || []).forEach(function (w) { if (window.CAL_WEEKDAYS[w] !== undefined) want[String(window.CAL_WEEKDAYS[w])] = true; });
+    [].slice.call(root.querySelectorAll('input[type=checkbox][name="weekdays"]')).forEach(function (b) { window.calCheck(b, !!want[b.value]); });
+    var hidden = root.querySelector('input[type=hidden][name="date_selection_0"]');
+    if (hidden) window.calSet(hidden, ranges.join('\n'));
+    return { ok: true };
+  };
+  // 셀렉트를 바꾸면 화면이 드로어를 다시 그린다(hx-get) — `cond(새 뿌리)` 가 설 때까지 기다린다
+  window.calRedraw = async function (select, value, rootOf, cond) {
+    window.calSet(select, value);
+    return !!(await stayRun.waitFor(function () { var r = rootOf(); return !!(r && cond(r)); }, 8000)) || !!(rootOf() && cond(rootOf()));
+  };
+  window.calErrors = function (root) {
+    if (!root) return [];
+    return [].slice.call(root.querySelectorAll('[data-stay-result="error"],[data-stay-error-for],.stay-banner--blocking,small.error,.errorlist'))
+      .map(function (e) { return window.calClean(e.textContent); }).filter(function (t, i, all) { return t && all.indexOf(t) === i; });
+  };
+
+  window.runCalendarPriceStep = async function (s, opt) {
+    opt = opt || {};
+    var C = window.calClean, out = { no: s.no, title: s.title, kind: s.kind };
+    var manual = function (why) { return { no: s.no, title: s.title, kind: s.kind, submitted: false, manualAction: true, error: why }; };
+    var one = function (label) { var f = window.calField(s, label); return f && f.kind === 'select' ? C(f.value) : ''; };
+    var typed = function (label) { var f = window.calField(s, label); return f && f.kind === 'typed' ? C(f.value) : ''; };
+    var offer = one('오퍼'), room = one('객실'), plan = one('요금제');
+    var from = typed('시작일'), to = typed('종료일'), weekdays = window.calList(window.calField(s, '요일'));
+    var link = one('연동 방식');
+    var mode = /^기준 조합만 입력/.test(link) ? 'base' : (/^조합마다 직접 입력/.test(link) ? 'manual' : null);
+    var baseKey = mode === 'base' ? window.calKeyOf(one('기준 조합')) : null;
+    var lines = (s.fields || []).filter(function (f) { return f.field === 'prices'; });
+    if (!room || !plan) { out.error = '`객실`·`요금제` 를 `선택: <하나>` 로 읽지 못했습니다'; return out; }
+    if (!mode) { out.error = '`연동 방식` 을 읽지 못했습니다(' + (link || '없음') + ')'; return out; }
+    if (mode === 'base' && !one('기준 조합')) { out.error = '`기준 조합` 을 읽지 못했습니다'; return out; }
+    if (!lines.length) { out.error = '가격 줄(`<키> · <N>박 이상 · <열>`)이 없습니다 — 실행 계획을 지시서에서 다시 만드세요'; return out; }
+    var period = window.calDayRanges(from, to, weekdays);
+    if (period.error) { out.error = period.error; return out; }
+    out.want = { offer: offer, room: room, plan: plan, dates: period.ranges, days: period.days, mode: mode, baseKey: baseKey, lines: lines.length };
+    if (opt.dry) { out.dry = true; out.submitted = false; return out; }
+
+    var t = await stayRun.tab('가격 캘린더'); out.tab = t && t.status;
+    if (!t || t.status !== 'ok') { out.error = '가격 캘린더 탭으로 이동하지 못했습니다'; return out; }
+    var so = await window.calSelectOffer(offer); if (so.error) { out.error = so.error; return out; }
+    await window.calEnsureCoord();
+    var where = room + ' · ' + plan;
+    var picked = window.calendarChipFor(room, plan); if (picked.error) { out.error = picked.error; return out; }
+    var sc = await window.calSelectChip(picked.chip, where); if (sc.error) { out.error = sc.error; return out; }
+    var bulk = document.querySelector('[data-calendar-bulk-action="price"]');
+    if (!bulk) { out.error = '[선택 날짜 가격 수정] 버튼이 없습니다'; return out; }
+    var root = function () { return document.querySelector('[data-stay-screen="calendar-bulk"]'); };
+    bulk.click();
+    await stayRun.waitFor(function () { var r = root(); return !!(r && r.querySelector('[name="period_from"]')); }, 6000);
+    var r1 = root();
+    if (!r1 || !r1.querySelector('[name="period_from"]')) { out.error = '[선택 날짜 가격 수정] 드로어 ① 이 열리지 않았습니다 (' + where + ')'; return out; }
+    var sp = window.calSetPeriod(r1, from, to, weekdays, period.ranges); if (sp.error) { out.error = sp.error; return out; }
+    var next = r1.querySelector('[data-stay-action="next"]');
+    await stayRun.waitFor(function () { return !!next && !next.disabled; }, 3000);
+    if (!next || next.disabled) { out.error = '[다음] 이 눌리지 않습니다 — 기간을 화면이 받지 않았습니다 (' + where + ')'; return out; }
+    next.click();
+    var review = null;
+    await stayRun.waitFor(function () {
+      review = root();
+      return !!(review && !review.hasAttribute('data-calendar-selection') && (review.querySelector('[data-stay-action="save"]') || review.querySelector('[data-stay-result="error"]')));
+    }, 6000);
+    var refused = review && review.querySelector('[data-stay-result="error"]');
+    if (refused) { out.error = '[선택 날짜 가격 수정] 이 기간을 거절했습니다 — ' + C(refused.textContent) + ' (' + where + ')'; return out; }
+    if (!review || !review.querySelector('[data-stay-action="save"]')) { out.error = '[선택 날짜 가격 수정] ② 가 뜨지 않았습니다 (' + where + ')'; return out; }
+
+    // 연동 방식 — 셀렉트를 먼저 맞춘다. 저장이 믿는 것은 숨은 `link_mode`·`base_key` 다
+    var pick = review.querySelector('select[name="link_mode_pick"]');
+    out.linkSelect = !!pick;
+    if (!pick) {
+      if (mode === 'base') return manual('이 화면에는 「기준 조합만 입력」 이 없습니다(묶음 전 ERP 이거나 인원 조합이 하나뿐인 객실 · ' + where + ') — 저장하지 않았습니다. 사람이 ERP 에서 입력하거나 원고를 「조합마다 직접 입력」 으로 고칩니다');
+    } else {
+      var wantMode = mode === 'base' ? 'base_delta' : 'manual';
+      var modeOf = function (r) { var h = r.querySelector('input[type=hidden][name="link_mode"]'); return h ? h.value : ''; };
+      if (modeOf(review) !== wantMode) {
+        if (!await window.calRedraw(pick, wantMode, root, function (r) { return modeOf(r) === wantMode && !!r.querySelector('[data-stay-action="save"]'); })) {
+          out.error = '`연동 방식` 을 「' + link + '」 로 바꾸지 못했습니다 — 저장하지 않습니다'; return out;
+        }
+      }
+      if (mode === 'base') {
+        review = root();
+        var bpick = review.querySelector('select[name="base_key_pick"]');
+        var baseOf = function (r) { var h = r.querySelector('input[type=hidden][name="base_key"]'); return h ? h.value : null; };
+        if (!bpick || baseOf(review) === null) { out.error = '`기준 조합` 셀렉트가 없습니다 — 저장하지 않습니다'; return out; }
+        if (baseOf(review) !== baseKey) {
+          var hit = [].slice.call(bpick.options).find(function (o) { return o.value === baseKey; })
+            || [].slice.call(bpick.options).find(function (o) { return window.calKeyOf(o.textContent) === baseKey; });
+          if (!hit) { out.error = '`기준 조합` 목록에 `' + (baseKey || '인원 무관 단일가') + '` 가 없습니다(' + [].slice.call(bpick.options).map(function (o) { return C(o.textContent); }).join(' / ') + ')'; return out; }
+          if (!await window.calRedraw(bpick, hit.value, root, function (r) { return baseOf(r) === hit.value && !!r.querySelector('[data-stay-action="save"]'); })) {
+            out.error = '`기준 조합` 을 `' + baseKey + '` 로 바꾸지 못했습니다 — 저장하지 않습니다'; return out;
+          }
+        }
+      }
+    }
+    // 표의 칸 — 표식으로만 찾는다(줄이 화면 표에 없으면 도우미가 멈춘다)
+    var F = lines.map(function (x) {
+      return { label: x.label, kind: x.kind, value: x.value, field: 'prices', occupancy_key: x.occupancy_key, los_nights: x.los_nights, field_col: x.field_col };
+    });
+    var res = await stayRun.fill(F);
+    out.fields = res.map(function (x) { return x.label + ': ' + x.status + (x.matched ? ' (' + x.matched + ')' : ''); });
+    out.bad = res.filter(function (x) { return x.status !== 'ok'; }).map(function (x) { return x.label + ': ' + x.status + ' ' + (x.detail || ''); });
+    if (out.bad.length) { out.submitted = false; out.note = '화면 표에 없는 줄이나 칸이 있어 저장하지 않았습니다 — 새 조합 줄은 이 단계가 만들지 않습니다'; return out; }
+    var rb = stayRun.readback(F);
+    out.readback = rb.ok + '/' + rb.total;
+    out.mismatch = rb.mismatch;
+    if (rb.mismatch.length && !opt.ignoreMismatch) { out.submitted = false; out.stoppedBy = 'mismatch'; out.note = '되읽기가 어긋났습니다: ' + rb.mismatch.join(' · '); return out; }
+    var sub = await stayRun.submit('입력한 가격 적용', { action: 'save' });
+    out.submit = sub.status; out.errors = sub.errors || []; out.submitted = true;
+    var result = document.querySelector('[data-calendar-link-result]');
+    if (result) {
+      // 기준 방식에서 건너뛴 날·칸 — 실패가 아니다(성공 + 경고)
+      out.submit = 'saved'; out.errors = [];
+      out.linkResult = [].slice.call(result.querySelectorAll('.stay-banner--warning, .stay-description, tbody tr')).map(function (e) { return C(e.textContent); }).filter(Boolean).slice(0, 20);
+      out.warn = ['기준 조합 가격이 없는 날·저장 규칙에 걸린 칸은 건너뛰었습니다 — ' + out.linkResult.slice(0, 4).join(' / ')];
+      out.note = '입력한 가격을 적용했습니다(건너뛴 날·칸 있음) · ' + where + ' · ' + period.ranges.join(', ');
+      return out;
+    }
+    var still = root();
+    if (window.SUBMIT_OK.indexOf(String(sub.status)) < 0 || out.errors.length || (still && window.calErrors(still).length)) {
+      out.errors = out.errors.concat(window.calErrors(still));
+      out.error = '[입력한 가격 적용] 을 저장하지 못했습니다 (' + where + ')';
+      return out;
+    }
+    out.note = '입력한 가격을 적용했습니다 · ' + where + ' · ' + period.ranges.join(', ');
+    return out;
+  };
+
+  window.runCalendarAdjustStep = async function (s, opt) {
+    opt = opt || {};
+    var C = window.calClean, out = { no: s.no, title: s.title, kind: s.kind };
+    var manual = function (why, extra) { var r = { no: s.no, title: s.title, kind: s.kind, submitted: false, manualAction: true, error: why }; Object.keys(extra || {}).forEach(function (k) { r[k] = extra[k]; }); return r; };
+    var one = function (label) { var f = window.calField(s, label); return f && f.kind === 'select' ? C(f.value) : ''; };
+    var typed = function (label) { var f = window.calField(s, label); return f && f.kind === 'typed' ? C(f.value) : ''; };
+    var flag = function (label) { var f = window.calField(s, label); return f ? (f.kind === 'check' ? true : (f.kind === 'uncheck' ? false : null)) : null; };
+    var offer = one('오퍼'), rooms = window.calList(window.calField(s, '객실')), plans = window.calList(window.calField(s, '요금제'));
+    var keys = window.calList(window.calField(s, '인원 조합')).map(window.calKeyOf);
+    var from = typed('시작일'), to = typed('종료일'), weekdays = window.calList(window.calField(s, '요일'));
+    var los = { '전 층': 'all', '1박 층만': 'one' }[one('박수 층')];
+    var adjustRaw = window.calField(s, '가감'), adjust = C(adjustRaw && (adjustRaw.raw_value || adjustRaw.value)).replace(/\s+/g, '').replace(/,/g, '');
+    var flags = { adjust_original: flag('정가도 같이 조정'), include_manual: flag('날짜별로 직접 고친 가격도 같이 바꾸기'), include_extra: flag('추가 인원 요금도 같이 조정') };
+    if (!offer || !rooms.length || !plans.length || !keys.length || !los) { out.error = '`오퍼`·`객실`·`요금제`·`인원 조합`·`박수 층` 을 읽지 못했습니다'; return out; }
+    if (!/^[+-]\d+(\.\d{1,2})?%?$/.test(adjust)) { out.error = '`가감` `' + adjust + '` 를 읽지 못했습니다'; return out; }
+    if (Object.keys(flags).some(function (k) { return flags[k] === null; })) { out.error = '체크 세 줄(`정가도 같이 조정` …)을 `체크`/`해제` 로 읽지 못했습니다'; return out; }
+    var period = window.calDayRanges(from, to, weekdays);
+    if (period.error) { out.error = period.error; return out; }
+    out.want = { offer: offer, rooms: rooms, plans: plans, dates: period.ranges, days: period.days, occupancy: keys, los: los, adjust: adjust, flags: flags };
+    if (opt.dry) { out.dry = true; out.submitted = false; return out; }
+
+    var t = await stayRun.tab('가격 캘린더'); out.tab = t && t.status;
+    if (!t || t.status !== 'ok') { out.error = '가격 캘린더 탭으로 이동하지 못했습니다'; return out; }
+    // 캘린더의 오퍼 칩은 드로어가 처음 고를 오퍼일 뿐이다 — 정하는 것은 드로어 ① 의 `오퍼` 셀렉트라 못 골라도 멈추지 않는다
+    var so = await window.calSelectOffer(offer); if (so.error) out.warn = [so.error + ' — 드로어의 오퍼 셀렉트로 고릅니다'];
+    await window.calEnsureCoord();
+    var opener = document.querySelector('[data-calendar-adjust-action="open"]');
+    if (!opener) return manual('이 ERP 에는 [선택 날짜 가격 가감] 창이 없습니다(묶음 전 화면) — 저장하지 않았습니다. 사람이 처리합니다');
+    var root = function () { return document.querySelector('[data-calendar-adjust]'); };
+    var stepOf = function () { var r = root(); return r ? r.getAttribute('data-calendar-adjust') : ''; };
+    opener.click();
+    await stayRun.waitFor(function () { return stepOf() === 'select' && !!root().querySelector('select[name="offer"]'); }, 6000);
+    if (stepOf() !== 'select' || !root().querySelector('select[name="offer"]')) {
+      out.error = '[선택 날짜 가격 가감] ① 이 열리지 않았습니다' + (root() ? ' — ' + window.calErrors(root()).concat([C(root().textContent).slice(0, 120)]).join(' / ') : ''); return out;
+    }
+    // 두 번 올라가지 않게 — `최근 가감` 에 같은 오퍼 · 같은 가감 글자 · 되돌림 아닌 줄
+    var norm = function (v) { return C(v).replace(/\s+/g, '').replace(/,/g, ''); };
+    var history = [].slice.call(root().querySelectorAll('tr[data-stay-row]')).map(function (tr) {
+      var td = tr.querySelectorAll('td');
+      return { when: C(td[0] && td[0].textContent), offer: C(td[1] && td[1].textContent), adjust: C(td[2] && td[2].textContent), undone: /되돌림/.test(td[0] ? td[0].textContent : '') };
+    });
+    var same = history.filter(function (h) { return !h.undone && h.offer === offer && norm(h.adjust) === adjust; });
+    if (same.length && !opt.allowRepeat) {
+      return manual('같은 오퍼 `' + offer + '` 에 같은 가감 `' + adjust + '` 이 이미 적용돼 있습니다(' + same[0].when + ') — 두 번 올라가지 않게 멈췄습니다. 이 단계가 아직 안 된 것이 맞으면 사람이 확인한 뒤 `runStep(' + s.no + ', {allowRepeat:true})` 로 다시 부릅니다', { history: same });
+    }
+    // 오퍼 먼저 — 바꾸면 객실·요금제·인원 조합이 다시 그려진다(전부 체크)
+    var osel = root().querySelector('select[name="offer"]');
+    var oopts = [].slice.call(osel.options);
+    var ohit = oopts.filter(function (o) { return C(o.textContent) === offer; });
+    if (ohit.length !== 1) ohit = oopts.filter(function (o) { return stayRun.tier(o.textContent, offer) >= 3; });
+    if (ohit.length !== 1) { out.error = '`오퍼` 목록에서 `' + offer + '` 을 ' + (ohit.length ? '하나로 못 골랐습니다' : '찾지 못했습니다') + '(' + oopts.map(function (o) { return C(o.textContent); }).join(' / ') + ')'; return out; }
+    if (osel.value !== ohit[0].value) {
+      var wantOffer = ohit[0].value;
+      if (!await window.calRedraw(osel, wantOffer, root, function (r) { var x = r.querySelector('select[name="offer"]'); return r.getAttribute('data-calendar-adjust') === 'select' && !!x && x.value === wantOffer && x !== osel; })) {
+        out.error = '`오퍼` 를 `' + offer + '` 로 바꾸지 못했습니다 — 저장하지 않습니다'; return out;
+      }
+    }
+    var r1 = root();
+    var labelOf = function (b) { var l = b.closest('label'); return C(l ? l.textContent : ''); };
+    var setBoxes = function (name, wants, hitOf, what) {
+      var boxes = [].slice.call(r1.querySelectorAll('input[type=checkbox][name="' + name + '"]'));
+      if (!boxes.length) return '`' + what + '` 칸에 고를 항목이 없습니다';
+      var on = {};
+      for (var i = 0; i < wants.length; i++) {
+        var hits = hitOf(boxes, wants[i]);
+        if (hits.length !== 1) return '`' + what + '` 에서 `' + (wants[i] || '인원 무관 단일가') + '` 을 ' + (hits.length ? '하나로 못 골랐습니다' : '찾지 못했습니다') + '(' + boxes.map(labelOf).join(' / ') + ')';
+        on[boxes.indexOf(hits[0])] = true;
+      }
+      boxes.forEach(function (b, i) { window.calCheck(b, !!on[i]); });
+      return null;
+    };
+    var byLabel = function (alias) {
+      return function (boxes, want) {
+        var names = [want].concat(alias ? window.displayNameOf(want) : []);
+        var exact = boxes.filter(function (b) { return names.some(function (w) { return labelOf(b) === C(w); }); });
+        if (exact.length) return exact;
+        return boxes.filter(function (b) { return names.some(function (w) { return stayRun.tier(labelOf(b), w) >= 3; }); });
+      };
+    };
+    var why = setBoxes('rooms', rooms, byLabel(true), '객실')
+      || setBoxes('plans', plans, byLabel(false), '요금제')
+      || setBoxes('occupancy', keys, function (boxes, want) { return boxes.filter(function (b) { return b.value === want; }); }, '인원 조합');
+    if (why) { out.error = why + ' — 저장하지 않습니다'; return out; }
+    var losBox = r1.querySelector('input[type=radio][name="los"][value="' + los + '"]');
+    if (!losBox) { out.error = '`박수 층` 라디오가 없습니다'; return out; }
+    if (!losBox.checked) losBox.click();
+    var sp = window.calSetPeriod(r1, from, to, weekdays, period.ranges); if (sp.error) { out.error = sp.error; return out; }
+    var adj = r1.querySelector('input[name="adjust"]');
+    if (!adj) { out.error = '`가감` 칸이 없습니다'; return out; }
+    window.calSet(adj, adjust);
+    for (var k in flags) {
+      var fb = r1.querySelector('input[type=checkbox][name="' + k + '"]');
+      if (!fb) { out.error = '체크 칸 `' + k + '` 이 없습니다'; return out; }
+      window.calCheck(fb, flags[k]);
+    }
+    var next = r1.querySelector('[data-stay-action="next"]');
+    await stayRun.waitFor(function () { return !!next && !next.disabled; }, 3000);
+    if (!next || next.disabled) { out.error = '[다음] 이 눌리지 않습니다 — 기간을 화면이 받지 않았습니다'; return out; }
+    next.click();
+    await stayRun.waitFor(function () {
+      var r = root(); if (!r) return false;
+      return r.getAttribute('data-calendar-adjust') === 'confirm' || (r !== r1 && window.calErrors(r).length > 0);
+    }, 8000);
+    var r2 = root();
+    if (!r2 || r2.getAttribute('data-calendar-adjust') !== 'confirm') {
+      out.errors = window.calErrors(r2);
+      out.error = '[선택 날짜 가격 가감] ① 을 화면이 받지 않았습니다' + (out.errors.length ? ' — ' + out.errors.join(' / ') : ''); return out;
+    }
+    var summary = [].slice.call(r2.querySelectorAll('.stay-description')).map(function (e) { return C(e.textContent); }).find(function (t2) { return /대상\s*[\d,]+칸/.test(t2); }) || '';
+    var num = function (re) { var m = summary.match(re); return m ? parseInt(m[1].replace(/,/g, ''), 10) : null; };
+    out.preview = { text: summary, total: num(/대상\s*([\d,]+)칸/), applied: num(/적용\s*([\d,]+)칸/), skipped: num(/건너뜀\s*([\d,]+)칸/) };
+    var save = r2.querySelector('[data-stay-action="save"]');
+    if (!save) { out.error = '[가감 적용] 버튼이 없습니다'; return out; }
+    if (save.disabled) {
+      out.submitted = false;
+      out.skippedRows = [].slice.call(r2.querySelectorAll('tbody tr')).map(function (e) { return C(e.textContent); }).slice(0, 10);
+      out.error = '적용할 칸이 0칸이라 [가감 적용] 이 꺼져 있습니다(' + summary + ') — 저장하지 않았습니다';
+      return out;
+    }
+    var sub = await stayRun.submit('가감 적용', { action: 'save' });
+    out.submit = sub.status; out.errors = sub.errors || []; out.submitted = true;
+    await stayRun.waitFor(function () { return stepOf() === 'done' || (root() !== r2 && window.calErrors(root()).length > 0); }, 8000);
+    if (stepOf() !== 'done') {
+      out.errors = out.errors.concat(window.calErrors(root()));
+      out.error = '[가감 적용] 결과를 확인하지 못했습니다' + (out.errors.length ? ' — ' + out.errors.join(' / ') : '') + ' — 자동으로 다시 누르지 않습니다';
+      return out;
+    }
+    var banner = root().querySelector('[data-stay-result="saved"]');
+    var done = C(banner ? banner.textContent : '');
+    var applied = (done.match(/적용\s*([\d,]+)칸/) || [])[1], skipped = (done.match(/건너뜀\s*([\d,]+)칸/) || [])[1];
+    out.submit = 'saved'; out.errors = [];
+    out.result = { text: done, applied: applied ? parseInt(applied.replace(/,/g, ''), 10) : null, skipped: skipped ? parseInt(skipped.replace(/,/g, ''), 10) : null };
+    out.note = done || '가감을 적용했습니다';
+    if (out.result.skipped) out.warn = (out.warn || []).concat(['건너뛴 칸 ' + out.result.skipped + '칸 — 예약이 있는 밤 · 날짜별로 직접 고친 가격 · 정가보다 비싸지는 칸은 그대로입니다(실패가 아닙니다)']);
+    return out;
+  };
+
+  /* ─────────────── 시즌 [가격 입력] 의 입력 기억 (2026-11-13) ───────────────
+     ERP 가 이 드로어를 **그 시즌의 마지막 입력값**(단가·인원 조합·조정·박수별 단가·아동 추가 금액)으로 채워 열고, 가격이 있는
+     시즌이면 `이미 값이 있는 날도 덮기` 를 체크한 채 연다. 원고가 적지 않은 칸에 지난 값이 남으면 그 값이 함께 깔린다 —
+     그래서 안내 띠의 [비우기](`?blank=1`, 같은 창을 빈 칸으로 다시 그릴 뿐 아무것도 지우지 않는다)를 먼저 누르고 원고대로 채운다.
+     원고에 `이미 값이 있는 날도 덮기` 줄이 없으면(옛 원고) 종전 기본값 그대로 **해제**로 둔다. 기억이 없는 화면(묶음 전 ERP)은 그대로다. */
+  window.SEASON_OVERWRITE_LABEL = '이미 값이 있는 날도 덮기';
+  window.seasonFillFresh = async function () {
+    var body = document.getElementById('stay_drawer_body') || document.querySelector('.stay-drawer.is-open') || document.body;
+    var form = body.querySelector('[data-stay-screen="season-price-fill"]');
+    if (!form) return { status: 'no-form' };
+    var blank = body.querySelector('[hx-get*="blank=1"]')
+      || [].slice.call(body.querySelectorAll('.stay-banner button, .stay-banner a')).find(function (b) { return window.calClean(b.textContent) === '비우기'; });
+    if (!blank) return { status: 'no-memory' };
+    var note = window.calClean((blank.closest('.stay-banner') || {}).textContent || '').replace(/\s*비우기\s*$/, '');
+    blank.click();
+    var fresh = await stayRun.waitFor(function () {
+      var f = body.querySelector('[data-stay-screen="season-price-fill"]');
+      return !!(f && f !== form && !body.querySelector('[hx-get*="blank=1"]'));
+    }, 8000);
+    if (!fresh) return { status: 'error', error: '시즌 [가격 입력] 의 [비우기] 뒤 빈 창이 그려지지 않았습니다 — 지난 입력값이 남아 있을 수 있어 저장하지 않습니다' };
+    return { status: 'cleared', note: note };
+  };
+  window.seasonFillFields = function (s, F) {
+    var has = (s.fields || []).some(function (f) { return window.calClean(f.label_base || f.label) === window.SEASON_OVERWRITE_LABEL; });
+    if (has) return { fields: F, implied: false };
+    return { fields: F.concat([{ label: window.SEASON_OVERWRITE_LABEL, kind: 'uncheck' }]), implied: true };
+  };
+
+  /* ─────────────── [판매 시작] 앞에서 배너 읽기 (2026-11-13) ───────────────
+     고리는 `판매 시작` 단계 앞에서 선다. 그때 검증 배너의 막힘(🔴)·권고(🟡)를 결과에 싣고, 연령 구간의 빈 나이·겹침처럼
+     [판매 시작] 을 막는 줄은 사람이 바로 읽을 문장으로 띠에 남긴다(넘어가기로 풀 수 없는 차단이다 — 오퍼 탭 연령 구간을 고친다). */
+  window.AGE_BAND_BLOCK_RE = /어느 구간에도 없습니다|두 구간에 겹칩니다/;
+  window.saleStartBanner = function () {
+    var b = { blockers: [], warnings: [] };
+    try { b = (stayRun.state() || {}).banner || b; } catch (e) { /* 배너를 못 읽으면 빈 채로 */ }
+    var age = (b.blockers || []).filter(function (l) { return window.AGE_BAND_BLOCK_RE.test(l); });
+    var note = (b.blockers || []).length
+      ? '[판매 시작] 이 막혀 있습니다 — 🔴 ' + b.blockers.length + '건' + (age.length ? ' (연령 구간의 빈 나이·겹침 ' + age.length + '건: 오퍼 탭 `연령 구간` 에서 고칩니다 — 넘어가기로 풀 수 없습니다)' : '')
+      : ((b.warnings || []).length ? '🟡 ' + b.warnings.length + '건이 남았습니다 — 원인을 지시서에서 고칩니다' : '배너에 막힘이 없습니다 — [판매 시작] 은 사람이 누릅니다');
+    return { blockers: b.blockers || [], warnings: b.warnings || [], ageBand: age, note: note };
+  };
+
   window.runStepCore = async function (n, opt) {
     opt = opt || {};
     var s = window.step(n);
@@ -1178,6 +1588,9 @@
     if (window.CHECK_KIND_RE.test(s.kind || '')) return window.runCheckStep(n, opt);
     // 셀 상태 → 가격 캘린더 판매 마감(위 `runCloseStep`). 캘린더에 [판매 마감] 이 없으면 종전 시즌 드로어로 간다
     if (s.kind === '셀 상태 바꾸기' && await window.calendarCloseAvailable()) return window.runCloseStep(s, opt);
+    // 가격 캘린더 일괄 단계(위 `runCalendarPriceStep` · `runCalendarAdjustStep`)
+    if (s.kind === '선택 날짜 가격 수정') return window.runCalendarPriceStep(s, opt);
+    if (s.kind === '선택 날짜 가격 가감') return window.runCalendarAdjustStep(s, opt);
     if (s.head.tab) { var t = await stayRun.tab(s.head.tab); out.tab = t.status; }
     if (stayRun.workspace) {
       var navOffer = (s.fields || []).find(function (f) { return f.label === '오퍼' && f.kind === 'select' && f.value; });
@@ -1267,9 +1680,20 @@
     }
 
     var F = window.customerOptionFields(s, window.stepFields(n));
+    // 시즌 [가격 입력] 은 지난 입력값으로 채워져 열린다 — [비우기] 로 빈 창을 다시 받고 원고대로 채운다(위 `seasonFillFresh`)
+    if (s.kind === '시즌 가격 채우기') {
+      var sf = await window.seasonFillFresh();
+      out.seasonFill = sf.status;
+      if (sf.note) out.seasonFillNote = sf.note;
+      if (sf.status === 'error') { out.error = sf.error; return out; }
+      var sff = window.seasonFillFields(s, F);
+      F = sff.fields;
+      if (sff.implied) out.overwriteImplied = true;
+    }
     var r = await stayRun.fill(F);
     // 화면에 없는 체크 칸(예: 저장 뒤에만 뜨는 `지금 모든 객실에 배포`)은 막지 않고 경고로만 남긴다
     out.warn = r.filter(function (x) { return x.status === 'not-found' && /^(check|uncheck)$/.test(x.kind); }).map(function (x) { return x.label + ': 화면에 없는 칸'; });
+    if (out.overwriteImplied) out.warn.push(window.SEASON_OVERWRITE_LABEL + ': 원고에 줄이 없어 종전 기본값(해제)으로 두었습니다');
     // 무엇으로 찾았는가 — 표식(hook) · 글자(label) · 자리(order). 자리 짐작은 **늘 알린다**: 표식도 글자도 안 맞아
     // 순서로 고른 칸이라 엉뚱한 칸에 값이 들어갔을 수 있다(2026-10-28 — 표식이 다 깔리면 없앨 갈래다).
     out.matchedBy = window.matchedByCounts(r);
@@ -1752,7 +2176,7 @@
     st.current = null;
     // 띠에 한 줄 — 실패는 `runStep` 이 이미 사유를 적어 두었으므로 덮지 않는다
     if (reason && reason !== 'done' && reason !== 'failed' && reason !== 'fatal') {
-      progSafe({ note: '고리 멈춤 — ' + reason + (at ? ' (' + at + '단계)' : '') });
+      progSafe({ note: '고리 멈춤 — ' + reason + (at ? ' (' + at + '단계)' : '') + (reason === 'sale-start' && st.banner && st.banner.note ? ' · ' + st.banner.note : '') });
     }
     return st;
   }
@@ -1774,6 +2198,8 @@
       }
       // [판매 시작] 은 사람이 누른다 — 고리는 그 단계를 열지도 않고 앞에서 멈춘다
       if (/^판매\s*시작/.test(loopNfc(s.kind).trim()) || /^판매\s*시작/.test(loopNfc(s.title).trim())) {
+        // 배너의 막힘·권고를 싣는다 — 연령 구간 빈 나이·겹침 같은 차단은 띠에 문장으로 남긴다(`saleStartBanner`)
+        try { st.banner = window.saleStartBanner(); } catch (e) { st.banner = null; }
         return loopFinish(st, 'sale-start', n);
       }
       st.current = n;
@@ -1899,7 +2325,8 @@
       startedAt: st.startedAt, elapsedMs: t0 ? Math.max(0, t1 - t0) : 0,
       cursor: { lastDone: cur.lastDone, pending: cur.pending, files: cur.files },
       waitMs: st.waitMs || null,
-      marks: marks, progress: band
+      marks: marks, progress: band,
+      banner: st.reason === 'sale-start' ? (st.banner || null) : null
     };
   };
 

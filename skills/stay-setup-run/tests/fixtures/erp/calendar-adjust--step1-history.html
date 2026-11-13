@@ -1,0 +1,132 @@
+
+
+
+<div id="stay_calendar_adjust_00000000" class="stay-root stay-readable" data-stay-screen="calendar-adjust" data-calendar-adjust="select" data-calendar-selection>
+  
+
+  
+  
+  <section class="stay-card" data-stay-card="adjust_history">
+    <h4 class="stay-section-title">최근 가감</h4>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <thead><tr><th>적용 일시</th><th>오퍼</th><th>가감</th><th class="stay-numeric">적용</th><th class="stay-numeric">건너뜀</th><th></th></tr></thead>
+        <tbody>
+        
+          <tr data-stay-row="1"><td>2026-10-30 12:00</td><td>〈오퍼 관리용 이름〉</td><td>+5%</td><td class="stay-numeric">3</td><td class="stay-numeric">0</td>
+            <td><a class="stay-btn stay-btn--ghost" href="/stay/{master:1}/calendar/adjust/{adjust_batch:1}/log.csv" data-calendar-adjust-action="log" download>적용 기록 내려받기</a>
+              <button type="button" class="stay-btn stay-btn--secondary" data-stay-action="undo" data-calendar-adjust-action="undo"
+                      hx-post="/stay/{master:1}/calendar/adjust/{adjust_batch:1}/undo/" hx-target="#stay_drawer_body" hx-swap="innerHTML" hx-disable="this"
+                      hx-confirm="마지막 가감을 되돌립니다. 그 사이 가격이 바뀐 칸과 예약이 있는 날은 그대로 둡니다.">되돌리기</button></td></tr>
+        
+        </tbody>
+      </table>
+    </div>
+    <p class="stay-description">되돌리기는 이 호텔의 마지막 가감 한 번만 할 수 있습니다.</p>
+  </section>
+  
+  
+  <section class="stay-card">
+    <h4 class="stay-section-title">대상 선택</h4>
+    <div class="stay-calendar-form">
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_adjust_offer_label" data-stay-label-for="offer">오퍼 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field">
+          <select name="offer" class="browser-default" data-stay-field="offer" data-stay-kind="select" data-stay-required="1" aria-labelledby="stay_adjust_offer_label" data-adjust-keep
+                  hx-get="/stay/{master:1}/calendar/adjust/" hx-trigger="change" hx-include="#stay_calendar_adjust_00000000 [data-adjust-keep]"
+                  hx-target="#stay_drawer_body" hx-swap="innerHTML" data-calendar-adjust-action="offer">
+            <option value="{offer:1}" selected>〈오퍼 관리용 이름〉</option>
+          </select>
+          
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_adjust_rooms_label" data-stay-label-for="rooms">객실 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field" role="group" aria-labelledby="stay_adjust_rooms_label">
+          <label class="check_form"><input type="checkbox" class="filled-in" name="rooms" data-stay-field="rooms" data-stay-kind="multicheck" data-stay-required="1" value="{room:1}" checked><span>디럭스</span></label><label class="check_form"><input type="checkbox" class="filled-in" name="rooms" data-stay-field="rooms" data-stay-kind="multicheck" data-stay-required="1" value="{room:2}" checked><span>스위트</span></label>
+          
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_adjust_plans_label" data-stay-label-for="plans">요금제 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field" role="group" aria-labelledby="stay_adjust_plans_label">
+          <label class="check_form"><input type="checkbox" class="filled-in" name="plans" data-stay-field="plans" data-stay-kind="multicheck" data-stay-required="1" value="source:{catalog:1}" checked><span>조식 포함</span></label><label class="check_form"><input type="checkbox" class="filled-in" name="plans" data-stay-field="plans" data-stay-kind="multicheck" data-stay-required="1" value="source:{catalog:2}" checked><span>룸온리</span></label><label class="check_form"><input type="checkbox" class="filled-in" name="plans" data-stay-field="plans" data-stay-kind="multicheck" data-stay-required="1" value="name:직접 만든 요금제" checked><span>직접 만든 요금제</span></label>
+          
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_calendar_period_label">기간 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field stay-calendar-period" role="group" aria-labelledby="stay_calendar_period_label">
+          <label for="stay_adjust_from"><span class="stay-calendar-form__sr" data-stay-label-for="period_from">시작일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span><dmc-datetime x-data x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }"><input type="text" id="stay_adjust_from" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" autocomplete="off" name="period_from" value="2026-07-01" data-stay-field="period_from" data-stay-kind="date" data-stay-required="1" data-calendar-from data-adjust-keep></dmc-datetime></label>
+          <span aria-hidden="true">~</span>
+          <label for="stay_adjust_to"><span class="stay-calendar-form__sr" data-stay-label-for="period_to">종료일 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span><dmc-datetime x-data x-on:focusin="if (window.jQuery) { var jq = window.jQuery; var mine = jq($el).find('input').data('xdsoft_datetimepicker'); jq('.xdsoft_datetimepicker').each(function () { if (!mine || this !== mine[0]) { jq(this).trigger('close.xdsoft'); } }); }"><input type="text" id="stay_adjust_to" input-format="year_month_day" data-date-format="Y-m-d" data-form-control="date" data-lang="ko" placeholder="2026-01-01" autocomplete="off" name="period_to" value="2026-07-31" data-stay-field="period_to" data-stay-kind="date" data-stay-required="1" data-calendar-to data-adjust-keep></dmc-datetime></label>
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_calendar_weekdays_label" data-stay-label-for="weekdays">요일</span>
+        <div class="stay-calendar-form__field" role="group" aria-labelledby="stay_calendar_weekdays_label"><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="0" checked><span>월</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="1" checked><span>화</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="2" checked><span>수</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="3" checked><span>목</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="4" checked><span>금</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="5" checked><span>토</span></label><label class="check_form"><input type="checkbox" name="weekdays" data-stay-field="weekdays" data-stay-kind="multicheck" data-calendar-weekday data-adjust-keep value="6" checked><span>일</span></label></div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label">선택</span>
+        <div class="stay-calendar-form__field stay-calendar-summary">
+          <strong data-calendar-count role="status">31일</strong>
+          <span data-calendar-selected-label>· 2026-07-01 ~ 2026-07-31</span>
+          <span data-calendar-message class="stay-calendar-form__message" role="status"></span>
+          
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_adjust_occupancy_label" data-stay-label-for="occupancy">인원 조합 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field" role="group" aria-labelledby="stay_adjust_occupancy_label">
+          <label class="check_form"><input type="checkbox" class="filled-in" name="occupancy" data-stay-field="occupancy" data-stay-kind="multicheck" data-stay-required="1" value="" checked><span>인원 무관 단일가</span></label><label class="check_form"><input type="checkbox" class="filled-in" name="occupancy" data-stay-field="occupancy" data-stay-kind="multicheck" data-stay-required="1" value="A2" checked><span>A2 · 성인 2</span></label><label class="check_form"><input type="checkbox" class="filled-in" name="occupancy" data-stay-field="occupancy" data-stay-kind="multicheck" data-stay-required="1" value="A3" checked><span>A3 · 성인 3</span></label>
+          
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_adjust_los_label" data-stay-label-for="los">박수 층</span>
+        <div class="stay-calendar-form__field" role="radiogroup" aria-labelledby="stay_adjust_los_label">
+          <label class="check_form"><input type="radio" name="los" data-stay-field="los" data-stay-kind="radio" data-adjust-keep value="all" checked><span>전 층</span></label>
+          <label class="check_form"><input type="radio" name="los" data-stay-field="los" data-stay-kind="radio" data-adjust-keep value="one"><span>1박 층만</span></label>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" name="date_selection_0" data-calendar-selected-ranges value="2026-07-01 ~ 2026-07-31">
+    <input type="hidden" name="date_selection_1" value="">
+    <input type="hidden" name="month" value="2026-07" data-adjust-keep>
+  </section>
+  <section class="stay-card">
+    <h4 class="stay-section-title">가감 입력</h4>
+    <div class="stay-calendar-form">
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_adjust_value_label" data-stay-label-for="adjust">가감 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></span>
+        <div class="stay-calendar-form__field">
+          <input type="text" name="adjust" value="" maxlength="20" autocomplete="off" placeholder="+12 · -5%" aria-labelledby="stay_adjust_value_label"
+                 data-stay-field="adjust" data-stay-kind="text" data-stay-required="1" data-adjust-keep>
+          <small>정액은 공급 통화(공급 통화) 금액, 정률은 %를 붙여 부호와 함께 적습니다. 예: +12 · -5%</small>
+          
+        </div>
+      </div>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label">조건</span>
+        <div class="stay-calendar-form__field">
+          <label class="check_form"><input type="checkbox" class="filled-in" name="adjust_original" value="1" data-stay-field="adjust_original" data-stay-kind="checkbox" data-adjust-keep><span data-stay-label-for="adjust_original">정가도 같이 조정</span></label>
+          <label class="check_form"><input type="checkbox" class="filled-in" name="include_manual" value="1" data-stay-field="include_manual" data-stay-kind="checkbox" data-adjust-keep><span data-stay-label-for="include_manual">날짜별로 직접 고친 가격도 같이 바꾸기</span></label>
+          <label class="check_form"><input type="checkbox" class="filled-in" name="include_extra" value="1" data-stay-field="include_extra" data-stay-kind="checkbox" data-adjust-keep><span data-stay-label-for="include_extra">추가 인원 요금도 같이 조정</span></label>
+          <small style="display:block;line-height:1.7">
+            · 정가도 같이 조정: 끄면 정가는 그대로 둡니다. 판매가가 정가보다 비싸지는 칸은 건너뜁니다.<br>
+            · 날짜별로 직접 고친 가격: 가격 캘린더에서 날짜를 눌러 직접 고친 가격입니다(그 칸에 "손입력"이라고 표시됩니다). 끄면 그 가격은 건드리지 않습니다.<br>
+            · 추가 인원 요금: 퍼센트로 조정할 때만 쓰입니다. 끄면 아동 추가분은 그대로 두고 성인 몫에만 곱합니다.
+          </small>
+        </div>
+      </div>
+    </div>
+    <p class="stay-description">공급 원가와 마감·판매 금지 상태는 바뀌지 않습니다. 예약이 있는 날은 건너뜁니다.</p>
+  </section>
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="next" data-calendar-next
+            hx-get="/stay/{master:1}/calendar/adjust/" hx-include="#stay_calendar_adjust_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML">다음</button>
+  </div>
+  
+  
+</div>

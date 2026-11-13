@@ -155,11 +155,14 @@ guide in the share folder.
 | `tests/test_parse_guide.py` | Parser tests — the stamp gate, refusals, photo and value checks |
 | `tests/test_helper.mjs` · `tests/helper_fixture.html` | Helper tests on a fixture page — drawer forms, danger buttons |
 | `tests/test_boot.mjs` · `tests/calendar_fixture.html` | Boot tests on a fixture page — price-calendar cells, openers, refusals, 0-step checks |
+| `tests/test_calendar_steps.mjs` | Price-calendar bulk steps (2026-11-13): base-combination / per-combination price edit, bulk adjust with the repeat guard, pre-bundle screens, season-drawer memory, the banner before [판매 시작], numeric read-back |
+| `tests/test_calendar_parse.py` | Parser side of the same steps: screen hooks on price lines, preflight value checks, age-band gaps |
 
 ```bash
 python3 -m unittest discover -s tests            # parser
 node tests/test_helper.mjs                       # helper
 node tests/test_boot.mjs                         # boot
+node tests/test_calendar_steps.mjs               # price-calendar bulk steps
 ```
 
 The two browser tests skip their **screen** half with exit code 0 when `jsdom` is not installed; nothing is

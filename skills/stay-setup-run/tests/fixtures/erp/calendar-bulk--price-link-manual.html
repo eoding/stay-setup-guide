@@ -1,0 +1,127 @@
+
+
+
+<div id="stay_calendar_bulk_00000000" class="stay-root stay-readable" data-stay-screen="calendar-bulk">
+  <input type="hidden" name="option" value="{room:1}" id="id_stay_option"><input type="hidden" name="rate_plan" value="{rate_plan:1}" id="id_stay_rate_plan"><input type="hidden" name="operation" value="price" id="id_stay_operation"><input type="hidden" name="month" value="2026-07" id="id_stay_month">
+  
+<style>
+  .stay-root [data-stay-summary] > .stay-section-title { margin: 0 0 10px; }
+  .stay-root [data-stay-summary] > .stay-facts { border-radius: 8px; overflow: hidden; font-size: 14px; line-height: 1.55; }
+  .stay-root [data-stay-summary] > .stay-facts > dt,
+  .stay-root [data-stay-summary] > .stay-facts > dd { padding: 9px 14px; }
+  .stay-root [data-stay-summary] > .stay-facts > dt { min-width: 104px; }
+  .stay-root [data-stay-summary] > .stay-facts > dd { font-weight: 500; }
+  .stay-root [data-stay-summary] > .stay-facts + .stay-description { margin: 12px 0 0; }
+</style>
+
+  <section class="stay-card" data-stay-summary>
+    <h4 class="stay-section-title">적용 대상</h4>
+    <dl class="stay-facts">
+      <dt>오퍼</dt><dd>〈오퍼 관리용 이름〉</dd>
+      <dt>객실</dt><dd>〈오퍼 관리용 이름〉 · 디럭스</dd>
+      <dt>요금제</dt><dd>조식 포함</dd>
+    </dl>
+    
+  </section>
+  
+  
+  
+  <input type="hidden" name="scope" value="plan">
+  <input type="hidden" name="date_selection_0" value="2026-07-01 ~ 2026-07-02">
+  <input type="hidden" name="date_selection_1" value="">
+  
+  <input type="hidden" name="period_from" value="2026-07-01">
+  <input type="hidden" name="period_to" value="2026-07-02">
+  <input type="hidden" name="weekdays" value="0"><input type="hidden" name="weekdays" value="1"><input type="hidden" name="weekdays" value="2"><input type="hidden" name="weekdays" value="3"><input type="hidden" name="weekdays" value="4"><input type="hidden" name="weekdays" value="5"><input type="hidden" name="weekdays" value="6">
+  <section class="stay-card">
+    <h4 class="stay-section-title">적용 내용 · 2일</h4>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <thead><tr><th>숙박일</th><th>현재 가격·마감 상태</th></tr></thead>
+        <tbody><tr><td>2026-07-01</td><td>가격 판매 가능</td></tr><tr><td>2026-07-02</td><td>가격 없음</td></tr></tbody>
+      </table>
+    </div>
+    
+    
+  </section>
+  
+  
+  <section class="stay-card">
+    <h4 class="stay-section-title" data-stay-label-for="prices">선택 날짜의 가격</h4>
+    <p class="stay-description">입력한 칸만 바뀝니다. 비운 칸과 마감 상태는 그대로입니다.</p>
+    <input type="hidden" name="prices-TOTAL_FORMS" value="3" id="id_stay_prices-TOTAL_FORMS"><input type="hidden" name="prices-INITIAL_FORMS" value="3" id="id_stay_prices-INITIAL_FORMS"><input type="hidden" name="prices-MIN_NUM_FORMS" value="0" id="id_stay_prices-MIN_NUM_FORMS"><input type="hidden" name="prices-MAX_NUM_FORMS" value="550" id="id_stay_prices-MAX_NUM_FORMS">
+    
+    
+    <input type="hidden" name="link_mode" value="manual">
+    <input type="hidden" name="base_key" value="A2">
+    <div class="stay-calendar-form" data-calendar-link>
+      <div class="stay-calendar-form__row">
+        <span class="stay-calendar-form__label" id="stay_calendar_link_mode_label" style="white-space:nowrap">연동 방식</span>
+        <div class="stay-calendar-form__field">
+          <select name="link_mode_pick" class="browser-default" data-stay-control="link_mode" aria-labelledby="stay_calendar_link_mode_label"
+                  hx-get="/stay/{master:1}/calendar/bulk/" hx-trigger="change" hx-include="#stay_calendar_bulk_00000000 :is(input,select,textarea):not([name=add_occupancy])"
+                  hx-target="#stay_drawer_body" hx-swap="innerHTML">
+            <option value="base_delta">기준 조합만 입력 — 나머지는 현재 차액 유지</option>
+            <option value="manual" selected>조합마다 직접 입력</option>
+          </select>
+        </div>
+      </div>
+      
+    </div>
+    
+    
+    
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table stay-calendar-bulk-prices" data-stay-field="prices" data-stay-kind="rows" data-stay-rows="prices">
+        <thead><tr><th>기존</th><th class="stay-numeric">판매가 (공급 통화)</th><th class="stay-numeric">정가 (공급 통화)</th><th class="stay-numeric">공급 원가 (공급 통화)</th></tr></thead>
+        
+        <tbody class="stay-calendar-bulk-line" data-stay-occupancy-key="" data-stay-los-nights="1">
+          <tr class="stay-calendar-bulk-line__head"><th colspan="4" scope="rowgroup"><input type="hidden" name="prices-0-occupancy_key" id="id_stay_prices-0-occupancy_key"><input type="hidden" name="prices-0-los_nights" value="1" id="id_stay_prices-0-los_nights">인원 무관 단일가 · 1박 이상</th></tr>
+          <tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>
+          <tr data-stay-existing><td>2026-07-02</td><td class="stay-numeric">가격 없음</td><td></td><td></td></tr>
+          
+          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="text" name="prices-0-price" data-stay-col="price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-0-price"></td><td class="stay-numeric"><input type="text" name="prices-0-original_price" data-stay-col="original_price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-0-original_price"></td><td class="stay-numeric"><input type="text" name="prices-0-net_amount" data-stay-col="net_amount" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-0-net_amount"></td></tr>
+        </tbody>
+        
+        <tbody class="stay-calendar-bulk-line" data-stay-occupancy-key="A2" data-stay-los-nights="1">
+          <tr class="stay-calendar-bulk-line__head"><th colspan="4" scope="rowgroup"><input type="hidden" name="prices-1-occupancy_key" value="A2" id="id_stay_prices-1-occupancy_key"><input type="hidden" name="prices-1-los_nights" value="1" id="id_stay_prices-1-los_nights">A2 · 성인 2 · 1박 이상</th></tr>
+          <tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">150000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>
+          <tr data-stay-existing><td>2026-07-02</td><td class="stay-numeric">가격 없음</td><td></td><td></td></tr>
+          
+          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="text" name="prices-1-price" data-stay-col="price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-1-price"></td><td class="stay-numeric"><input type="text" name="prices-1-original_price" data-stay-col="original_price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-1-original_price"></td><td class="stay-numeric"><input type="text" name="prices-1-net_amount" data-stay-col="net_amount" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-1-net_amount"></td></tr>
+        </tbody>
+        
+        <tbody class="stay-calendar-bulk-line" data-stay-occupancy-key="A3" data-stay-los-nights="1">
+          <tr class="stay-calendar-bulk-line__head"><th colspan="4" scope="rowgroup"><input type="hidden" name="prices-2-occupancy_key" value="A3" id="id_stay_prices-2-occupancy_key"><input type="hidden" name="prices-2-los_nights" value="1" id="id_stay_prices-2-los_nights">A3 · 성인 3 · 1박 이상</th></tr>
+          <tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">180000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>
+          <tr data-stay-existing><td>2026-07-02</td><td class="stay-numeric">가격 없음</td><td></td><td></td></tr>
+          
+          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="text" name="prices-2-price" data-stay-col="price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-2-price"></td><td class="stay-numeric"><input type="text" name="prices-2-original_price" data-stay-col="original_price" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-2-original_price"></td><td class="stay-numeric"><input type="text" name="prices-2-net_amount" data-stay-col="net_amount" inputmode="decimal" style="width:100%;max-width:110px;margin:0;text-align:right" id="id_stay_prices-2-net_amount"></td></tr>
+        </tbody>
+        
+      </table>
+    </div>
+    
+    
+    <div class="stay-calendar-bulk-add">
+      <span class="stay-calendar-form__sr" data-stay-label-for="add_occupancy">추가할 인원 조합</span>
+      <select name="add_occupancy" class="browser-default" data-stay-field="add_occupancy" data-stay-kind="select" aria-label="추가할 인원 조합">
+        <option value="A1">A1 · 성인 1</option><option value="A1C1_CHILD">A1C1_CHILD · 성인 1 · 소아 1</option><option value="A1C1_INFANT">A1C1_INFANT · 성인 1 · 유아 1</option><option value="A2C1_CHILD">A2C1_CHILD · 성인 2 · 소아 1</option><option value="A2C1_INFANT">A2C1_INFANT · 성인 2 · 유아 1</option>
+      </select>
+      <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
+              hx-get="/stay/{master:1}/calendar/bulk/" hx-include="#stay_calendar_bulk_00000000 :is(input,select,textarea)"
+              hx-target="#stay_drawer_body" hx-swap="innerHTML">인원 조합 추가</button>
+    </div>
+    
+  </section>
+  
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="back"
+            hx-get="/stay/{master:1}/calendar/bulk/?operation=price&amp;option={room:1}&amp;rate_plan={rate_plan:1}&amp;month=2026-07&amp;scope=plan&amp;period_from=2026-07-01&amp;period_to=2026-07-02&amp;weekdays=0&amp;weekdays=1&amp;weekdays=2&amp;weekdays=3&amp;weekdays=4&amp;weekdays=5&amp;weekdays=6"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML">기간 다시 선택</button>
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save"
+            hx-post="/stay/{master:1}/calendar/bulk/" hx-include="#stay_calendar_bulk_00000000 :is(input,select,textarea)"
+            hx-target="#stay_drawer_body" hx-swap="innerHTML" hx-disable="this">입력한 가격 적용</button>
+  </div>
+  
+</div>

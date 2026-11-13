@@ -37,6 +37,12 @@
       "note": "편집"
     },
     {
+      "file": "season-price-fill.html",
+      "screen": "season-price-fill",
+      "url": "/stay/{master:1}/seasons/{season:1}/fill/",
+      "note": "시즌 가격 입력 — 기억 없음. 가격이 깔린 시즌이라 '이미 값이 있는 날도 덮기'가 켜진 채 열린다"
+    },
+    {
       "file": "rate-plan-catalog--new.html",
       "screen": "rate-plan-catalog",
       "url": "/stay/{master:1}/rate-plans/catalog/new/",
@@ -251,6 +257,66 @@
       "screen": "panel:offers",
       "url": "",
       "note": "오퍼 목록(편집 화면이 include)"
+    },
+    {
+      "file": "calendar-bulk--price-link-step2.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/?option={room:1}&rate_plan={rate_plan:1}&operation=price&month=2026-07&date_selection_0=2026-07-01+~+2026-07-02&period_from=2026-07-01&period_to=2026-07-02&weekdays=0&weekdays=1&weekdays=2&weekdays=3&weekdays=4&weekdays=5&weekdays=6",
+      "note": "가격 수정 2단계 — 연동 방식 `기준 조합만 입력`(기준 A2 · 줄마다 차액 칸)"
+    },
+    {
+      "file": "calendar-bulk--price-link-manual.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/?option={room:1}&rate_plan={rate_plan:1}&operation=price&month=2026-07&date_selection_0=2026-07-01+~+2026-07-02&period_from=2026-07-01&period_to=2026-07-02&weekdays=0&weekdays=1&weekdays=2&weekdays=3&weekdays=4&weekdays=5&weekdays=6&link_mode_pick=manual",
+      "note": "가격 수정 2단계 — 연동 방식 셀렉트를 `조합마다 직접 입력` 으로 바꿔 다시 그린 것"
+    },
+    {
+      "file": "calendar-adjust--step1.html",
+      "screen": "calendar-adjust",
+      "url": "/stay/{master:1}/calendar/adjust/?month=2026-07&view=coord&offer={offer:1}&option={room:1}&rate_plan={rate_plan:1}&promo=1",
+      "note": "가감 1단계(대상 · 가감 입력) — 아직 가감 기록 없음"
+    },
+    {
+      "file": "calendar-adjust--step2.html",
+      "screen": "calendar-adjust",
+      "url": "/stay/{master:1}/calendar/adjust/?offer={offer:1}&rooms={room:1}&rooms={room:2}&plans=source%3A{catalog:1}&plans=source%3A{catalog:2}&plans=name%3A%EC%A7%81%EC%A0%91+%EB%A7%8C%EB%93%A0+%EC%9A%94%EA%B8%88%EC%A0%9C&period_from=2026-07-01&period_to=2026-07-31&weekdays=0&weekdays=1&weekdays=2&weekdays=3&weekdays=4&weekdays=5&weekdays=6&occupancy=&occupancy=A2&occupancy=A3&los=all&date_selection_0=2026-07-01+~+2026-07-31&date_selection_1=&month=2026-07&adjust=%2B5%25",
+      "note": "가감 2단계(확인) — +5% · 대상 · 적용 · 건너뜀 칸 수"
+    },
+    {
+      "file": "calendar-adjust--applied.html",
+      "screen": "calendar-adjust",
+      "url": "/stay/{master:1}/calendar/adjust/",
+      "note": "가감 [가감 적용](POST) 결과 — [되돌리기] · [적용 기록 내려받기]"
+    },
+    {
+      "file": "calendar-adjust--step1-history.html",
+      "screen": "calendar-adjust",
+      "url": "/stay/{master:1}/calendar/adjust/?month=2026-07&view=coord&offer={offer:1}&option={room:1}&rate_plan={rate_plan:1}&promo=1",
+      "note": "가감 1단계를 다시 연 것 — `최근 가감` 표(되돌리기는 맨 위 한 줄)"
+    },
+    {
+      "file": "calendar-bulk--price-link-result.html",
+      "screen": "calendar-bulk",
+      "url": "/stay/{master:1}/calendar/bulk/",
+      "note": "가격 수정 [입력한 가격 적용](POST) — 기준 조합 셀이 없는 둘째 날을 건너뛴 결과 조각"
+    },
+    {
+      "file": "season-price-fill--last-fill.html",
+      "screen": "season-price-fill",
+      "url": "/stay/{master:1}/seasons/{season:1}/fill/",
+      "note": "시즌 가격 입력 — 마지막 입력값을 채워 연 것([비우기])"
+    },
+    {
+      "file": "panel--offers--age-gap.html",
+      "screen": "panel:offers",
+      "url": "/stay/{master:1}/age-bands/",
+      "note": "오퍼 탭 연령 구간 — 만 4세가 빈 나이(경고)"
+    },
+    {
+      "file": "validation--age-gap.html",
+      "screen": "validation",
+      "url": "/stay/{master:1}/validation/",
+      "note": "검증 배너 — 연령 구간 빈 나이 차단 · 판매중 오퍼 안내"
     }
   ]
 }

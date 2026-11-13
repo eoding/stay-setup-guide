@@ -275,4 +275,134 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   w.close();
 }
 
-console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, flags, activate, panel openers, calendar close)`);
+// 6) 선택 날짜 가격 수정(2026-11-13) — 실제 캘린더 패널 · ① · ② 의 `연동 방식`(기준 A2) · 직접 입력으로 다시 그린 ② · 건너뜀 결과 조각
+{
+  const F = (label, kind, value, extra = {}) => Object.assign({ label, kind, raw_value: value }, kind === 'multi' ? { values: value } : (value === undefined ? {} : { value }), extra);
+  const line = (label, kind, value, key, col) => F(label, kind, value, { field: 'prices', occupancy_key: key, los_nights: 1, field_col: col });
+  const step = (link, lines, base = 'A2 · 성인 2') => ({ no: 30, kind: '선택 날짜 가격 수정', title: '선택 날짜 가격 수정 (1번째, 디럭스 × 조식 포함)', head: { tab: '가격 캘린더' },
+    fields: [F('오퍼', 'select', '〈오퍼 관리용 이름〉'), F('객실', 'select', '디럭스'), F('요금제', 'select', '조식 포함'),
+             F('시작일', 'typed', '2026-07-01'), F('종료일', 'typed', '2026-07-02'), F('요일', 'multi', ['월', '화', '수', '목', '금', '토', '일']),
+             F('연동 방식', 'select', link)].concat(base ? [F('기준 조합', 'select', base)] : []).concat(lines) });
+  const run = async (s, { skipped = false } = {}) => {
+    const w = page({ pane: frag('panel--calendar--2.html'), steps: [] });
+    w.eval(BOOT);
+    const d = w.document, posts = [], redraws = [];
+    w.stayRun.tab = async () => ({ status: 'ok' });
+    const body = d.getElementById('stay_drawer_body'), drawer = d.querySelector('.stay-drawer');
+    d.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.stayEntity === 'rate_plan') {
+        d.querySelectorAll('[data-stay-entity="rate_plan"]').forEach((x) => { x.className = x.className.replace('stay-btn--primary', 'stay-btn--ghost'); });
+        b.className = b.className.replace('stay-btn--ghost', 'stay-btn--primary');
+      }
+      if (b.dataset.calendarBulkAction === 'price') { body.innerHTML = frag('calendar-bulk--price-step1.html'); drawer.classList.add('is-open'); }
+      if (b.dataset.stayAction === 'next' && body.querySelector('[data-calendar-selection]')) body.innerHTML = frag('calendar-bulk--price-link-step2.html');
+    });
+    d.addEventListener('change', (e) => {
+      if (e.target.name === 'link_mode_pick') { redraws.push(e.target.value); body.innerHTML = frag(e.target.value === 'manual' ? 'calendar-bulk--price-link-manual.html' : 'calendar-bulk--price-link-step2.html'); }
+    });
+    w.stayRun.submit = async (_t, opt) => {
+      const root = d.querySelector('[data-stay-screen="calendar-bulk"]');
+      const post = {};
+      root.querySelectorAll('input, select').forEach((i) => { if (i.name && !i.name.endsWith('_pick') && i.value !== '') post[i.name] = i.value; });
+      posts.push(post);
+      if (skipped) { body.innerHTML = frag('calendar-bulk--price-link-result.html'); return { status: 'saved', errors: [] }; }
+      body.innerHTML = ''; drawer.classList.remove('is-open');
+      return { status: 'closed', errors: [] };
+    };
+    const r = await w.runCalendarPriceStep(s, {});
+    w.close();
+    return { r, posts, redraws };
+  };
+  const base = await run(step('기준 조합만 입력 — 나머지는 현재 차액 유지', [
+    line('A2 · 1박 이상 · 판매가', 'typed', '160000', 'A2', 'price'),
+    line('A3 · 1박 이상 · 판매가 차액', 'typed', '+30000', 'A3', 'price_diff'),
+    line('인원 무관 단일가 · 1박 이상 · 판매가 차액', 'empty', undefined, '', 'price_diff')]));
+  const bp = base.posts[0] || {};
+  const idx = (key) => Object.keys(bp).find((k) => /-occupancy_key$/.test(k) && bp[k] === key);
+  const a3 = (Object.keys(bp).find((k) => /-occupancy_key$/.test(k) && bp[k] === 'A3') || '').replace('occupancy_key', '');
+  ok(base.r.submitted === true && base.redraws.length === 0 && bp.link_mode === 'base_delta' && bp.base_key === 'A2', '실제 ② 가 이미 기준 방식(A2)이면 셀렉트를 건드리지 않고 저장', [base.r, base.redraws, bp.link_mode]);
+  ok(bp['prices-1-price'] === '160000' && bp[a3 + 'price_diff'] === '+30000' && !bp[a3 + 'price'], '실제 표의 기준 칸과 차액 칸에 들어갔다', [idx('A2'), a3, bp]);
+  const manual = await run(step('조합마다 직접 입력', [line('A3 · 1박 이상 · 판매가', 'typed', '200000', 'A3', 'price')], null));
+  const mp = manual.posts[0] || {};
+  const ma3 = (Object.keys(mp).find((k) => /-occupancy_key$/.test(k) && mp[k] === 'A3') || '').replace('occupancy_key', '');
+  ok(manual.r.submitted === true && JSON.stringify(manual.redraws) === '["manual"]' && mp[ma3 + 'price'] === '200000', '셀렉트를 직접 입력으로 바꿔 다시 그린 실제 ② 에서 저장', [manual.r, manual.redraws, mp]);
+  const skipped = await run(step('기준 조합만 입력', [line('A2 · 1박 이상 · 판매가', 'typed', '160000', 'A2', 'price')]), { skipped: true });
+  ok(skipped.r.submitted === true && skipped.r.submit === 'saved' && !skipped.r.error && skipped.r.warn && skipped.r.warn.length === 1, '실제 건너뜀 결과 조각은 성공 + 경고', skipped.r);
+}
+
+// 7) 선택 날짜 가격 가감 — 실제 ① · 확인 · 결과 조각. `최근 가감` 에 같은 가감이 있으면 멈춘다. [되돌리기] 는 누르지 않는다
+{
+  const F = (label, kind, value) => Object.assign({ label, kind, raw_value: value }, kind === 'multi' ? { values: value } : (value === undefined ? {} : { value }));
+  const step = { no: 31, kind: '선택 날짜 가격 가감', title: '선택 날짜 가격 가감 (1번째, 〈오퍼 관리용 이름〉 · +5%)', head: { tab: '가격 캘린더' },
+    fields: [F('오퍼', 'select', '〈오퍼 관리용 이름〉'), F('객실', 'multi', ['디럭스', '스위트']), F('요금제', 'multi', ['조식 포함', '룸온리']),
+             F('시작일', 'typed', '2026-07-01'), F('종료일', 'typed', '2026-07-31'), F('요일', 'multi', ['월', '화', '수', '목', '금', '토', '일']),
+             F('인원 조합', 'multi', ['A2', 'A3 · 성인 3']), F('박수 층', 'select', '전 층'), F('가감', 'typed', '+5%'),
+             F('정가도 같이 조정', 'uncheck'), F('날짜별로 직접 고친 가격도 같이 바꾸기', 'uncheck'), F('추가 인원 요금도 같이 조정', 'uncheck')] };
+  const run = async (opener, opt = {}) => {
+    const w = page({ pane: frag('panel--calendar--2.html'), steps: [] });
+    w.eval(BOOT);
+    const d = w.document, posts = [], clicks = [];
+    w.stayRun.tab = async () => ({ status: 'ok' });
+    const body = d.getElementById('stay_drawer_body'), drawer = d.querySelector('.stay-drawer');
+    d.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      clicks.push(b.dataset.calendarAdjustAction || b.dataset.stayAction || '');
+      if (b.dataset.calendarAdjustAction === 'open') { body.innerHTML = frag(opener); drawer.classList.add('is-open'); }
+      if (b.dataset.stayAction === 'next' && body.querySelector('[data-calendar-adjust="select"]')) {
+        const got = {};
+        body.querySelectorAll('input, select').forEach((i) => { if (!i.name || ((i.type === 'checkbox' || i.type === 'radio') && !i.checked)) return; (got[i.name] = got[i.name] || []).push(i.value); });
+        posts.push(got);
+        body.innerHTML = frag('calendar-adjust--step2.html');
+      }
+    });
+    w.stayRun.submit = async (_t, o) => {
+      const save = body.querySelector(`[data-stay-action="${o.action}"]`);
+      if (!save || save.disabled) return { status: 'not-found', errors: [] };
+      body.innerHTML = frag('calendar-adjust--applied.html');
+      return { status: 'saved', errors: [] };
+    };
+    const r = await w.runCalendarAdjustStep(step, opt);
+    w.close();
+    return { r, posts, clicks };
+  };
+  const a = await run('calendar-adjust--step1.html');
+  const g = a.posts[0] || {};
+  ok(a.r.submitted === true && a.r.submit === 'saved' && a.r.preview.applied === 3 && a.r.result.applied === 3, '실제 가감 ① → 확인 → 결과', a.r);
+  ok(JSON.stringify(g.rooms) === '["{room:1}","{room:2}"]' && JSON.stringify(g.plans) === '["source:{catalog:1}","source:{catalog:2}"]' && JSON.stringify(g.occupancy) === '["A2","A3"]', '실제 ① 의 객실·요금제·인원 조합을 원고대로(나머지는 끔)', g);
+  ok(g.adjust[0] === '+5%' && g.los[0] === 'all' && !g.adjust_original && !g.include_manual && !g.include_extra && g.date_selection_0[0] === '2026-07-01 ~ 2026-07-31', '가감·박수 층·체크·날짜', g);
+  ok(!a.clicks.includes('undo') && !a.clicks.includes('log'), '[되돌리기]·[적용 기록 내려받기] 는 누르지 않았다', a.clicks);
+  const h = await run('calendar-adjust--step1-history.html');
+  ok(h.r.manualAction === true && h.posts.length === 0 && /이미 적용돼 있습니다/.test(h.r.error), '실제 `최근 가감` 의 같은 가감 앞에서 멈춘다', h.r);
+}
+
+// 8) 시즌 [가격 입력] 의 입력 기억 — 실제 조각의 [비우기](`?blank=1`)를 눌러 빈 창을 받는다
+{
+  const w = page({ drawer: frag('season-price-fill--last-fill.html') });
+  w.eval(BOOT);
+  const d = w.document;
+  ok(d.querySelector('[name="price"]').value === '180000', '실제 조각은 지난 입력값으로 열린다');
+  d.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b && /blank=1/.test(b.getAttribute('hx-get') || '')) d.getElementById('stay_drawer_body').innerHTML = frag('season-price-fill.html');
+  });
+  const sf = await w.seasonFillFresh();
+  ok(sf.status === 'cleared' && d.querySelector('[name="price"]').value === '' && d.querySelector('[name="overwrite"]').checked === true, '[비우기] 뒤 빈 창(가격이 있는 시즌이라 덮기는 켜진 채)', [sf, d.querySelector('[name="overwrite"]').checked]);
+  const plan = w.seasonFillFields({ fields: [] }, [{ label: '판매 단가(공급 통화)', kind: 'typed', value: '200000' }]);
+  const res = await w.stayRun.fill(plan.fields);
+  ok(res.every((x) => x.status === 'ok') && d.querySelector('[name="overwrite"]').checked === false && d.querySelector('[name="price"]').value === '200000', '덮기 줄이 없는 원고는 덮기를 끈다', res);
+  w.close();
+}
+
+// 9) 검증 배너 — 연령 구간 빈 나이 차단을 사람 말로 넘긴다
+{
+  const w = page({ pane: frag('validation--age-gap.html') });
+  w.eval(BOOT);
+  const b = w.saleStartBanner();
+  ok(b.blockers.length >= 1 && b.ageBand.length === 1 && /연령 구간/.test(b.note), '실제 배너의 연령 구간 차단 줄을 읽는다', b);
+  w.close();
+}
+
+console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner)`);
