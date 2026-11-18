@@ -33,6 +33,15 @@ class TestExplainField(unittest.TestCase):
                 self.assertEqual([(r['screen_id'], r['label']) for r in rows], [('calendar-bulk', '선택 날짜의 가격')])
                 self.assertIn(name, rows[0]['help'])
 
+    def test_promotion_target_offers_explains_one_promotion_per_checked_offer(self):
+        # CO-32160 — 오퍼 카드의 [프로모션 추가] 「붙일 오퍼」. 그대로 두면 연 카드의 오퍼에 한 건이다
+        result = self.call('붙일 오퍼', '--json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = json.loads(result.stdout)['matches']
+        self.assertEqual([(r['screen_id'], r['label']) for r in rows], [('promotion', '붙일 오퍼')])
+        self.assertIn('한 건씩', rows[0]['effect'])
+        self.assertIn('전 오퍼 공통', rows[0]['effect'])
+
     def test_hotel_name_help_reports_customer_location(self):
         result = self.call('호텔명', '--screen', '호텔 만들기', '--json')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -60,7 +69,7 @@ class TestExplainField(unittest.TestCase):
         data = rsg.load_dictionary(root / 'screen-dictionary.json')
         impact = rsg.load_impact(root / 'screen-effects.json')
         page, stats = rsg.render_guide(data, version='1.5.0', impact=impact)
-        self.assertEqual(stats['fields'], 280)  # 2026-11-13 사전 — 화면 36개 · 가감 화면(calendar-adjust) 칸 12개 포함
+        self.assertEqual(stats['fields'], 281)  # 2026-11-18 사전 — 화면 36개 · 프로모션 「붙일 오퍼」 포함
         self.assertIn('허용 인원 조합', page)
 
 

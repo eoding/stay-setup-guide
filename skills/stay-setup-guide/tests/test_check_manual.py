@@ -4160,6 +4160,39 @@ def promotion_step(num, window, name="얼리버드", card="`2026 시즌 요금`"
 """
 
 
+class TargetOffersRowTest(unittest.TestCase):
+    """프로모션 「붙일 오퍼」(2026-11-18)는 사전에 있어도 지시서에 적지 않는다 — 오퍼 카드마다 한 단계다."""
+
+    def with_row(self, name, value):
+        step = promotion_step(4, ("해제", "비움", "비움"))
+        return HEAD + step.replace("| 프로모션명 |", f"| {name} | {value} |\n| 프로모션명 |", 1)
+
+    def test_promotion_without_the_row_passes(self):
+        self.assertEqual(cm.find_target_offer_rows(steps_of(HEAD + promotion_step(4, ("해제", "비움", "비움")))), [])
+
+    def test_blank_row_is_error(self):
+        """`비움` 이면 도구가 연 카드의 체크까지 풀어 화면이 「붙일 오퍼를 하나 이상 고르세요.」 로 막는다."""
+        problems = cm.find_target_offer_rows(steps_of(self.with_row("붙일 오퍼", "비움")))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("4단계", problems[0])
+        self.assertIn("`붙일 오퍼` 줄은 적지 않는다", problems[0])
+
+    def test_backticked_key_with_offers_is_error(self):
+        problems = cm.find_target_offer_rows(steps_of(self.with_row("`target_offers`", "선택: 2026 시즌 요금, 연말 특가")))
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_the_whole_check_fails_on_the_row(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(self.with_row("붙일 오퍼", "선택: 2026 시즌 요금"))
+            r = cm.check(path, dictionary_path=DICTIONARY)
+            code = cm.main([path])
+        self.assertEqual(len(r["target_offer_rows"]), 1, r["target_offer_rows"])
+        self.assertNotIn("붙일 오퍼", r["unknown_fields"])  # 사전에는 있는 칸이다 — 이 검사만 막는다
+        self.assertEqual(code, 1)
+
+
 class PromotionWindowTest(unittest.TestCase):
     """`진행기간` 은 **예약하는 날** 축이고 제한을 켜면 두 날짜가 둘 다 필수다(`적용 숙박일` 과 다르다)."""
 

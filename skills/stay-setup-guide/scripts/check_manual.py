@@ -29,6 +29,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `경고 넘어가기` 단계가 있는지(있으면 오류 — 원인을 지시서에서 고친다)
 - 단계 제목의 갈래가 규칙서 §단계 갈래별 마지막 줄 표의 정본(또는 러너가 받는 별칭)인지(오류 — 러너가 모르는 갈래에서 멈춘다)
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
+- 프로모션 `붙일 오퍼` 줄이 있는지(있으면 오류 — 연 카드의 오퍼가 이미 체크돼 있고, 지시서는 오퍼 카드마다 한 단계다)
 - 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
 - 유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 빠진 회차의 날짜만 마감으로 팔린다)
@@ -253,6 +254,9 @@ CANCEL_POLICY_EMPTY = {"지정 안 함", "", "비움", "—", "-", "— 없음 �
 # 겉면을 직접 가진다. 단계로도 만들지 않고, 어느 단계 표에도 `캠페인` 줄을 두지 않는다.
 CAMPAIGN_TITLE = "캠페인 만들기"
 CAMPAIGN_FIELD = "캠페인"
+# 프로모션 추가 드로어의 「붙일 오퍼」(2026-11-18) — 사전에는 있지만 지시서에는 적지 않는 칸이다(`find_target_offer_rows`).
+TARGET_OFFERS_FIELD = "붙일 오퍼"
+TARGET_OFFERS_KEY = "target_offers"
 
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
@@ -3693,6 +3697,23 @@ def find_campaign_uses(steps):
     return problems
 
 
+def find_target_offer_rows(steps):
+    """프로모션 `붙일 오퍼` 줄은 적지 않는다(2026-11-18) — 지시서는 오퍼 카드마다 한 단계다.
+
+    오퍼 카드의 [프로모션 추가] 를 열면 그 카드의 오퍼가 이미 체크돼 있어, 줄이 없으면 그 오퍼에 한 건이다.
+    `비움` 으로 적으면 러너·설치 도구가 그 체크까지 풀어 화면이 「붙일 오퍼를 하나 이상 고르세요.」 로 저장을 막는다.
+    """
+    problems = []
+    for step in steps:
+        for name in step["fields"]:
+            if norm_field(name) in (TARGET_OFFERS_FIELD, f"`{TARGET_OFFERS_KEY}`"):
+                problems.append(
+                    f"{step['num']}단계: `{TARGET_OFFERS_FIELD}` 줄은 적지 않는다 — 연 카드의 오퍼가 이미 체크돼 있다. "
+                    f"같은 할인이 오퍼 여럿에 걸리면 오퍼 카드마다 `프로모션 추가` 단계를 하나씩 쓴다(그 줄을 뺀다)"
+                )
+    return problems
+
+
 def step_kind(title):
     """제목에서 갈래만 — 끝의 ` (…)` 를 떼되 괄호가 겹쳐도 짝을 맞춘다.
 
@@ -4745,6 +4766,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     skip_warning_steps = find_skip_warning_steps(parsed)
     unknown_step_kinds = find_unknown_step_kinds(parsed)
     campaign_uses = find_campaign_uses(parsed)
+    target_offer_rows = find_target_offer_rows(parsed)
     age_band_order = find_age_band_order(parsed)
     age_band_overlaps = find_age_band_overlaps(parsed)
     band_code_formats = find_band_code_format(parsed)
@@ -4883,6 +4905,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "customer_option_gaps": find_customer_option_gaps(parsed),
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
+        "target_offer_rows": target_offer_rows,
         "age_band_order": age_band_order,
         "age_band_overlaps": age_band_overlaps,
         "band_code_formats": band_code_formats,
@@ -4995,7 +5018,7 @@ def main(argv=None):
               + r["season_overlaps"] + r["season_date_problems"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["unknown_step_kinds"] + r["inventory_gaps"] + r["customer_option_gaps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
-              + r["campaign_uses"] + r["age_band_order"] + r["age_band_overlaps"]
+              + r["campaign_uses"] + r["target_offer_rows"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]
               + r["child_extra_values"] + r["child_extra_no_occupancy"]
               + r["promotion_window_gaps"]
