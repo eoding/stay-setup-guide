@@ -12,9 +12,10 @@ Release candidate: plugin `stay-setup` 1.8.1 (`stay-setup-guide` 1.8.1, `stay-se
 ## 2026-11-18 promotion target offers and screen-help names
 
 The ERP promotion drawer opened from an offer card now starts with a `붙일 오퍼` checklist: every checked offer gets
-its own copy of the promotion, and the opened card's offer is checked by default. With two or more offers checked,
-`시즌 한정`, `요금제 한정` and the room scope rows are hidden and saved empty. Guides stay as they are, one
-`프로모션 추가` step per offer card. The checker rejects a `붙일 오퍼` row, and the runner leaves the checklist
+its own copy of the promotion, and the opened card's offer is checked by default. If anything other than the
+opened card's offer alone is ticked (two or more offers, or one different offer), `시즌 한정`, `요금제 한정` and the
+room scope rows are hidden and saved empty. Guides stay as they are, one `프로모션 추가` step per offer card, which
+keeps those fields usable for each offer. The checker rejects a `붙일 오퍼` row, and the runner leaves the checklist
 untouched, so each step still saves one promotion for the opened offer. People entering by hand can use the
 checklist to add one discount to several offers at once. The screen dictionary (281 fields), screen help and runner
 fixtures are re-synced. The scope card's mode selects now render as plain selects, so they show on the styled screen.

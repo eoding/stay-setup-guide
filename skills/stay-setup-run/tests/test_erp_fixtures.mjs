@@ -202,7 +202,7 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   w.stayRun.tab = async () => ({ status: 'ok' });
   const d = w.document, body = d.getElementById('stay_drawer_body'), drawer = d.querySelector('.stay-drawer');
   const target = d.querySelector('[data-stay-field="target_offers"]');
-  ok(target && target.checked && target.type === 'checkbox', '실제 신설 드로어에 「붙일 오퍼」가 서고 연 카드의 오퍼가 체크돼 있다');
+  ok(target && target.checked && target.type === 'checkbox' && target.hasAttribute('data-opened-offer'), '실제 신설 드로어에 「붙일 오퍼」가 서고 연 카드의 오퍼(`data-opened-offer`)가 체크돼 있다');
   // htmx 흉내: [추가] 의 `hx-include` 가 걷어 갈 이름·값(잠긴 칸 · 꺼진 체크는 안 실린다)을 적고 드로어를 닫는다
   const posts = [];
   d.querySelector('[data-stay-action="save"]').addEventListener('click', (e) => {
@@ -220,7 +220,7 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   ok(JSON.stringify(sent.filter(([name]) => /^target_offers/.test(name))) ===
      JSON.stringify([['target_offers_submitted', '1'], ['target_offers', '{offer:1}']]),
      '저장 요청에 연 카드의 오퍼 한 건만 실린다 — 지금처럼 그 오퍼에 프로모션 한 건', sent.filter(([name]) => /^target_offers/.test(name)));
-  ok(sent.some(([name]) => name === 'season') && sent.some(([name]) => name === 'scope_room_mode'), '오퍼 하나라 시즌 한정·객실 적용 범위도 그대로 실린다');
+  ok(sent.some(([name]) => name === 'season') && sent.some(([name]) => name === 'scope_room_mode'), '체크가 연 카드의 오퍼 하나 그대로라 시즌 한정·객실 적용 범위도 잠기지 않고 실린다');
   w.stayRun.progressHide && w.stayRun.progressHide();
   w.close();
 }
