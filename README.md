@@ -7,7 +7,20 @@ takes that same guide and fills the ERP Stay screens automatically, in the Chrom
 into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
 guides and the skill documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.8.0 (`stay-setup-guide` 1.8.0, `stay-setup-run` 0.15.0). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+Release candidate: plugin `stay-setup` 1.8.1 (`stay-setup-guide` 1.8.1, `stay-setup-run` 0.15.1). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+
+## 2026-11-18 promotion target offers and screen-help names
+
+The ERP promotion drawer opened from an offer card now starts with a `붙일 오퍼` checklist: every checked offer gets
+its own copy of the promotion, and the opened card's offer is checked by default. If anything other than the
+opened card's offer alone is ticked (two or more offers, or one different offer), `시즌 한정`, `요금제 한정` and the
+room scope rows are hidden and saved empty. Guides stay as they are, one `프로모션 추가` step per offer card, which
+keeps those fields usable for each offer. The checker rejects a `붙일 오퍼` row, and the runner leaves the checklist
+untouched, so each step still saves one promotion for the opened offer. People entering by hand can use the
+checklist to add one discount to several offers at once. The screen dictionary (281 fields), screen help and runner
+fixtures are re-synced. The scope card's mode selects now render as plain selects, so they show on the styled screen.
+Screen help also answers for the four names in the price-calendar edit window (`연동 방식` and the three `… 차액`
+fields), and the price guide says that an empty `공급 원가` in the season price window keeps the stored cost.
 
 ## 2026-11-13 price calendar steps and age-band gaps
 

@@ -172,6 +172,59 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   w.close();
 }
 
+// 2-b) 프로모션 드로어 「붙일 오퍼」(CO-32160, 2026-11-18) — 지시서는 오퍼 카드마다 한 단계이고 그 줄을 적지 않는다.
+//      러너가 한 오퍼 단계를 끝까지 돌려도 연 카드의 오퍼 체크는 그대로이고, 저장 요청에는 그 오퍼 한 건만 실린다.
+{
+  const v = (label, field, kind, value) => (value === undefined ? { label, field, kind } : { label, field, kind, value });
+  const fields = [
+    v('프로모션명', 'title', 'typed', '얼리버드'),
+    v('코드', 'code', 'empty'),
+    v('발동 조건', 'trigger_type', 'select', '상시 — 조건 없이 항상'),
+    v('혜택 방식', 'basis', 'select', '정률 — 요금의 %'),
+    v('적용 단위', 'unit', 'select', '박당'),
+    v('적용 숙박일 시작', 'start_date', 'empty'),
+    v('적용 숙박일 종료', 'end_date', 'empty'),
+    v('진행기간 제한', 'promotion_apply_flag', 'uncheck'),
+    v('진행기간 시작', 'promotion_apply_start_date', 'empty'),
+    v('진행기간 종료', 'promotion_apply_end_date', 'empty'),
+    v('시즌 한정', 'season', 'empty'),
+    v('요금제 한정', 'rate_plan', 'empty'),
+    v('다른 프로모션과 중복 적용', 'combinability', 'uncheck'),
+    v('배타 그룹', 'exclusivity_group', 'empty'),
+    v('프로모션 전용 취소 정책', 'cancellation_policy', 'empty'),
+    v('요금제 적용 범위', 'scope_rate_plan_mode', 'select', '기존 범위 그대로'),
+    v('객실 적용 범위', 'scope_room_mode', 'select', '기존 범위 그대로')
+  ];
+  const step = { no: 1, kind: '프로모션 추가', title: '프로모션 추가 (1번째, 얼리버드)', head: { tab: '프로모션', buttons_parsed: [] },
+    fields, longtexts: [], photos: [], submit: '추가' };
+  const w = page({ drawer: frag('promotion--zero-tiers.html'), steps: [step] });
+  w.eval(BOOT);
+  w.stayRun.tab = async () => ({ status: 'ok' });
+  const d = w.document, body = d.getElementById('stay_drawer_body'), drawer = d.querySelector('.stay-drawer');
+  const target = d.querySelector('[data-stay-field="target_offers"]');
+  ok(target && target.checked && target.type === 'checkbox' && target.hasAttribute('data-opened-offer'), '실제 신설 드로어에 「붙일 오퍼」가 서고 연 카드의 오퍼(`data-opened-offer`)가 체크돼 있다');
+  // htmx 흉내: [추가] 의 `hx-include` 가 걷어 갈 이름·값(잠긴 칸 · 꺼진 체크는 안 실린다)을 적고 드로어를 닫는다
+  const posts = [];
+  d.querySelector('[data-stay-action="save"]').addEventListener('click', (e) => {
+    const sel = e.currentTarget.getAttribute('hx-include');
+    posts.push([...d.querySelectorAll(sel)]
+      .filter((el) => el.name && !el.disabled && (!/^(checkbox|radio)$/.test(el.type) || el.checked))
+      .map((el) => [el.name, el.value]));
+    body.innerHTML = ''; drawer.classList.remove('is-open');
+  });
+  const r = await w.runStepCore(1, {});
+  ok(r.submitted === true && r.bad.length === 0 && r.mismatch.length === 0, '한 오퍼 프로모션 단계가 멈추지 않고 저장까지 간다', r);
+  ok(!(r.matchedBy && r.matchedBy.order), '자리로 짐작한 칸이 없다 — 칸이 하나 늘어도 표식으로 찾는다', r.matchedBy);
+  ok(posts.length === 1, '저장 요청은 한 번이다', posts.length);
+  const sent = posts[0] || [];
+  ok(JSON.stringify(sent.filter(([name]) => /^target_offers/.test(name))) ===
+     JSON.stringify([['target_offers_submitted', '1'], ['target_offers', '{offer:1}']]),
+     '저장 요청에 연 카드의 오퍼 한 건만 실린다 — 지금처럼 그 오퍼에 프로모션 한 건', sent.filter(([name]) => /^target_offers/.test(name)));
+  ok(sent.some(([name]) => name === 'season') && sent.some(([name]) => name === 'scope_room_mode'), '체크가 연 카드의 오퍼 하나 그대로라 시즌 한정·객실 적용 범위도 잠기지 않고 실린다');
+  w.stayRun.progressHide && w.stayRun.progressHide();
+  w.close();
+}
+
 // 3) 검증 배너 — [판매 시작] 은 표식(`activate` · `gate`)으로 force 로도 거부한다
 {
   const w = page({ pane: frag('validation.html') });
@@ -405,4 +458,4 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   w.close();
 }
 
-console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner)`);
+console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, promotion target offers, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner)`);
