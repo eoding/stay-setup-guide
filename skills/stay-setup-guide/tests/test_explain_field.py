@@ -23,6 +23,16 @@ class TestExplainField(unittest.TestCase):
                 self.assertEqual(rows[0]['label'], f'시즌 {direction} 예외 (기록용)')
                 self.assertIn('반영하지 않습니다', rows[0]['effect'])
 
+    def test_calendar_link_mode_and_diff_names_explain_the_price_table(self):
+        # CO-32459 — 가격 캘린더 [선택 날짜 가격 수정] 의 셀렉트·차액 칸 이름은 사전에 칸으로 없다(`선택 날짜의 가격` 한 칸)
+        for name in ('연동 방식', '판매가 차액', '정가 차액', '공급 원가 차액'):
+            with self.subTest(name=name):
+                result = self.call(name, '--json')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                rows = json.loads(result.stdout)['matches']
+                self.assertEqual([(r['screen_id'], r['label']) for r in rows], [('calendar-bulk', '선택 날짜의 가격')])
+                self.assertIn(name, rows[0]['help'])
+
     def test_hotel_name_help_reports_customer_location(self):
         result = self.call('호텔명', '--screen', '호텔 만들기', '--json')
         self.assertEqual(result.returncode, 0, result.stderr)
