@@ -265,6 +265,27 @@ class ListChoiceTest(unittest.TestCase):
         self.assertEqual((row.sell, row.list), (D("528.00"), None))
 
 
+class NoEmptySaveTest(unittest.TestCase):
+    """R10 — 아무 값도 바꾸지 않는 저장은 만들지 않는다."""
+
+    def test_a_cell_already_at_its_new_value_is_skipped_and_never_saved(self):
+        snapshot = snap({(DAY, "A2", 1): open_("350.00"), (DAY, "A3", 1): open_("410.00"), (NEXT, "A2", 1): open_("300.00")})
+        plan = plan_change(snapshot, ask("set", "350", dates=(DAY, NEXT), base_occupancy="A2"))
+        self.assertEqual([(i.key.date, i.key.occupancy, i.reason) for i in plan.skipped],
+                         [(DAY, "A2", "same"), (DAY, "A3", "same")])
+        steps = save_steps(resolve(plan, [])[0])
+        self.assertEqual([(s.dates, [r.occupancy for r in s.rows]) for s in steps], [((NEXT,), ["A2"])])
+
+    def test_a_change_that_moves_nothing_produces_no_save_at_all(self):
+        plan = plan_change(snap({(DAY, "A2", 1): open_("100.00"), (NEXT, "A2", 1): open_("100.00")}),
+                           ask("percent", "0", dates=(DAY, NEXT)))
+        self.assertEqual((plan.changes, len(plan.skipped)), ((), 2))
+        self.assertEqual(save_steps(resolve(plan, [])[0]), ())
+
+    def test_a_write_without_any_value_is_ignored_by_save_steps(self):
+        self.assertEqual(save_steps([CellWrite(CellKey("R", "P", DAY, "A2", 1))]), ())
+
+
 class ResolveTest(unittest.TestCase):
     def setUp(self):
         self.plan = plan_change(snap({

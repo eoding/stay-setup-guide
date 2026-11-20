@@ -85,6 +85,12 @@ class RollbackTest(unittest.TestCase):
         self.assertEqual([step.dates for step in save_steps(rollback_writes(plan))],
                          [("2026-12-25", "2026-12-26", "2026-12-27"), ("2026-12-28",)])
 
+    def test_a_kept_cell_already_back_at_its_recorded_value_gets_no_save(self):
+        self.now = now({**self.now.cells, OUTSIDE: value("100.00")})
+        plan = plan_cell_rollback(self.change, self.later, self.now, include_kept=True)
+        self.assertNotIn(REF[OUTSIDE][1], [item.key for item in plan.restored])
+        self.assertNotIn(OUTSIDE, [write.key for write in rollback_writes(plan)])
+
     def test_a_cell_gone_since_is_kept_as_outside_and_a_cell_the_change_created_is_never_removed(self):
         created = CellKey("R", "P", "2026-12-25", "A3", 1)
         change = recorded(item(SAME, value("100.00"), sell="110.00"), item(created, MISSING, sell="200.00"))

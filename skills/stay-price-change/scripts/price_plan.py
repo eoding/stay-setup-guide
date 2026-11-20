@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.items import Difference, Refused, stale_items
@@ -26,7 +27,8 @@ from change_core.rules import BLOCKED, RED, Resolution, decide
 from price_model import (
     CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    cell_state, day_label, occupancy_label, encode_step, key_of_item, occupancy_order, snapshot_reading, split_occupancy,
+    cell_state, day_label, encode_step, key_of_item, occupancy_label, occupancy_order, snapshot_reading, split_occupancy,
+    value_of,
 )
 
 
@@ -108,6 +110,9 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
             continue
         value, lacking = (None, None) if request.operation == "clear" else _after_value(snapshot, request, key, before)
         after = None if lacking else replace(before, **{request.field: value})
+        if after == before:
+            skipped.append(Skipped(key, "same"))
+            continue
         changes.append(CellChange(key, before, after, _marks(snapshot, key, before),
                                   CELL_RULES.verdict(before, after, lacking)))
     return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped))
@@ -182,9 +187,19 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> tuple[tuple[CellWr
             fields["list"] = change.after.sell + (change.before.list - change.before.sell)
         if choice == "clear_list":
             fields["list"] = None
-        writes.append(CellWrite(change.key, **{name: value for name, value in fields.items() if value is not None},
-                                clear=tuple(name for name in FIELDS if name in fields and fields[name] is None)))
+        write = _write(change.key, change.before, fields)
+        if write is not None:
+            writes.append(write)
     return tuple(writes), tuple(by_key[key] for key in waiting)
+
+
+def _write(key: CellKey, current: CellValue, fields: Mapping[str, Decimal | None]) -> CellWrite | None:
+    """지금 값과 다른 필드만 넣는 값. 다른 필드가 없으면 None — 아무것도 바꾸지 않는 저장은 만들지 않는다."""
+    fields = {name: value for name, value in fields.items() if getattr(current, name) != value}
+    if not fields:
+        return None
+    return CellWrite(key, **{name: value for name, value in fields.items() if value is not None},
+                     clear=tuple(name for name in FIELDS if name in fields and fields[name] is None))
 
 
 def _next_day(day: str) -> str:
@@ -200,6 +215,8 @@ def save_steps(writes: Iterable[CellWrite]) -> tuple[BulkStep | CellEditStep, ..
     grid: dict[tuple[str, str], dict[str, set[RowWrite]]] = {}
     edits: dict[tuple[str, str], list[CellEditStep]] = {}
     for write in writes:
+        if not write.fields():
+            continue
         pair = (write.key.room, write.key.rate_plan)
         if write.clear:
             edits.setdefault(pair, []).append(CellEditStep(write.key, write.clear))
@@ -314,13 +331,9 @@ def plan_cell_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str],
 
 
 def rollback_writes(plan: RollbackPlan) -> tuple[CellWrite, ...]:
-    """돌릴 칸마다 그 변경이 썼던 필드에 적어 둔 값을 넣는다(적어 둔 값이 없던 필드는 비운다)."""
-    writes = []
-    for item in plan.restored:
-        targets = dict(item.targets)
-        writes.append(CellWrite(key_of_item(item.key), **{name: value for name, value in targets.items() if value is not None},
-                                clear=tuple(name for name in FIELDS if name in targets and targets[name] is None)))
-    return tuple(writes)
+    """돌릴 칸마다 적어 둔 값을 넣는다(적어 둔 값이 없던 필드는 비운다). 이미 그 값인 필드는 넣지 않는다."""
+    writes = (_write(key_of_item(item.key), value_of(item.now), item.targets) for item in plan.restored)
+    return tuple(write for write in writes if write is not None)
 
 
 def rollback_rows(plan: RollbackPlan) -> list[ValueRow]:

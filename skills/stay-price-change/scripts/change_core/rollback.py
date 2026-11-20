@@ -119,14 +119,17 @@ def plan_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequ
         if item.state == MISSING_STATE:
             kept.append(KeptItem(item.kind, item.key, item.label, recorded_values, item.written, current, Cause(created=True)))
             continue
-        restore = RestoredItem(item.kind, item.key, item.label, current, recorded_values)
+        targets = {name: value for name, value in recorded_values.items()
+                   if current.state == MISSING_STATE or current.fields.get(name) != value}
+        restore = RestoredItem(item.kind, item.key, item.label, current, targets) if targets else None
         if holds(current, item.written):
-            restored.append(restore)
+            if restore:
+                restored.append(restore)
             continue
         cause = next((Cause(write.change_id, write.at, write.sentence)
                       for write in reversed(later.get((item.kind, item.key), ())) if holds(current, write.written)), Cause())
         kept.append(KeptItem(item.kind, item.key, item.label, recorded_values, item.written, current, cause))
-        if include_kept:
+        if include_kept and restore:
             restored.append(restore)
     return RollbackPlan(recorded.id, recorded.hotel, recorded.offer, recorded.currency, recorded.read_at,
                         recorded.sentence, recorded.applied_at, read_at, tuple(restored), tuple(kept), include_kept)
