@@ -1,6 +1,6 @@
 # price_change.py — 명령과 파일
 
-차례: 공통 · 하위 명령 · 요청 파일 · 빨간 줄 고름 파일 · 오류와 할 일
+차례: 공통 · 하위 명령 · 요청 파일 · 요금표 · 넣지 않는 것 · 빨간 줄 고름 파일 · 오류와 할 일
 
 ## 공통
 
@@ -20,11 +20,12 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | 명령 | 플래그 | 하는 일 · 답 |
 |---|---|---|
 | `look` | `--answers` (여러 번) | `stayPrice.look()` 의 답과 그 조각 → `{login, hotel, offer, offers, pairs}`. 목록이 길어 `body` 로 왔을 때만 쓴다. |
-| `read-calls` | `--request` 또는 `--record` | 읽을 범위 → `{pairs: [readPair 부를 값], reserved: [readReserved 첫 물음]}`. `--request` 는 범위 파일(`kind: range`)·바꾸기 요청·목표 값 표, `--record` 는 장부 번호(그 번호의 계산이 바탕으로 삼은 범위). 부를 값마다 `hotel` 이 든다. 기간은 고른 날만 덮게 끊는다(readPair 186일씩). |
+| `read-calls` | `--request` 또는 `--record` | 읽을 범위 → `{pairs: [readPair 부를 값], reserved: [readReserved 첫 물음]}`. `--request` 는 범위 파일(`kind: range`)·바꾸기 요청·목표 값 표·`sheet` 가 낸 파일(읽기 한 번에 들지 않으면 거절), `--record` 는 장부 번호(그 번호의 계산이 바탕으로 삼은 범위). 부를 값마다 `hotel` 이 든다. 기간은 고른 날만 덮게 끊는다(readPair 186일씩). |
 | `reserved` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) | `read-calls` 가 낸 파일과 readReserved 답들 → `{done, ask, answered, failed}`. 숨긴 줄이 있던 물음은 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 `ask` 에 다시 낸다. 답 폴더를 통째로 주면 된다. 예약 조각이 어디에도 없으면 종료 2 와 `refetch`. |
 | `read` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) · `--read-at` | 브라우저 답 → 지금 값 `{hotel, offer, currency, read_at, cells, reserved, pairs, room_names, no_sale, dates}`. 호텔은 페이지가 알아본 것이다. readPair 답이 없는 부를 값이나 남은 예약 물음이 있으면 거절하고, 어디에도 없는 조각이 있으면 종료 2 와 `refetch`. `--hotel`·`--hotel-id`·`--price-page`·`--adjust-page` 는 화면 조각 파일로 읽는 시험용이다. |
-| `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` | 미리보기 계산 → `{change_id, counts, plan, unresolved, steps}`. `--record` 면 장부에 미리보기와 그 읽은 값을 적고 `change_id` 를 준다. 빨간 줄을 다 고르지 않았으면 `steps` 가 null. |
-| `render` | `preview`·`result`·`rollback`·`prices` 중 하나 + `--plan` (preview·rollback) · `--change` (result) · `--snapshot` (prices) · `--by-date` | 페이지 HTML. `--out` 이 없으면 기록 폴더에 `<날짜 시각> · <호텔> · <페이지 이름>.html` 로 쓴다. 답 `{page}` 는 그 경로. 날짜 열은 7일까지 날짜마다 하나, 그보다 길면 모든 줄의 칸이 같은 날끼리(떨어져 있어도) 하나다 — 열 머리에 날 수와 그 날짜 구간을 모두 적고, 예약 있는 날을 따로 적는다. `--by-date` 면 길이와 상관없이 날짜마다 하나. |
+| `sheet` | `--sheet` · `--look` · `--room` (여러 번) · `--from` · `--to` | 요금표 파일(「요금표」)을 읽기 전에 확인한다 → `sheet-check.json`: `{kind: "sheet_check", sheet, hotel_pairs, part, lines, cells, currency, gaps, range, reads}`. `--look` 은 `look()` 의 답(`hotel`·`offer`·`pairs`, 길면 `look` 명령이 묶은 파일). 요금표 전체의 셈과 펼침을 해 보고 없는 줄을 가리킴 · 고리 · 두 줄이 한 칸에 다른 값 · 틀린 기간이면 거절한다. `gaps` 는 읽기 전에 아는 넣지 않는 것(`unknown`·`unnamed`), `range` 는 읽을 범위(객실 · 요금제와 첫 날 · 끝 날 · 날 수), `reads` 는 읽기 한 번의 페이지 작업 `{readPair, readReserved, limit, fits}`. `--room`·`--from`·`--to` 는 요금표의 한 부분만(객실 하나 · 시즌 하나) 할 때. 이 파일을 `read-calls`·`plan` 의 `--request`, `render sheet` 의 `--plan` 으로 준다. |
+| `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` | 미리보기 계산 → `{change_id, counts, plan, unresolved, steps}`. `--record` 면 장부에 미리보기와 그 읽은 값을 적고 `change_id` 를 준다. 빨간 줄을 다 고르지 않았으면 `steps` 가 null. `--request` 가 `sheet` 가 낸 파일이면 요금표를 칸마다 펼쳐 목표 값 표로 계산하고(`plan.request.from_sheet: true`), 넣지 않는 것을 `plan.coverage`(「넣지 않는 것」)에, 종류마다의 수를 `coverage` 에 싣는다. |
+| `render` | `preview`·`result`·`rollback`·`prices`·`sheet` 중 하나 + `--plan` (preview·rollback·sheet) · `--change` (result) · `--snapshot` (prices) · `--by-date` | 페이지 HTML. `sheet` 는 「요금표를 이렇게 읽었습니다」(`sheet` 가 낸 파일로, ERP 를 읽기 전에), 요금표에서 온 `preview`·`result` 는 시즌 [가격] 덮기 한 문장을 단다. `--out` 이 없으면 기록 폴더에 `<날짜 시각> · <호텔> · <페이지 이름>.html` 로 쓴다. 답 `{page}` 는 그 경로. 날짜 열은 7일까지 날짜마다 하나, 그보다 길면 모든 줄의 칸이 같은 날끼리(떨어져 있어도) 하나다 — 열 머리에 날 수와 그 날짜 구간을 모두 적고, 예약 있는 날을 따로 적는다. `--by-date` 면 길이와 상관없이 날짜마다 하나. |
 | `begin` | `--change` · `--plan` (`steps` 가 든 plan.json 또는 rollback.json) · `--snapshot` (적용 직전에 같은 범위로 읽은 값) | 적용 시작. 먼저 `--snapshot` 을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견준다 — 한 칸이라도 다르면 아무것도 시작하지 않고 `stale` 과 같은 `{change_id, status, same: false, differences}` (종료 1). 읽은 지 15분이 넘은 값이면 거절한다. 같으면 저장 단계를 장부에 적는다 → `{change_id, status, steps}`. 이미 시작한 번호에 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. |
 | `calls` | `--change` | 아직 저장되지 않은 단계 → `{change_id, status, calls: [{no, op, payload}]}`. `op` 는 `applyBulk` 또는 `applyCell`, `payload` 는 그 작업에 그대로 넘긴다(장부의 호텔이 든다). 멈춘 변경(아래 `list` 의 `stopped`)은 다시 읽어 `check` 가 이어서 해도 된다고 한 뒤에만 낸다. |
 | `record-result` | `--change` · `--result` (답 파일 하나) | 브라우저 답 하나 → 그 단계를 됨·멈춤으로 적는다 → `{change_id, step, started, saved, note, status}`. 답이 `started: false` 면 적지 않고 `{started: false, wait}` 만 돌려준다(그 초만큼 기다려 같은 값으로 다시 부른다). `saved: "unknown"` 은 「모름」 표시를 달아 멈춤으로 적는다. 이미 멈춘 변경에 적힌 저장은 적기만 하고 `status` 는 `stopped` 그대로다. 다른 단계·다른 값을 물은 답이면 거절한다. |
@@ -96,6 +97,55 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 
 - `occupancy`·`nights` 는 위 바꾸기 요청과 같은 키다. 담당자의 표에 없으면 빼고 적는다(둘 다, 또는 하나). 읽은 값에서 그 객실 · 요금제의 줄 가운데 적은 것과 맞는 줄이 하나뿐이면 그 줄이고, 여럿이거나 없으면 `plan` 이 고를 줄을 대며 거절한다. `"occupancy": ""` 는 인원 무관 줄이다(빼는 것과 다르다). `plan` 답의 `plan.request` 와 장부에는 채운 줄이 적힌다.
 - 가격 없던 칸의 목표는 새로 생기는 칸이다. 판매가가 있어야 하고, 그 객실 · 요금제에 읽힌 적 있는 인원 조합 · 박수여야 한다.
+- `from_sheet` 는 명령이 요금표를 펼친 표에만 `true` 로 적는다(도우미가 쓰는 표에는 적지 않는다).
+
+## 요금표
+
+### 요금표 (`kind: sheet`)
+
+새 요금표를 날짜별 가격으로 맞출 때 도우미가 요금표에서 **숫자만** 옮겨 적는다. 종이와 한 줄씩 견줄 수 있게 줄 하나가 요금표의 줄 하나다: 객실 · 요금제 · 기간(여럿, 요일은 골라서) 하나와 그 안의 인원 조합 · 박수마다 값.
+
+```json
+{"kind": "sheet", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼", "currency": "USD",
+ "sentence": "새 요금표대로 디럭스 날짜별 가격 맞춰줘",
+ "lines": [
+   {"room": "디럭스", "rate_plan": "조식 포함", "season": "성수기",
+    "periods": [{"from": "2027-07-01", "to": "2027-08-31", "weekdays": ["금", "토"]}],
+    "rows": [
+      {"occupancy": "A2", "nights": 1, "sell": "240", "list": "300"},
+      {"occupancy": "A3", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "60"}},
+      {"occupancy": "A2C1_CHD", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "30"}},
+      {"occupancy": "A2", "nights": 3, "sell": {"from": {"nights": 1}, "percent": "-10"}}]}]}
+```
+
+- `currency`: 요금표에 적힌 통화. 읽은 값의 통화와 다르면 `plan` 이 거절한다(바꿔 셈하지 않는다). 셈한 값의 반올림이 이 통화를 따른다.
+- `lines[].room`·`rate_plan`: `look()` 의 `pairs` 이름. 호텔에 맞는 것이 없으면 요금표의 이름 그대로 — 「호텔에 없는 객실 · 요금제」로 나오고 넣지 않는다. `season` 은 요금표의 시즌 이름(보이기만 한다, 없어도 된다).
+- `periods`: `from`·`to` 는 ISO 날짜(둘 다 포함), `weekdays` 는 「월 화 수 목 금 토 일」 가운데 고른 글자(없으면 모든 요일). 시즌이 구간 여럿이면 기간을 여럿 적는다.
+- `rows[]`: 인원 조합 키(`occupancy`, 「바꾸기 요청」의 `occupancies` 와 같은 키, 인원 무관은 `""`)와 박수 층의 시작 박수(`nights`, 1박 `1`)는 둘 다 적는다. 값은 `sell`(반드시) · `list` · `supply`.
+- 값은 글자 숫자(`"240"`)이거나 같은 줄의 다른 인원 · 박수 값(같은 필드)에서 셈한 값이다: `{"from": {"occupancy", "nights"}, "add": "60"}`(금액을 더함, 빼면 `"-20"`) 또는 `"percent": "-10"`. `from` 에 적지 않은 것은 그 줄의 것과 같다 — 성인 추가는 `{"occupancy": "A2"}`, 3박 이상 할인은 `{"nights": 1}`. 가리킨 값이 그 줄에 없거나 서로를 가리키면(고리) `sheet` 가 그 줄과 값을 대며 거절한다.
+- 두 줄이 같은 칸(객실 · 요금제 · 날짜 · 인원 · 박수)에 다른 값을 주면 `sheet` 가 두 줄을 대며 거절한다. 같은 값이면 된다.
+- 셈은 명령이 하고 「요금표를 이렇게 읽었습니다」가 값 아래에 셈을 보인다(「계산」).
+
+### `sheet` 가 낸 파일 (`kind: sheet_check`)
+
+`read-calls`·`plan` 의 `--request`, `render sheet` 의 `--plan` 으로 준다. 고치지 않는다 — 요금표를 고쳤으면 `sheet` 를 다시 한다. 명령은 그 안의 `sheet`·`hotel_pairs`·`part` 만 읽고 나머지는 다시 셈한다.
+
+- 읽을 범위는 넣을 줄(고른 부분 가운데 호텔에 있는 객실 · 요금제)의 객실 · 요금제 × 첫 날부터 끝 날까지 모든 날이다. 요금표가 비운 날도 읽어야 그대로 둘 칸을 빠짐없이 댄다.
+- 읽기 한 번은 가격 읽기(`readPair`, 객실 · 요금제마다 186일에 한 번)와 예약 있는 날 읽기(`readReserved`, 550일에 한 번 — 숨은 줄이 있으면 쪼개져 늘어난다)를 합쳐 40번까지다. 페이지가 읽은 화면 조각을 40개까지만 두고(`stay_price.js` 의 `KEEP_BODIES`), 조각은 다 읽은 뒤에 받으므로 넘으면 앞 조각이 밀려난다. `reads.fits` 가 false 면 `read-calls` 가 거절한다 — `--room` 이나 `--from`·`--to` 로 나눈다.
+
+## 넣지 않는 것
+
+요금표에서 온 `plan` 의 `plan.coverage` 는 아래 다섯 종류의 목록이고, `coverage` 는 종류마다의 수다. 미리보기 페이지의 「요금표가 넣지 않는 것」이 같은 것을 보인다. 항목은 `{kind, room, rate_plan, occupancy, nights, dates, lines}` 이고 종류마다 쓰는 칸만 찬다.
+
+| `kind` | 뜻 | 수 | 찬 칸 |
+|---|---|---|---|
+| `untouched` | 호텔에 가격이 있는데 요금표가 말하지 않은 칸(읽은 범위 안). 그대로 둔다 | 칸 | 객실 · 요금제 · 인원 · 박수 · 날짜들 |
+| `unseen` | 요금표 값인데 읽은 값에 그 객실 · 요금제의 줄로 나온 적 없는 인원 조합 · 박수. 새 종류의 칸이라 만들지 않는다 | 칸 | 객실 · 요금제 · 인원 · 박수 · 날짜들 · 줄 번호들 |
+| `no_sale` | 요금표 날짜 가운데 판매일이 없는 날. 이 길로는 넣을 수 없다 | 일 | 객실 · 요금제 · 날짜들 |
+| `unknown` | 요금표에 있는데 호텔(이 오퍼)에 없는 객실 · 요금제. 넣지 않는다 | 개 | 객실 · 요금제 · 줄 번호들 |
+| `unnamed` | 호텔에 있는데 요금표가 말하지 않은 객실 · 요금제. 그대로 둔다 | 개 | 객실 · 요금제 |
+
+`sheet` 의 `gaps` 는 읽기 전에 아는 `unknown`·`unnamed` 다.
 
 ## 빨간 줄 고름 파일
 
@@ -143,3 +193,12 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | `…번은 저장해 둔 상태입니다` / `…번은 저장해 둔 상태가 아닙니다` | `rollback` 과 `restore` 를 바꿔 쓴다 |
 | `고른 범위에 되돌릴 것이 없습니다` · `고른 범위에 저장해 둔 값이 없습니다` | 고르기 플래그가 맞는 칸이 없다. 객실·요금제·날짜·인원 조합 키를 다시 본다 |
 | `이 장부는 더 새 판 도우미가 만든 것입니다` | 담당자에게 도우미를 새로 받아 달라고 한다 |
+| `… 의 … 가 가리키는 … 가 그 줄에 없습니다` · `… 가 서로를 가리킵니다(고리)` | 요금표 파일의 그 줄을 요금표와 다시 견준다. 옮겨 적다 빠뜨렸으면 채우고, 요금표가 그렇게 적혀 있으면 담당자에게 묻는다 |
+| `… 과 … 이 … 칸에 다른 값을 줍니다` | 요금표의 두 줄이 같은 날 · 같은 인원에 다른 값을 준다(시즌이 겹친다). 두 줄을 담당자에게 보여 주고 어느 값인지 묻는다 |
+| `기간의 시작일 … 보다 뒤입니다` · `날짜는 ISO 형식` · `고른 요일 … 이 하루도 없습니다` · `요일은 「월 화 수 목 금 토 일」` · `금액을 읽지 못했습니다` · `판매가(sell)가 없습니다` · `같은 인원 · 박수가 두 번 있습니다` · `요금표의 통화(currency)` | 요금표 파일 모양을 고친다. 요금표에서 읽지 못한 숫자면 짐작하지 않고 담당자에게 묻는다 |
+| `요금표 파일(kind sheet)은 sheet 명령으로 확인하고` · `sheet 명령이 낸 파일` | `--request` 에는 `sheet` 가 낸 `sheet-check.json` 을 준다 |
+| `요금표 파일은 … 인데 look 의 답은 …` · `--look 은 hotel · offer · pairs 가 든 look 의 답입니다` | 요금표의 호텔 · 오퍼와 탭이 다르다, 또는 look 의 답이 아니다. 「준비」 3 으로 그 오퍼를 다시 본다 |
+| `이 요금표(부분)는 읽기 한 번에 들지 않습니다` | 객실(`--room`)이나 시즌의 날짜 창(`--from`·`--to`)으로 나눠 `sheet` 를 다시 하고 한 부분씩 한다 |
+| `고른 객실이 요금표에 없습니다` · `고른 부분에 요금표 줄이 하나도 없습니다` · `넣을 요금표 줄이 없습니다` | 나눈 부분을 다시 고른다 |
+| `요금표의 통화는 … 인데 ERP 의 이 오퍼는 …` | 멈추고 담당자에게 묻는다. 바꿔 셈하지 않는다 |
+| `요금표에서 넣을 수 있는 칸이 없습니다` | 요금표의 인원 조합 키가 호텔의 줄과 다르거나 날이 모두 판매일 없음이다. 읽은 값의 줄을 담당자에게 보여 주고 키를 맞춰 `sheet`·`plan` 을 다시 한다 |

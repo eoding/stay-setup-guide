@@ -6,8 +6,11 @@
     reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
                   시험용으로 ERP 화면 조각(HTML) 파일도 받는다
-    plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다
-    render        preview | result | rollback | prices 페이지(HTML) 만들기
+    sheet         요금표 파일(kind sheet) + look 의 답 → 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위와
+                  페이지 작업 수(sheet-check.json). read-calls · plan · render sheet 가 이 파일을 받는다
+    plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다.
+                  요청이 sheet-check.json 이면 요금표를 칸마다 펼쳐 계산하고 넣지 않는 것(coverage)을 단다
+    render        preview | result | rollback | prices | sheet 페이지(HTML) 만들기
     begin         적용 시작 — 적용 직전에 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어, 한 칸이라도 다르면
                   아무것도 시작하지 않고 다른 칸을 댄다(종료 1). 같으면 저장 단계를 장부에 적는다
     calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell). 멈춘 변경(저장이 실패했거나
@@ -55,17 +58,19 @@ from price_browser import (
     step_outcome, unanswered,
 )
 from price_model import (
-    ReadRange, TargetTable, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change,
-    encode_hotel, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, request_range, same_hotel,
-    snapshot_reading,
+    ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
+    encode_change, encode_hotel, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, iso_day, request_range,
+    same_hotel, snapshot_reading,
 )
-from price_pages import render_prices, render_preview, render_result, render_rollback
+from price_pages import render_prices, render_preview, render_result, render_rollback, render_sheet
+from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
     PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
     snapshot_rows, stale_cells, step_plans,
 )
 
-PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격"}
+PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
+              "sheet": "요금표 읽은 것"}
 
 
 def load(path: str):
@@ -177,8 +182,13 @@ def recorded_reading(ledger: Ledger, change_id: int):
     return decode_snapshot(ledger.reading(change_id))
 
 
+def request_scope(data: dict) -> ReadRange:
+    """요청 파일의 읽을 범위 — sheet 가 낸 파일이면 요금표의 범위(읽기 한 번에 들지 않으면 거절), 아니면 request_range."""
+    return decode_check(data).fitting_range() if data.get("kind") == "sheet_check" else request_range(data)
+
+
 def cmd_read_calls(args):
-    scope: ReadRange = recorded_reading(Ledger(), args.record).range if args.record else request_range(load(args.request))
+    scope: ReadRange = recorded_reading(Ledger(), args.record).range if args.record else request_scope(load(args.request))
     hotel = encode_hotel(scope.hotel, scope.hotel_id)
     return dict(pairs=read_calls(hotel, scope.offer, scope.pairs, scope.dates),
                 reserved=reserved_probes(hotel, scope.offer, scope.pairs, scope.dates))
@@ -190,9 +200,29 @@ def cmd_reserved(args):
     return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 
 
+def cmd_sheet(args):
+    """요금표를 읽기 전에 확인한다 — `--look` 은 look 명령의 답(짧으면 stayPrice.look() 의 답 파일 그대로도 된다)."""
+    look = load(args.look)
+    if not isinstance(look, dict) or not isinstance(look.get("hotel"), dict) or not isinstance(look.get("pairs"), list):
+        raise ValueError("--look 은 hotel · offer · pairs 가 든 look 의 답입니다 — 목록이 길어 body 로 왔으면 look --answers 로 먼저 묶습니다")
+    sheet = decode_sheet(load(args.sheet))
+    name, hotel_id = decode_hotel(look["hotel"])
+    if not same_hotel(sheet.hotel, sheet.hotel_id, name, hotel_id) or look.get("offer") != sheet.offer:
+        raise PlanError(f"요금표 파일은 {hotel_label(sheet.hotel, sheet.hotel_id)} · {sheet.offer} 인데 look 의 답은 "
+                        f"{hotel_label(name, hotel_id)} · {look.get('offer')} 입니다 — stayPrice.look({{offer}}) 로 그 오퍼를 봅니다")
+    part = Part(tuple(args.room or ()), iso_day(args.date_from) if args.date_from else None,
+                iso_day(args.date_to) if args.date_to else None)
+    return encode_check(SheetCheck(sheet, tuple((str(item["room"]), str(item["rate_plan"])) for item in look["pairs"]), part))
+
+
 def cmd_plan(args):
-    snapshot, request = decode_snapshot(load(args.snapshot)), decode_request(load(args.request))
-    plan = plan_targets(snapshot, request) if isinstance(request, TargetTable) else plan_change(snapshot, request)
+    snapshot, data = decode_snapshot(load(args.snapshot)), load(args.request)
+    if data.get("kind") == "sheet_check":
+        plan = plan_sheet(snapshot, decode_check(data))
+    else:
+        request = decode_request(data)
+        plan = plan_targets(snapshot, request) if isinstance(request, TargetTable) else plan_change(snapshot, request)
+    request = plan.request
     resolutions = [Resolution(str(item["rule"]), str(item["choice"]), decode_resolution_items(item.get("cells")))
                    for item in load(args.resolutions)] if args.resolutions else []
     writes, unresolved = resolve(plan, resolutions)
@@ -202,9 +232,12 @@ def cmd_plan(args):
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                         request=encode_request(plan.request),
                                         reading=encode_snapshot(snapshot)) if args.record else None
-    return dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
-                unresolved=[encode_change(change) for change in unresolved],
-                steps=None if steps is None else [encode_step(step) for step in steps])
+    result = dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
+                  unresolved=[encode_change(change) for change in unresolved],
+                  steps=None if steps is None else [encode_step(step) for step in steps])
+    if isinstance(request, TargetTable) and request.from_sheet:
+        result["coverage"] = coverage_counts(plan.coverage)
+    return result
 
 
 def cmd_render(args):
@@ -222,6 +255,9 @@ def cmd_render(args):
     elif args.kind == "prices":
         snapshot = decode_snapshot(load(args.snapshot))
         html, hotel = render_prices(snapshot, args.by_date), snapshot.hotel
+    elif args.kind == "sheet":
+        check = decode_check(load(args.plan))
+        html, hotel = render_sheet(check), check.sheet.hotel
     else:
         ledger = Ledger()
         record = ledger.change(args.change)
@@ -374,7 +410,7 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("read-calls", cmd_read_calls, "읽을 범위 → readPair · readReserved 부를 값")
     scope = sub.add_mutually_exclusive_group(required=True)
-    scope.add_argument("--request", help="요청 파일 — 읽을 범위(kind range) · 바꾸기 요청 · 목표 값 표")
+    scope.add_argument("--request", help="요청 파일 — 읽을 범위(kind range) · 바꾸기 요청 · 목표 값 표 · sheet 가 낸 파일")
     scope.add_argument("--record", type=int, help="장부 번호 — 그 번호의 계산이 바탕으로 삼은 범위를 다시 읽는다")
 
     sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
@@ -392,15 +428,23 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--price-page", action="append", help="시험용: '캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")
     sub.add_argument("--adjust-page", action="append", help="시험용: [선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
 
+    sub = command("sheet", cmd_sheet, "요금표 확인 — 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위")
+    sub.add_argument("--sheet", required=True, help="요금표 파일(kind sheet) — 도우미가 요금표에서 숫자만 옮겨 적은 것")
+    sub.add_argument("--look", required=True, help="look 의 답(hotel · offer · pairs) — 호텔의 객실 · 요금제")
+    sub.add_argument("--room", action="append", help="이 객실의 줄만 (여러 번) — 요금표를 객실마다 나눠 할 때")
+    sub.add_argument("--from", dest="date_from", help="이 날짜부터(ISO) — 요금표를 시즌(날짜 창)마다 나눠 할 때")
+    sub.add_argument("--to", dest="date_to", help="이 날짜까지(ISO)")
+
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)
-    sub.add_argument("--request", required=True, help="요청 JSON — 바꾸는 방법(kind change) 또는 목표 값 표(kind targets)")
+    sub.add_argument("--request", required=True,
+                     help="요청 JSON — 바꾸는 방법(kind change) · 목표 값 표(kind targets) · sheet 가 낸 파일(kind sheet_check)")
     sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "ABOVE_LIST", "choice": "raise_list"}]')
     sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
 
     sub = command("render", cmd_render, "페이지 만들기")
     sub.add_argument("kind", choices=sorted(PAGE_NAMES))
-    sub.add_argument("--plan", help="preview 는 plan.json, rollback 은 rollback.json")
+    sub.add_argument("--plan", help="preview 는 plan.json, rollback 은 rollback.json, sheet 는 sheet 가 낸 파일")
     sub.add_argument("--snapshot", help="prices 의 지금 값")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
     sub.add_argument("--by-date", action="store_true",
@@ -464,7 +508,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     if args.command == "render":
-        needed = {"preview": "plan", "rollback": "plan", "prices": "snapshot", "result": "change"}[args.kind]
+        needed = {"preview": "plan", "rollback": "plan", "prices": "snapshot", "result": "change", "sheet": "plan"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
     try:
