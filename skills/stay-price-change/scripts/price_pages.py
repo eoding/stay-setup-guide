@@ -866,7 +866,7 @@ def render_sheet(check: SheetCheck) -> str:
         facts.append(("이번에 하는 부분", " / ".join(part for part in (" · ".join(check.part.rooms), window) if part)))
     sentence = f'<p class="sub">요청: “{esc(sheet.sentence)}”</p>' if sheet.sentence else ""
     body = [f"<h1>{esc(title)}</h1>",
-            '<p class="sub"><b>아직 ERP 에서 아무것도 읽지 않았고, 아무것도 바뀌지 않았습니다.</b> 종이 요금표와 한 줄씩 견주어 봐 주세요.</p>',
+            '<p class="sub"><b>아직 이 요금표의 범위로 ERP 의 가격을 읽지 않았고, 아무것도 바뀌지 않았습니다.</b> 종이 요금표와 한 줄씩 견주어 봐 주세요.</p>',
             f'<div class="frame">{sentence}<dl class="kv">'
             + "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in facts) + "</dl></div>"]
     for gap in check.gaps:

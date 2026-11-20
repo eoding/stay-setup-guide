@@ -48,7 +48,7 @@ class SheetPageTest(SelfContainedMixin, unittest.TestCase):
 
     def test_it_says_nothing_was_read_and_what_will_be_read_after_yes(self):
         self.assertIn("요금표를 이렇게 읽었습니다 · 데모 호텔 · 기본 오퍼", self.text)
-        self.assertIn("아직 ERP 에서 아무것도 읽지 않았고, 아무것도 바뀌지 않았습니다.", self.text)
+        self.assertIn("아직 이 요금표의 범위로 ERP 의 가격을 읽지 않았고, 아무것도 바뀌지 않았습니다.", self.text)
         self.assertIn("호텔(이 오퍼)에 없는 객실 · 요금제 펜트하우스 · 조식 포함 (9번째 줄) — 이 줄은 넣지 않습니다", self.text)
         self.assertIn("요금표에 없는 객실 · 요금제 패밀리 · 조식 포함 — 가격을 그대로 둡니다", self.text)
         self.assertIn("객실 · 요금제 2개 × 14일(2027-01-04 ~ 2027-01-17", self.text)
