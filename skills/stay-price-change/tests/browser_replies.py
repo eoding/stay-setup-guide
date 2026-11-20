@@ -8,7 +8,7 @@ import json
 import zlib
 from datetime import datetime, timezone
 
-from change_core.answers import ask_sum, fnv1a
+from change_core.answers import ask_sum, fnv1a, page_sum
 
 
 def done_at(moment: datetime | None = None) -> str:
@@ -35,7 +35,7 @@ def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, body_
 
 
 def take(meta: dict, text: str, at: int, size: int) -> dict:
-    """`stayPrice.take(id, at, ...)` 의 답 — 글자 자리 at 부터 size 글자."""
+    """`stayPrice.take(id, at, ...)` 의 답 — 글자 자리 at 부터 size 글자. 칸의 차례와 쪽의 검사값(sum)은 페이지와 같다."""
     part = text[at:at + size]
     return {"op": "take", "ok": True, "id": meta["id"], "at": at, "size": 800, "next": at + len(part), "end": meta["chars"],
-            "bytes": meta["bytes"], "crc32": meta["crc32"], "text": part}
+            "sum": page_sum(meta["id"], at, meta["chars"], part), "text": part}

@@ -2,8 +2,9 @@
 
 브라우저 도구는 답을 1,000자쯤에서 자른다(`[TRUNCATED]`). 그래서 페이지는 작업의 답(JSON 으로 800자 안)에 `ask`(물은 값의
 지문)와 `body`(id 와 그 글자를 알아볼 값 — 글자 수 · 바이트 수 · CRC-32 · FNV-1a)만 싣고, 조각은 `take(id, at, size)` 로 한 쪽씩
-내준다. 이 모듈은 쪽을 자리로 이어 바이트 수 · CRC-32 · FNV-1a 가 모두 맞을 때만 쓴다 — 잘리거나 잘못 옮겨 적은 쪽이 틀린 값이
-되지 않는다. 잘린 답(글자 그대로 넣는다)은 알아보고, 어느 쪽을 어떤 크기로 다시 받을지 말한다(CutAnswer.refetch).
+내준다. 쪽마다 제 검사값(`sum`)이 있어 이 모듈은 쪽을 하나씩 맞춰 보고, 맞는 쪽만 자리로 이어 바이트 수 · CRC-32 · FNV-1a 가
+모두 맞을 때만 쓴다 — 잘리거나 잘못 옮겨 적은 쪽이 틀린 값이 되지 않고, 그 쪽 하나만 다시 받으면 된다. 잘린 답(글자 그대로
+넣는다)과 틀린 쪽은 파일로 짚고, 어느 쪽을 어떤 크기로 어디까지 받아 어느 새 이름에 둘지 말한다(CutAnswer.refetch).
 
 한 변경은 세 번 읽는다(미리보기 · 적용 직전 · 적용 뒤). 적용 직전의 조각은 거의 늘 미리보기 때와 같은 글자다. 그래서 알아볼 값
 넷이 앞선 읽기에서 다 받은 조각과 같으면 그 글자를 쓰고, 어디에도 없는 조각만 다시 받으라고 한다. 앞선 읽기의 답은 조각을 빌려
@@ -89,14 +90,38 @@ def _latest(whole: list[dict]) -> list[dict]:
             if not _asked(result) or chosen[(result.get("op"), result.get("ask"))] == index]
 
 
+class Answer(dict):
+    """답 하나(JSON 객체). `file` 은 그 답이 든 파일의 이름이다(모르면 빈 글자) — 다시 받을 쪽을 말할 때 파일로 짚는다."""
+    file = ""
+
+
+class Shown(str):
+    """도구가 보인 그대로의 답 글자(JSON 이 아니거나 잘렸을 수 있다). `file` 은 Answer 와 같다."""
+    file = ""
+
+
+def named(item, file: str):
+    """답 하나에 파일 이름을 단다 — 객체는 Answer, 글자는 Shown 으로. 그 밖의 값은 그대로다."""
+    if isinstance(item, Mapping):
+        out = Answer(item)
+    elif isinstance(item, str):
+        out = Shown(item)
+    else:
+        return item
+    out.file = file
+    return out
+
+
 def answers(results: Iterable, latest: bool = False) -> tuple[list[dict], list[dict]]:
     """답 목록 → (온전한 답, 잘린 쪽의 단서). 글자로 들어온 답은 도구가 보인 그대로다 — `[TRUNCATED]` 가 붙었거나
     JSON 이 닫히지 않았으면 잘린 것이다. 답이 아닌 것은 뺀다: 시작하지 않은 답(`started: false` — 아무것도 하지 않았다),
     작업이 도는 중에 받은 stayPrice.last()(`{running}`), 그리고 잘린 읽는 작업의 답(어느 물음의 답인지 모른다 — 그 물음은 답이
-    없는 것으로 남아 last() 로 받거나 다시 부르라는 말이 나온다). 잘린 take 답은 다시 받을 쪽의 단서가 된다. `latest` 면 같은
-    물음의 답이 여럿일 때 가장 늦게 끝난 것만 남긴다(_latest — 이번 읽기의 답. 앞선 읽기의 답은 조각만 빌려 주므로 모두 둔다)."""
+    없는 것으로 남아 last() 로 받거나 다시 부르라는 말이 나온다). 잘린 take 답은 다시 받을 쪽의 단서가 된다(`file` · 도구가
+    잘랐는지 `truncated`). `latest` 면 같은 물음의 답이 여럿일 때 가장 늦게 끝난 것만 남긴다(_latest — 이번 읽기의 답. 앞선
+    읽기의 답은 조각만 빌려 주므로 모두 둔다)."""
     whole, cut = [], []
     for item in results:
+        file = getattr(item, "file", "")
         if isinstance(item, Mapping):
             data, text = dict(item), None
         else:
@@ -107,11 +132,11 @@ def answers(results: Iterable, latest: bool = False) -> tuple[list[dict], list[d
                 data = None
         if isinstance(data, dict) and (text is None or "[TRUNCATED]" not in text):
             if data.get("started") is not False and not ("running" in data and "op" not in data):
-                whole.append(data)
+                whole.append(named(data, file))
             continue
         clue = _clue(text)
         if clue["op"] == "take" or (clue["op"] is None and clue["id"] is not None):
-            cut.append(clue)
+            cut.append(dict(clue, file=file, truncated="[TRUNCATED]" in text))
     return (_latest(whole) if latest else whole), cut
 
 
@@ -125,6 +150,12 @@ def fnv1a(data: bytes) -> str:
     for byte in data:
         value = ((value ^ byte) * 0x01000193) & 0xFFFFFFFF
     return f"{value:08x}"
+
+
+def page_sum(body_id: str, at: int, end: int, text: str) -> str:
+    """쪽 하나의 검사값 — `조각 id:자리:전체 길이:글자` 의 CRC-32(페이지 take 의 `sum` 과 같은 셈). 쪽마다 따로 맞춰 보므로
+    잘못 옮겨 적은 쪽 하나를 그 쪽으로 짚는다."""
+    return f"{zlib.crc32(f'{body_id}:{at}:{end}:{text}'.encode('utf-8')):08x}"
 
 
 def _identity(meta: Mapping) -> tuple:
@@ -143,127 +174,225 @@ def _identity_of(text: str) -> tuple:
     return _units(text), len(data), f"{zlib.crc32(data):08x}", fnv1a(data)
 
 
-def _usable(result: Mapping) -> tuple | None:
-    """take 답 하나가 쓸 만한 쪽이면 (id, at, next, end, text), 아니면 None — 칸이 빠졌거나 스스로 말하는 길이와 다르다."""
-    if result.get("op") != "take" or not result.get("ok"):
-        return None
+RETAKE = "그 쪽을 다시 받아 새 파일로 저장합니다"
+RECALL = "같은 값으로 그 작업을 다시 불러 답을 새 파일로 저장합니다(받아 둔 쪽은 그대로 씁니다)"
+
+
+@dataclass(frozen=True)
+class _Page:
+    """맞춰 본 쪽 하나."""
+    id: str
+    at: int
+    next: int
+    end: int
+    text: str
+
+
+@dataclass(frozen=True)
+class _Bad:
+    """맞지 않는 쪽 하나 — 어느 조각 · 자리 · 파일 · 왜. `smaller` 면 도구가 잘랐으니 더 작은 크기(`size` 의 3/4)로 다시 받는다."""
+    id: str
+    at: int | None
+    file: str
+    why: str
+    smaller: bool = False
+    size: int | None = None
+
+
+def _whole_number(value) -> int | None:
     try:
-        at, next_, end, text = int(result["at"]), int(result["next"]), int(result["end"]), result["text"]
-    except (KeyError, TypeError, ValueError):
+        return int(value)
+    except (TypeError, ValueError):
         return None
-    if not isinstance(text, str) or next_ != at + _units(text) or not 0 <= at < next_ <= end:
-        return None
-    return str(result["id"]), at, next_, end, text
+
+
+def _check(result: Mapping) -> _Page | _Bad:
+    """take 답 하나를 그 쪽만으로 맞춰 본다 — 칸이 있고, 다음 자리가 자리 + 글자 수이고, 검사값(sum)이 글자와 맞는다."""
+    body_id, at = str(result.get("id")), _whole_number(result.get("at"))
+
+    def bad(why: str, smaller: bool = False) -> _Bad:
+        return _Bad(body_id, at, getattr(result, "file", ""), why, smaller, _whole_number(result.get("size")))
+
+    if not result.get("ok"):
+        error = str(result.get("error") or "실패")
+        return bad(f"페이지가 이 쪽을 주지 못했습니다({error})", smaller="다른 size" in error)
+    text, next_, end = result.get("text"), _whole_number(result.get("next")), _whole_number(result.get("end"))
+    if not isinstance(text, str) or at is None or next_ is None or end is None:
+        return bad("쪽의 칸(at · next · end · text)이 빠졌거나 숫자가 아닙니다")
+    if "[TRUNCATED]" in text:
+        return bad("도구가 이 쪽을 잘랐습니다", smaller=True)
+    if "sum" not in result:
+        return bad("쪽에 검사값(sum)이 없습니다 — 예전 판 페이지의 쪽입니다")
+    if next_ != at + _units(text) or not 0 <= at < next_ <= end:
+        return bad("옮겨 적은 글의 길이가 쪽이 말하는 길이와 다릅니다")
+    if str(result["sum"]) != page_sum(body_id, at, end, text):
+        return bad("옮겨 적은 글이 페이지가 준 것과 다릅니다")
+    return _Page(body_id, at, next_, end, text)
+
+
+@dataclass(frozen=True)
+class _Joined:
+    """한 조각의 맞는 쪽들을 이은 것. `text` 는 처음부터 끝(`end`)까지 이어지면 그 글자, 아니면 None. 이어지지 않으면 `gap` 은
+    처음부터 따라갈 수 있는 가장 먼 자리(빈 곳), `until` 은 그 뒤로 끝까지 맞는 쪽이 이어지는 첫 자리(없으면 end)다."""
+    text: str | None
+    end: int
+    gap: int
+    until: int
+
+
+def _join(pages: Iterable[_Page], end: int) -> _Joined:
+    """맞는 쪽들을 0 부터 next 를 따라 end 까지 잇는다. 맞는 쪽은 어느 것이든 그 자리의 참 글자라 같은 자리에 여럿이면 아무거나 쓴다."""
+    starts: dict[int, list[_Page]] = {}
+    for page in pages:
+        if page.end == end:
+            starts.setdefault(page.at, []).append(page)
+    came: dict[int, _Page | None] = {0: None}
+    todo = [0]
+    while todo:
+        for page in starts.get(todo.pop(), ()):
+            if page.next not in came:
+                came[page.next] = page
+                todo.append(page.next)
+    if end in came:
+        parts, pos = [], end
+        while pos:
+            page = came[pos]
+            parts.append(page.text)
+            pos = page.at
+        return _Joined("".join(reversed(parts)), end, end, end)
+    whole, grew = {end}, True
+    while grew:
+        grew = False
+        for start, group in starts.items():
+            if start not in whole and any(page.next in whole for page in group):
+                whole.add(start)
+                grew = True
+    gap = max(came)
+    return _Joined(None, end, gap, min(pos for pos in whole if pos > gap))
+
+
+def _sorted_pages(results: Iterable[Mapping]) -> tuple[dict[str, list[_Page]], dict[str, list[_Bad]]]:
+    """take 답 → 조각 id 마다 맞는 쪽 · 맞지 않는 쪽."""
+    good: dict[str, list[_Page]] = {}
+    bad: dict[str, list[_Bad]] = {}
+    for result in results:
+        if result.get("op") == "take":
+            checked = _check(result)
+            (good if isinstance(checked, _Page) else bad).setdefault(checked.id, []).append(checked)
+    return good, bad
+
+
+def _joined(good: Mapping[str, list[_Page]]) -> dict[str, _Joined]:
+    """조각 id 마다 맞는 쪽을 이은 것 — 끝 자리는 쪽들이 말하는 것(맞는 쪽은 모두 같은 끝을 말한다)."""
+    return {body_id: _join(pages, pages[0].end) for body_id, pages in good.items()}
 
 
 def _lent(earlier: Iterable) -> dict[tuple, str]:
-    """앞선 읽기의 쪽들로 처음부터 끝까지 이어지는 조각 — 이은 글자의 알아볼 값 → 글자. 앞선 읽기의 머리는 보지 않는다:
-    이번 답의 머리와 알아볼 값 넷이 같은 글자만 빌리므로 그것이 검사다. 쓸 수 없는 쪽 · 빈 자리 · 읽지 못한 파일은 말없이
+    """앞선 읽기의 맞는 쪽들로 처음부터 끝까지 이어지는 조각 — 이은 글자의 알아볼 값 → 글자. 앞선 읽기의 머리는 보지 않는다:
+    이번 답의 머리와 알아볼 값 넷이 같은 글자만 빌리므로 그것이 검사다. 맞지 않는 쪽 · 빈 자리 · 읽지 못한 파일은 말없이
     건너뛴다 — 앞선 읽기는 빌려 줄 뿐, 그 안의 어긋난 것이 이번 읽기를 막지 않는다."""
-    by_id: dict[str, dict[int, tuple]] = {}
-    for result in answers(earlier)[0]:
-        page = _usable(result)
-        if page is not None:
-            by_id.setdefault(page[0], {}).setdefault(page[1], page)
-    held = {}
-    for pages in by_id.values():
-        parts, pos, end = [], 0, None
-        while pos in pages and (end is None or pages[pos][3] == end):
-            _id, _at, pos, end, text = pages[pos]
-            parts.append(text)
-        if parts and pos == end:
-            text = "".join(parts)
-            held[_identity_of(text)] = text
-    return held
+    good, _bad = _sorted_pages(answers(earlier)[0])
+    return {_identity_of(joined.text): joined.text for joined in _joined(good).values() if joined.text is not None}
 
 
 def _body_meta(result: Mapping) -> Mapping | None:
     return result.get("body") if result.get("op") != "take" and result.get("ok") else None
 
 
-def _pieces(whole: Iterable[Mapping]) -> dict[str, dict[int, Mapping]]:
-    """take 답 → 조각 id 마다 자리 → 쪽. 같은 자리의 쪽이 두 번이면 앞이 같아야 하고 긴 쪽을 쓴다."""
-    pieces: dict[str, dict[int, Mapping]] = {}
-    for result in whole:
-        if result.get("op") != "take":
-            continue
-        if not result.get("ok"):
-            raise BrowserError(f"조각 한 쪽을 받지 못했습니다: {result.get('error')}")
-        at, text = int(result["at"]), str(result["text"])
-        if int(result["next"]) != at + len(text):
-            raise BrowserError(f"조각 {result['id']} 의 {at}번째 자리 쪽이 스스로 말하는 길이와 다릅니다")
-        seen = pieces.setdefault(str(result["id"]), {}).get(at)
-        if seen is not None:
-            short, long_ = sorted((str(seen["text"]), text), key=len)
-            if not long_.startswith(short):
-                raise BrowserError(f"조각 {result['id']} 의 {at}번째 자리 쪽이 두 번 왔는데 서로 다릅니다")
-            if len(text) <= len(str(seen["text"])):
-                continue
-        pieces[str(result["id"])][at] = result
-    return pieces
+def _which(result: Mapping) -> str:
+    return getattr(result, "file", "") or f"{result.get('op')} 의 답"
 
 
-def _join(meta: Mapping, got: Mapping[int, Mapping]) -> tuple[str | None, int]:
-    """쪽을 0 부터 next 를 따라 end 까지 잇는다 → `(글자, 끝 자리)`. 빈 자리가 있으면 `(None, 그 자리)`. 이은 글자의 알아볼
-    값이 답과 다르면 BrowserError — 다른 조각의 쪽이 섞였거나 잘못 옮겨 적었다."""
-    parts, pos, end = [], 0, int(meta["chars"])
-    while pos < end:
-        piece = got.get(pos)
-        if piece is None:
-            return None, pos
-        if (piece.get("end"), piece.get("bytes"), piece.get("crc32")) != (end, meta["bytes"], meta["crc32"]):
-            raise BrowserError(f"조각 {meta['id']} 의 쪽들이 말하는 크기·검사값이 답과 다릅니다")
-        parts.append(str(piece["text"]))
-        pos = int(piece["next"])
-    text = "".join(parts)
-    data = text.encode("utf-8")
-    if len(data) != meta["bytes"] or f"{zlib.crc32(data):08x}" != meta["crc32"] or fnv1a(data) != meta.get("fnv"):
-        raise BrowserError(f"조각 {meta['id']} 을 이어 보니 바이트 수나 CRC-32 · FNV-1a 가 맞지 않습니다 — 쪽을 다시 받아야 합니다")
-    return text, pos
+def _save_prefix(body_id: str, names: set[str]) -> str:
+    """다시 받는 쪽을 저장할 파일 이름의 앞 — 처음이면 `take-<id>-`, 그 조각의 파일이 이미 있으면 `take-<id>-<k>-`(k 는 2 부터
+    아직 없는 수). 기록 폴더의 파일은 덮어쓰지 않으므로 다시 받은 쪽은 언제나 새 이름에 간다."""
+    base = f"take-{body_id}-"
+    if not any(name.startswith(base) for name in names):
+        return base
+    round_ = 2
+    while any(name.startswith(f"{base}{round_}-") for name in names):
+        round_ += 1
+    return f"{base}{round_}-"
+
+
+def _retake(meta: Mapping, joined: _Joined | None, bad: Mapping[str, list[_Bad]], names: set[str]) -> dict:
+    """받을 쪽 하나 — `{id, at, size, until, save, bad}`. at 부터 받아 `<save><at>.json` 에 두고, 답의 next 가 until 보다 작으면
+    next 로 이어 받는다. `bad` 는 그 사이 자리의 맞지 않는 쪽마다 `{file, at, why}`(다시 받는 까닭)."""
+    body_id = str(meta["id"])
+    joined = joined or _Joined(None, int(meta["chars"]), 0, int(meta["chars"]))
+    named_ = [item for item in bad.get(body_id, ()) if item.at is not None and joined.gap <= item.at < joined.until]
+    size = next((_smaller(item.size) for item in named_ if item.at == joined.gap and item.smaller), DEFAULT_SIZE)
+    return {"id": body_id, "at": joined.gap, "size": size, "until": joined.until, "save": _save_prefix(body_id, names),
+            "bad": [{"file": item.file, "at": item.at, "why": f"{item.why} — {RETAKE}"} for item in named_]}
+
+
+def _say(item: Mapping) -> str:
+    """받을 쪽 하나를 말로 — 부를 것 · 저장할 파일 · 이어 받을 데까지 · 다시 받는 까닭."""
+    words = (f"stayPrice.take('{item['id']}', {item['at']}, {item['size']}) 의 답을 {item['save']}{item['at']}.json 에"
+             f"(답의 next 가 {item['until']} 보다 작으면 take('{item['id']}', next) 를 {item['save']}<next>.json 에 이어서)")
+    return words + "".join(f" [{bad['file'] or str(bad['at']) + '번째 자리 쪽'}: {bad['why']}]" for bad in item["bad"])
+
+
+def _body_text(result: Mapping, meta: Mapping, joined: Mapping[str, _Joined], held: Mapping[tuple, str],
+               bad: Mapping[str, list[_Bad]]) -> str | None:
+    """읽기 답 하나의 조각 글자 — 그 조각의 맞는 쪽을 이은 것, 아니면 알아볼 값이 같은 다른 조각. 없으면 None(받을 쪽이 있다).
+    답의 머리를 옮겨 적다 틀렸으면(쪽들이 말하는 것과 다르면) 그 답을 다시 받으라고 거절한다."""
+    try:
+        identity, body_id = _identity(meta), str(meta["id"])
+    except (KeyError, TypeError, ValueError):
+        raise BrowserError(f"{_which(result)} 의 조각 머리(body)를 읽지 못했습니다 — 옮겨 적다 틀렸습니다. {RECALL}") from None
+    own = joined.get(body_id)
+    if own is not None and (own.end != identity[0] or (own.text is not None and _identity_of(own.text) != identity)):
+        raise BrowserError(f"{_which(result)} 의 조각 머리(body)가 페이지가 준 쪽들과 맞지 않습니다 — 그 답을 옮겨 적다 틀렸습니다. "
+                           f"{RECALL}")
+    text = own.text if own is not None and own.text is not None else held.get(identity)
+    if text is None and any("페이지에 없습니다" in item.why for item in bad.get(body_id, ())):
+        raise BrowserError(f"조각 {body_id} 이 페이지에 없습니다(페이지가 바뀌었거나 조각이 밀려났습니다) — 새 폴더로 읽기를 처음부터 "
+                           "다시 합니다")
+    return text
 
 
 def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
     """답 목록(읽기 답과 take 답, 잘린 답의 글자가 섞여 있다) → 읽기 답마다 조각을 푼 답. take 답은 빠진다. 푼 답에는 `body`
     가 남지 않아 한 번 더 지나도 그대로다.
 
-    조각의 글자는 (1) 그 조각의 쪽을 이은 것, 아니면 (2) 알아볼 값 넷이 같은 다 받은 조각 — 이번 답들이나 앞선 읽기의 답들
-    (`earlier`)에서 — 이다. 어디에도 없으면 CutAnswer 로 그 조각의 빈 자리와 크기를 댄다(그 자리의 쪽이 잘려 왔으면 더 작은
-    크기). 이번 조각의 쪽이 서로 어긋나거나 이은 글자가 알아볼 값과 다르면 BrowserError. 앞선 읽기에서는 처음부터 끝까지 이어지는
-    쪽들만 빌려 주고(_lent), 그 밖의 것은 오류가 아니다. 풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
+    쪽은 하나씩 맞춰 본다(칸 · 길이 · 검사값 sum — _check). 같은 자리에는 맞는 쪽을 쓰고 맞지 않는 쪽은 무시한다. 조각의 글자는
+    (1) 그 조각의 맞는 쪽을 처음부터 끝까지 이은 것, 아니면 (2) 알아볼 값 넷이 같은 다 받은 조각 — 이번 답들이나 앞선 읽기의
+    답들(`earlier`, _lent)에서 — 이다. 어디에도 없으면 CutAnswer 로 받을 쪽(_retake)을 댄다: 빈 곳의 자리 · 크기 · 어디까지 이어
+    받을지 · 새 파일 이름 · 그 사이의 맞지 않는 쪽과 까닭. 그래서 어떤 쪽을 몇 번 잘못 옮겨 적어도 그 쪽을 다시 받으면 읽기가
+    끝난다. 답의 머리(body)가 맞는 쪽들과 다르면 BrowserError(그 답을 다시 받는다). 풀린 body 가 다른 물음(`asked` 의 지문이
+    답의 `ask` 와 다름)의 것이면 그 답은 옮겨 적다 지문이 틀린 것이라 쓰지 않는다 — 그 물음은 답이 없는 것으로 남는다.
     """
+    results = list(results)
     whole, cuts = answers(results, latest=True)
-    pieces = _pieces(whole)
-    held = _lent(earlier)
-    joined: dict[int, tuple[str | None, int]] = {}
-    for index, result in enumerate(whole):
-        meta = _body_meta(result)
-        if meta is not None:
-            joined[index] = _join(meta, pieces.get(str(meta["id"]), {}))
-            if joined[index][0] is not None:
-                held[_identity(meta)] = joined[index][0]
+    good, bad = _sorted_pages(whole)
+    for clue in cuts:
+        if clue["id"] is not None:
+            bad.setdefault(clue["id"], []).append(_Bad(clue["id"], clue["at"], clue["file"], "답이 잘렸거나 JSON 으로 닫히지 않았습니다",
+                                                       clue["truncated"], clue["size"]))
+    joined = _joined(good)
+    held = {**_lent(earlier), **{_identity_of(item.text): item.text for item in joined.values() if item.text is not None}}
+    names = {getattr(item, "file", "") for item in results}
     out, refetch = [], []
-    for index, result in enumerate(whole):
+    for result in whole:
         if result.get("op") == "take":
             continue
         meta = _body_meta(result)
         if meta is None:
             out.append(result)
             continue
-        text, pos = joined[index]
-        text = text if text is not None else held.get(_identity(meta))
+        text = _body_text(result, meta, joined, held, bad)
         if text is None:
-            cut = next((clue for clue in cuts if clue["id"] == str(meta["id"]) and clue["at"] == pos), None)
-            refetch.append({"id": str(meta["id"]), "at": pos, "size": _smaller(cut["size"]) if cut else DEFAULT_SIZE})
+            refetch.append(_retake(meta, joined.get(str(meta["id"])), bad, names))
             continue
         body = json.loads(text)
         if body.get("op") != result.get("op") or ask_sum(body.get("asked") or {}) != result.get("ask"):
-            raise BrowserError(f"조각 {meta['id']} 은 이 답의 물음에서 나온 것이 아닙니다")
+            continue
         merged = {**result, **body}
         merged.pop("body", None)
         out.append(merged)
     if refetch:
-        raise CutAnswer("받지 못했거나 잘린 쪽이 있습니다 — " + " · ".join(
-            f"stayPrice.take('{item['id']}', {item['at']}, {item['size']})" for item in refetch) + " 로 받아 덧붙입니다", refetch)
+        raise CutAnswer("받지 못했거나 잘렸거나 잘못 옮겨 적은 쪽이 있습니다 — " + " · ".join(map(_say, refetch)), refetch)
     return out
 
 

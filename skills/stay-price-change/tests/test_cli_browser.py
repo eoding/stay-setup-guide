@@ -276,7 +276,11 @@ class BrowserCommandTest(unittest.TestCase):
         cut = json.dumps(takes[1], ensure_ascii=False)[:990] + "[TRUNCATED]"
         calls = self.write("calls.json", {"pairs": [asked], "reserved": []})
         error = self.run_cli("read", "--calls", calls, "--answers", self.write("pair.json", [result, takes[0], cut, takes[2]]), code=2)
-        self.assertEqual(error["refetch"], [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
+        body_id = result["body"]["id"]
+        self.assertEqual(error["refetch"], [{"id": body_id, "at": takes[1]["at"], "size": 600, "until": takes[2]["at"],
+                                             "save": f"take-{body_id}-", "bad": [
+            {"file": "pair.json", "at": takes[1]["at"], "why": "답이 잘렸거나 JSON 으로 닫히지 않았습니다 — 그 쪽을 다시 받아 새 파일로 저장합니다"}]}],
+                         "그 자리부터 다음 맞는 쪽 앞까지만 다시 받고, 잘린 답이 든 파일을 까닭과 함께 짚는다")
         self.assertIn("stayPrice.take(", error["error"])
         raw = self.dir / "cut.txt"
         raw.write_text(cut, encoding="utf-8")
@@ -326,7 +330,8 @@ class BrowserCommandTest(unittest.TestCase):
         changed = PRICE.replace('stay-numeric">140.00<', 'stay-numeric">150.00<', 1)
         pair3 = reply("readPair", asked, {"fragment": changed}, body_id="b5")
         calls3, third = reading("기록/작업/A/읽기-3", pair3[:1], [reply("readReserved", probe, {"fragment": REJECTED}, body_id="b6")[0]])
-        self.assertEqual(self.run_cli("read", "--calls", calls3, "--answers", third, code=2)["refetch"], [{"id": "b5", "at": 0, "size": 800}],
+        self.assertEqual(self.run_cli("read", "--calls", calls3, "--answers", third, code=2)["refetch"],
+                         [{"id": "b5", "at": 0, "size": 800, "until": pair3[0]["body"]["chars"], "save": "take-b5-", "bad": []}],
                          "어디에도 없는 조각만 이름이 나온다")
         for index, item in enumerate(pair3[1:], 1):
             self.write(f"기록/작업/A/읽기-3/take-b5-{index}.json", item)

@@ -39,7 +39,7 @@ metadata:
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
 - 도우미는 자기가 만든 페이지(이 컴퓨터의 HTML 파일)를 브라우저 도구로 열지 못한다. 브라우저 도구는 ERP 탭만 다룬다. 그래서 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 를 `--text` 를 붙여 다시 하고 답의 `text`(페이지에 보이는 글)에서 옮긴다.
-- 날짜가 8일을 넘는 표는 모든 줄의 칸이 같은 날끼리(떨어져 있어도) 열 하나로 묶여 나온다. 열 머리에 날 수와 그 날짜들이 모두 적혀 있고, 예약 있는 날은 그 머리에 따로 적힌다. 담당자가 "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다.
+- 8일 넘는 표는 같은 날끼리 열 하나로 묶여 나온다(commands.md `render`). 담당자가 "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다.
 
 ## 준비
 
@@ -68,7 +68,7 @@ metadata:
 2. **가격.** 1 의 답의 `pairs` 값마다(i = 1, 2 …) `await stayPrice.readPair(<값 그대로>)` 의 답을 `<R>/pair-<i>.json` 에 저장한다. 조각은 아직 받지 않는다.
 3. **예약 있는 날.** `price_change.py reserved --calls "<R>/calls.json" --answers "<R>"` 의 `ask` 값마다(n 은 이어서 1, 2 …) `await stayPrice.readReserved(<값 그대로>)` 의 답을 `<R>/resv-<n>.json` 에 저장한다. `done: true` 까지 되풀이한다.
 4. **지금 값으로 묶기.** `price_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. 답의 `read_at` 이 ERP 에서 읽은 시각이다(페이지 작업이 끝난 시각 가운데 가장 이른 것 — 15분 창도 여기서 잰다).
-5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/take-<id>-<at>.json`, 답의 `next` 가 `end` 가 될 때까지 `stayPrice.take("<id>", <next>)` 를 한 쪽씩 이어 받고, 그 명령을 다시 한다. 잘려서 `next` 가 안 보이면 그대로 저장하고 명령을 다시 한다(명령이 더 작은 크기를 댄다).
+5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고, 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이고, `bad` 는 다시 받는 쪽과 까닭이다(failures.md). 잘렸어도 그대로 저장한다.
 
 답이 `started: false` 면 아무것도 하지 않았다 — 저장하지 않고 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 작업(`look`·`readPair`·`readReserved`)의 답을 잃었으면(끊김 · 잘림) `stayPrice.last()` 의 답을 새 파일로 저장하거나 같은 값으로 다시 불러 저장한다 — 둘 다 된다. 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
 

@@ -53,7 +53,7 @@ metadata:
 1. `python3 scripts/addon_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"`(장부 번호가 있는 일은 `--record <번호>`).
 2. 답의 `lines` 값마다(i = 1, 2 …) `await stayAddonPrice.readLine(<값 그대로>)` 의 답을 `<R>/line-<i>.json` 에 저장한다. 읽기는 편집 창을 열어 보고 닫을 뿐 저장하지 않는다.
 3. `python3 scripts/addon_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. 답의 `read_at` 이 ERP 에서 읽은 시각, `doubt` 는 목록과 편집 창이 금액을 다르게 보이는 줄(바꾸지 않는다), `missing` 은 목록에 없는 줄이다.
-4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size}` 마다 `stayAddonPrice.take("<id>", <at>, <size>)` → `<R>/take-<id>-<at>.json`, 답의 `next` 가 `end` 가 될 때까지 이어 받고 그 명령을 다시 한다.
+4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayAddonPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayAddonPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이다. `bad` 가 있으면 그 쪽을 옮겨 적다 틀린 것이다 — 그 쪽만 이렇게 다시 받으면 되고, 틀린 파일은 그대로 둔다.
 
 답이 `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 답을 잃었으면 `stayAddonPrice.last()` 의 답을 새 파일로 저장하거나 같은 값으로 다시 불러 저장한다.
 

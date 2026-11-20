@@ -43,6 +43,11 @@ def answer(probe, hidden=0, ok=True):
     return reply("readReserved", dict(probe), {"fragment": fragment})
 
 
+def spots(refetch):
+    """받을 쪽마다 (조각 id, 자리, 크기)."""
+    return [(item["id"], item["at"], item["size"]) for item in refetch]
+
+
 def flat(*answers):
     return [item for group in answers for item in group]
 
@@ -213,38 +218,47 @@ class BodyTest(unittest.TestCase):
         joined, = attach_bodies([takes[2], result, takes[0], takes[3], takes[1], takes[1]])
         self.assertEqual((joined["fragment"], joined["asked"]), (PRICE, self.ASKED))
 
-    def test_a_missing_cut_or_mistyped_piece_is_refused_and_never_read(self):
+    def test_a_missing_cut_or_mistyped_page_is_named_with_its_reason_and_never_read(self):
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=4)
+        body_id, chars = result["body"]["id"], result["body"]["chars"]
         with self.assertRaises(CutAnswer) as missing:
             attach_bodies([result, *takes[:3]])
-        self.assertEqual(missing.exception.refetch, [{"id": result["body"]["id"], "at": takes[3]["at"], "size": 800}])
+        self.assertEqual(missing.exception.refetch, [{"id": body_id, "at": takes[3]["at"], "size": 800, "until": chars,
+                                                       "save": f"take-{body_id}-", "bad": []}])
         at = next(index for index, take in enumerate(takes) if "140.00" in take["text"])
         typo = dict(takes[at], text=takes[at]["text"].replace("140.00", "146.00", 1))
         self.assertEqual(len(typo["text"]), len(takes[at]["text"]), "글자 수가 같은 잘못 옮겨 적기")
-        with self.assertRaisesRegex(BrowserError, "바이트 수나 CRC-32"):
+        with self.assertRaises(CutAnswer) as mistyped:
             attach_bodies([result, *takes[:at], typo, *takes[at + 1:]])
-        with self.assertRaisesRegex(BrowserError, "두 번 왔는데 서로 다릅니다"):
-            attach_bodies([result, *takes, typo])
-        with self.assertRaisesRegex(BrowserError, "크기·검사값이 답과 다릅니다"):
-            attach_bodies([dict(result, body=dict(result["body"], crc32="00000000")), *takes])
-        with self.assertRaisesRegex(BrowserError, "받지 못했습니다: 그 조각이 페이지에 없습니다"):
-            attach_bodies([result, {"ok": False, "op": "take", "id": "x", "error": "그 조각이 페이지에 없습니다"}])
+        self.assertEqual([(item["at"], item["until"], [bad["why"] for bad in item["bad"]]) for item in mistyped.exception.refetch],
+                         [(takes[at]["at"], takes[at]["next"], ["옮겨 적은 글이 페이지가 준 것과 다릅니다 — 그 쪽을 다시 받아 새 파일로 저장합니다"])],
+                         "그 쪽 하나만 다시 받는다")
+        joined, = attach_bodies([result, *takes, typo])
+        self.assertEqual(joined["fragment"], PRICE, "같은 자리에 맞는 쪽이 있으면 맞지 않는 쪽은 무시한다")
         short = dict(takes[1], text=takes[1]["text"][:-5])
-        with self.assertRaisesRegex(BrowserError, "스스로 말하는 길이와 다릅니다"):
+        with self.assertRaises(CutAnswer) as cut_short:
             attach_bodies([result, takes[0], short, *takes[2:]])
+        self.assertEqual([bad["why"] for bad in cut_short.exception.refetch[0]["bad"]],
+                         ["옮겨 적은 글의 길이가 쪽이 말하는 길이와 다릅니다 — 그 쪽을 다시 받아 새 파일로 저장합니다"])
+        with self.assertRaisesRegex(BrowserError, "조각 머리\\(body\\)가 페이지가 준 쪽들과 맞지 않습니다"):
+            attach_bodies([dict(result, body=dict(result["body"], crc32="00000000")), *takes])
+        with self.assertRaises(CutAnswer):
+            attach_bodies([result, {"ok": False, "op": "take", "id": "x", "error": "그 조각이 페이지에 없습니다"}])
+        with self.assertRaisesRegex(BrowserError, "페이지에 없습니다.*새 폴더"):
+            attach_bodies([result, {"ok": False, "op": "take", "id": body_id, "error": "그 조각이 페이지에 없습니다"}])
 
     def test_u1_a_header_whose_second_check_differs_is_refused_here_and_never_lent_by_an_earlier_reading(self):
-        # 글자 수 · 바이트 수 · CRC-32 는 이은 글자와 맞고 FNV-1a 만 다른 머리 — 이 읽기의 쪽이면 거절한다
+        # 글자 수 · 바이트 수 · CRC-32 는 이은 글자와 맞고 FNV-1a 만 다른 머리 — 이 읽기의 답이면 그 답을 다시 받으라고 거절한다
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=3, body_id="b1")
         odd = dict(result["body"], fnv="00000000")
         self.assertNotEqual(odd["fnv"], result["body"]["fnv"])
-        with self.assertRaisesRegex(BrowserError, "CRC-32 · FNV-1a 가 맞지 않습니다"):
+        with self.assertRaisesRegex(BrowserError, "조각 머리\\(body\\)가 페이지가 준 쪽들과 맞지 않습니다"):
             attach_bodies([dict(result, body=odd), *takes])
-        # 앞선 읽기의 그런 조각은 빌려 주지 않는다 — 같은 머리를 단 이번 답은 그 조각을 받아야 한다
+        # 앞선 읽기의 그런 머리는 빌려 주는 것과 상관없다 — 같은 틀린 머리를 단 이번 답은 쪽을 받아야 한다
         again = dict(result, body=dict(odd, id="b2"))
         with self.assertRaises(CutAnswer) as caught:
             attach_bodies([again], earlier=[dict(result, body=odd), *takes])
-        self.assertEqual(caught.exception.refetch, [{"id": "b2", "at": 0, "size": 800}])
+        self.assertEqual([(item["id"], item["at"]) for item in caught.exception.refetch], [("b2", 0)])
         lent, = attach_bodies([dict(result, body=dict(result["body"], id="b2"))], earlier=[result, *takes])
         self.assertEqual(lent["fragment"], PRICE, "머리가 맞는 조각은 빌려 쓴다")
 
@@ -254,7 +268,7 @@ class BodyTest(unittest.TestCase):
         cut = shown[:1000] + "[TRUNCATED]"
         with self.assertRaises(CutAnswer) as caught:
             attach_bodies([result, takes[0], cut, takes[2]])
-        self.assertEqual(caught.exception.refetch, [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
+        self.assertEqual(spots(caught.exception.refetch), [(result["body"]["id"], takes[1]["at"], 600)])
         self.assertIn(f"stayPrice.take('{result['body']['id']}', {takes[1]['at']}, 600)", str(caught.exception))
         unclosed = shown[:700]
         with self.assertRaises(CutAnswer):
@@ -264,7 +278,7 @@ class BodyTest(unittest.TestCase):
             self.assertIsInstance(json.loads(closed), dict, "닫힌 JSON 이다")
             with self.assertRaises(CutAnswer) as marked:
                 attach_bodies([result, takes[0], closed, takes[2]])
-            self.assertEqual(marked.exception.refetch, [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
+            self.assertEqual(spots(marked.exception.refetch), [(result["body"]["id"], takes[1]["at"], 600)])
         # 같은 자리에서 더 작게 다시 받은 쪽 둘이 빈 곳을 메우면 잘린 답은 그냥 지나간다
         text = "".join(take["text"] for take in takes)
         meta, mid = result["body"], takes[1]
@@ -283,10 +297,15 @@ class BodyTest(unittest.TestCase):
         joined, = attach_bodies([cut, running, result, *takes])
         self.assertEqual(joined["fragment"], PRICE)
 
-    def test_a_body_from_another_question_is_refused(self):
+    def test_an_answer_whose_body_is_from_another_question_is_not_used_and_that_question_stays_unanswered(self):
+        # 옮겨 적다 지문(ask)이 틀린 답 — 검사값이 맞는 조각이 진짜 물음을 말한다. 그 답은 쓰지 않고(막지도 않고), 진짜 물음은
+        # 답이 없는 것으로 남아 다시 부르게 된다
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE})
-        with self.assertRaisesRegex(BrowserError, "이 답의 물음에서 나온 것이 아닙니다"):
-            attach_bodies([dict(result, ask=ask_sum(dict(self.ASKED, room="스위트"))), *takes])
+        wrong = dict(result, ask=ask_sum(dict(self.ASKED, room="스위트")))
+        self.assertEqual(attach_bodies([wrong, *takes]), [])
+        self.assertEqual(unanswered([self.ASKED], [wrong, *takes], "readPair"), [self.ASKED])
+        joined, = attach_bodies([wrong, result, *takes])
+        self.assertEqual(joined["fragment"], PRICE)
 
     def test_the_digest_matches_the_page_rule_for_korean_and_key_order(self):
         self.assertEqual(ask_sum({"no": 3, "b": [1, None], "a": "디럭스 \"킹\""}), ask_sum({"a": "디럭스 \"킹\"", "b": [1, None]}))

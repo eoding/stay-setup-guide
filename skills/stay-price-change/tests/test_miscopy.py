@@ -1,4 +1,5 @@
-"""옮겨 적다 틀린 쪽 하나가 호텔을 막지 않는다 — 앞선 읽기 폴더의 어긋난 것은 말없이 건너뛴다(R1).
+"""옮겨 적다 틀린 쪽 하나가 호텔을 막지 않는다 — 앞선 읽기 폴더의 어긋난 것은 말없이 건너뛰고(R1), 이번 읽기의 틀린 쪽은 그 쪽을
+한 번 다시 받으면 된다(R2). 세 번째 시운전(적용한 뒤 확인 읽기에서 쪽 하나를 두 글자 모자라게 옮겨 적음)을 그대로 되풀이한다.
 
     python3 -m unittest discover -s tests
 
@@ -18,7 +19,8 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
-from browser_replies import reply  # noqa: E402
+from browser_replies import done_at, reply  # noqa: E402
+from change_core.answers import ask_sum  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"
 PRICE = (ERP / "price-runs-closed-absent-list.html").read_text(encoding="utf-8")
@@ -124,6 +126,161 @@ class EarlierFolderTest(Cli):
             self.save(new, f"resv-1-{item.get('at', 'answer')}.json", item)
         snapshot = self.run_cli("read", "--calls", new / "calls.json", "--answers", new)
         self.assertEqual(len(snapshot["cells"]), 16, "같은 글자의 다 받은 화면은 어긋난 쪽 곁에 있어도 빌린다")
+
+
+RANGE = {"kind": "range", "hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}],
+         "dates": [f"2026-12-{day}" for day in range(24, 32)]}
+TARGETS = {"kind": "targets", "hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "sentence": "12/31 디럭스 조식 성인 2 는 170",
+           "targets": [{"key": {"room": "디럭스", "rate_plan": "조식 포함", "date": "2026-12-31", "occupancy": "A2", "nights": 1},
+                        "values": {"sell": "170"}}]}
+APPLIED = PRICE.replace('stay-numeric">160.00<', 'stay-numeric">170.00<', 1)
+
+
+class TrialTest(Cli):
+    """세 번째 시운전 — 가격을 적용하고, 적용 뒤 확인 읽기에서 쪽 하나를 두 글자 모자라게 옮겨 적었다. 그 뒤로 (a) 같은 읽기가 그 쪽
+    하나를 새 파일로 다시 받아 끝나고, (b) 새 폴더의 새 읽기가 앞 폴더를 건드리지 않고 끝나고, (c) 되돌리기가 끝까지 간다."""
+
+    def read(self, job: str, name: str, fragment: str, calls_args, ids: str, pages_too=True) -> tuple[Path, list]:
+        folder = self.records / "작업" / job / name
+        folder.mkdir(parents=True)
+        self.run_cli("read-calls", *calls_args, "--out", folder / "calls.json")
+        calls = json.loads((folder / "calls.json").read_text(encoding="utf-8"))
+        pair = reply("readPair", calls["pairs"][0], {"fragment": fragment}, pieces=4, body_id=f"{ids}p")
+        resv = reply("readReserved", calls["reserved"][0], {"fragment": REJECTED}, pieces=3, body_id=f"{ids}r")
+        self.save(folder, "pair-1.json", pair[0])
+        self.save(folder, "resv-1.json", resv[0])
+        if pages_too:
+            for item in pair[1:] + resv[1:]:
+                self.save(folder, f"take-{item['id']}-{item['at']}.json", item)
+        return folder, pair
+
+    def snapshot(self, folder: Path) -> Path:
+        self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json")
+        return folder / "snapshot.json"
+
+    def apply(self, change: int, plan: Path, snapshot: Path, folder: Path) -> None:
+        self.assertEqual(self.run_cli("begin", "--change", change, "--plan", plan, "--snapshot", snapshot)["status"], "applying")
+        for call in self.run_cli("calls", "--change", change)["calls"]:
+            saved = {"op": call["op"], "no": call["no"], "ok": True, "saved": True, "pressed": True, "ask": ask_sum(call["payload"]),
+                     "note": "저장했습니다", "doneAt": done_at()}
+            result = self.save(folder, f"{call['no']}.json", saved)
+            self.run_cli("record-result", "--change", change, "--result", result)
+
+    def test_r2_trial_one_page_two_characters_short_after_applying_costs_one_retake(self):
+        job = self.records / "작업" / "A"
+        first, _ = self.read("A", "읽기-1", PRICE, ["--request", self.save(self.dir, "range.json", RANGE)], "a1")
+        plan = self.run_cli("plan", "--snapshot", self.snapshot(first), "--request", self.save(self.dir, "targets.json", TARGETS),
+                            "--record", "--out", job / "plan-1.json")
+        change = plan["change_id"]
+        self.assertEqual(plan["saves"], 1)
+        before, _ = self.read("A", "읽기-2", PRICE, ["--record", change], "a2", pages_too=False)
+        (job / "적용-1").mkdir()
+        self.apply(change, job / "plan-1.json", self.snapshot(before), job / "적용-1")
+
+        # 적용 뒤 확인 읽기 — 둘째 쪽을 두 글자 모자라게 옮겨 적었다(시운전의 `\\\"` → `\"`)
+        verify, pair = self.read("A", "읽기-3", APPLIED, ["--record", change], "a3")
+        page = pair[2]
+        miscopied = self.save(verify, f"take-{page['id']}-{page['at']}.json", dict(page, text=page["text"][:40] + page["text"][42:]))
+        asked = self.run_cli("read", "--calls", verify / "calls.json", "--answers", verify, code=2)
+        self.assertEqual(asked["refetch"], [{"id": page["id"], "at": page["at"], "size": 800, "until": page["next"],
+                                             "save": f"take-{page['id']}-2-", "bad": [
+            {"file": miscopied.name, "at": page["at"],
+             "why": "옮겨 적은 글의 길이가 쪽이 말하는 길이와 다릅니다 — 그 쪽을 다시 받아 새 파일로 저장합니다"}]}],
+                         "그 쪽 하나를 새 이름으로 다시 받으라고 한다 — 앞뒤 쪽은 이미 맞다")
+        after_trial = folder_state(verify)
+
+        # (b) 새 폴더의 새 읽기 — 앞 폴더의 틀린 쪽은 오류가 아니고, 앞 폴더는 그대로다
+        fresh, _ = self.read("A", "읽기-4", APPLIED, ["--record", change], "a4", pages_too=False)
+        self.assertEqual([(item["id"], item["at"], item["bad"]) for item in
+                          self.run_cli("read", "--calls", fresh / "calls.json", "--answers", fresh, code=2)["refetch"]],
+                         [("a4p", 0, [])], "확인 읽기의 가격 조각은 앞 폴더에서 다 이어지지 않아 빌리지 않는다 — 처음부터 받는다")
+        for item in reply("readPair", json.loads((fresh / "calls.json").read_text(encoding="utf-8"))["pairs"][0], {"fragment": APPLIED},
+                          pieces=4, body_id="a4p")[1:]:
+            self.save(fresh, f"take-a4p-{item['at']}.json", item)
+        self.assertTrue(self.run_cli("verify", "--change", change, "--snapshot", self.snapshot(fresh))["same"])
+        self.assertEqual(folder_state(verify), after_trial, "새 읽기는 앞 폴더의 파일을 건드리지 않는다")
+
+        # (a) 같은 읽기 — 그 쪽 하나를 명령이 고른 새 이름으로 다시 받으면 끝난다(틀린 파일은 그대로 둔다)
+        self.save(verify, f"take-{page['id']}-2-{page['at']}.json", page)
+        self.assertTrue(self.run_cli("verify", "--change", change, "--snapshot", self.snapshot(verify))["same"])
+        self.assertEqual(miscopied.read_text(encoding="utf-8"), after_trial[miscopied.name][0].decode("utf-8"))
+
+        # (c) 되돌리기 — 같은 범위를 다시 읽어 계산하고 적용하고 확인한다
+        back = self.records / "작업" / "B"
+        now, _ = self.read("B", "읽기-1", APPLIED, ["--record", change], "b1", pages_too=False)
+        rollback = self.run_cli("rollback", "--change", change, "--snapshot", self.snapshot(now), "--record",
+                                "--out", back / "rollback-1.json")
+        self.assertEqual((rollback["restored"], rollback["saves"]), (1, 1))
+        again, _ = self.read("B", "읽기-2", APPLIED, ["--record", rollback["change_id"]], "b2", pages_too=False)
+        (back / "적용-1").mkdir()
+        self.apply(rollback["change_id"], back / "rollback-1.json", self.snapshot(again), back / "적용-1")
+        undone, _ = self.read("B", "읽기-3", PRICE, ["--record", rollback["change_id"]], "b3", pages_too=False)
+        self.assertTrue(self.run_cli("verify", "--change", rollback["change_id"], "--snapshot", self.snapshot(undone))["same"],
+                        "되돌린 뒤 값은 처음 값이다(조각은 처음 읽기에서 빌린다)")
+
+
+def corrupt(page: dict, how: str) -> str:
+    """쪽 하나를 옮겨 적다 틀린 파일 글자 — 글자를 빠뜨림 · 더함 · 하나를 바꿈(글자 수는 그대로) · 파일이 중간에 끊김."""
+    text, middle = page["text"], len(page["text"]) // 2
+    if how == "drop":
+        return json.dumps(dict(page, text=text[:middle] + text[middle + 2:]), ensure_ascii=False)
+    if how == "add":
+        return json.dumps(dict(page, text=text[:middle] + "가a" + text[middle:]), ensure_ascii=False)
+    if how == "change":
+        other = "x" if text[middle] != "x" else "y"
+        return json.dumps(dict(page, text=text[:middle] + other + text[middle + 1:]), ensure_ascii=False)
+    shown = json.dumps(page, ensure_ascii=False)
+    return shown[:len(shown) // 2]
+
+
+class PageMiscopyTest(Cli):
+    """R2 — 여러 쪽인 조각의 어느 쪽이든, 어떻게 잘못 옮겨 적었든 명령은 꼭 그 쪽 하나를 짚고, 그 쪽을 한 번 다시 받으면 읽기가
+    끝난다. 기록 폴더 밖에서 읽어 앞선 읽기가 빌려 주지 않게 한다."""
+
+    def setUp(self):
+        super().setUp()
+        self.pair = reply("readPair", ASKED, {"fragment": PRICE}, pieces=5, body_id="p1")
+        self.resv = reply("readReserved", PROBE, {"fragment": REJECTED}, pieces=1, body_id="r1")
+
+    def folder(self, name: str, skip: int) -> Path:
+        folder = self.dir / name
+        folder.mkdir()
+        (folder / "calls.json").write_text(json.dumps({"pairs": [ASKED], "reserved": [PROBE]}, ensure_ascii=False), encoding="utf-8")
+        self.save(folder, "pair-1.json", self.pair[0])
+        self.save(folder, "resv-1.json", self.resv[0])
+        for item in self.resv[1:]:
+            self.save(folder, f"take-r1-{item['at']}.json", item)
+        for index, item in enumerate(self.pair[1:]):
+            if index != skip:
+                self.save(folder, f"take-p1-{item['at']}.json", item)
+        return folder
+
+    def test_r2_every_page_corrupted_four_ways_is_named_alone_and_one_retake_completes_the_reading(self):
+        pages = self.pair[1:]
+        self.assertEqual(len(pages), 5)
+        for index, page in enumerate(pages):
+            for how in ("drop", "add", "change", "truncate"):
+                with self.subTest(page=index, how=how):
+                    folder = self.folder(f"{index}-{how}", skip=index)
+                    bad = self.save(folder, f"take-p1-{page['at']}.json", corrupt(page, how))
+                    asked = self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder, code=2)["refetch"]
+                    self.assertEqual([(item["id"], item["at"], item["until"], [b["file"] for b in item["bad"]]) for item in asked],
+                                     [("p1", page["at"], page["next"], [bad.name])], "꼭 그 쪽 하나")
+                    self.save(folder, f"{asked[0]['save']}{page['at']}.json", page)
+                    self.assertEqual(len(self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder)["cells"]), 16)
+
+    def test_r2_retakes_that_are_miscopied_again_each_get_a_new_name_until_one_is_right(self):
+        page = self.pair[3]
+        folder = self.folder("again", skip=2)
+        self.save(folder, f"take-p1-{page['at']}.json", corrupt(page, "change"))
+        for round_, how in ((2, "drop"), (3, "truncate")):
+            asked, = self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder, code=2)["refetch"]
+            self.assertEqual(asked["save"], f"take-p1-{round_}-", "다시 받은 쪽은 언제나 새 이름")
+            self.assertEqual(len(asked["bad"]), round_ - 1, "그 자리의 틀린 파일을 모두 짚는다")
+            self.save(folder, f"{asked['save']}{page['at']}.json", corrupt(page, how))
+        asked, = self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder, code=2)["refetch"]
+        self.save(folder, f"{asked['save']}{page['at']}.json", page)
+        self.assertEqual(len(self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder)["cells"]), 16)
 
 
 if __name__ == "__main__":

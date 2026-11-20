@@ -131,8 +131,9 @@
 
   // 작업의 답과 쪽 하나는 도구가 보이는 모양(JSON 으로 적은 글자)으로 800자 안이다 — 쪽 글자 안의 따옴표는 \" 로 두 자다.
   // 화면 조각은 페이지에 두고(`keep`) `take(id, at, size)` 로 글자 자리 at 부터 size 자 안의 쪽을 받는다(size 는 200~800).
-  // 쪽마다 다음 자리(next) · 전체 길이(end) · 전체의 UTF-8 바이트 수와 CRC-32 를 싣는다 — 파이썬이 0 부터 end 까지 이어 붙이고
-  // 둘 다 맞을 때만 쓴다(`price_browser.attach_bodies`). 잘린 쪽은 같은 자리에서 더 작은 size 로 다시 받으면 된다.
+  // 쪽마다 다음 자리(next) · 전체 길이(end) · 그 쪽 하나의 검사값(sum — `id:at:end:글자` 의 CRC-32)을 싣는다. 파이썬은 쪽마다
+  // 따로 맞춰 보고, 맞는 쪽만 0 부터 end 까지 이어 붙여 머리(body)의 알아볼 값과 견준다(`change_core.answers.attach_bodies`).
+  // 틀린 쪽 하나는 그 자리만 다시 받으면 된다. 잘린 쪽은 같은 자리에서 더 작은 size 로 다시 받는다.
   var RESULT_CHARS = 800;
   var PIECE_MIN = 200;
   // 두는 조각 수. 읽기는 작업을 다 부른 뒤에 조각을 받으므로 읽기 한 번의 작업이 이보다 많으면 앞 조각이 밀려난다. 명령(read-calls)은
@@ -193,7 +194,7 @@
   // at 부터 size 자 안의 쪽 하나. 되도록 `>`·`,` 바로 뒤에서 자른다(거르기가 쪽마다 같은 답을 내도록). 한 글자도 못 담으면 null
   function pieceAt(item, id, at, size) {
     var text = item.text;
-    var piece = { op: 'take', ok: true, id: id, at: at, size: size, next: text.length, end: text.length, bytes: item.bytes, crc32: item.crc32, text: '' };
+    var piece = { op: 'take', ok: true, id: id, at: at, size: size, next: text.length, end: text.length, sum: '00000000', text: '' };
     var room = size - shownLength(piece), cost = 0, stop = at, good = -1;
     for (var i = at; i < text.length;) {
       var step = text.codePointAt(i) > 0xffff ? 2 : 1, ch = text.substr(i, step), c = JSON.stringify(ch).length - 2;
@@ -207,6 +208,7 @@
     if (stop === at) return null;
     piece.next = stop;
     piece.text = text.slice(at, stop);
+    piece.sum = crc32(id + ':' + at + ':' + text.length + ':' + piece.text);
     return piece;
   }
   function keep(body) {

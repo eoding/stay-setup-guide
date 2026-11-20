@@ -129,7 +129,7 @@ test('B9 · 줄인 조각에는 들여쓰기가 남지 않는다(파이썬 읽�
   }
 });
 
-test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 쪽으로 나뉘며(따옴표 이스케이프 포함), 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
+test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 쪽으로 나뉘며(따옴표 이스케이프 포함), 쪽마다 제 검사값(sum)이 있고, 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
   const long = '아주 긴 "객실" 이름 칸 '.repeat(400);
   const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('인원 무관 단일가 · 1박 이상', long) });
   const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
@@ -140,7 +140,11 @@ test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 �
   const { takes, text, body } = takeAll(page.w, r);
   assert.deepEqual(Object.keys(r.body).sort(), ['bytes', 'chars', 'crc32', 'fnv', 'id'], '머리에는 쪽 수가 없다(take 는 글자 자리를 받는다) — 알아볼 값만');
   assert.ok(takes.length >= 15, `쪽 ${takes.length}개`);
-  for (const t of takes) assert.ok(charsOf(t) <= 800 && t.end === r.body.chars && t.bytes === r.body.bytes && t.crc32 === r.body.crc32, `쪽 ${t.at}: ${charsOf(t)}자`);
+  for (const t of takes) assert.ok(charsOf(t) <= 800 && t.end === r.body.chars, `쪽 ${t.at}: ${charsOf(t)}자`);
+  for (const t of takes) {
+    assert.equal(t.sum, crc32(Buffer.from(`${t.id}:${t.at}:${t.end}:${t.text}`, 'utf8')).toString(16).padStart(8, '0'), `쪽 ${t.at}: 쪽 하나의 검사값은 id:at:end:글자의 CRC-32`);
+    assert.equal(t.bytes, undefined, '쪽에는 전체의 바이트 수 · CRC-32 가 없다(머리에 있다)');
+  }
   assert.ok(takes.some((t) => t.text.includes('"')), '따옴표가 든 쪽이 있다(도구는 \\" 로 보인다)');
   assert.equal(text.length, r.body.chars);
   assert.equal(Buffer.byteLength(text), r.body.bytes);

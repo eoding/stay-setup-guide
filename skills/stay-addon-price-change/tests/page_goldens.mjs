@@ -4,9 +4,11 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node tests/page_goldens.mjs --write
 //
 // 파일마다 [답, take 쪽…] 목록이다(applyLine 은 쪽이 없어 [답]). 시각에 따라 바뀌는 칸은 정해 둔 값으로 적는다(NORMALIZED):
-// 답의 `ms`(걸린 ms) · `doneAt`(끝난 시각) · `body.id`, 그리고 쪽의 `id`(페이지가 조각에 붙인 이름 — 시각으로 만든다). 나머지 칸
+// 답의 `ms`(걸린 ms) · `doneAt`(끝난 시각) · `body.id`, 그리고 쪽의 `id`(페이지가 조각에 붙인 이름 — 시각으로 만든다)와 그 id 로 셈하는
+// 쪽의 `sum`. 나머지 칸
 // (`ask` · `body.chars/bytes/crc32/fnv` · 쪽의 `text/at/next/end` …)은 그대로다. tests/test_page_goldens.mjs 가 다시 만들어 견준다.
 import { writeFileSync } from 'node:fs';
+import { crc32 } from 'node:zlib';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { addonPage, inPage, plain, takeAll, HOTEL, HERE } from './addon_harness.mjs';
@@ -19,7 +21,10 @@ const SET = { price: '22.00' };
 function normal(op, answer, pieces = []) {
   const out = Object.assign({}, answer, { ms: NORMALIZED.ms, doneAt: NORMALIZED.doneAt });
   if (out.body) out.body = Object.assign({}, out.body, { id: NORMALIZED.bodyId[op] });
-  return [out, ...pieces.map((piece) => Object.assign({}, piece, { id: NORMALIZED.bodyId[op] }))];
+  // 쪽의 검사값(sum)은 조각 id 를 넣어 셈하므로 정해 둔 id 로 다시 셈한다(페이지와 같은 셈 — `id:at:end:글자` 의 CRC-32)
+  const id = NORMALIZED.bodyId[op];
+  const sum = (piece) => crc32(Buffer.from(`${id}:${piece.at}:${piece.end}:${piece.text}`, 'utf8')).toString(16).padStart(8, '0');
+  return [out, ...pieces.map((piece) => Object.assign({}, piece, { id, sum: sum(piece) }))];
 }
 
 // 파일 이름 → 내용
