@@ -251,7 +251,7 @@ def cmd_plan(args):
                                         request=encode_request(plan.request), reading=encode_snapshot(snapshot),
                                         replaces=args.replaces) if args.record else None
     result = dict(change_id=change_id, replaces=args.replaces, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
-                  red=red_lines(plan), chosen=chosen_lines(plan),
+                  red=red_lines(plan), chosen=chosen_lines(plan), above_one_night_before=plan.above_one_night_before,
                   unresolved=[encode_change(change) for change in unresolved(plan)],
                   steps=None if steps is None else [encode_step(step) for step in steps])
     if isinstance(request, TargetTable) and request.from_sheet:

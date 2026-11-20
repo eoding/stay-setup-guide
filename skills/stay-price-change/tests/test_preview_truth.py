@@ -214,19 +214,23 @@ class PreviewTruthTest(CommandCase):
         over = above_list_cells(snapshot, request)
         self.assertEqual(len(over), 24)
         sea = [key for key in over if key.room == "스탠다드 바다 전망"]
+        # 1박 이상 줄을 안 바꾸면 스탠다드의 성인 2 · 3박 이상(90.00 → 100.80)이 그날 1박 이상(100.00)보다 비싸진다 — 박수 층 빨간 줄(Y2).
+        # 안 바꿈은 네 날 모두, 섞음은 1박 이상을 안 바꾼 12/7 하루. 아동 줄의 3박 이상은 1박 이상보다 싸게 남는다.
         cases = {
-            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list"}], 2),
-            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list"}], 26),
-            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep"}], 1),
+            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list"}], 2, 24),
+            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list"}], 26, 24),
+            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep"}, {"rule": "ABOVE_ONE_NIGHT", "choice": "keep"}], 1, 28),
             "mixed": ([{"rule": "ABOVE_LIST", "choice": "raise_list"},
                        {"rule": "ABOVE_LIST", "choice": "clear_list", "cells": [encode_key(sea[0])]},
-                       {"rule": "ABOVE_LIST", "choice": "keep", "cells": [encode_key(over[0]), encode_key(sea[-1])]}], 6),
+                       {"rule": "ABOVE_LIST", "choice": "keep", "cells": [encode_key(over[0]), encode_key(sea[-1])]},
+                       {"rule": "ABOVE_ONE_NIGHT", "choice": "include"}], 6, 25),
         }
-        for name, (choices, saves) in cases.items():
+        for name, (choices, saves, chosen) in cases.items():
             with self.subTest(name):
                 planned, page = self.check(f"trial-{name}", snapshot, request, choices)
                 self.assertEqual(len(planned["steps"]), saves)
-                self.assertEqual((planned["counts"]["cells"], planned["counts"]["red"], planned["counts"]["chosen"]), (36, 0, 24))
+                self.assertEqual((planned["counts"]["cells"], planned["counts"]["red"], planned["counts"]["chosen"]), (36, 0, chosen))
+                self.assertEqual(planned["counts"]["ABOVE_ONE_NIGHT"], chosen - 24)
                 self.assertNotIn("골라 주세요", page)
 
     def test_the_trial_shape_says_the_raised_list_price_in_the_red_line_box_and_the_cell(self):

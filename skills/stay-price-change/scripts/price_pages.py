@@ -128,9 +128,11 @@ def _how(request: ChangeRequest, currency: str) -> str:
     return f"{occupancy_label(request.base_occupancy)} · {nights_label(1)} {fmt_money(value, currency)} {currency} 으로"
 
 
-def _flag(verdict: str, after: CellValue, currency: str) -> str:
+def _flag(verdict: str, after: CellValue, currency: str, key: CellKey) -> str:
     if verdict == "ABOVE_LIST":
         return f"정가 {fmt_money(after.list, currency)} 넘음"
+    if verdict == "ABOVE_ONE_NIGHT":
+        return f"{nights_label(1)}보다 비쌈" if key.nights > 1 else "박수 층보다 쌈"
     if verdict == "BELOW_COST":
         return f"원가 {fmt_money(after.supply, currency)} 아래"
     if verdict == "OVER_30":
@@ -225,7 +227,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         if change.choice:
             return "chosen", moved + _chosen_tag(change, request, currency)
         if severity == RED:
-            return "red", f'{moved}<span class="tag red">{esc(_flag(change.verdict, change.after, currency))}</span>'
+            return "red", f'{moved}<span class="tag red">{esc(_flag(change.verdict, change.after, currency, key))}</span>'
         if NEW in change.marks:
             return "new", f'{moved}<span class="tag new">새 칸</span>'
         return "", moved
@@ -245,7 +247,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
                   + ([(tally["reserved"], "예약 있는 날의 칸 (바꿉니다)")] if tally["reserved"] else [])
                   + ([(tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)")] if tally["closed"] else [])
                   + [(tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
-            _skip_line(plan), _coverage_section(plan.coverage) if sheet else ""]
+            _skip_line(plan), _tiers_line(plan), _coverage_section(plan.coverage) if sheet else ""]
     if tally["red"]:
         body.append(f'<p class="sub">빨간 줄 {tally["red"]:,}칸을 어떻게 할지 고르시면 ERP 에 몇 번 나눠 저장하는지 정해집니다. '
                     "그때 미리보기를 다시 보여 드립니다.</p>")
@@ -299,6 +301,14 @@ def _coverage_section(gaps: Sequence[Gap]) -> str:
         out.append(f"<h3>{esc(title)} · {tally[kind]:,}{units[kind]}</h3><div class=\"scroll\"><table>"
                    "<tr><th>객실 · 요금제</th><th>인원 · 박수</th><th>날짜</th><th>요금표 줄</th></tr>" + "".join(rows) + "</table></div>")
     return "\n".join(out)
+
+
+def _tiers_line(plan: Plan) -> str:
+    """읽은 값에서 바꾸기 전부터 1박 이상 층보다 비싼 박수 층 칸 — 이번에 바꾸지 않는 그 칸은 고치라고 하지 않고 수만 알린다."""
+    if not plan.above_one_night_before:
+        return ""
+    return (f'<p class="sub">읽은 값에 바꾸기 전부터 같은 날 {nights_label(1)} 가격보다 비싼 박수 층 칸이 {plan.above_one_night_before:,}칸 '
+            "있습니다. 이번에 바꾸지 않는 칸은 그대로 두고, 바꾸는 칸만 견줍니다.</p>")
 
 
 def _skip_line(plan: Plan) -> str:
@@ -417,6 +427,9 @@ def _preview_banners(plan: Plan, tally: Mapping) -> str:
                    f'바꾸지 않습니다. ({esc(reasons)})</div>')
     messages = {
         "ABOVE_LIST": ("정가(줄 그은 값)를 넘습니다.", "ERP 는 판매가가 정가보다 비싼 것을 받지 않습니다. 이 칸은 골라 주세요: "),
+        "ABOVE_ONE_NIGHT": (f"같은 날 {nights_label(1)} 가격보다 비싼 박수 층이 됩니다.",
+                            "긴 숙박이 1박 이상보다 비싸지는 칸입니다(2박 이상 층이 1박 이상보다 비싸지거나, 1박 이상을 내려 위 층보다 "
+                            "싸짐). ERP [선택 날짜 가격 가감]은 이런 칸을 건너뜁니다. 이 칸은 골라 주세요: "),
         "BELOW_COST": ("공급 원가보다 싸집니다.", "맞으면 그 칸을 짚어 다시 말씀해 주세요. 고를 것: "),
         "OVER_30": ("지금 값보다 30% 넘게 바뀝니다.", "금액을 잘못 말씀하신 것은 아닌지 확인해 주세요. "
                     "맞으면 그 칸을 짚어 다시 말씀해 주세요. 고를 것: "),

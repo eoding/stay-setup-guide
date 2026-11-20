@@ -76,7 +76,7 @@ class TargetPlanTest(unittest.TestCase):
 
     def test_the_same_rules_apply_to_the_resulting_cell(self):
         plan = plan_targets(self.snapshot, table(
-            (key("2026-12-25"), {"sell": "120.00"}),
+            (key("2026-12-25"), {"sell": "270.00"}),     # +35% — 1박 이상을 올리니 박수 층 규칙에는 걸리지 않는다
             (key("2026-12-26"), {"sell": "210.00", "supply": "250.00"}),
             (key("2027-01-01", room="스위트"), {"sell": "520.00"}),
             (key("2027-01-02", room="스위트"), {"sell": "0"})))

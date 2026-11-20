@@ -1,4 +1,4 @@
-"""ERP 와 같은 계산 — 「정가도 같이 올림」의 정가(Y1).
+"""ERP 와 같은 계산 — 「정가도 같이 올림」의 정가(Y1), 1박 이상보다 비싼 박수 층(Y2).
 
 기대값은 도우미를 돌려 얻은 것이 아니라 ERP 소스를 읽고 손으로 셈한 것이다. 근거는 basecamp
 `stay/services/bulk_price_adjust.py` 의 `build_preview` 가 「정가도 같이 조정」(`adjust_original`)을 켰을 때 정가를 옮기는 줄이다:
@@ -11,6 +11,16 @@
     normalize = `pricing.money.normalize` — 공급 통화 최소 단위로 ROUND_HALF_UP(USD 2자리, KRW · VND · JPY · IDR 0자리)
 
 새 값 지정(set)은 ERP 에 짝이 없다 — 브리프대로 판매가가 옮긴 만큼 정가도 옮긴다.
+
+박수 층의 기대값은 같은 파일의 `_check_los_tiers` 를 읽고 손으로 정했다(바꾼 뒤의 값, 건너뛴 칸은 지금 값으로 견준다):
+
+    ① upper_tiers   2박 이상 칸의 after > 그날 같은 인원 조합의 1박 칸(price_at) 이면 그 칸을 건너뜀
+    ② 1박 칸        같은 좌표의 다른 층(고르지 않은 층도 — `tiers`) 가운데 price_at > 1박 칸의 after 가 있으면 1박 칸을 건너뜀
+    ③ upper_tiers   ② 로 1박 칸이 지금 값으로 돌아갔으니 한 번 더 — 건너뛰는 칸이 더 늘지 않을 때까지(`while True`)
+    차례            … → 정가보다 비싸짐(ABOVE_ORIGINAL) → 1박 가격보다 비싸짐(ABOVE_ONE_NIGHT) — 칸마다 첫 사유 하나
+
+도우미에서 ERP 의 「건너뜀」은 빨간 줄 ABOVE_ONE_NIGHT(이대로 바꿈 / 그 칸은 안 바꿈)다. 「정가도 같이 조정」을 끈 ERP 는 도우미에서
+정가 빨간 줄에 「그 칸은 안 바꿈」을, 켠 ERP 는 「정가도 같이 올림」을 고른 것과 같다.
 
     python3 -m unittest discover -s tests
 """
@@ -104,6 +114,91 @@ class ListFollowsTheErpRuleTest(unittest.TestCase):
         plan = plan_change(snapshot, ask("percent", "10"))
         with self.assertRaisesRegex(ValueError, "정가를 같이 올려도 판매가보다 낮은 칸"):
             resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])
+
+
+def tiers(cells, currency="USD"):
+    """`{(인원, 박수): 판매가 또는 (판매가, 정가)}` → 객실 R · 요금제 P · 하루의 Snapshot."""
+    def value(item):
+        sell, lst = item if isinstance(item, tuple) else (item, None)
+        return CellValue(D(sell), None if lst is None else D(lst), None, "open")
+    return Snapshot("H", "O", currency, "2026-11-20T10:00:00+09:00",
+                    {CellKey("R", "P", DAY, occ, nights): value(item) for (occ, nights), item in cells.items()},
+                    frozenset(), frozenset({("R", "P")}), hotel_id="9")
+
+
+def tier_red(snapshot, request, choices=()):
+    """박수 층 빨간 줄에 걸린 칸 {(인원, 박수)} 와 그 미리보기."""
+    plan = resolve(plan_change(snapshot, request), choices)
+    return {(c.key.occupancy, c.key.nights) for c in plan.changes if c.verdict == "ABOVE_ONE_NIGHT"}, plan
+
+
+A2_1, A2_2, A2_3 = ("A2", 1), ("A2", 2), ("A2", 3)
+# (이름, 칸들, 요청, 고름, ERP 가 1박 가격보다 비싸짐으로 건너뛰는 칸, _check_los_tiers 로 손으로 셈한 것)
+TIER_CASES = (
+    ("1박만 10% 내림 — 브리프의 예", {A2_1: "100.00", A2_3: "95.00"}, ask("percent", "-10", nights=(1,)), (),
+     {A2_1}, "② 1박 90.00 < 3박 이상 95.00(고르지 않은 층) → 1박 칸"),
+    ("1박만 4% 내림 — 아직 3박 이상보다 비쌈", {A2_1: "100.00", A2_3: "95.00"}, ask("percent", "-4", nights=(1,)), (),
+     set(), "② 1박 96.00 > 3박 이상 95.00 → 건너뛰지 않음"),
+    ("3박 이상만 10% 올림", {A2_1: "100.00", A2_3: "95.00"}, ask("percent", "10", nights=(3,)), (),
+     {A2_3}, "① 3박 이상 104.50 > 1박 100.00 → 3박 이상 칸"),
+    ("3박 이상만 5% 올림", {A2_1: "100.00", A2_3: "95.00"}, ask("percent", "5", nights=(3,)), (),
+     set(), "① 99.75 < 100.00"),
+    ("같으면 비싸진 것이 아니다", {A2_1: "100.00", A2_3: "95.00"}, ask("amount", "5", nights=(3,)), (),
+     set(), "① 100.00 > 100.00 은 거짓(엄격히 큼)"),
+    ("모든 층 10% 올림", {A2_1: "100.00", A2_3: "95.00"}, ask("percent", "10"), (),
+     set(), "① 104.50 < 110.00"),
+    ("② 다음 ① 한 번 더", {A2_1: "100.00", A2_2: "98.00", A2_3: "130.00"}, ask("amount", "20", nights=(1, 2)), (),
+     {A2_1, A2_2}, "① 2박 118 < 1박 120 · ② 1박 120 < 3박 이상 130 → 1박 건너뜀 · ③ 2박 118 > 1박 지금 값 100 → 2박 건너뜀"),
+    ("정가 빨간 줄을 안 바꿈 = 「정가도 같이 조정」을 끈 ERP", {A2_1: ("100.00", "105.00"), A2_3: "95.00"}, ask("percent", "10"),
+     (Resolution("ABOVE_LIST", "keep"),), {A2_3}, "1박 110 > 정가 105 → 정가보다 비싸짐으로 건너뜀 · ① 3박 이상 104.50 > 1박 지금 값 100"),
+    ("정가도 같이 올림 = 「정가도 같이 조정」을 켠 ERP", {A2_1: ("100.00", "105.00"), A2_3: "95.00"}, ask("percent", "10"),
+     (Resolution("ABOVE_LIST", "raise_list"),), set(), "1박 110 · 정가 115.50 저장 · ① 104.50 < 110"),
+    ("바꾸기 전부터 어긴 칸도 이번에 바꾸면 본다", {A2_1: "100.00", A2_3: "105.00"}, ask("percent", "10"), (),
+     {A2_3}, "① 3박 이상 115.50 > 1박 110.00"),
+    ("바꾸지 않는 칸은 보지 않는다", {A2_1: "100.00", A2_3: "105.00"}, ask("percent", "10", nights=(1,)), (),
+     set(), "② 1박 110 > 3박 이상 105 — 고르지 않은 3박 이상은 cells 에 없다"),
+    ("아동 칸도 제 1박 이상과 견준다", {A2_1: "100.00", A2_3: "90.00", ("A2C1_CHD", 1): "130.00", ("A2C1_CHD", 3): "117.00"},
+     ask("percent", "-20", nights=(1,)), (), {A2_1, ("A2C1_CHD", 1)},
+     "② 성인 1박 80 < 90 · 아동 1박 scaled(100) + 30 = 110 < 117"),
+    ("아동 칸 — 걸리지 않는 만큼", {A2_1: "100.00", A2_3: "90.00", ("A2C1_CHD", 1): "130.00", ("A2C1_CHD", 3): "117.00"},
+     ask("percent", "-10", nights=(1,)), (), set(), "② 성인 1박 90 = 90 · 아동 1박 120 > 117"),
+)
+
+
+class TierRuleTest(unittest.TestCase):
+    def test_a_red_line_where_the_erp_skips_a_cell_for_the_one_night_price_and_none_where_it_does_not(self):
+        for name, cells, request, choices, expected, worked in TIER_CASES:
+            with self.subTest(name, worked=worked):
+                self.assertEqual(tier_red(tiers(cells), request, choices)[0], expected)
+
+    def test_the_two_choices_and_what_each_saves(self):
+        snapshot, request = tiers({A2_1: "100.00", A2_3: "95.00"}), ask("percent", "-10", nights=(1,))
+        red, plan = tier_red(snapshot, request)
+        self.assertIsNone(plan_steps(plan), "고르기 전에는 저장할 수 없다")
+        for choice, written in (("include", D("90.00")), ("keep", None)):
+            chosen = resolve(plan_change(snapshot, request), [Resolution("ABOVE_ONE_NIGHT", choice)])
+            rows = [row.sell for step in plan_steps(chosen) for row in step.rows]
+            self.assertEqual(rows, [written] if written else [], choice)
+
+    def test_the_erp_order_where_both_rules_apply(self):
+        snapshot = tiers({A2_1: "100.00", A2_3: ("95.00", "100.00")})
+        request = ask("percent", "10", nights=(3,))      # 3박 이상 104.50 — 정가 100 도, 1박 100 도 넘는다
+        plan = plan_change(snapshot, request)
+        self.assertEqual([c.verdict for c in plan.changes], ["ABOVE_LIST"], "ERP 차례: 정가보다 비싸짐이 먼저")
+        raised = resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])
+        self.assertEqual([(c.verdict, c.choice, c.after.list) for c in raised.changes], [("ABOVE_ONE_NIGHT", None, D("110.00"))],
+                         "정가를 같이 올려 판매가가 바뀌면(「정가도 같이 조정」을 켠 ERP) 그다음 규칙이 걸린다")
+        lowered = plan_change(tiers({A2_1: "100.00", A2_3: "95.00"}), ask("percent", "-40", nights=(1,)))
+        self.assertEqual([c.verdict for c in lowered.changes], ["ABOVE_ONE_NIGHT"], "박수 층 규칙이 30% 보다 앞선다")
+
+    def test_the_preview_says_how_many_cells_already_broke_the_rule(self):
+        snapshot = tiers({A2_1: "100.00", A2_3: "105.00", ("A3", 1): "160.00", ("A3", 3): "170.00"})
+        plan = plan_change(snapshot, ask("percent", "10", nights=(1,)))
+        self.assertEqual(plan.above_one_night_before, 2)
+        self.assertIn("바꾸기 전부터 같은 날 1박 이상 가격보다 비싼 박수 층 칸이 2칸", render_preview(plan))
+        page = render_preview(tier_red(tiers({A2_1: "100.00", A2_3: "95.00"}), ask("percent", "-10", nights=(1,)))[1])
+        self.assertIn("같은 날 1박 이상 가격보다 비싼 박수 층이 됩니다.", page)
+        self.assertIn("이 칸은 골라 주세요: 이대로 바꿈 / 그 칸은 안 바꿈.", page)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,8 @@
 
     plan_change(snapshot, request)      → Plan          칸마다 전 → 후, 표시, 판정
     plan_targets(snapshot, table)       → Plan          목표 값 표 — 다른 칸만, 새로 생기는 칸 포함. 인원·박수가 없는 줄은 하나뿐인 줄로
-    resolve(plan, resolutions)          → Plan          빨간 줄 고름을 칸에 단다 — 고른 칸의 후 값은 고른 대로(정가도 올림 · 지움 · 안 바꿈)
+    resolve(plan, resolutions)          → Plan          빨간 줄 고름을 칸에 단다 — 고른 칸의 후 값은 고른 대로(정가도 올림 · 지움 · 안 바꿈),
+                                                        그 값으로 박수 층 규칙(1박 이상보다 비싼 층)을 다시 본다
     plan_steps(plan)                    → 저장 단계들   칸이 넣는 값(CellChange.writes)에서만. 고르지 않은 빨간 줄이 있으면 None
     save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 줄과 값이 같은 날들(떨어져 있어도 한 번, 550일까지)
     stale_cells(then, now)              → 다른 항목들   (change_core.items.stale_items)
@@ -14,6 +15,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import replace
 from datetime import date, timedelta
 from decimal import Decimal
@@ -26,7 +28,7 @@ from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_
 from change_core.rules import BLOCKED, Resolution, decide
 
 from price_model import (
-    CELL_RULES, CLOSED, ERP_MAX_DAYS, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
+    CELL_RULES, CLOSED, ERP_MAX_DAYS, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, TIER_RULE, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
     day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
     snapshot_reading, split_occupancy, value_of,
@@ -186,13 +188,14 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
             skipped.append(Skipped(key, "same"))
             continue
         changes.append(_change(snapshot, request, key, before, after, lacking))
-    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent, no_sale)
+    return _judged(Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent, no_sale),
+                   snapshot)
 
 
 def _change(snapshot: Snapshot, request: ChangeRequest | TargetTable, key: CellKey, before: CellValue,
             after: CellValue | None, lacking: str | None) -> CellChange:
     """칸 하나의 판정 — 정가보다 비싸지는 칸이면 「정가도 같이 올림」일 때의 정가도 셈해 둔다."""
-    verdict = CELL_RULES.verdict(before, after, lacking)
+    verdict = CELL_RULES.verdict(before, after, lacking, False)
     follow = _list_follow(snapshot, request, key, before, after) if verdict == "ABOVE_LIST" else None
     return CellChange(key, before, after, _marks(snapshot, key, before), verdict, list_follow=follow)
 
@@ -250,7 +253,24 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
         if after == before:
             continue
         changes.append(_change(snapshot, table, key, before, after, lacking))
-    return Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), (), no_sale=tuple(sorted(no_sale)))
+    return _judged(Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), (), no_sale=tuple(sorted(no_sale))), snapshot)
+
+
+def _tier_group(key: CellKey) -> tuple[str, str, str, str]:
+    """박수 층끼리 견주는 묶음 — 같은 객실 · 요금제 · 날짜 · 인원 조합(ERP 의 판매일 · 요금제 · 인원 조합)."""
+    return key.room, key.rate_plan, key.date, key.occupancy
+
+
+def _judged(plan: Plan, snapshot: Snapshot) -> Plan:
+    """계산을 마친 미리보기 — 박수 층 규칙에 쓸 바꾸지 않는 층의 지금 값(`tiers`)과, 바꾸기 전부터 1박 이상 층보다 비싼 박수 층 칸
+    수를 달고, 아직 아무것도 고르지 않은 채로 박수 층 규칙을 본다(resolve)."""
+    moved = {_tier_group(change.key) for change in plan.changes
+             if change.after is not None and change.after.sell != change.before.sell}
+    tiers = {key: value.sell for key, value in snapshot.cells.items() if value.sell is not None and _tier_group(key) in moved}
+    one_night = {_tier_group(key): value.sell for key, value in snapshot.cells.items() if key.nights == 1 and value.sell is not None}
+    above = sum(1 for key, value in snapshot.cells.items() if key.nights > 1 and value.sell is not None
+                and one_night.get(_tier_group(key)) is not None and value.sell > one_night[_tier_group(key)])
+    return resolve(replace(plan, tiers=tiers, above_one_night_before=above), ())
 
 
 CHOICES = ("include", "keep", "raise_list", "clear_list")
@@ -279,15 +299,102 @@ def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
 
 
 def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
-    """빨간 줄 고름을 칸에 단 미리보기. 칸을 짚은 고름이 규칙 전체 고름보다 앞선다. 고르지 않은 빨간 줄 칸은 그대로 둔다.
+    """빨간 줄 고름을 칸에 단 미리보기. 받는 것은 계산이 막 낸 미리보기(plan_change · plan_targets — 아직 고른 것이 없다)다.
+
+    두 번에 나눠 단다. 먼저 칸 하나로 정하는 규칙(정가 · 공급 원가 · 30%)의 고름을 달고, 그 뒤의 값으로 박수 층 규칙을 본다 — 같은 날
+    1박 이상 층보다 비싼 박수 층이 되는지는 다른 칸이 고른 뒤 어떤 값이 되는지에 달렸다(안 바꾸기로 고른 칸은 지금 값으로 남는다).
+    박수 층 규칙의 판정이 공급 원가 · 30% 보다 앞선다(ERP 차례 — 정가보다 비싸짐 다음). 정가보다 비싸지는 칸은 정가 고름(정가도
+    같이 올림 · 정가 지움)으로 판매가가 바뀔 때만 박수 층 규칙을 본다. 그 칸이 걸리면 판정은 박수 층 규칙이 되고 정가 고름은 후 값
+    (올린 · 지운 정가)으로 남는다.
 
     고른 칸의 후 값은 고른 대로다 — include 계산한 값 그대로 · keep 전 값 그대로 · raise_list 정가를 계산 때 셈해 둔 값으로
     (CellChange.list_follow — ERP 「정가도 같이 조정」의 규칙) · clear_list 정가를 비움. 저장 단계(plan_steps)와 장부의
-    줄(preview_rows)이 이 값에서 나온다.
+    줄(preview_rows)이 이 값에서 나온다. 칸을 짚은 고름이 규칙 전체 고름보다 앞서고, 고르지 않은 빨간 줄 칸은 그대로 둔다.
     """
-    flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
-    chosen, _waiting = decide(CELL_RULES, flagged, resolutions, cell_name)
-    return replace(plan, changes=tuple(_choose(change, chosen.get(change.key)) for change in plan.changes))
+    resolutions = tuple(resolutions)
+    fresh = {change.key: replace(change, verdict=_own_verdict(change)) for change in plan.changes}
+    flagged = {key: change.verdict for key, change in fresh.items() if change.verdict}
+    chosen, _waiting = decide(CELL_RULES, flagged, [item for item in resolutions if item.rule != TIER_RULE], cell_name)
+    first = {key: _choose(change, chosen.get(key)) for key, change in fresh.items()}
+    tier_choices = [item for item in resolutions if item.rule == TIER_RULE]
+    included: set[CellKey] = set()
+    for _round in range(len(first) + 1):    # 「이대로 바꿈」으로 바꾼 값이 다른 칸의 견줌을 바꾼다 — 고름이 더 늘지 않을 때까지
+        breaks = _tier_breaks(plan, first, included)
+        picked, _waiting = decide(CELL_RULES, dict.fromkeys(breaks, TIER_RULE), tier_choices, cell_name)
+        now = {key for key, choice in picked.items() if choice == "include"}
+        if now == included:
+            break
+        included = now
+    return replace(plan, changes=tuple(
+        _choose(replace(first[change.key], verdict=TIER_RULE, choice=None), picked.get(change.key)) if change.key in breaks
+        else first[change.key] for change in plan.changes))
+
+
+def _own_verdict(change: CellChange) -> str | None:
+    """칸 하나로 정하는 판정 — 막 계산한 칸이 박수 층 규칙에 걸려 있으면 그 밑의 판정(공급 원가 · 30% · 없음)을 다시 본다."""
+    if change.verdict != TIER_RULE:
+        return change.verdict
+    return CELL_RULES.verdict(change.before, change.after, None, False)
+
+
+def _saves_sell(change: CellChange) -> bool:
+    """저장이 판매가를 바꾸는 칸 — 적용할 수 없는 칸 · 안 바꾸기로 고른 칸이 아니고 판매가가 달라진다. 아직 고르지 않은 빨간 줄은
+    미리보기가 보이는 계산한 값으로 본다."""
+    return (CELL_RULES.severity(change.verdict) != BLOCKED and change.choice != "keep" and change.after is not None
+            and change.after.sell != change.before.sell)
+
+
+def _tier_breaks(plan: Plan, cells: Mapping[CellKey, CellChange], included: set[CellKey]) -> set[CellKey]:
+    """박수 층 규칙에 걸리는 칸 — ERP 의 `bulk_price_adjust._check_los_tiers` 와 같은 판정이다.
+
+    박수 층은 같은 객실 · 요금제 · 날짜 · 인원 조합의 1박 이상 층보다 비싸면 안 된다. 바꾼 뒤의 값(바꾸지 않는 칸 · 안 바꾸기로 고른
+    칸은 지금 값)끼리 견준다. ① 2박 이상 층의 칸이 그날 1박 이상 칸보다 비싸지면 그 칸 ② 1박 이상 칸을 내려 위 층보다 싸지면 그 1박
+    이상 칸 ③ ② 로 걸린 칸이 지금 값으로 돌아가면 ① 을 한 번 더. 걸린 칸은 ERP 처럼 안 바꾸는 것으로 보고(담당자가 「이대로
+    바꿈」을 고른 칸 `included` 만 바꾼 값으로 본다) 더 걸리는 칸이 없을 때까지 돈다. 한 번 걸린 칸은 풀지 않는다(ERP 와 같다).
+
+    보는 칸은 저장이 판매가를 바꾸는 칸이다. 아직 고르지 않은 「정가보다 비싸짐」 칸은 보지 않는다 — ERP 차례에서 그 규칙이 앞선다.
+    바꾸기 전부터 규칙을 어긴 칸이라도 이번에 바꾸면 본다. 바꾸지 않는 칸은 보지 않는다(Plan.above_one_night_before 가 그 수를 센다).
+    """
+    flagged: set[CellKey] = set()
+    candidates = [change for change in cells.values()
+                  if _saves_sell(change) and not (change.verdict == "ABOVE_LIST" and change.choice is None)]
+    groups: dict[tuple, set[int]] = defaultdict(set)
+    for key in [*plan.tiers, *(key for key, change in cells.items() if _saves_sell(change))]:
+        groups[_tier_group(key)].add(key.nights)
+
+    def price_at(key: CellKey) -> Decimal | None:
+        change = cells.get(key)
+        if change is None:
+            return plan.tiers.get(key)
+        if _saves_sell(change) and (key not in flagged or key in included):
+            return change.after.sell
+        return change.before.sell
+
+    def upper_tiers():
+        for change in candidates:
+            if change.key in flagged or change.key.nights == 1:
+                continue
+            one_night = price_at(replace(change.key, nights=1))
+            if one_night is not None and change.after.sell > one_night:
+                flagged.add(change.key)
+
+    def one_night_cells():
+        for change in candidates:
+            if change.key in flagged or change.key.nights != 1:
+                continue
+            for nights in sorted(groups[_tier_group(change.key)] - {1}):
+                upper = price_at(replace(change.key, nights=nights))
+                if upper is not None and upper > change.after.sell:
+                    flagged.add(change.key)
+                    break
+
+    while True:
+        count = len(flagged)
+        upper_tiers()
+        one_night_cells()
+        upper_tiers()
+        if len(flagged) == count:
+            return flagged
 
 
 def _choose(change: CellChange, choice: str | None) -> CellChange:

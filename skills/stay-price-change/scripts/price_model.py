@@ -337,29 +337,35 @@ CHOICE_LABELS = {
     "clear_list": "정가 지움",
 }
 
-# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산하지 못한 까닭 또는 None) 을 받는다. 까닭은 "adult"(성인만 있는 칸이
-# 없음) · "base"(새 값 지정에서 그날 기준 인원 · 1박 이상 칸에 값이 없음) · "sell"(새로 생기는 칸에 판매가가 없음) ·
-# "row"(읽은 값에 없는 인원 조합·박수라 칸을 새로 만들지 않음).
-# 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다.
+# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산하지 못한 까닭 또는 None, 박수 층 규칙에 걸림) 을 받는다. 까닭은 "adult"(성인만
+# 있는 칸이 없음) · "base"(새 값 지정에서 그날 기준 인원 · 1박 이상 칸에 값이 없음) · "sell"(새로 생기는 칸에 판매가가 없음) ·
+# "row"(읽은 값에 없는 인원 조합·박수라 칸을 새로 만들지 않음). 박수 층 규칙은 칸 하나로 정할 수 없어(같은 날 다른 층의 값 — 고른
+# 뒤의 값 — 과 견준다) 계산(price_plan._tier_breaks)이 정해 넘긴다.
+# 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다. 표의 차례는 ERP [선택 날짜 가격 가감]이 건너뛸 까닭을 보는
+# 차례를 따른다 — 정가보다 비싸짐 → 1박 가격보다 비싸짐(`bulk_price_adjust.build_preview`). 공급 원가 · 30% 는 ERP 에 없는 도우미의
+# 확인이라 그 뒤다.
+TIER_RULE = "ABOVE_ONE_NIGHT"
 CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
-         lambda before, after, lacking: after is not None and after.sell <= 0),
+         lambda before, after, lacking, tier: after is not None and after.sell <= 0),
     Rule("NEGATIVE_SUPPLY", "공급 원가가 0 아래가 됩니다", BLOCKED, (),
-         lambda before, after, lacking: after is not None and after.supply is not None and after.supply < 0),
+         lambda before, after, lacking, tier: after is not None and after.supply is not None and after.supply < 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
-         lambda before, after, lacking: lacking == "adult"),
+         lambda before, after, lacking, tier: lacking == "adult"),
     Rule("NO_BASE_CELL", "그날 기준 인원 · 1박 이상 칸에 값이 없습니다", BLOCKED, (),
-         lambda before, after, lacking: lacking == "base"),
+         lambda before, after, lacking, tier: lacking == "base"),
     Rule("NEW_WITHOUT_SELL", "새로 생기는 칸에 판매가가 없습니다", BLOCKED, (),
-         lambda before, after, lacking: lacking == "sell"),
+         lambda before, after, lacking, tier: lacking == "sell"),
     Rule("NEW_NOT_SHOWN", "이 객실·요금제에 없는 인원 조합·박수라 칸을 새로 만들지 않습니다", BLOCKED, (),
-         lambda before, after, lacking: lacking == "row"),
+         lambda before, after, lacking, tier: lacking == "row"),
     Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "clear_list", "keep"),
-         lambda before, after, lacking: after is not None and after.list is not None and after.sell > after.list),
+         lambda before, after, lacking, tier: after is not None and after.list is not None and after.sell > after.list),
+    Rule(TIER_RULE, "박수 층이 1박 이상 가격보다 비싸집니다", RED, ("include", "keep"),
+         lambda before, after, lacking, tier: tier),
     Rule("BELOW_COST", "공급 원가보다 싸집니다", RED, ("include", "keep"),
-         lambda before, after, lacking: after is not None and after.supply is not None and after.sell < after.supply),
+         lambda before, after, lacking, tier: after is not None and after.supply is not None and after.sell < after.supply),
     Rule("OVER_30", "30% 넘게 바뀝니다", RED, ("include", "keep"),
-         lambda before, after, lacking: _moved_far(before, after)),
+         lambda before, after, lacking, tier: _moved_far(before, after)),
 )
 
 
@@ -457,6 +463,9 @@ class Plan:
     `absent_pairs` 는 객실·요금제를 따로 받았을 때 그 객실에 없어(읽은 쌍에 없어) 요청에서 뺀 조합 — 미리보기가 이름을 댄다.
     `no_sale` 은 요청한 (객실, 요금제, 날짜) 가운데 판매일이 없어 바꿀 수 없는 날 — 「판매일 없음」으로 건너뛴다.
     `coverage` 는 새 요금표로 맞출 때 넣지 않는 것 전부(Gap) — 요금표에서 온 계획만 갖는다.
+    `tiers` 는 판매가가 바뀌는 칸과 같은 객실 · 요금제 · 날짜 · 인원 조합의 모든 박수 층의 지금 판매가 — 박수 층 규칙(1박 이상보다
+    비싼 층)을 고른 뒤에 다시 볼 때 바꾸지 않는 층의 값이다. `above_one_night_before` 는 읽은 값에서 바꾸기 전부터 같은 날 1박 이상
+    층보다 비싼 박수 층 칸의 수다(이번 변경과 상관없이 — 미리보기가 알린다).
     """
     request: ChangeRequest | TargetTable
     currency: str
@@ -467,6 +476,8 @@ class Plan:
     absent_pairs: tuple[tuple[str, str], ...] = ()
     no_sale: tuple[tuple[str, str, str], ...] = ()
     coverage: tuple[Gap, ...] = ()
+    tiers: Mapping[CellKey, Decimal] = field(default_factory=dict)
+    above_one_night_before: int = 0
 
 
 # ─── 사람이 읽는 이름 ───
@@ -700,7 +711,9 @@ def encode_plan(plan: Plan) -> dict:
                 empty_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.empty_pairs],
                 absent_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.absent_pairs],
                 no_sale=[dict(room=room, rate_plan=plan_name, date=day) for room, plan_name, day in plan.no_sale],
-                coverage=[encode_gap(gap) for gap in plan.coverage])
+                coverage=[encode_gap(gap) for gap in plan.coverage],
+                tiers=[dict(encode_key(key), sell=money_text(sell)) for key, sell in sorted(plan.tiers.items())],
+                above_one_night_before=plan.above_one_night_before)
 
 
 def decode_plan(data: Mapping) -> Plan:
@@ -710,4 +723,6 @@ def decode_plan(data: Mapping) -> Plan:
                 tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("empty_pairs") or ()),
                 tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("absent_pairs") or ()),
                 tuple((str(item["room"]), str(item["rate_plan"]), iso_day(item["date"])) for item in data.get("no_sale") or ()),
-                tuple(decode_gap(item) for item in data.get("coverage") or ()))
+                tuple(decode_gap(item) for item in data.get("coverage") or ()),
+                {decode_key(item): money(item["sell"]) for item in data.get("tiers") or ()},
+                int(data.get("above_one_night_before") or 0))
