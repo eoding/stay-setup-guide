@@ -1,0 +1,44 @@
+[
+  {
+    "op": "readCharge",
+    "ok": true,
+    "what": "데모 오퍼 2027 · 레이트 체크아웃 (14시 이후 · 1박 요금의 50%)",
+    "body": {
+      "id": "bgoldenread",
+      "chars": 1301,
+      "bytes": 1624,
+      "crc32": "3257572f",
+      "fnv": "4cbe5bb5"
+    },
+    "rest": true,
+    "ask": "12db2651",
+    "clicks": {
+      "chargeOpen": 1
+    },
+    "blocked": [],
+    "ms": 0,
+    "doneAt": "2026-11-21T00:00:00.000Z"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenread",
+    "at": 0,
+    "size": 800,
+    "next": 680,
+    "end": 1301,
+    "sum": "0783a494",
+    "text": "{'op':'readCharge','asked':{'hotel':{'id':'1','name':'데모 호텔'},'offer':'601','charge':'701'},'hotel':{'id':'1','name':'데모 호텔'},'offer':{'id':'601','name':'데모 오퍼 2027'},'charge':{'id':'701','name':'레이트 체크아웃 (14시 이후 · 1박 요금의 50%)','kind':'레이트 체크아웃','basis':'1박 요금의 %','amount':['12:01 ~ 14:00 · 정액: 0.00 USD','14:01 ~ 18:00 · 1박 요금의 %: 50.00%','체류당 1회'],'scope':'이 오퍼의 모든 객실 객실: 기존 범위 그대로','dates':'선택 항목 (고객이 고를 때만)'},'window':{'title':'부과금 편집 — 레이트 체크아웃 (14시 이후 · 1박 요금의 50%)','currency':'USD','form':[['kind','1'],['name','레이트 체크아웃 (14시 이후 · 1박 요금의 50%)'],['basis','1'],['per','0'],['amount_mode','blank'],['amount',''],['pct_mode','set'],['pct','50.00'],['date_mode','optional'],"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenread",
+    "at": 680,
+    "size": 800,
+    "next": 1301,
+    "end": 1301,
+    "sum": "26e02a4f",
+    "text": "['date_scope',''],['onsite_currency',''],['onsite_amount',''],['tiers_submitted','1'],['tiers_time_from','12:01'],['tiers_time_to','14:00'],['tiers_basis','0'],['tiers_amount','0.00'],['tiers_pct',''],['tiers_time_from','14:01'],['tiers_time_to','18:00'],['tiers_basis','1'],['tiers_amount',''],['tiers_pct','50.00'],['description',''],['scope_room_mode','0']],'labels':{'kind':'레이트 체크아웃','basis':'1박 요금의 %','per':'체류당 1회','amount_mode':'미정 (비움)','pct_mode':'지정 (0 포함)','date_mode':'선택 — 고객이 고를 때만 붙습니다','onsite_currency':'---------','tiers_basis':'정액&#10;1박 요금의 %','scope_room_mode':'기존 범위 그대로'},'bands':[],'errors':[]}}"
+  }
+]
