@@ -1,0 +1,264 @@
+"""미리보기 계산 — 바꾸는 방법 셋, 반올림, 아동 추가분, 규칙 표의 줄마다, 표시, 빨간 줄 고르기, 저장 단계, 낡음 확인.
+
+    python3 -m unittest discover -s tests
+"""
+
+import sys
+import unittest
+from decimal import Decimal
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+
+import scene  # noqa: E402
+from price_model import (  # noqa: E402
+    MISSING, CellKey, CellValue, CellWrite, ChangeRequest, Resolution, Snapshot,
+)
+from price_plan import PlanError, counts, plan_change, resolve, save_steps, stale_cells  # noqa: E402
+
+D = Decimal
+DAY, NEXT, LATER = "2026-12-25", "2026-12-26", "2026-12-28"
+
+
+def snap(cells, currency="USD", reserved=()):
+    """`{(날짜, 인원, 박수): CellValue}` → 객실 R · 요금제 P 한 곳의 Snapshot."""
+    return Snapshot("H", "O", currency, "2026-11-20T10:00:00+09:00",
+                    {CellKey("R", "P", day, occ, nights): value for (day, occ, nights), value in cells.items()},
+                    frozenset(reserved))
+
+
+def open_(sell, list_price=None, supply=None):
+    return CellValue(D(sell), None if list_price is None else D(list_price), None if supply is None else D(supply), "open")
+
+
+def ask(operation, value, dates=(DAY,), **over):
+    return ChangeRequest("H", "O", ("R",), ("P",), tuple(dates), operation, D(value), **over)
+
+
+def after_of(plan):
+    return {(c.key.date, c.key.occupancy, c.key.nights): (c.after.sell if c.after else None) for c in plan.changes}
+
+
+def verdicts(plan):
+    return {(c.key.date, c.key.occupancy, c.key.nights): c.verdict for c in plan.changes}
+
+
+class SceneTest(unittest.TestCase):
+    """그림이 보인 숫자: 바뀌는 칸 90 · 예약 있는 날의 칸 24 · 마감 칸 6 · 건너뛰는 칸 6 · 정가 넘는 칸 2 · 저장 8번."""
+
+    def setUp(self):
+        self.plan = plan_change(scene.snapshot(), scene.request())
+
+    def test_counts(self):
+        tally = counts(self.plan.changes, len(self.plan.skipped))
+        self.assertEqual((tally["cells"], tally["reserved"], tally["closed"], tally["skipped"], tally["ABOVE_LIST"]),
+                         (90, 24, 6, 6, 2))
+        self.assertEqual((tally["blocked"], tally["OVER_30"], tally["red"]), (0, 0, 2))
+
+    def test_save_steps_after_choosing_for_the_two_cells_above_list_price(self):
+        for choice in ("raise_list", "keep"):
+            writes, unresolved = resolve(self.plan, [Resolution("ABOVE_LIST", choice)])
+            self.assertEqual(unresolved, ())
+            self.assertEqual(len(save_steps(writes)), 8, choice)
+
+    def test_values_from_the_picture(self):
+        values = {(c.key.room, c.key.rate_plan, c.key.date, c.key.occupancy, c.key.nights): c for c in self.plan.changes}
+        child = values[("디럭스", "조식 포함", "2026-12-25", "A2C1_CHD", 1)]
+        self.assertEqual((child.before.sell, child.after.sell), (D("230.00"), D("250.00")))
+        half = values[("스위트", "룸온리", "2026-12-25", "A2", 1)]
+        self.assertEqual(half.after.sell, D("373.95"))
+        over = values[("스위트", "조식 포함", "2027-01-01", "A2", 1)]
+        self.assertEqual((over.after.sell, over.verdict, over.marks), (D("528.00"), "ABOVE_LIST", ("reserved",)))
+
+    def test_a_hundred_percent_by_mistake_puts_every_cell_on_a_red_line_once(self):
+        tally = counts(plan_change(scene.snapshot(), scene.request("100")).changes)
+        self.assertEqual((tally["red"], tally["OVER_30"], tally["ABOVE_LIST"]), (90, 88, 2))
+
+
+class OperationTest(unittest.TestCase):
+    def test_flat_amount_moves_every_occupancy_and_nights_tier_by_the_same_amount(self):
+        snapshot = snap({(DAY, "A2", 1): open_("100000"), (DAY, "A3", 1): open_("130000"),
+                         (DAY, "A2C1_CHD", 3): open_("110000")}, currency="KRW")
+        plan = plan_change(snapshot, ask("amount", "-5000"))
+        self.assertEqual(after_of(plan), {(DAY, "A2", 1): D("95000"), (DAY, "A3", 1): D("125000"),
+                                          (DAY, "A2C1_CHD", 3): D("105000")})
+
+    def test_set_gives_the_base_the_value_and_keeps_each_difference_per_date_and_tier(self):
+        snapshot = snap({(DAY, "A2", 1): open_("300.00"), (DAY, "A3", 1): open_("360.00"),
+                         (DAY, "A2", 3): open_("270.00"), (DAY, "A3", 3): open_("320.00"),
+                         (NEXT, "A2", 1): open_("310.00"), (NEXT, "A3", 1): open_("380.00")})
+        plan = plan_change(snapshot, ask("set", "350", dates=(DAY, NEXT), base_occupancy="A2"))
+        self.assertEqual(after_of(plan), {
+            (DAY, "A2", 1): D("350.00"), (DAY, "A3", 1): D("410.00"),
+            (DAY, "A2", 3): D("350.00"), (DAY, "A3", 3): D("400.00"),
+            (NEXT, "A2", 1): D("350.00"), (NEXT, "A3", 1): D("420.00"),
+        })
+
+    def test_set_without_a_base_price_that_day_cannot_be_applied(self):
+        snapshot = snap({(DAY, "A2", 1): MISSING, (DAY, "A3", 1): open_("360.00")})
+        plan = plan_change(snapshot, ask("set", "350", base_occupancy="A2"))
+        self.assertEqual(verdicts(plan), {(DAY, "A3", 1): "NO_BASE_CELL"})
+        self.assertIsNone(plan.changes[0].after)
+
+    def test_percent_multiplies_adults_only_cells(self):
+        plan = plan_change(snap({(DAY, "A2", 1): open_("200.00"), (DAY, "", 1): open_("150.00")}), ask("percent", "-10"))
+        self.assertEqual(after_of(plan), {(DAY, "A2", 1): D("180.00"), (DAY, "", 1): D("135.00")})
+
+    def test_percent_keeps_the_child_surcharge_unless_asked_to_scale_it(self):
+        cells = {(DAY, "A2", 1): open_("200.00"), (DAY, "A2C1_CHD", 1): open_("230.00")}
+        plain = plan_change(snap(cells), ask("percent", "10"))
+        self.assertEqual(after_of(plain)[(DAY, "A2C1_CHD", 1)], D("250.00"))
+        scaled = plan_change(snap(cells), ask("percent", "10", scale_child_surcharge=True))
+        self.assertEqual(after_of(scaled)[(DAY, "A2C1_CHD", 1)], D("253.00"))
+
+    def test_rounding_at_a_half_goes_up_in_the_currency_unit(self):
+        usd = plan_change(snap({(DAY, "A2", 1): open_("339.95")}), ask("percent", "10"))
+        self.assertEqual(after_of(usd)[(DAY, "A2", 1)], D("373.95"))
+        krw = plan_change(snap({(DAY, "A2", 1): open_("15005")}, currency="KRW"), ask("percent", "10"))
+        self.assertEqual(after_of(krw)[(DAY, "A2", 1)], D("16506"))
+        amount = plan_change(snap({(DAY, "A2", 1): open_("10.00")}), ask("amount", "0.005"))
+        self.assertEqual(after_of(amount)[(DAY, "A2", 1)], D("10.01"))
+
+
+class RuleTableTest(unittest.TestCase):
+    def verdict(self, cell, operation, value, **over):
+        plan = plan_change(snap({(DAY, "A2", 1): cell, **over.pop("more", {})}), ask(operation, value, **over))
+        return verdicts(plan)
+
+    def test_zero_or_below_cannot_be_applied(self):
+        self.assertEqual(self.verdict(open_("150.00"), "amount", "-150")[(DAY, "A2", 1)], "NOT_POSITIVE")
+        self.assertEqual(self.verdict(open_("150.00"), "amount", "-200")[(DAY, "A2", 1)], "NOT_POSITIVE")
+
+    def test_child_cell_without_an_adults_only_cell_cannot_be_applied(self):
+        result = self.verdict(open_("100.00"), "percent", "10", more={(DAY, "A3C1_CHD", 1): open_("230.00")})
+        self.assertEqual(result[(DAY, "A3C1_CHD", 1)], "NO_ADULT_CELL")
+        scaled = self.verdict(open_("100.00"), "percent", "10", scale_child_surcharge=True,
+                              more={(DAY, "A3C1_CHD", 1): open_("230.00")})
+        self.assertIsNone(scaled[(DAY, "A3C1_CHD", 1)])
+        unreadable = self.verdict(open_("100.00"), "percent", "10", more={(DAY, "2A+1유아", 1): open_("230.00")})
+        self.assertEqual(unreadable[(DAY, "2A+1유아", 1)], "NO_ADULT_CELL")
+        flat = self.verdict(open_("100.00"), "amount", "10", more={(DAY, "A3C1_CHD", 1): open_("230.00")})
+        self.assertIsNone(flat[(DAY, "A3C1_CHD", 1)])
+
+    def test_more_than_thirty_percent_is_a_red_line_and_exactly_thirty_is_not(self):
+        self.assertIsNone(self.verdict(open_("100.00"), "percent", "30")[(DAY, "A2", 1)])
+        self.assertIsNone(self.verdict(open_("100.00"), "percent", "-30")[(DAY, "A2", 1)])
+        self.assertEqual(self.verdict(open_("100.00"), "amount", "30.01")[(DAY, "A2", 1)], "OVER_30")
+        self.assertEqual(self.verdict(open_("100.00"), "amount", "-30.01")[(DAY, "A2", 1)], "OVER_30")
+
+    def test_below_known_supply_cost_is_a_red_line(self):
+        self.assertEqual(self.verdict(open_("200.00", supply="180.00"), "amount", "-30")[(DAY, "A2", 1)], "BELOW_COST")
+        self.assertIsNone(self.verdict(open_("200.00", supply="180.00"), "amount", "-20")[(DAY, "A2", 1)])
+        self.assertIsNone(self.verdict(open_("200.00"), "amount", "-30")[(DAY, "A2", 1)])
+
+    def test_above_list_price_is_a_red_line_and_wins_over_thirty_percent(self):
+        self.assertEqual(self.verdict(open_("200.00", list_price="210.00"), "amount", "20")[(DAY, "A2", 1)], "ABOVE_LIST")
+        self.assertIsNone(self.verdict(open_("200.00", list_price="220.00"), "amount", "20")[(DAY, "A2", 1)])
+        self.assertEqual(self.verdict(open_("200.00", list_price="210.00"), "percent", "100")[(DAY, "A2", 1)],
+                         "ABOVE_LIST")
+
+
+class MarksTest(unittest.TestCase):
+    def test_missing_days_are_skipped_closed_stay_closed_reserved_are_changed_and_marked(self):
+        snapshot = snap({(DAY, "A2", 1): open_("100.00"), (NEXT, "A2", 1): CellValue(D("100.00"), None, None, "closed"),
+                         (LATER, "A2", 1): MISSING}, reserved={("R", DAY)})
+        plan = plan_change(snapshot, ask("amount", "10", dates=(DAY, NEXT, LATER)))
+        self.assertEqual([k.date for k in plan.skipped], [LATER])
+        by_day = {c.key.date: c for c in plan.changes}
+        self.assertEqual((by_day[DAY].marks, by_day[DAY].after.sell), (("reserved",), D("110.00")))
+        self.assertEqual((by_day[NEXT].marks, by_day[NEXT].after.state, by_day[NEXT].after.sell),
+                         (("closed",), "closed", D("110.00")))
+
+
+class ScopeTest(unittest.TestCase):
+    def test_request_outside_what_was_read_is_refused(self):
+        snapshot = snap({(DAY, "A2", 1): open_("100.00")})
+        with self.assertRaises(PlanError):
+            plan_change(snapshot, ask("amount", "10", dates=(DAY, NEXT)))
+        with self.assertRaises(PlanError):
+            plan_change(snapshot, ChangeRequest("H", "O", ("R", "Other"), ("P",), (DAY,), "amount", D("1")))
+        with self.assertRaises(PlanError):
+            plan_change(snapshot, ChangeRequest("Other hotel", "O", ("R",), ("P",), (DAY,), "amount", D("1")))
+
+
+class ResolveTest(unittest.TestCase):
+    def setUp(self):
+        self.plan = plan_change(snap({
+            (DAY, "A2", 1): open_("200.00", list_price="210.00"),
+            (NEXT, "A2", 1): open_("200.00", list_price="205.00"),
+            (DAY, "A3", 1): open_("100.00"),
+            (NEXT, "A3", 1): open_("10.00"),
+        }), ask("amount", "20", dates=(DAY, NEXT)))
+
+    def test_red_line_cells_wait_for_a_choice(self):
+        writes, unresolved = resolve(self.plan, [])
+        self.assertEqual(sorted((c.key.date, c.key.occupancy) for c in unresolved),
+                         [(DAY, "A2"), (NEXT, "A2"), (NEXT, "A3")])
+        self.assertEqual([(w.key.date, w.key.occupancy, w.sell) for w in writes], [(DAY, "A3", D("120.00"))])
+
+    def test_blocked_cells_are_never_written_and_need_no_choice(self):
+        plan = plan_change(snap({(DAY, "A2", 1): open_("150.00"), (DAY, "A3", 1): open_("300.00")}),
+                           ask("amount", "-150"))
+        writes, unresolved = resolve(plan, [Resolution("OVER_30", "include")])
+        self.assertEqual(unresolved, ())
+        self.assertEqual([(w.key.occupancy, w.sell) for w in writes], [("A3", D("150.00"))])
+
+    def test_raise_list_moves_the_list_price_by_the_same_amount_and_a_named_cell_overrides(self):
+        nxt = CellKey("R", "P", NEXT, "A2", 1)
+        writes, unresolved = resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list"), Resolution("OVER_30", "include"),
+                                                 Resolution("ABOVE_LIST", "keep", (nxt,))])
+        self.assertEqual(unresolved, ())
+        self.assertEqual({(w.key.date, w.key.occupancy): (w.sell, w.list_price) for w in writes}, {
+            (DAY, "A2"): (D("220.00"), D("230.00")), (DAY, "A3"): (D("120.00"), None), (NEXT, "A3"): (D("30.00"), None)})
+
+    def test_naming_a_cell_that_is_not_on_that_red_line_is_refused(self):
+        with self.assertRaises(PlanError):
+            resolve(self.plan, [Resolution("OVER_30", "include", (CellKey("R", "P", DAY, "A2", 1),))])
+
+    def test_only_listed_choices_are_accepted(self):
+        with self.assertRaises(ValueError):
+            Resolution("ABOVE_LIST", "clear_list")
+        with self.assertRaises(ValueError):
+            Resolution("NOT_POSITIVE", "include")
+
+
+class SaveStepTest(unittest.TestCase):
+    def write(self, day, occ, sell, nights=1, plan="P", list_price=None):
+        return CellWrite(CellKey("R", plan, day, occ, nights), D(sell), None if list_price is None else D(list_price))
+
+    def test_adjacent_days_with_the_same_rows_share_one_save(self):
+        steps = save_steps([self.write(DAY, "A2", "10"), self.write(DAY, "A3", "12"),
+                            self.write(NEXT, "A3", "12"), self.write(NEXT, "A2", "10")])
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].dates, (DAY, NEXT))
+        self.assertEqual([(r.occupancy, r.sell) for r in steps[0].rows], [("A2", D("10")), ("A3", D("12"))])
+
+    def test_a_gap_a_different_value_a_missing_row_or_a_different_list_price_splits_the_save(self):
+        self.assertEqual(len(save_steps([self.write(DAY, "A2", "10"), self.write(LATER, "A2", "10")])), 2)
+        self.assertEqual(len(save_steps([self.write(DAY, "A2", "10"), self.write(NEXT, "A2", "11")])), 2)
+        self.assertEqual(len(save_steps([self.write(DAY, "A2", "10"), self.write(DAY, "A3", "12"),
+                                         self.write(NEXT, "A2", "10")])), 2)
+        self.assertEqual(len(save_steps([self.write(DAY, "A2", "10", list_price="20"),
+                                         self.write(NEXT, "A2", "10", list_price="21")])), 2)
+
+    def test_each_rate_plan_is_its_own_save(self):
+        steps = save_steps([self.write(DAY, "A2", "10"), self.write(DAY, "A2", "10", plan="Q")])
+        self.assertEqual([s.rate_plan for s in steps], ["P", "Q"])
+
+    def test_two_values_for_one_cell_are_refused(self):
+        with self.assertRaises(PlanError):
+            save_steps([self.write(DAY, "A2", "10"), self.write(DAY, "A2", "11")])
+
+
+class StaleTest(unittest.TestCase):
+    def test_every_differing_cell_is_reported(self):
+        then = snap({(DAY, "A2", 1): open_("100.00"), (NEXT, "A2", 1): open_("100.00"), (LATER, "A2", 1): open_("1.00")})
+        self.assertEqual(stale_cells(then, then), ())
+        now = snap({(DAY, "A2", 1): open_("101.00"), (NEXT, "A2", 1): CellValue(D("100.00"), None, None, "closed"),
+                    (LATER, "A3", 1): open_("1.00")})
+        self.assertEqual([(d.key.date, d.key.occupancy) for d in stale_cells(then, now)],
+                         [(DAY, "A2"), (NEXT, "A2"), (LATER, "A2"), (LATER, "A3")])
+
+
+if __name__ == "__main__":
+    unittest.main()
