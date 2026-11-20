@@ -64,6 +64,7 @@ test('A6 · 설치된 것과 다른 stay_addon_price.js 는 올리지도(load) �
   next.w.eval(LOADER);
   const again = plain(next.w.stayPriceLoader.again('addon'));
   assert.deepEqual([again.ok, again.wrong], [false, ['stay_addon_price.js']]);
+  assert.deepEqual(again.want, FOUR.map(([name]) => name), '거절한 답이 올릴 네 파일을 댄다');
   assert.match(again.error, /네 파일을 다시 올립니다\(load\)$/);
   assert.equal(next.w.stayAddonPrice, undefined);
   next.w.close();
@@ -97,6 +98,24 @@ test('A6 · 페이지 이동 뒤 again("addon") 은 적어 둔 네 원본을 다
   assert.equal(price.w.localStorage.getItem('stayPriceAddonSrc'), null);
   assert.deepEqual(Object.keys(plain(price.w.stayPriceLoader.status())).sort(), ['helper', 'label', 'ok', 'price', 'stored']);
   price.w.close();
+});
+
+test('F8 · 올리개 전체 뒤에 again("addon") 을 붙여 한 번에 실행하면, 첫 답이 부가옵션 묶음의 네 파일을 댄다(가격 캘린더의 세 파일이 아니다)', async () => {
+  const page = addonPage({ bare: true });
+  const first = plain(page.w.eval(LOADER + "\nstayPriceLoader.again('addon')"));
+  assert.equal(first.ok, false);
+  assert.deepEqual(first.want, FOUR.map(([name]) => name));
+  assert.match(first.error, /^적어 둔 원본이 없습니다: .* — 네 파일을 다시 올립니다\(load\)$/);
+  upload(page, FOUR);
+  assert.equal(plain(await page.w.stayPriceLoader.load('addon')).ok, true);
+  const saved = KEYS.map((k) => [k, page.w.localStorage.getItem(k)]);
+  page.w.close();
+  const next = addonPage({ bare: true });
+  saved.forEach(([k, v]) => next.w.localStorage.setItem(k, v));
+  const again = plain(next.w.eval(LOADER + "\nstayPriceLoader.again('addon')"));
+  assert.equal(again.ok, true, again.error);
+  assert.deepEqual(again.loaded.map((f) => f.name), FOUR.map(([name]) => name));
+  next.w.close();
 });
 
 test('A6 · 모르는 묶음 이름은 아무것도 하지 않고 거절한다', async () => {

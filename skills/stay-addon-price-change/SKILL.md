@@ -42,9 +42,8 @@ metadata:
 
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 답이 `stayAddonPrice is not defined`)마다.
-   1. JS 실행 도구로 가격 캘린더 도우미의 `../stay-price-change/scripts/page/stay_price_loader.js` 내용 전체를 실행한다.
-   2. `stayPriceLoader.again('addon')` 을 부른다. `ok: true` 와 `addon` 판 번호가 오면 됐다.
-   3. 거절할 때만 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 네 파일 — `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js` — 을 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
+   1. JS 실행 도구로 가격 캘린더 도우미의 `../stay-price-change/scripts/page/stay_price_loader.js` 내용 전체 **뒤에 한 줄 `stayPriceLoader.again('addon')` 을 붙여** 한 번에 실행한다. 그래서 첫 답이 이 도우미의 묶음(네 파일)의 것이다. `ok: true` 와 `addon` 판 번호가 오면 됐다.
+   2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 가 올릴 네 파일이다. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 네 파일 — `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js` — 을 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
 3. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장한다(`<작업>` 은 아래 4). `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾으면 "○○ 호텔의 Stay 화면을 열어 주세요". 답의 `body` 는 「읽기」 4 처럼 조각으로 받아 같은 폴더에 둔다. 그리고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"` — 짧은 답의 `hotel` 이 말한 호텔이 아니면 그 호텔 화면을 열어 달라고 한다.
 4. **장부 보기 · 작업 폴더.** `python3 scripts/addon_change.py list` 를 한 번 본다. 이 호텔의 `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `ledger` 가 든 폴더가 기록 폴더다. 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(`<작업>`)에, 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)에 둔다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
 
