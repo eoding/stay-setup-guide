@@ -19,13 +19,12 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from price_model import (
-    MISSING, CellKey, CellValue, Snapshot, decode_hotel, decode_key, decode_value, encode_hotel, encode_key, encode_value,
+    FIELDS, MISSING, CellKey, CellValue, Snapshot, decode_hotel, decode_key, decode_value, encode_hotel, encode_key, encode_value,
     hotel_label, iso_day, same_hotel,
 )
 from price_plan import PlanError
 
 KINDS = ("changed", "new", "gone", "closed", "same")
-FIELDS = ("sell", "list", "supply")
 
 
 @dataclass(frozen=True)

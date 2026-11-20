@@ -67,11 +67,11 @@ from price_browser import (
 )
 from change_core.rules import BLOCKED
 from price_model import (
-    CELL_RULES, ITEM_KIND, CellKey, ReadRange, Snapshot, TargetTable, cell_state, decode_hotel, decode_plan, decode_request,
+    CELL_RULES, FIELDS, ITEM_KIND, CellKey, ReadRange, Snapshot, TargetTable, cell_state, decode_hotel, decode_plan, decode_request,
     decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_key, encode_plan, encode_request,
     encode_snapshot, encode_step, hotel_label, iso_day, key_of_item, line_label, request_range, same_hotel, snapshot_reading,
 )
-from price_compare import Comparison, compare_counts, compare_saved, decode_comparison, encode_comparison
+from price_compare import compare_counts, compare_saved, decode_comparison, encode_comparison
 from price_pages import (
     EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, render_compare, render_prices, render_preview,
     render_result, render_rollback, render_sheet, result_name,
@@ -88,7 +88,8 @@ def open_ledger() -> Ledger:
 
 
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
-              "sheet": "요금표 읽은 것", "compare": "저장해 둔 상태와 견주기"}   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
+              "sheet": "요금표 읽은 것",   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
+              "compare": "저장해 둔 상태와 견주기"}
 
 
 ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
@@ -543,13 +544,15 @@ def short_rollback(result: dict) -> dict:
 
 def short_compare(result: dict) -> dict:
     """견준 것을 말하는 데 필요한 것 — 저장해 둔 때와 지금 읽은 때, 범위, 종류마다의 칸 수, 날짜별로 바꿔 두었다가 바뀐 칸을 넣은
-    장부 번호들, 바뀐 칸의 예 하나."""
-    comparison: Comparison = decode_comparison(result)
+    장부 번호들, 바뀐 칸의 예 하나(달라진 첫 필드의 저장해 둔 값 → 지금 값)."""
+    comparison = decode_comparison(result)
     changed = comparison.of("changed")
     example = None
     if changed:
         cell = changed[0]
-        example = dict(key=encode_key(cell.key), then=money_text(cell.then.sell), now=money_text(cell.now.sell))
+        field = next(name for name in FIELDS if getattr(cell.then, name) != getattr(cell.now, name))
+        example = dict(key=encode_key(cell.key), field=field, then=money_text(getattr(cell.then, field)),
+                       now=money_text(getattr(cell.now, field)))
     return dict(saved=comparison.saved, saved_at=comparison.saved_at, read_at=comparison.read_at, scope=result["scope"],
                 counts=result["counts"], edited_by=sorted({cell.edited_by for cell in comparison.cells if cell.edited_by}),
                 example=example)

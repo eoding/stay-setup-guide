@@ -84,7 +84,7 @@ class SeasonRefillSafetyNetTest(unittest.TestCase):
         self.assertEqual(short["counts"]["same"] + 13, short["counts"]["cells"])
         self.assertEqual((short["saved"], short["edited_by"]), (saved, [change]), "날짜별로 바꿔 둔 값은 그 변경 번호와 함께")
         self.assertEqual(short["example"], dict(key=dict(room="디럭스", rate_plan="조식 포함", date="2026-12-25", occupancy="A2",
-                                                         nights=1), then="220.00", now="225.00"))
+                                                         nights=1), field="sell", then="220.00", now="225.00"))
         self.assertTrue(short["scope"].endswith("지금 상태 저장"), short["scope"])
         self.assertNotIn("cells", short, "짧은 답에 칸 목록은 없다")
 
