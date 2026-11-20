@@ -15,10 +15,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import scene  # noqa: E402
-from price_ledger import DB_NAME, Ledger  # noqa: E402
-from price_model import CellKey, CellValue, ChangeRequest, Resolution, Snapshot  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
+from change_core.rollback import LaterWrite, RecordedChange, RecordedItem  # noqa: E402
+from change_core.rules import Resolution  # noqa: E402
+from price_model import (  # noqa: E402
+    ITEM_KIND, CellKey, CellValue, ChangeRequest, Snapshot, cell_item_key, cell_name, encode_request, snapshot_reading,
+)
 from price_pages import render_prices, render_preview, render_result, render_rollback  # noqa: E402
-from price_plan import plan_change, plan_rollback, resolve, save_steps  # noqa: E402
+from price_plan import plan_cell_rollback, plan_change, preview_rows, resolve, save_steps, step_plans  # noqa: E402
 
 D = Decimal
 
@@ -96,20 +100,13 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
         self.before = scene.snapshot()
         plan = plan_change(self.before, scene.request())
         self.steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
-        self.id = self.ledger.record_preview(plan)
-        self.ledger.begin(self.id, self.steps)
+        self.id = self.ledger.record_preview(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
+                                             read_at=plan.read_at, rows=preview_rows(plan),
+                                             request=encode_request(plan.request))
+        self.ledger.begin(self.id, step_plans(self.steps))
 
     def tearDown(self):
         self.tmp.cleanup()
-
-    def after(self):
-        cells = dict(self.before.cells)
-        for step in self.steps:
-            for day in step.dates:
-                for row in step.rows:
-                    key = CellKey(step.room, step.rate_plan, day, row.occupancy, row.nights)
-                    cells[key] = replace(cells[key], sell=row.sell, list_price=row.list_price or cells[key].list_price)
-        return cells
 
     def test_stopped_change_shows_where_it_stopped_and_the_three_choices(self):
         for index in range(1, 6):
@@ -129,47 +126,49 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
     def test_applied_and_verified_and_a_mismatch(self):
         for index in range(1, 9):
             self.ledger.record_step(self.id, index, saved=True)
-        cells = self.after()
-        snapshot = Snapshot(self.before.hotel, self.before.offer, "USD", "t", cells, self.before.reserved)
-        self.ledger.verify(self.id, snapshot)
+        after = scene.applied(self.before, self.steps)
+        self.ledger.verify(self.id, snapshot_reading(after))
         text = visible(render_result(self.ledger.change(self.id), ledger_path="/기록/가격장부.sqlite3"))
         self.assertIn("적용했고, 다시 읽어 확인했습니다. 90칸 모두 넣은 값과 같습니다.", text)
         self.assertIn("기록: /기록/가격장부.sqlite3", text)
-        self.assertIn("480.00 → 528.00 확인 정가 548.00", text)
+        self.assertIn("480.00 → 528.00 정가 500.00 → 548.00 확인", text)
         odd = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
-        self.ledger.verify(self.id, Snapshot(self.before.hotel, self.before.offer, "USD", "t",
-                                             {**cells, odd: replace(cells[odd], sell=D("1.00"))}, self.before.reserved))
+        self.ledger.verify(self.id, snapshot_reading(scene.with_cells(after, {odd: replace(after.cells[odd], sell=D("1.00"))})))
         text = visible(render_result(self.ledger.change(self.id)))
         self.assertIn("적용했지만, 다시 읽었더니 1칸이 넣은 값과 다릅니다.", text)
-        self.assertIn("200.00 → 220.00 다시 읽은 값 1.00", text)
+        self.assertIn("200.00 → 220.00 다시 읽은 값 판매가 1.00", text)
 
 
 class RollbackPageTest(SelfContainedMixin, unittest.TestCase):
     def test_restore_date_kept_cells_with_three_values_and_cause_and_restored_cells(self):
-        from price_model import CellWrite, LaterWrite, RecordedCell, RecordedChange
         a, b, c = (CellKey("디럭스", "룸온리", day, "A2", 1) for day in ("2027-01-01", "2027-01-02", "2026-12-25"))
+
+        def item(key, before, after):
+            return RecordedItem(ITEM_KIND, cell_item_key(key), cell_name(key), "open",
+                                dict(sell=D(before), list=None, supply=None), dict(sell=D(after)))
+
         recorded = RecordedChange(4, "change", "데모 호텔", "기본 오퍼", "USD", scene.SENTENCE, "2026-11-20T14:02:00+09:00",
-                                  "2026-11-20T14:05:00+09:00", (
-                                      RecordedCell(a, CellValue(D("480.00"), None, None, "open"), CellWrite(a, D("528.00"))),
-                                      RecordedCell(b, CellValue(D("270.00"), None, None, "open"), CellWrite(b, D("297.00"))),
-                                      RecordedCell(c, CellValue(D("170.00"), None, None, "open"), CellWrite(c, D("187.00")))))
-        later = {b: [LaterWrite(6, "2026-11-24T10:30:00+09:00", "1/2 디럭스 룸온리 310 으로", CellWrite(b, D("310.00")))]}
+                                  "2026-11-20T14:05:00+09:00",
+                                  (item(a, "480.00", "528.00"), item(b, "270.00", "297.00"), item(c, "170.00", "187.00")))
+        later = {(ITEM_KIND, cell_item_key(b)): [LaterWrite(6, "2026-11-24T10:30:00+09:00", "1/2 디럭스 룸온리 310 으로",
+                                                            dict(sell=D("310.00")))]}
         now = Snapshot("데모 호텔", "기본 오퍼", "USD", "2026-11-27T09:00:00+09:00", {
             a: CellValue(D("550.00"), None, None, "open"), b: CellValue(D("310.00"), None, None, "open"),
             c: CellValue(D("187.00"), None, None, "open")}, frozenset({("디럭스", "2026-12-25")}))
-        page = render_rollback(plan_rollback(recorded, later, now))
+        page = render_rollback(plan_cell_rollback(recorded, later, now), now.reserved)
         text = visible(page)
         self.assert_self_contained(page)
         self.assertIn("2026-11-20 14:02 에 적어 둔 값으로 되돌립니다.", text)
         self.assertIn(f"그때 한 일: “{scene.SENTENCE}” (2026-11-20 14:05 적용, 장부 4번)", text)
         self.assertIn("1 되돌리는 칸 2 그대로 두는 칸 1 되돌리는 칸 중 예약 있는 날", text)
-        self.assertIn("1/1 금 · 디럭스 · 룸온리 · 성인 2 · 1박 480.00 528.00 550.00 도우미 밖에서 바뀜", text)
-        self.assertIn("1/2 토 · 디럭스 · 룸온리 · 성인 2 · 1박 270.00 297.00 310.00 이 컴퓨터의 다른 변경 "
+        self.assertIn("1/1 금 · 디럭스 · 룸온리 · 성인 2 · 1박 판매가 480.00 판매가 528.00 판매가 550.00 도우미 밖에서 바뀜",
+                      text)
+        self.assertIn("1/2 토 · 디럭스 · 룸온리 · 성인 2 · 1박 판매가 270.00 판매가 297.00 판매가 310.00 이 컴퓨터의 다른 변경 "
                       "(2026-11-24 10:30 “1/2 디럭스 룸온리 310 으로”, 장부 6번)", text)
         self.assertIn("12/25 금 예약 있는 날", text)
         self.assertIn("187.00 → 170.00", text)
         self.assertIn("550.00 그대로 둠", text)
-        self.assertIn('그대로 두는 2칸도 되돌리려면 "2칸도 포함해서 되돌려"', text)
+        self.assertIn('그 사이 달라진 2칸도 되돌리려면 "2칸도 포함해서 되돌려"', text)
 
 
 class PricesPageTest(SelfContainedMixin, unittest.TestCase):

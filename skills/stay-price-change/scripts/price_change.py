@@ -12,7 +12,7 @@
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록
 
-결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 종료 코드: 0 됨 · 1 다른 칸이 있음(stale·verify) ·
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
 예:
@@ -30,14 +30,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from change_core.items import encode_state, key_fields
+from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
+from change_core.money import money_text
+from change_core.rollback import decode_rollback, encode_rollback
+from change_core.rules import Resolution
 from erp_read import ParseError, build_snapshot, parse_adjust_page, parse_price_page
-from price_ledger import Ledger, LedgerError, ledger_dir, now_text
 from price_model import (
-    decode_plan, decode_request, decode_resolution, decode_rollback, decode_snapshot, decode_step, encode_change,
-    encode_key, encode_plan, encode_rollback, encode_snapshot, encode_step, encode_value, money_text,
+    decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_plan,
+    encode_request, encode_snapshot, encode_step, snapshot_reading,
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback
-from price_plan import PlanError, counts, plan_change, plan_rollback, resolve, rollback_writes, save_steps, stale_cells
+from price_plan import (
+    PlanError, counts, plan_cell_rollback, plan_change, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    snapshot_rows, stale_cells, step_plans,
+)
 
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격"}
 
@@ -69,10 +76,13 @@ def cmd_read(args):
 def cmd_plan(args):
     snapshot, request = decode_snapshot(load(args.snapshot)), decode_request(load(args.request))
     plan = plan_change(snapshot, request)
-    resolutions = [decode_resolution(item) for item in load(args.resolutions)] if args.resolutions else []
+    resolutions = [Resolution(str(item["rule"]), str(item["choice"]), decode_resolution_items(item.get("cells")))
+                   for item in load(args.resolutions)] if args.resolutions else []
     writes, unresolved = resolve(plan, resolutions)
     steps = save_steps(writes) if not unresolved else None
-    change_id = Ledger().record_preview(plan) if args.record else None
+    change_id = Ledger().record_preview(hotel=request.hotel, offer=request.offer, currency=plan.currency,
+                                        sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
+                                        request=encode_request(request)) if args.record else None
     return dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
                 unresolved=[encode_change(change) for change in unresolved],
                 steps=None if steps is None else [encode_step(step) for step in steps])
@@ -82,11 +92,14 @@ def cmd_render(args):
     if args.kind == "preview":
         data = load(args.plan)
         plan = decode_plan(data["plan"])
-        html, hotel = render_preview(plan, data.get("change_id"), len(data["steps"]) if data.get("steps") else None), \
-            plan.request.hotel
+        html = render_preview(plan, data.get("change_id"), len(data["steps"]) if data.get("steps") else None)
+        hotel = plan.request.hotel
     elif args.kind == "rollback":
-        plan = decode_rollback(load(args.plan)["rollback"])
-        html, hotel = render_rollback(plan), plan.hotel
+        data = load(args.plan)
+        plan = decode_rollback(data["rollback"])
+        html = render_rollback(plan, [(item["room"], item["date"]) for item in data.get("reserved") or ()],
+                               data.get("scope") or "")
+        hotel = plan.hotel
     elif args.kind == "prices":
         snapshot = decode_snapshot(load(args.snapshot))
         html, hotel = render_prices(snapshot), snapshot.hotel
@@ -103,9 +116,9 @@ def cmd_begin(args):
     data = load(args.plan)
     if not data.get("steps"):
         raise PlanError("저장 단계가 없습니다. 빨간 줄 칸을 먼저 골라 주세요")
-    request = decode_request(data["plan"]["request"]) if "plan" in data else None
     ledger = Ledger()
-    ledger.begin(args.change, [decode_step(step) for step in data["steps"]], request)
+    ledger.begin(args.change, step_plans(decode_step(step) for step in data["steps"]),
+                 data["plan"]["request"] if "plan" in data else None)
     record = ledger.change(args.change)
     return dict(change_id=record.id, status=record.status, steps=len(record.steps))
 
@@ -116,29 +129,36 @@ def cmd_record_step(args):
 
 
 def cmd_verify(args):
-    mismatches = Ledger().verify(args.change, decode_snapshot(load(args.snapshot)))
+    mismatches = Ledger().verify(args.change, snapshot_reading(decode_snapshot(load(args.snapshot))))
     return dict(change_id=args.change, same=not mismatches, mismatches=[
-        dict(key=encode_key(key), sell=str(write.sell), list=money_text(write.list_price), seen=encode_value(seen))
-        for key, write, seen in mismatches])
+        dict(key=key_fields(item.item_key), label=item.label, field=item.field, after=money_text(item.after),
+             seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])
 
 
 def cmd_stale(args):
     differences = stale_cells(decode_snapshot(load(args.before)), decode_snapshot(load(args.after)))
     return dict(same=not differences, differences=[
-        dict(key=encode_key(item.key), then=encode_value(item.then), now=encode_value(item.now)) for item in differences])
+        dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in differences])
 
 
 def cmd_rollback(args):
     ledger = Ledger()
-    plan = plan_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change),
-                         decode_snapshot(load(args.snapshot)), args.include_kept)
-    change_id = ledger.record_rollback_preview(plan, args.sentence) if args.record else None
+    snapshot = decode_snapshot(load(args.snapshot))
+    plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
+                              args.include_kept)
+    change_id = ledger.record_preview(hotel=plan.hotel, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
+                                      read_at=plan.read_at, rows=rollback_rows(plan),
+                                      reverses=args.change) if args.record else None
     return dict(change_id=change_id, rollback=encode_rollback(plan),
-                steps=[encode_step(step) for step in save_steps(rollback_writes(plan))])
+                steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
+                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
 
 
 def cmd_save_snapshot(args):
-    return dict(change_id=Ledger().record_snapshot(decode_snapshot(load(args.snapshot)), args.sentence))
+    snapshot = decode_snapshot(load(args.snapshot))
+    return dict(change_id=Ledger().record_snapshot(hotel=snapshot.hotel, offer=snapshot.offer, currency=snapshot.currency,
+                                                   sentence=args.sentence, read_at=snapshot.read_at,
+                                                   rows=snapshot_rows(snapshot)))
 
 
 def cmd_list(args):

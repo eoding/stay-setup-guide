@@ -10,9 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+from change_core.money import round_money  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, CellValue, ChangeRequest, Snapshot, decode_request, decode_snapshot, encode_request,
-    encode_snapshot, round_money, split_occupancy,
+    encode_snapshot, split_occupancy,
 )
 
 D = Decimal

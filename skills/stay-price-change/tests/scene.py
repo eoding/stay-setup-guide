@@ -5,9 +5,11 @@
 예약 있는 날은 디럭스 12/25 · 스위트 1/1, 스위트 조식 포함 1/1 · 1/2 의 성인 2 · 1박 칸만 정가 500.
 """
 
+from dataclasses import replace
 from decimal import Decimal
 
-from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot, round_money
+from change_core.money import round_money
+from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot
 
 HOTEL, OFFER = "데모 호텔", "기본 오퍼"
 DATES = ("2026-12-25", "2026-12-26", "2027-01-01", "2027-01-02")
@@ -47,3 +49,25 @@ def request(percent="10", **over) -> ChangeRequest:
                   dates=DATES, operation="percent", value=Decimal(percent), sentence=SENTENCE)
     fields.update(over)
     return ChangeRequest(**fields)
+
+
+def applied(snapshot: Snapshot, steps, read_at="2026-11-20T14:06:00+09:00") -> Snapshot:
+    """저장 단계를 ERP 가 받은 것처럼 값을 바꾼 새 Snapshot — 묶음 저장은 적은 칸만, 셀 창은 비운 칸만 바꾼다."""
+    cells = dict(snapshot.cells)
+    for step in steps:
+        if step.kind == "cell_edit":
+            cells[step.key] = replace(cells[step.key], **{name: None for name in step.clear})
+            continue
+        for day in step.dates:
+            for row in step.rows:
+                key = CellKey(step.room, step.rate_plan, day, row.occupancy, row.nights)
+                old = cells.get(key, MISSING)
+                new = {name: getattr(row, name) for name in ("sell", "list", "supply") if getattr(row, name) is not None}
+                cells[key] = CellValue(new.get("sell", old.sell), new.get("list", old.list), new.get("supply", old.supply),
+                                       "open" if old.state == "missing" else old.state)
+    return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at, cells, snapshot.reserved)
+
+
+def with_cells(snapshot: Snapshot, changes: dict, read_at=None) -> Snapshot:
+    return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at or snapshot.read_at,
+                    {**snapshot.cells, **changes}, snapshot.reserved)

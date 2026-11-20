@@ -11,9 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import scene  # noqa: E402
-from price_model import (  # noqa: E402
-    MISSING, CellKey, CellValue, CellWrite, ChangeRequest, Resolution, Snapshot,
-)
+from change_core.items import Refused  # noqa: E402
+from change_core.rules import Resolution  # noqa: E402
+from price_model import MISSING, CellKey, CellValue, CellWrite, ChangeRequest, Snapshot, key_of_item  # noqa: E402
 from price_plan import PlanError, counts, plan_change, resolve, save_steps, stale_cells  # noqa: E402
 
 D = Decimal
@@ -208,18 +208,18 @@ class ResolveTest(unittest.TestCase):
         writes, unresolved = resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list"), Resolution("OVER_30", "include"),
                                                  Resolution("ABOVE_LIST", "keep", (nxt,))])
         self.assertEqual(unresolved, ())
-        self.assertEqual({(w.key.date, w.key.occupancy): (w.sell, w.list_price) for w in writes}, {
+        self.assertEqual({(w.key.date, w.key.occupancy): (w.sell, w.list) for w in writes}, {
             (DAY, "A2"): (D("220.00"), D("230.00")), (DAY, "A3"): (D("120.00"), None), (NEXT, "A3"): (D("30.00"), None)})
 
     def test_naming_a_cell_that_is_not_on_that_red_line_is_refused(self):
-        with self.assertRaises(PlanError):
+        with self.assertRaises(Refused):
             resolve(self.plan, [Resolution("OVER_30", "include", (CellKey("R", "P", DAY, "A2", 1),))])
 
-    def test_only_listed_choices_are_accepted(self):
-        with self.assertRaises(ValueError):
-            Resolution("ABOVE_LIST", "clear_list")
-        with self.assertRaises(ValueError):
-            Resolution("NOT_POSITIVE", "include")
+    def test_only_listed_choices_and_red_line_rules_are_accepted(self):
+        with self.assertRaises(Refused):
+            resolve(self.plan, [Resolution("ABOVE_LIST", "multiply")])
+        with self.assertRaises(Refused):
+            resolve(self.plan, [Resolution("NOT_POSITIVE", "include")])
 
 
 class SaveStepTest(unittest.TestCase):
@@ -256,7 +256,7 @@ class StaleTest(unittest.TestCase):
         self.assertEqual(stale_cells(then, then), ())
         now = snap({(DAY, "A2", 1): open_("101.00"), (NEXT, "A2", 1): CellValue(D("100.00"), None, None, "closed"),
                     (LATER, "A3", 1): open_("1.00")})
-        self.assertEqual([(d.key.date, d.key.occupancy) for d in stale_cells(then, now)],
+        self.assertEqual([(key_of_item(d.key).date, key_of_item(d.key).occupancy) for d in stale_cells(then, now)],
                          [(DAY, "A2"), (NEXT, "A2"), (LATER, "A2"), (LATER, "A3")])
 
 

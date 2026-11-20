@@ -1,15 +1,14 @@
-"""price_model.py — 가격 변경 도우미의 값 모양. 계산·장부·화면 읽기·HTML 이 모두 이 모양 위에 선다.
-
-돈은 전부 `Decimal` 이다(float 를 쓰지 않는다). JSON 에서는 문자열("373.95")로 오간다.
+"""price_model.py — 가격 칸의 값 모양. 칸 계산·ERP 화면 읽기·칸 표 페이지가 이 모양 위에 서고, 장부·낡음 확인·되돌리기는
+`change_core` 의 공통 모양((종류, 키, 필드) → 값)으로 바꿔 넘긴다. 돈은 전부 `Decimal` 이다.
 
     CellKey      칸 하나의 자리 — 객실 · 요금제 · 날짜 · 인원 조합 · 박수 층
-    CellValue    그 칸의 값 — 판매가 · 정가 · 공급 원가 · 상태(open / closed / missing)
+    CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
     Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜)
-    ChangeRequest  담당자의 요청 — 범위 · 바꾸는 방법(amount / percent / set) · 원래 문장
+    ChangeRequest  담당자의 요청 — 범위 · 바꾸는 방법 · 원래 문장
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
-    RULES        판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
-    CellWrite / RowWrite / SaveStep   ERP [선택 날짜 가격 수정] 저장 한 번에 들어가는 값
-    Plan / RollbackPlan               미리보기 · 되돌리기 미리보기 한 장의 내용
+    CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
+    CellWrite / RowWrite / BulkStep   ERP 에 넣을 값과 저장 한 번
+    Plan         미리보기 한 장의 내용
 """
 
 from __future__ import annotations
@@ -17,24 +16,22 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal
 from functools import cached_property
-from typing import Callable, Mapping
+from typing import Mapping
 
-ZERO_DECIMAL_CURRENCIES = frozenset({"KRW", "VND", "JPY", "IDR", "CLP", "ISK"})
+from change_core.items import ItemState, Reading, item_key, key_fields
+from change_core.money import money, money_text
+from change_core.rules import BLOCKED, RED, Rule, RuleTable
+
+ITEM_KIND = "price_cell"
+FIELDS = ("sell", "list", "supply")
+FIELD_LABELS = {"sell": "판매가", "list": "정가", "supply": "공급 원가"}
 STATES = ("open", "closed", "missing")
 OPERATIONS = ("amount", "percent", "set")
-BLOCKED, RED = "blocked", "red"
 RESERVED, CLOSED = "reserved", "closed"
 RED_LINE_SHARE = Decimal("0.30")
-
-
-def scale_of(currency: str) -> int:
-    return 0 if currency.upper() in ZERO_DECIMAL_CURRENCIES else 2
-
-
-def round_money(value: Decimal, currency: str) -> Decimal:
-    return value.quantize(Decimal(1).scaleb(-scale_of(currency)), rounding=ROUND_HALF_UP)
+WEEKDAYS = "월화수목금토일"
 
 
 def iso_day(text: str) -> str:
@@ -74,8 +71,8 @@ class CellKey:
 @dataclass(frozen=True)
 class CellValue:
     sell: Decimal | None
-    list_price: Decimal | None
-    supply_cost: Decimal | None
+    list: Decimal | None
+    supply: Decimal | None
     state: str
 
     def __post_init__(self):
@@ -137,14 +134,19 @@ class CellChange:
     marks: tuple[str, ...]
     verdict: str | None
 
+    @property
+    def changed(self) -> tuple[str, ...]:
+        return () if self.after is None else tuple(f for f in FIELDS if getattr(self.after, f) != getattr(self.before, f))
 
-@dataclass(frozen=True)
-class Rule:
-    code: str
-    label: str
-    severity: str
-    choices: tuple[str, ...]
-    applies: Callable[[CellValue, CellValue | None, str | None], bool]
+
+def _moved_far(before: CellValue, after: CellValue | None) -> bool:
+    if after is None:
+        return False
+    for name in FIELDS:
+        old, new = getattr(before, name), getattr(after, name)
+        if old is not None and new is not None and abs(new - old) > abs(old) * RED_LINE_SHARE:
+            return True
+    return False
 
 
 CHOICE_LABELS = {
@@ -153,8 +155,9 @@ CHOICE_LABELS = {
     "raise_list": "정가도 같은 만큼 올림",
 }
 
-# 위에서부터 처음 맞는 한 줄이 칸의 판정이다. 세 번째 인자는 계산에 필요한 칸이 없을 때 그 칸 이름("adult"·"base")이다.
-RULES = (
+# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산에 필요한데 없던 칸 이름 "adult"·"base" 또는 None) 을 받는다.
+# 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다.
+CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
          lambda before, after, lacking: after is not None and after.sell <= 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
@@ -162,59 +165,48 @@ RULES = (
     Rule("NO_BASE_CELL", "같은 날 기준 인원 가격이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "base"),
     Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "keep"),
-         lambda before, after, lacking: after is not None and before.list_price is not None
-         and after.sell > before.list_price),
+         lambda before, after, lacking: after is not None and after.list is not None and after.sell > after.list),
     Rule("BELOW_COST", "공급 원가보다 싸집니다", RED, ("include", "keep"),
-         lambda before, after, lacking: after is not None and before.supply_cost is not None
-         and after.sell < before.supply_cost),
+         lambda before, after, lacking: after is not None and after.supply is not None and after.sell < after.supply),
     Rule("OVER_30", "30% 넘게 바뀝니다", RED, ("include", "keep"),
-         lambda before, after, lacking: after is not None
-         and abs(after.sell - before.sell) > abs(before.sell) * RED_LINE_SHARE),
+         lambda before, after, lacking: _moved_far(before, after)),
 )
-RULE_BY_CODE = {rule.code: rule for rule in RULES}
-
-
-def verdict_of(before: CellValue, after: CellValue | None, lacking: str | None) -> str | None:
-    return next((rule.code for rule in RULES if rule.applies(before, after, lacking)), None)
-
-
-@dataclass(frozen=True)
-class Resolution:
-    rule: str
-    choice: str
-    cells: tuple[CellKey, ...] | None = None
-
-    def __post_init__(self):
-        rule = RULE_BY_CODE.get(self.rule)
-        if rule is None or rule.severity != RED:
-            raise ValueError(f"고를 수 있는 것은 빨간 줄 규칙뿐입니다: {self.rule!r}")
-        if self.choice not in rule.choices:
-            raise ValueError(f"{self.rule} 에서 고를 수 있는 것: {', '.join(rule.choices)} (받은 값 {self.choice!r})")
 
 
 @dataclass(frozen=True)
 class CellWrite:
-    """칸 하나에 넣을 값. `list_price` 가 None 이면 정가 칸은 비워 보내 지금 정가를 그대로 둔다."""
+    """칸 하나에 넣을 값. None 인 필드는 그대로 두고, `clear` 에 든 필드는 비운다."""
     key: CellKey
-    sell: Decimal
-    list_price: Decimal | None = None
+    sell: Decimal | None = None
+    list: Decimal | None = None
+    supply: Decimal | None = None
+    clear: tuple[str, ...] = ()
+
+    def fields(self) -> dict[str, Decimal | None]:
+        """쓰는 필드 → 넣을 값(비우는 필드는 None)."""
+        written = {name: getattr(self, name) for name in FIELDS if getattr(self, name) is not None}
+        written.update({name: None for name in self.clear})
+        return written
 
 
 @dataclass(frozen=True, order=True)
 class RowWrite:
+    """[선택 날짜 가격 수정] 표의 한 줄 — 칸마다 넣을 값, None 은 그 칸을 비워 보내 지금 값을 둔다."""
     occupancy: str
     nights: int
-    sell: Decimal
-    list_price: Decimal | None = None
+    sell: Decimal | None = None
+    list: Decimal | None = None
+    supply: Decimal | None = None
 
 
 @dataclass(frozen=True)
-class SaveStep:
+class BulkStep:
     """[선택 날짜 가격 수정] 저장 한 번 — 객실 하나 × 요금제 하나 × 이어진 날짜, 줄마다 같은 값."""
     room: str
     rate_plan: str
     dates: tuple[str, ...]
     rows: tuple[RowWrite, ...]
+    kind = "bulk"
 
 
 @dataclass(frozen=True)
@@ -226,88 +218,37 @@ class Plan:
     skipped: tuple[CellKey, ...]
 
 
-@dataclass(frozen=True)
-class RecordedCell:
-    """장부에 적힌, 실제로 저장된 칸 하나 — 적어 둔 전 값과 넣은 값."""
-    key: CellKey
-    before: CellValue
-    written: CellWrite
+# ─── 사람이 읽는 이름 ───
 
 
-@dataclass(frozen=True)
-class RecordedChange:
-    id: int
-    kind: str
-    hotel: str
-    offer: str
-    currency: str
-    sentence: str
-    read_at: str
-    applied_at: str | None
-    cells: tuple[RecordedCell, ...]
+def day_label(day: str) -> str:
+    value = date.fromisoformat(day)
+    return f"{value.month}/{value.day} {WEEKDAYS[value.weekday()]}"
 
 
-@dataclass(frozen=True)
-class LaterWrite:
-    change_id: int
-    at: str
-    sentence: str
-    write: CellWrite
+def occupancy_label(key: str) -> str:
+    if not key:
+        return "인원 무관"
+    if key.isdigit():
+        return f"{key}명"
+    adult_key, has_children = split_occupancy(key)
+    if adult_key is None:
+        return key
+    adults = f"성인 {adult_key[1:]}"
+    if not has_children:
+        return adults
+    return f"{adults} + 아동 {sum(int(count) for count in re.findall(r'C(\d+)', key.upper()))}"
 
 
-@dataclass(frozen=True)
-class Cause:
-    """되돌리지 않고 두는 까닭 — 이 장부의 나중 변경(번호·시각·문장) 또는 도우미 밖."""
-    change_id: int | None = None
-    at: str | None = None
-    sentence: str | None = None
-
-    @property
-    def outside(self) -> bool:
-        return self.change_id is None
+def nights_label(nights: int) -> str:
+    return "1박" if nights == 1 else f"{nights}박 이상"
 
 
-@dataclass(frozen=True)
-class KeptCell:
-    key: CellKey
-    recorded: CellValue
-    written: CellWrite
-    now: CellValue
-    cause: Cause
+def cell_name(key: CellKey) -> str:
+    return f"{day_label(key.date)} · {key.room} · {key.rate_plan} · {occupancy_label(key.occupancy)} · {nights_label(key.nights)}"
 
 
-@dataclass(frozen=True)
-class RollbackPlan:
-    reverses: int
-    hotel: str
-    offer: str
-    currency: str
-    restore_to: str
-    original_sentence: str
-    original_applied_at: str | None
-    restored: tuple[CellChange, ...]
-    kept: tuple[KeptCell, ...]
-    include_kept: bool
-    read_at: str
-
-
-# ─── JSON ───
-
-
-def money(text) -> Decimal | None:
-    if text is None:
-        return None
-    try:
-        value = Decimal(str(text).replace(",", "").strip())
-    except InvalidOperation:
-        raise ValueError(f"금액을 읽지 못했습니다: {text!r}") from None
-    if not value.is_finite():
-        raise ValueError(f"금액을 읽지 못했습니다: {text!r}")
-    return value
-
-
-def money_text(value: Decimal | None) -> str | None:
-    return None if value is None else str(value)
+# ─── 공통 모양(change_core)으로 ───
 
 
 def encode_key(key: CellKey) -> dict:
@@ -319,11 +260,34 @@ def decode_key(data: Mapping) -> CellKey:
                    str(data.get("occupancy") or ""), int(data["nights"]))
 
 
+def cell_item_key(key: CellKey) -> str:
+    return item_key(encode_key(key))
+
+
+def key_of_item(text: str) -> CellKey:
+    return decode_key(key_fields(text))
+
+
+def cell_state(key: CellKey, value: CellValue) -> ItemState:
+    return ItemState(cell_name(key), value.state, {name: getattr(value, name) for name in FIELDS})
+
+
+def value_of(state: ItemState) -> CellValue:
+    return CellValue(*(state.fields.get(name) for name in FIELDS), state.state)
+
+
+def snapshot_reading(snapshot: Snapshot) -> Reading:
+    return {(ITEM_KIND, cell_item_key(key)): cell_state(key, value) for key, value in snapshot.cells.items()}
+
+
+# ─── JSON ───
+
+
 def encode_value(value: CellValue | None) -> dict | None:
     if value is None:
         return None
-    return dict(sell=money_text(value.sell), list=money_text(value.list_price),
-                supply=money_text(value.supply_cost), state=value.state)
+    return dict(sell=money_text(value.sell), list=money_text(value.list), supply=money_text(value.supply),
+                state=value.state)
 
 
 def decode_value(data: Mapping | None) -> CellValue | None:
@@ -379,30 +343,20 @@ def decode_change(data: Mapping) -> CellChange:
                       tuple(data.get("marks") or ()), data.get("verdict"))
 
 
-def encode_write(write: CellWrite) -> dict:
-    return dict(key=encode_key(write.key), sell=str(write.sell), list=money_text(write.list_price))
+def encode_step(step: BulkStep) -> dict:
+    return dict(kind=step.kind, room=step.room, rate_plan=step.rate_plan, dates=list(step.dates),
+                rows=[dict(occupancy=row.occupancy, nights=row.nights,
+                           **{name: money_text(getattr(row, name)) for name in FIELDS}) for row in step.rows])
 
 
-def decode_write(data: Mapping) -> CellWrite:
-    return CellWrite(decode_key(data["key"]), money(data["sell"]), money(data.get("list")))
+def decode_step(data: Mapping) -> BulkStep:
+    return BulkStep(str(data["room"]), str(data["rate_plan"]), tuple(iso_day(day) for day in data["dates"]),
+                    tuple(RowWrite(str(row.get("occupancy") or ""), int(row["nights"]),
+                                   *(money(row.get(name)) for name in FIELDS)) for row in data["rows"]))
 
 
-def encode_step(step: SaveStep) -> dict:
-    return dict(room=step.room, rate_plan=step.rate_plan, dates=list(step.dates),
-                rows=[dict(occupancy=row.occupancy, nights=row.nights, sell=str(row.sell),
-                           list=money_text(row.list_price)) for row in step.rows])
-
-
-def decode_step(data: Mapping) -> SaveStep:
-    return SaveStep(str(data["room"]), str(data["rate_plan"]), tuple(iso_day(day) for day in data["dates"]),
-                    tuple(RowWrite(str(row.get("occupancy") or ""), int(row["nights"]), money(row["sell"]),
-                                   money(row.get("list"))) for row in data["rows"]))
-
-
-def decode_resolution(data: Mapping) -> Resolution:
-    cells = data.get("cells")
-    return Resolution(str(data["rule"]), str(data["choice"]),
-                      None if cells is None else tuple(decode_key(item) for item in cells))
+def decode_resolution_items(items) -> tuple[CellKey, ...] | None:
+    return None if items is None else tuple(decode_key(item) for item in items)
 
 
 def encode_plan(plan: Plan) -> dict:
@@ -415,30 +369,3 @@ def decode_plan(data: Mapping) -> Plan:
     return Plan(decode_request(data["request"]), str(data["currency"]).upper(), str(data["read_at"]),
                 tuple(decode_change(item) for item in data["changes"]),
                 tuple(decode_key(item) for item in data.get("skipped") or ()))
-
-
-def encode_rollback(plan: RollbackPlan) -> dict:
-    return dict(
-        reverses=plan.reverses, hotel=plan.hotel, offer=plan.offer, currency=plan.currency,
-        restore_to=plan.restore_to, original_sentence=plan.original_sentence,
-        original_applied_at=plan.original_applied_at, include_kept=plan.include_kept, read_at=plan.read_at,
-        restored=[encode_change(change) for change in plan.restored],
-        kept=[dict(key=encode_key(cell.key), recorded=encode_value(cell.recorded), written=encode_write(cell.written),
-                   now=encode_value(cell.now),
-                   cause=dict(change_id=cell.cause.change_id, at=cell.cause.at, sentence=cell.cause.sentence))
-              for cell in plan.kept],
-    )
-
-
-def decode_rollback(data: Mapping) -> RollbackPlan:
-    kept = tuple(
-        KeptCell(decode_key(item["key"]), decode_value(item["recorded"]), decode_write(item["written"]),
-                 decode_value(item["now"]), Cause(**item["cause"]))
-        for item in data.get("kept") or ()
-    )
-    return RollbackPlan(
-        int(data["reverses"]), str(data["hotel"]), str(data["offer"]), str(data["currency"]).upper(),
-        str(data["restore_to"]), str(data.get("original_sentence") or ""), data.get("original_applied_at"),
-        tuple(decode_change(item) for item in data["restored"]), kept, bool(data.get("include_kept")),
-        str(data["read_at"]),
-    )

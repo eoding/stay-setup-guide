@@ -16,7 +16,8 @@ from datetime import date, timedelta
 from html.parser import HTMLParser
 from typing import Iterable
 
-from price_model import MISSING, CellKey, CellValue, Snapshot, money
+from change_core.money import money
+from price_model import MISSING, CellKey, CellValue, Snapshot
 
 VOID = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"})
 ABSENT = ("", "없음")

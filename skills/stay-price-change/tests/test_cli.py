@@ -97,14 +97,7 @@ class CommandTest(unittest.TestCase):
             last = self.run_cli("record-step", "--change", change, "--step", index, "--saved")
         self.assertEqual(last["status"], "applied")
 
-        cells = dict(scene.snapshot().cells)
-        for step in map(decode_step, plan["steps"]):
-            for day in step.dates:
-                for row in step.rows:
-                    at = CellKey(step.room, step.rate_plan, day, row.occupancy, row.nights)
-                    cells[at] = replace(cells[at], sell=row.sell, list_price=row.list_price or cells[at].list_price)
-        after = self.write("after.json", encode_snapshot(Snapshot(scene.HOTEL, scene.OFFER, "USD", "2026-11-20T14:06:00+09:00",
-                                                                  cells, scene.RESERVED)))
+        after = self.write("after.json", encode_snapshot(scene.applied(scene.snapshot(), map(decode_step, plan["steps"]))))
         self.assertTrue(self.run_cli("verify", "--change", change, "--snapshot", after)["same"])
         result = Path(self.run_cli("render", "result", "--change", change, "--out", self.dir / "result.html")["page"])
         self.assertIn("90칸 모두 넣은 값과 같습니다", result.read_text(encoding="utf-8"))
