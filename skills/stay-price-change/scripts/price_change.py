@@ -9,8 +9,10 @@
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다
     render        preview | result | rollback | prices 페이지(HTML) 만들기
     begin         적용 시작 — 저장 단계를 장부에 적는다
-    record-step   저장 한 번이 끝날 때마다 — 됨(--saved) 또는 멈춤(--failed)
-    calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell)
+    calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell). 멈춘 변경은 check 가
+                  이어서 해도 된다고 한 뒤에만 낸다
+    check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 계획대로 해도 되는지와 까닭.
+                  「모름」인 저장은 읽은 값으로 가려 장부에 적는다
     record-result 브라우저 답(applyBulk · applyCell JSON) 하나 → 그 단계를 장부에 됨·멈춤으로 적는다
     verify        적용 뒤 다시 읽은 값과 견주기
     stale         장부 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
@@ -235,11 +237,6 @@ def cmd_begin(args):
     return dict(change_id=record.id, status=record.status, steps=len(record.steps))
 
 
-def cmd_record_step(args):
-    return dict(change_id=args.change, step=args.step,
-                status=Ledger().record_step(args.change, args.step, args.saved, args.note))
-
-
 def record_hotel(record) -> dict:
     """장부가 적어 둔 호텔 — 페이지가 알아본 번호 · 이름. 부를 값마다 실려 다른 호텔의 탭에서는 페이지가 누르지 않는다."""
     if not record.hotel_id:
@@ -251,6 +248,9 @@ def cmd_calls(args):
     record = Ledger().change(args.change)
     if not record.steps:
         raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
+    if record.status == "stopped":
+        raise LedgerError(f"{args.change}번 변경은 멈춰 있습니다 — 같은 범위를 다시 읽고(read-calls --record {args.change}) "
+                          f"check 가 이어서 해도 된다고 하면 calls 를 다시 부릅니다")
     return dict(change_id=record.id, status=record.status,
                 calls=[step_call(step.index, record_hotel(record), record.offer, step.kind, step.body)
                        for step in record.steps if step.status != "saved"])
@@ -270,6 +270,19 @@ def cmd_record_result(args):
     return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note,
                 status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note,
                                           unknown=outcome.saved == "unknown"))
+
+
+def cmd_check(args):
+    ledger = Ledger()
+    record, now = ledger.change(args.change), decode_snapshot(load(args.snapshot))
+    if not same_hotel(record.hotel, record.hotel_id, now.hotel, now.hotel_id) or record.offer != now.offer:
+        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {args.change}번은 "
+                        f"{hotel_label(record.hotel, record.hotel_id)} · {record.offer} 입니다")
+    report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)))
+    return dict(change_id=report.change_id, status=report.status, remaining=list(report.remaining),
+                can_continue=report.can_continue, why=list(report.why),
+                steps=[dict(no=step.index, label=step.label, ledger=step.ledger, seen=step.seen, settled=step.settled,
+                            moved=step.moved) for step in report.steps])
 
 
 def cmd_verify(args):
@@ -378,20 +391,16 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--plan", required=True, help="steps 가 든 plan.json 또는 rollback.json")
 
-    sub = command("record-step", cmd_record_step, "저장 한 번의 결과")
-    sub.add_argument("--change", type=int, required=True)
-    sub.add_argument("--step", type=int, required=True, help="1부터 센 저장 번호")
-    done = sub.add_mutually_exclusive_group(required=True)
-    done.add_argument("--saved", action="store_true", dest="saved")
-    done.add_argument("--failed", action="store_false", dest="saved")
-    sub.add_argument("--note", help="멈춘 까닭 등")
-
     sub = command("calls", cmd_calls, "아직 저장되지 않은 단계 → applyBulk · applyCell 부를 값")
     sub.add_argument("--change", type=int, required=True)
 
     sub = command("record-result", cmd_record_result, "브라우저 답 하나를 장부에 적기")
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--result", required=True, help="stayPrice.applyBulk · applyCell 답 JSON")
+
+    sub = command("check", cmd_check, "변경에 무슨 일이 있었는지 — 저장마다, 그리고 남은 저장을 해도 되는지")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--snapshot", required=True, help="방금 같은 범위로 읽은 값(read-calls --record N 으로 읽는다)")
 
     sub = command("verify", cmd_verify, "적용 뒤 다시 읽은 값과 견주기")
     sub.add_argument("--change", type=int, required=True)

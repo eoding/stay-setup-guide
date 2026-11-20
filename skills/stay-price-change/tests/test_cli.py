@@ -20,7 +20,14 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
+from price_browser import ask_sum  # noqa: E402
 from price_model import CellKey, Snapshot, decode_snapshot, decode_step, encode_request, encode_snapshot  # noqa: E402
+
+
+def answer(call, **over):
+    """페이지가 그 저장 단계를 저장했다고 돌려준 답(stayPrice.applyBulk · applyCell 의 모양)."""
+    return dict({"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True,
+                 "note": "저장했습니다"}, **over)
 
 
 class CommandTest(unittest.TestCase):
@@ -89,12 +96,8 @@ class CommandTest(unittest.TestCase):
         self.assertEqual([item["key"]["date"] for item in stale["differences"]], ["2026-12-25"])
 
         self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")["status"], "applying")
-        for index in range(1, 6):
-            self.run_cli("record-step", "--change", change, "--step", index, "--saved")
-        self.assertEqual(self.run_cli("record-step", "--change", change, "--step", 6, "--failed", "--note", "로그인")["status"],
-                         "stopped")
-        for index in range(6, 9):
-            last = self.run_cli("record-step", "--change", change, "--step", index, "--saved")
+        for call in self.run_cli("calls", "--change", change)["calls"]:
+            last = self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))
         self.assertEqual(last["status"], "applied")
 
         after = self.write("after.json", encode_snapshot(scene.applied(scene.snapshot(), map(decode_step, plan["steps"]))))

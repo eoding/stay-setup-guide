@@ -138,8 +138,8 @@ class BrowserCommandTest(unittest.TestCase):
         stopped = self.run_cli("record-result", "--change", change, "--result", self.write("r2.json", unsure))
         self.assertEqual((stopped["saved"], stopped["status"]), (False, "stopped"))
         self.assertIn("다시 읽어", stopped["note"])
-        self.assertEqual([call["no"] for call in self.run_cli("calls", "--change", change)["calls"]], list(range(2, 9)),
-                         "멈춘 단계는 이어서 할 목록에 남는다")
+        self.assertIn("check", self.run_cli("calls", "--change", change, code=2)["error"],
+                      "멈춘 변경은 다시 읽어 check 가 이어서 해도 된다고 하기 전에는 남은 단계를 내지 않는다")
 
     def test_g2_the_ledger_keeps_the_hotel_the_page_named_and_rollback_or_restore_elsewhere_is_refused(self):
         snapshot = encode_snapshot(scene.snapshot())

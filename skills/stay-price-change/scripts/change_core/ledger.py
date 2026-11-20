@@ -200,6 +200,48 @@ class ChangeRecord:
 
 
 @dataclass(frozen=True)
+class StepSeen:
+    """저장 한 번을 방금 읽은 값으로 본 것. `ledger` 는 장부의 상태(saved · pending · failed · unknown), `seen` 은 읽은 값이
+    말하는 것 — saved 넣은 값 그대로 · not_saved 전 값 그대로 · mixed 섞임(저장 한 번은 통째로 되거나 안 되니 다른 손이 탔다) ·
+    changed 그 사이 다른 값이 됨. `settled` 는 이번에 가린 「모름」(saved · not_saved), `moved` 는 남은 저장의 칸 가운데
+    그 계산이 바탕으로 삼은 읽은 값과 지금 값이 다른 칸 수."""
+    index: int
+    label: str
+    ledger: str
+    seen: str
+    settled: str | None = None
+    moved: int = 0
+
+
+@dataclass(frozen=True)
+class CheckReport:
+    change_id: int
+    status: str
+    steps: tuple[StepSeen, ...]
+    remaining: tuple[int, ...]
+    can_continue: bool
+    why: tuple[str, ...]
+
+
+def _absent(item) -> bool:
+    return item is None or item.state == "missing"
+
+
+def _field_seen(row, item) -> str:
+    """장부의 한 줄(넣은 필드 하나)을 방금 읽은 항목으로 — after 넣은 값 · before 전 값 · other 그 밖."""
+    seen = None if _absent(item) else item.fields.get(row["field"])
+    if not _absent(item) and seen == money(row["after"]):
+        return "after"
+    if (row["state"] == "missing" and _absent(item)) or (row["state"] != "missing" and not _absent(item) and seen == money(row["before"])):
+        return "before"
+    return "other"
+
+
+def _same_item(then, now) -> bool:
+    return (_absent(then) and _absent(now)) or (not _absent(then) and then.same_as(now))
+
+
+@dataclass(frozen=True)
 class Mismatch:
     item_kind: str
     item_key: str
@@ -367,6 +409,68 @@ class Ledger:
             stamp = now_text()
             db.execute("UPDATE changes SET verified_at = ?, updated_at = ? WHERE id = ?", (stamp, stamp, change_id))
         return mismatches
+
+    def check(self, change_id: int, now: Reading, then: Reading) -> CheckReport:
+        """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`)이 말하는 것과, 남은 저장을 계획대로 해도 되는지.
+
+        「모름」(눌렸고 저장됐는지 모르는 단계)은 읽은 값이 넣은 값 그대로면 저장됨으로, 전 값 그대로면 저장 안 됨으로 가려 적는다.
+        남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
+        바탕으로 삼은 읽은 값(`then`)과 모두 같을 때뿐이다. 그러면 멈춘 변경을 다시 적용 중으로 돌린다(calls 가 남은 단계를 낸다).
+        """
+        with self._db() as db:
+            header = self._header(db, change_id)
+            steps = db.execute("SELECT * FROM steps WHERE change_id = ? ORDER BY idx", (change_id,)).fetchall()
+            if not steps:
+                raise LedgerError(f"{change_id}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
+            rows = {step["idx"]: db.execute("SELECT * FROM item_values WHERE change_id = ? AND step = ? ORDER BY rowid",
+                                            (change_id, step["idx"])).fetchall() for step in steps}
+        seen_steps, settle = [], []
+        for step in steps:
+            kinds = {_field_seen(row, now.get((row["item_kind"], row["item_key"]))) for row in rows[step["idx"]]}
+            seen = {frozenset({"after"}): "saved", frozenset({"before"}): "not_saved",
+                    frozenset({"after", "before"}): "mixed"}.get(frozenset(kinds), "changed")
+            state = "unknown" if step["status"] == "failed" and step["unknown"] else step["status"]
+            if state == "saved" and seen != "saved":
+                seen = "changed"
+            settled = seen if state == "unknown" and seen in ("saved", "not_saved") else None
+            if settled:
+                settle.append((step["idx"], settled))
+            done = state == "saved" or settled == "saved"
+            items = {(row["item_kind"], row["item_key"]) for row in rows[step["idx"]]}
+            moved = 0 if done else sum(not _same_item(then.get(item), now.get(item)) for item in items)
+            seen_steps.append(StepSeen(step["idx"], step["label"], state, seen, settled, moved))
+        for index, settled in settle:
+            if settled == "saved":
+                self.record_step(change_id, index, True, "다시 읽어 저장된 것을 확인했습니다")
+            else:
+                with self._db() as db:
+                    db.execute("UPDATE steps SET unknown = 0, note = ? WHERE change_id = ? AND idx = ?",
+                               ("다시 읽어 저장되지 않은 것을 확인했습니다", change_id, index))
+        why, remaining = [], []
+        for step in seen_steps:
+            name = f"{step.index}번째 저장({step.label})"
+            if step.ledger == "saved" or step.settled == "saved":
+                if step.seen != "saved":
+                    why.append(f"{name}은 저장됐지만 그 뒤 칸이 다른 값이 됐습니다")
+                continue
+            remaining.append(step.index)
+            if step.ledger == "unknown" and not step.settled:
+                why.append(f"{name}은 저장됐는지 가리지 못했습니다 — 칸이 {'일부만 넣은 값' if step.seen == 'mixed' else '넣은 값도 전 값도 아닌 값'}입니다")
+            elif step.seen == "saved":
+                why.append(f"{name}은 장부에 저장 안 됨인데 칸은 이미 넣으려던 값입니다")
+            elif step.seen == "mixed":
+                why.append(f"{name}의 칸이 일부만 넣으려던 값입니다")
+            elif step.seen == "changed":
+                why.append(f"{name}의 칸이 넣으려던 값도 그 전 값도 아닙니다")
+            if step.moved:
+                why.append(f"{name}의 칸 {step.moved}개가 미리보기 때 읽은 값과 다릅니다")
+        can_continue = bool(remaining) and not why
+        with self._db() as db:
+            status = self._header(db, change_id)["status"]
+            if can_continue and status == "stopped":
+                status = "applying"
+                db.execute("UPDATE changes SET status = ?, updated_at = ? WHERE id = ?", (status, now_text(), change_id))
+        return CheckReport(header["id"], status, tuple(seen_steps), tuple(remaining), can_continue, tuple(why))
 
     def recorded_change(self, change_id: int) -> RecordedChange:
         """되돌리기 계산의 재료 — 실제로 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만."""
