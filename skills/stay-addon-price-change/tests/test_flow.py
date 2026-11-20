@@ -245,6 +245,24 @@ class OneLedgerTest(Flow):
         self.assertEqual((kinds, fields), ({"addon_price"}, {"sell", "supply"}))
 
 
+class PageObjectTest(Flow):
+    def test_a_reading_with_pieces_still_to_take_tells_the_helper_to_call_this_helpers_take(self):
+        scene.write_answers(self.work / "look", "look", [scene.look_answer(self.erp)[:1]])
+        error = self.cli("look", "--answers", self.work / "look", "--out", self.work / "look.json", code=2)
+        self.assertIn("stayAddonPrice.take('blook', 0, 800)", error["error"])
+        self.assertNotIn("stayPrice.take(", error["error"], "이 도우미는 가격 캘린더 도우미의 페이지 모듈을 부르지 않는다")
+        self.assertEqual([item["id"] for item in error["refetch"]], ["blook"])
+
+        folder = self.work / "읽기-1"
+        folder.mkdir()
+        self.cli("read-calls", "--request", self.request(), "--out", folder / "calls.json")
+        calls = json.loads((folder / "calls.json").read_text(encoding="utf-8"))["lines"]
+        scene.write_answers(folder, "line", [self.erp.read_line(call)[:1] for call in calls])
+        error = self.cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json", code=2)
+        self.assertEqual(error["error"].count("stayAddonPrice.take("), 2, error["error"])
+        self.assertNotIn("stayPrice.take(", error["error"])
+
+
 class TrapLineTest(Flow):
     def test_a_line_whose_amount_records_the_screen_cannot_see_is_never_saved(self):
         request = self.file("request.json", dict(kind="addon_change", hotel=scene.HOTEL, all=True, field="sell", percent="5",

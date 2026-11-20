@@ -60,6 +60,7 @@ from change_core.money import money, money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 
+PAGE_OBJECT = "stayAddonPrice"      # 이 도우미의 페이지 모듈 — 조각을 다시 받으라는 글이 이 이름의 take 를 부르라고 한다
 PREFIXES = ("look-", "line-", "take-")
 READS = ("readLine",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readLine 하나가 조각 하나다
@@ -80,7 +81,7 @@ def load_results(paths) -> list:
 
 def cmd_look(args):
     results = load_results(args.answers)
-    looks = [result for result in attach_bodies(answers_for(results, "look")) if result.get("op") == "look"]
+    looks = [result for result in attach_bodies(answers_for(results, "look"), page=PAGE_OBJECT) if result.get("op") == "look"]
     if len(looks) != 1:
         raise BrowserError(f"stayAddonPrice.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
     look = looks[0]
@@ -126,7 +127,8 @@ def cmd_read(args):
                            f"가격 줄 {missing[0]['line']}. 그 값으로 readLine 을 부릅니다(불렀는데 답이 끊겼거나 잘렸으면 "
                            "stayAddonPrice.last() 의 답을 새 파일로 저장해도 됩니다)")
     read_at = reading_time(results, READS)
-    joined = attach_bodies(answers_for(results, "readLine"), files.lent_answers(args.calls, args.answers, calls, PREFIXES))
+    joined = attach_bodies(answers_for(results, "readLine"), files.lent_answers(args.calls, args.answers, calls, PREFIXES),
+                           PAGE_OBJECT)
     asked = [LineKey(str(call["addon"]), str(call["line"])) for call in calls["lines"]]
     hotel, hotel_id = decode_hotel(calls["lines"][0]["hotel"]) if calls["lines"] else ("", "")
     lines = {}
