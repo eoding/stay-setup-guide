@@ -187,7 +187,9 @@ def cmd_reserved(args):
 
 
 def cmd_sheet(args):
-    """요금표를 읽기 전에 확인한다 — `--look` 은 look 명령의 답(짧으면 stayPrice.look() 의 답 파일 그대로도 된다)."""
+    """요금표를 읽기 전에 확인한다 — `--look` 은 look 명령의 답(짧으면 stayPrice.look() 의 답 파일 그대로도 된다). 낸 파일은 기록이라
+    덮어쓰지 않는다(고친 요금표는 다음 이름 sheet-check-2.json …)."""
+    files.fresh_record(args.out, None, False, "sheet-check")
     look = load(args.look)
     if not isinstance(look, dict) or not isinstance(look.get("hotel"), dict) or not isinstance(look.get("pairs"), list):
         raise ValueError("--look 은 hotel · offer · pairs 가 든 look 의 답입니다 — 목록이 길어 body 로 왔으면 look --answers 로 먼저 묶습니다")

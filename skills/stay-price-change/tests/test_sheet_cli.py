@@ -95,6 +95,30 @@ class SheetCommandTest(unittest.TestCase):
         result = visible(Path(self.run_cli("render", "result", "--change", change)["page"]).read_text(encoding="utf-8"))
         self.assertIn(SEASON_REFILL_NOTE, result)
 
+    def test_a_fixed_sheet_is_a_new_file_and_its_plan_replaces_the_old_preview(self):
+        """F4 — sheet.md 「요금표를 고칠 때」: sheet 는 있는 --out 을 덮어쓰지 않고, 고친 요금표의 계산은 앞 미리보기를 바꾼다."""
+        out = self.dir / "sheet-check-1.json"
+        checked = self.run_cli("sheet", "--sheet", self.sheet, "--look", self.look, "--out", out)
+        first = out.read_text(encoding="utf-8")
+        fixed = S.sheet_data()
+        fixed["lines"][2]["rows"][0]["sell"] = "265"   # 담당자: "디럭스 성수기 주중 성인 2 는 265 야"
+        fixed_path = self.write("sheet-2.json", fixed)
+        refused = self.run_cli("sheet", "--sheet", fixed_path, "--look", self.look, "--out", out, code=2)["error"]
+        self.assertIn("이미 있는 파일입니다", refused)
+        self.assertIn("sheet-check-2.json", refused)
+        self.assertEqual(out.read_text(encoding="utf-8"), first, "거절하면 앞 파일은 그대로다")
+
+        snapshot = self.write("snapshot.json", encode_snapshot(S.reading(read_at=now_text())))
+        old = self.run_cli("plan", "--snapshot", snapshot, "--request", out, "--record", "--out", self.dir / "plan-1.json")["change_id"]
+        again = self.run_cli("sheet", "--sheet", fixed_path, "--look", self.look, "--out", self.dir / "sheet-check-2.json")
+        self.assertEqual(again["range"], checked["range"], "범위가 같으면 읽은 값을 그대로 쓴다")
+        new = self.run_cli("plan", "--snapshot", snapshot, "--request", self.dir / "sheet-check-2.json", "--record",
+                           "--replaces", old, "--out", self.dir / "plan-2.json")
+        listed = {entry["id"]: entry for entry in self.run_cli("list")["changes"]}
+        self.assertEqual((listed[old]["status"], listed[new["change_id"]]["replaces"]), ("replaced", old))
+        changes = json.loads((self.dir / "plan-2.json").read_text(encoding="utf-8"))["plan"]["changes"]
+        self.assertIn("265.00", {c["after"]["sell"] for c in changes if c["key"]["occupancy"] == "A2" and c["key"]["nights"] == 1})
+
     def test_one_room_at_a_time_and_a_sheet_too_big_for_one_reading(self):
         part = self.run_cli("sheet", "--sheet", self.sheet, "--look", self.look, "--room", "스위트", "--from", "2027-01-11",
                             "--out", self.dir / "part.json")
