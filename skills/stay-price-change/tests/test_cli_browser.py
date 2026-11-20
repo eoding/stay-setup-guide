@@ -64,6 +64,10 @@ class BrowserCommandTest(unittest.TestCase):
         first = self.run_cli("reserved", "--calls", calls)
         self.assertEqual((first["done"], first["ask"], first["answered"]), (False, [probe], 0))
         self.assertIn("readPair 답이 없는", self.run_cli("read", "--calls", calls, "--answers", folder, code=2)["error"])
+        # 시작하지 않은 답(started false)은 잘못 저장해 두어도 실패한 읽기가 아니라 없는 답이다
+        self.write("읽기-1/pair-0.json", {"ok": False, "op": "readPair", "ask": ask_sum(asked), "started": False, "wait": 5,
+                                         "error": "앞 화면(드로어·요청)이 아직 정리되지 않았습니다"})
+        self.assertIn("readPair 답이 없는", self.run_cli("read", "--calls", calls, "--answers", folder, code=2)["error"])
         for index, item in enumerate(reply("readPair", asked, {"fragment": PRICE})):
             self.write(f"읽기-1/pair-1{'' if index == 0 else '-' + str(index)}.json", item)
         self.assertIn("물음이 1개 남았습니다", self.run_cli("read", "--calls", calls, "--answers", folder, code=2)["error"])

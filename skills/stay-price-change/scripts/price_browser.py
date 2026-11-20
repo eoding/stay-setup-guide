@@ -76,11 +76,12 @@ def _clue(text: str) -> dict:
 
 def answers(results: Iterable) -> tuple[list[dict], list[dict]]:
     """답 목록 → (온전한 답, 잘린 답의 단서). 글자로 들어온 답은 도구가 보인 그대로다 — `[TRUNCATED]` 가 붙었거나
-    JSON 이 닫히지 않았으면 잘린 것이다."""
+    JSON 이 닫히지 않았으면 잘린 것이다. 시작하지 않은 답(`started: false` — 아무것도 하지 않았다)은 없는 답으로 친다."""
     whole, cut = [], []
     for item in results:
         if isinstance(item, Mapping):
-            whole.append(dict(item))
+            if item.get("started") is not False:
+                whole.append(dict(item))
             continue
         text = str(item)
         try:
@@ -88,7 +89,8 @@ def answers(results: Iterable) -> tuple[list[dict], list[dict]]:
         except ValueError:
             data = None
         if isinstance(data, dict) and "[TRUNCATED]" not in text:
-            whole.append(data)
+            if data.get("started") is not False:
+                whole.append(data)
         else:
             cut.append(_clue(text))
     return whole, cut
