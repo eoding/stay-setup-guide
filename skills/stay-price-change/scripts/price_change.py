@@ -203,7 +203,8 @@ def cmd_record_result(args):
         return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note,
                     status=record.status)
     return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note,
-                status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note))
+                status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note,
+                                          unknown=outcome.saved == "unknown"))
 
 
 def cmd_verify(args):

@@ -4,13 +4,15 @@
 환경 변수 `STAY_PRICE_LEDGER_DIR` 로 다른 폴더를 줄 수 있다(시험은 임시 폴더를 쓴다). 가격·부과금·프로모션·부가옵션
 도우미가 모두 이 장부 하나에 적는다.
 
-    meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
+    meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다. 앞 판(1)은 열 때 칸을 더해 올린다
     changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied),
-                 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON)
+                 호텔(페이지가 알아본 번호와 이름), 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON),
+                 그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다)
     item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 넣을 값,
                  넣는 방법(set / clear, 넣지 않으면 비어 있음), 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값,
                  되돌린 되돌리기 번호
-    steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다
+    steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
+                 저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 applied 다.
 """
@@ -34,7 +36,7 @@ from .rollback import LaterWrite, RecordedChange, RecordedItem
 LEDGER_ENV = "STAY_PRICE_LEDGER_DIR"
 FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -43,6 +45,7 @@ CREATE TABLE IF NOT EXISTS changes (
   kind TEXT NOT NULL CHECK (kind IN ('change', 'snapshot', 'rollback')),
   status TEXT NOT NULL CHECK (status IN ('previewed', 'applying', 'stopped', 'applied')),
   hotel TEXT NOT NULL,
+  hotel_id TEXT NOT NULL DEFAULT '',
   offer TEXT NOT NULL,
   currency TEXT NOT NULL,
   sentence TEXT NOT NULL,
@@ -52,7 +55,8 @@ CREATE TABLE IF NOT EXISTS changes (
   applied_at TEXT,
   verified_at TEXT,
   reverses INTEGER REFERENCES changes(id),
-  request TEXT
+  request TEXT,
+  reading TEXT
 );
 CREATE TABLE IF NOT EXISTS item_values (
   change_id INTEGER NOT NULL REFERENCES changes(id),
@@ -82,6 +86,7 @@ CREATE TABLE IF NOT EXISTS steps (
   status TEXT NOT NULL CHECK (status IN ('pending', 'saved', 'failed')),
   finished_at TEXT,
   note TEXT,
+  unknown INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (change_id, idx)
 );
 CREATE TRIGGER IF NOT EXISTS keep_meta BEFORE DELETE ON meta BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
@@ -91,6 +96,9 @@ CREATE TRIGGER IF NOT EXISTS keep_steps BEFORE DELETE ON steps BEGIN SELECT RAIS
 """
 
 ROW = "item_kind = ? AND item_key = ? AND field = ?"
+# 앞 판 장부에 더하는 칸 — (표, 칸, 정의). 판 1 → 2
+ADDED = (("changes", "hotel_id", "TEXT NOT NULL DEFAULT ''"), ("changes", "reading", "TEXT"),
+         ("steps", "unknown", "INTEGER NOT NULL DEFAULT 0"))
 
 
 class LedgerError(ValueError):
@@ -148,6 +156,7 @@ class StepRecord:
     status: str
     finished_at: str | None
     note: str | None
+    unknown: bool = False
 
 
 @dataclass(frozen=True)
@@ -176,6 +185,7 @@ class ChangeRecord:
     kind: str
     status: str
     hotel: str
+    hotel_id: str
     offer: str
     currency: str
     sentence: str
@@ -214,7 +224,11 @@ class Ledger:
                 raise LedgerError(f"이 장부는 더 새 판 도우미가 만든 것입니다(장부 판 {found['value']}, 이 도우미는 "
                                   f"{SCHEMA_VERSION}). 도우미를 새로 받아 주세요")
             db.executescript(SCHEMA)
-            db.execute("INSERT OR IGNORE INTO meta (name, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+            for table, column, decl in ADDED:
+                if column not in {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            db.execute("INSERT INTO meta (name, value) VALUES ('schema_version', ?)"
+                       " ON CONFLICT(name) DO UPDATE SET value = excluded.value", (str(SCHEMA_VERSION),))
 
     @contextmanager
     def _db(self) -> Iterator[sqlite3.Connection]:
@@ -227,14 +241,15 @@ class Ledger:
         finally:
             db.close()
 
-    def _insert(self, db, kind, status, hotel, offer, currency, sentence, read_at, rows: Iterable[ValueRow],
-                reverses=None, request=None) -> int:
+    def _insert(self, db, kind, status, hotel, hotel_id, offer, currency, sentence, read_at, rows: Iterable[ValueRow],
+                reverses=None, request=None, reading=None) -> int:
         stamp = now_text()
         change_id = db.execute(
-            "INSERT INTO changes (kind, status, hotel, offer, currency, sentence, read_at, created_at, updated_at,"
-            " applied_at, reverses, request) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (kind, status, hotel, offer, currency, sentence, read_at, stamp, stamp, stamp if status == "applied" else None,
-             reverses, None if request is None else _body(request))).lastrowid
+            "INSERT INTO changes (kind, status, hotel, hotel_id, offer, currency, sentence, read_at, created_at, updated_at,"
+            " applied_at, reverses, request, reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (kind, status, hotel, hotel_id, offer, currency, sentence, read_at, stamp, stamp,
+             stamp if status == "applied" else None, reverses, None if request is None else _body(request),
+             None if reading is None else _body(reading))).lastrowid
         db.executemany(
             "INSERT INTO item_values (change_id, item_kind, item_key, label, field, state, before, after, verdict, marks)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -243,18 +258,21 @@ class Ledger:
         return change_id
 
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
-                       rows: Iterable[ValueRow], request: Mapping | None = None, reverses: int | None = None) -> int:
-        """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다."""
+                       rows: Iterable[ValueRow], request: Mapping | None = None, reverses: int | None = None,
+                       hotel_id: str = "", reading: Mapping | None = None) -> int:
+        """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다. `reading` 은 그 계산이 바탕으로 삼은
+        읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다."""
         with self._db() as db:
             if reverses is not None:
                 self._header(db, reverses)
-            return self._insert(db, "rollback" if reverses is not None else "change", "previewed", hotel, offer, currency,
-                                sentence, read_at, rows, reverses, request)
+            return self._insert(db, "rollback" if reverses is not None else "change", "previewed", hotel, hotel_id, offer,
+                                currency, sentence, read_at, rows, reverses, request, reading)
 
     def record_snapshot(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
-                        rows: Iterable[ValueRow]) -> int:
+                        rows: Iterable[ValueRow], hotel_id: str = "", reading: Mapping | None = None) -> int:
         with self._db() as db:
-            return self._insert(db, "snapshot", "applied", hotel, offer, currency, sentence, read_at, rows)
+            return self._insert(db, "snapshot", "applied", hotel, hotel_id, offer, currency, sentence, read_at, rows,
+                                reading=reading)
 
     def _header(self, db, change_id):
         row = db.execute("SELECT * FROM changes WHERE id = ?", (change_id,)).fetchone()
@@ -295,8 +313,10 @@ class Ledger:
                            (change_id, index, step.kind, step.label, _body(step.body)))
             db.execute("UPDATE changes SET status = 'applying', updated_at = ? WHERE id = ?", (now_text(), change_id))
 
-    def record_step(self, change_id: int, index: int, saved: bool, note: str | None = None) -> str:
-        """저장 한 번이 끝날 때마다 부른다. 되돌리기의 저장이 끝나면 되돌린 변경의 그 값들에 이 번호를 단다. 새 상태를 돌려준다."""
+    def record_step(self, change_id: int, index: int, saved: bool, note: str | None = None, unknown: bool = False) -> str:
+        """저장 한 번이 끝날 때마다 부른다. 되돌리기의 저장이 끝나면 되돌린 변경의 그 값들에 이 번호를 단다. 새 상태를 돌려준다.
+
+        `unknown` 은 저장 단추는 눌렸고 저장됐는지 모르는 단계다 — failed 로 적고 표시를 단다(다시 읽어 가린다)."""
         with self._db() as db:
             header = self._header(db, change_id)
             step = db.execute("SELECT * FROM steps WHERE change_id = ? AND idx = ?", (change_id, index)).fetchone()
@@ -305,8 +325,8 @@ class Ledger:
             if step["status"] == "saved":
                 return header["status"]
             stamp = now_text()
-            db.execute("UPDATE steps SET status = ?, finished_at = ?, note = ? WHERE change_id = ? AND idx = ?",
-                       ("saved" if saved else "failed", stamp, note, change_id, index))
+            db.execute("UPDATE steps SET status = ?, finished_at = ?, note = ?, unknown = ? WHERE change_id = ? AND idx = ?",
+                       ("saved" if saved else "failed", stamp, note, int(unknown and not saved), change_id, index))
             if saved and header["kind"] == "rollback":
                 for row in db.execute("SELECT item_kind, item_key, field FROM item_values WHERE change_id = ? AND step = ?",
                                       (change_id, index)).fetchall():
@@ -364,7 +384,7 @@ class Ledger:
                 items.append(RecordedItem(kind, key, rows[0]["label"], rows[0]["state"],
                                           {row["field"]: money(row["before"]) for row in rows}, written))
         return RecordedChange(header["id"], header["kind"], header["hotel"], header["offer"], header["currency"],
-                              header["sentence"], header["read_at"], header["applied_at"], tuple(items))
+                              header["sentence"], header["read_at"], header["applied_at"], tuple(items), header["hotel_id"])
 
     def recorded_snapshot(self, change_id: int) -> RecordedChange:
         """저장해 둔 상태로 돌리기의 재료 — snapshot 에 적은 항목 전부와 그때 값(넣은 값은 없다)."""
@@ -379,7 +399,7 @@ class Ledger:
                                    {row["field"]: money(row["before"]) for row in rows}, {})
                       for (kind, key), rows in grouped.items())
         return RecordedChange(header["id"], header["kind"], header["hotel"], header["offer"], header["currency"],
-                              header["sentence"], header["read_at"], header["applied_at"], items)
+                              header["sentence"], header["read_at"], header["applied_at"], items, header["hotel_id"])
 
     def later_writes(self, change_id: int) -> dict[tuple[str, str], list[LaterWrite]]:
         """이 변경 뒤에 같은 호텔·오퍼에 이 장부가 저장한 값 — 항목마다, 변경마다 하나씩, 오래된 것부터."""
@@ -391,8 +411,8 @@ class Ledger:
                 " JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 " JOIN changes ON changes.id = item_values.change_id"
                 " WHERE item_values.change_id > ? AND steps.status = 'saved' AND changes.kind != 'snapshot'"
-                " AND changes.hotel = ? AND changes.offer = ? ORDER BY item_values.change_id, steps.idx",
-                (change_id, header["hotel"], header["offer"])).fetchall()
+                " AND changes.hotel_id = ? AND changes.offer = ? ORDER BY item_values.change_id, steps.idx",
+                (change_id, header["hotel_id"], header["offer"])).fetchall()
         for row in rows:
             entry = grouped.setdefault((row["item_kind"], row["item_key"], row["change_id"]),
                                        dict(at=row["finished_at"], sentence=row["sentence"], written={}))
@@ -407,7 +427,7 @@ class Ledger:
         with self._db() as db:
             header = self._header(db, change_id)
             steps = tuple(StepRecord(row["idx"], row["kind"], row["label"], json.loads(row["body"]), row["status"],
-                                     row["finished_at"], row["note"])
+                                     row["finished_at"], row["note"], bool(row["unknown"]))
                           for row in db.execute("SELECT * FROM steps WHERE change_id = ? ORDER BY idx", (change_id,)))
             saved = {step.index for step in steps if step.status == "saved"}
             rows = tuple(
@@ -416,10 +436,18 @@ class Ledger:
                           money(row["seen"]), row["seen_state"], row["rolled_back_by"], row["verdict"],
                           tuple(mark for mark in row["marks"].split(",") if mark))
                 for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
-        return ChangeRecord(header["id"], header["kind"], header["status"], header["hotel"], header["offer"],
+        return ChangeRecord(header["id"], header["kind"], header["status"], header["hotel"], header["hotel_id"], header["offer"],
                             header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
                             None if header["request"] is None else json.loads(header["request"]), steps, rows)
+
+    def reading(self, change_id: int) -> dict:
+        """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""
+        with self._db() as db:
+            header = self._header(db, change_id)
+        if header["reading"] is None:
+            raise LedgerError(f"{change_id}번에는 적어 둔 읽은 값이 없습니다 — 범위를 다시 정해 읽어야 합니다")
+        return json.loads(header["reading"])
 
     def list_changes(self) -> list[dict]:
         item = "item_values.item_kind || '|' || item_values.item_key"
@@ -431,7 +459,8 @@ class Ledger:
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
                 " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 " GROUP BY changes.id ORDER BY changes.id DESC").fetchall()
-        return [dict(id=row["id"], kind=row["kind"], status=row["status"], hotel=row["hotel"], offer=row["offer"],
+        return [dict(id=row["id"], kind=row["kind"], status=row["status"], hotel=row["hotel"], hotel_id=row["hotel_id"],
+                     offer=row["offer"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
                      items=row["items"], written=row["written"], rolled_back=row["rolled_back"]) for row in rows]

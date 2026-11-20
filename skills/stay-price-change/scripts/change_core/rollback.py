@@ -44,6 +44,7 @@ class RecordedChange:
     read_at: str
     applied_at: str | None
     items: tuple[RecordedItem, ...]
+    hotel_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,7 @@ class RollbackPlan:
     include_kept: bool
     unremovable: tuple[KeptItem, ...] = ()
     mode: str = "rollback"
+    hotel_id: str = ""
 
 
 def holds(state: ItemState, written: Fields) -> bool:
@@ -137,7 +139,7 @@ def plan_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequ
             restored.append(restore)
     return RollbackPlan(recorded.id, recorded.hotel, recorded.offer, recorded.currency, recorded.read_at,
                         recorded.sentence, recorded.applied_at, read_at, tuple(restored), tuple(kept), include_kept,
-                        tuple(unremovable))
+                        tuple(unremovable), hotel_id=recorded.hotel_id)
 
 
 def plan_restore(snapshot: RecordedChange, now: Reading, read_at: str,
@@ -163,7 +165,7 @@ def plan_restore(snapshot: RecordedChange, now: Reading, read_at: str,
         if targets:
             restored.append(RestoredItem(item.kind, item.key, item.label, current, targets))
     return RollbackPlan(snapshot.id, snapshot.hotel, snapshot.offer, snapshot.currency, snapshot.read_at, snapshot.sentence,
-                        None, read_at, tuple(restored), (), False, tuple(unremovable), "restore")
+                        None, read_at, tuple(restored), (), False, tuple(unremovable), "restore", snapshot.hotel_id)
 
 
 def _fields(values: Fields) -> dict:
@@ -187,7 +189,7 @@ def _decode_kept(item: Mapping) -> KeptItem:
 
 def encode_rollback(plan: RollbackPlan) -> dict:
     return dict(
-        mode=plan.mode, reverses=plan.reverses, hotel=plan.hotel, offer=plan.offer, currency=plan.currency, restore_to=plan.restore_to,
+        mode=plan.mode, reverses=plan.reverses, hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, restore_to=plan.restore_to,
         original_sentence=plan.original_sentence, original_applied_at=plan.original_applied_at, read_at=plan.read_at,
         include_kept=plan.include_kept,
         restored=[dict(kind=item.kind, key=item.key, label=item.label, now=encode_state(item.now),
@@ -207,4 +209,5 @@ def decode_rollback(data: Mapping) -> RollbackPlan:
         bool(data.get("include_kept")),
         tuple(_decode_kept(item) for item in data.get("unremovable") or ()),
         str(data.get("mode") or "rollback"),
+        str(data.get("hotel_id") or ""),
     )
