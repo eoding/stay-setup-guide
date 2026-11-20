@@ -6,6 +6,7 @@
 // (`stay-setup-run/tests/fixtures/erp/`), 가격 수정 ②·가감 ② 의 손 조각(`tests/fixtures/erp/`). 셀 창은 캡처가 없어
 // ERP 템플릿 `_calendar_cell_edit.html` 의 표식을 따라 손으로 그린다(`cellWindow`). htmx 대신 문서에 붙인 클릭 듣개가
 // 서버처럼 조각을 갈아 끼운다 — 벽(window 캡처 단계)이 막은 클릭은 여기 닿지 않으므로 `log.reached` 가 증거다.
+// htmx 4 처럼 htmx 단추(`hx-get` 등)는 연결돼야(`data-htmx-powered`) 눌린다. 연결 전에 누르면 아무 일도 없고 `log.dead` 에 남는다.
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,9 @@ export const ownFixture = (name) => readFileSync(join(SKILL, 'tests', 'fixtures'
 export const OWN_FIXTURES = join(SKILL, 'tests', 'fixtures', 'erp');
 
 export const OFFER = '〈오퍼 관리용 이름〉';
+// htmx 가 맡는 단추 — htmx 4 는 이것들에 듣개를 붙이며 `data-htmx-powered` 를 단다(htmx.org 4.0.0-beta6 `#initializeElement`)
+const HTMX = ['action', 'get', 'post', 'put', 'patch', 'delete'].map((v) => `[hx-${v}],[data-hx-${v}]`).join(',');
+const wire = (root) => { if (root) [root, ...root.querySelectorAll(HTMX)].filter((el) => el.matches(HTMX)).forEach((el) => el.setAttribute('data-htmx-powered', 'true')); };
 // 시험 호텔 — 지어낸 번호와 이름. 페이지는 `#master_id` 와 [에이전트에 복사] 문구로 이 호텔을 알아본다
 export const HOTEL = Object.freeze({ id: '1', name: '데모 호텔' });
 
@@ -138,6 +142,9 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   echoDays     true 면 가격 수정 ② 의 상태 표·기존 값 줄을 받은 날짜 구간대로 다시 그린다
  *   panelEdit · adjustSelectEdit  캘린더 판 · 가감 ① 조각을 바꾸는 함수(객실 이름 변형 등)
  *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다 · bare 면 아무것도 올리지 않는다(올리개 시험)
+ *   lateWire     {ms, on, untracked} — `on` 의 조각('calendar' 칩·오퍼·보기·달·셀 창 닫기 | 'drawer' 드로어 ① | 'step' 드로어 ② ·
+ *                「직접 입력」 다시 그리기 · 가감 ② | 'cell' 셀 창 열기·저장 뒤)을 끼운 뒤 ms 지나서 연결한다(실측: 달력은 3~4ms 늦다).
+ *                요청은 htmx 4 처럼 연결 뒤에 끝난다. untracked 면 요청이 끼우자마자 끝난다 — 요청 수로는 그 틈이 안 보인다
  *   hotel        호텔 표식 `hotelMarks` 의 값({id, name, said}) · null 이면 표식이 없다 · login true 면 로그인 화면(비밀번호 칸만)
  */
 export function erpPage(opts = {}) {
@@ -163,9 +170,11 @@ export function erpPage(opts = {}) {
   <div id="stay_save_result" hidden></div>`;
   const dom = new JSDOM(html, { url: 'https://erp.example.test/stay/1/?month=2026-07&view=coord&offer=9#stay_tab_calendar', runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window, doc = w.document;
+  wire(doc.body);   // 처음 그린 화면은 htmx 가 이미 연결했다
   const drawer = doc.querySelector('.stay-drawer'), body = doc.getElementById('stay_drawer_body');
-  const log = { reached: [], posts: [], submits: 0 };
-  const render = (fragment) => { body.innerHTML = fragment; drawer.classList.add('is-open'); };
+  const log = { reached: [], posts: [], submits: 0, dead: [] };
+  const put = (fragment) => { body.innerHTML = fragment; drawer.classList.add('is-open'); return body; };
+  const render = (fragment) => wire(put(fragment));
   // ERP 드로어처럼 닫는다 — `is-open` 은 바로 빠지고 내용은 0.35초 뒤에 비운다(`_drawer.html` hide()). drawerStuck 이면 안 비운다
   const closeDrawer = () => {
     drawer.classList.remove('is-open');
@@ -175,6 +184,27 @@ export function erpPage(opts = {}) {
   };
   const slot = () => doc.getElementById('stay_cell_slot');
   const fire = (name, detail) => doc.dispatchEvent(new w.CustomEvent(name, { detail, bubbles: true }));
+  // 서버 요청 하나 — htmx 4 의 차례: 요청 시작 → 조각 끼우기(apply, 끼운 뿌리를 돌려준다) → 정착 → 연결 → 요청 끝
+  const late = Object.assign({ ms: 0, on: [], untracked: false }, o.lateWire);
+  const swap = (name, apply) => {
+    fire('htmx:before:request', {});
+    const root = apply();
+    const settle = () => { fire('htmx:after:settle', {}); wire(root); fire('htmx:after:swap', {}); };
+    if (!late.ms || !late.on.includes(name)) { settle(); fire('htmx:finally:request', {}); return; }
+    if (late.untracked) fire('htmx:finally:request', {});
+    w.setTimeout(() => { settle(); if (!late.untracked) fire('htmx:finally:request', {}); }, late.ms);
+  };
+  // 달력 조각 — 서버가 그리듯 고른 칩(객실·요금제, 오퍼)을 칠해 그린다
+  const picks = {};
+  const shownMonth = () => doc.getElementById('stay_calendar').getAttribute('data-cal-month');
+  const drawCalendar = (start, month) => {
+    doc.getElementById('stay_calendar').outerHTML = panelOf(start, month);
+    const cal = doc.getElementById('stay_calendar');
+    Object.entries(picks).forEach(([kind, name]) => cal.querySelectorAll(`[data-stay-entity="${kind}"]`).forEach((x) => {
+      x.className = x.className.replace(/stay-btn--(primary|ghost)/, x.getAttribute('data-stay-name') === name ? 'stay-btn--primary' : 'stay-btn--ghost');
+    }));
+    return cal;
+  };
   const nameOf = (b) => {
     for (const a of ['data-calendar-bulk-action', 'data-calendar-adjust-action', 'data-stay-action', 'data-stay-tab']) if (b.hasAttribute(a)) return `${a.replace(/^data-/, '')}=${b.getAttribute(a)}`;
     return `${b.localName}${b.name ? '[name=' + b.name + ']' : ''}`;
@@ -184,25 +214,25 @@ export function erpPage(opts = {}) {
     const b = e.target.closest('button, a, input, label');
     if (!b) return;
     log.reached.push(nameOf(b));
+    if (b.matches(HTMX) && !b.hasAttribute('data-htmx-powered')) { log.dead.push(nameOf(b)); return; }   // htmx 가 아직 듣지 않는다
     if (b.matches('#stay_calendar .erp_cont_head_right > [data-stay-action="goto"]:not(.stay-view-btn):not(.stay-promo-btn)')) {
-      doc.getElementById('stay_calendar').outerHTML = panelOf('coord', /[?&]month=(\d{4}-\d{2})/.exec(b.getAttribute('hx-get'))[1]);
+      swap('calendar', () => drawCalendar('coord', /[?&]month=(\d{4}-\d{2})/.exec(b.getAttribute('hx-get'))[1]));
     } else if (b.matches('ul.tab-container a')) {
       doc.querySelectorAll('ul.tab-container a').forEach((a) => a.classList.toggle('active', a === b));
     } else if (b.matches('.stay-view-btn') && /view=coord/.test(b.getAttribute('hx-get') || '')) {
-      doc.getElementById('stay_calendar').outerHTML = panelOf('coord');
+      swap('calendar', () => drawCalendar('coord'));
     } else if (b.matches('[data-stay-entity="rate_plan"], [data-stay-entity="offer"]')) {
-      const kind = b.getAttribute('data-stay-entity');
-      doc.querySelectorAll(`[data-stay-entity="${kind}"]`).forEach((x) => { x.className = x.className.replace('--primary', '--ghost'); });
-      b.className = b.className.replace('--ghost', '--primary');
+      picks[b.getAttribute('data-stay-entity')] = b.getAttribute('data-stay-name');
+      swap('calendar', () => drawCalendar('coord', shownMonth()));
     } else if (b.matches('[data-calendar-bulk-action="price"]')) {
-      render(runFixture('calendar-bulk--price-step1.html'));
+      swap('drawer', () => put(runFixture('calendar-bulk--price-step1.html')));
     } else if (b.matches('[data-calendar-bulk-action]')) {
-      render(runFixture('calendar-bulk--close-step1.html'));
+      swap('drawer', () => put(runFixture('calendar-bulk--close-step1.html')));
     } else if (b.matches('[data-calendar-adjust-action="open"]')) {
-      render((o.adjustSelectEdit || ((html) => html))(runFixture('calendar-adjust--step1.html')));
+      swap('drawer', () => put((o.adjustSelectEdit || ((html) => html))(runFixture('calendar-adjust--step1.html'))));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="next"]')) {
       const sent = formValues(body, ['date_selection_0']);
-      render(echoHidden(o.echoDays ? echoDays(o.bulkReview, sent.date_selection_0[0]) : o.bulkReview, sent));
+      swap('step', () => put(echoHidden(o.echoDays ? echoDays(o.bulkReview, sent.date_selection_0[0]) : o.bulkReview, sent)));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="save"]')) {
       const root = b.closest('[data-stay-screen="calendar-bulk"]');
       const post = { screen: 'calendar-bulk' };
@@ -222,11 +252,11 @@ export function erpPage(opts = {}) {
     } else if (b.closest('[data-stay-screen="calendar-adjust"]') && b.matches('[data-stay-action="next"]')) {
       const picked = formValues(body, ['rooms', 'plans', 'occupancy', 'offer', 'los', 'adjust', 'date_selection_0']);
       const offerName = [...body.querySelector('select[name="offer"]').options].find((x) => x.selected).textContent.trim();
-      render(echoHidden(o.adjustReview, picked, offerName));
+      swap('step', () => put(echoHidden(o.adjustReview, picked, offerName)));
     } else if (b.closest('[data-stay-screen]') && b.matches('[data-stay-action="save"]')) {
       log.posts.push({ screen: b.closest('[data-stay-screen]').getAttribute('data-stay-screen') });
     } else if (b.matches('[data-stay-action="open_cell"]')) {
-      slot().innerHTML = cellWindow(o.cell);
+      swap('cell', () => { slot().innerHTML = cellWindow(o.cell); return slot(); });
     } else if (b.matches('[data-stay-action="save_cell"]')) {
       const tr = b.closest('tr[data-stay-row]');
       const post = { screen: 'price-cell', row: tr.getAttribute('data-stay-row') };
@@ -239,16 +269,21 @@ export function erpPage(opts = {}) {
       }));
       const saved = o.cellSave === 'ok';
       const fresh = saved ? rows : (o.cell.rows || ROWS);
-      doc.getElementById('stay_cell_edit').outerHTML = cellWindow(Object.assign({}, o.cell, { rows: fresh, notice: saved ? '저장했습니다' : '', error: saved ? '' : '정가는 판매가보다 작을 수 없습니다' }));
+      swap('cell', () => {
+        doc.getElementById('stay_cell_edit').outerHTML = cellWindow(Object.assign({}, o.cell, { rows: fresh, notice: saved ? '저장했습니다' : '', error: saved ? '' : '정가는 판매가보다 작을 수 없습니다' }));
+        return doc.getElementById('stay_cell_edit');
+      });
     } else if (b.matches('#stay_cell_edit [data-stay-action="close"]')) {
-      slot().innerHTML = '';
+      swap('calendar', () => drawCalendar('coord', shownMonth()));   // ERP 의 [닫기] 는 달력을 다시 가져온다(셀 창 자리는 달력 안)
     }
   });
   // 연동 방식 셀렉트를 바꾸면 ERP 가 ② 를 다시 그린다(hx-trigger="change") — 「직접 입력」 캡처로 갈아 끼운다
   doc.addEventListener('change', (e) => {
     if (e.target.name !== 'link_mode_pick' || e.target.value !== 'manual') return;
     log.reached.push('change:link_mode_pick');
-    render(echoHidden(o.bulkReviewManual || runFixture('calendar-bulk--price-link-manual.html'), formValues(body, ['date_selection_0'])));
+    if (!e.target.hasAttribute('data-htmx-powered')) { log.dead.push('change:link_mode_pick'); return; }
+    const sent = formValues(body, ['date_selection_0']);
+    swap('step', () => put(echoHidden(o.bulkReviewManual || runFixture('calendar-bulk--price-link-manual.html'), sent)));
   });
   w.addEventListener('stay-drawer-close', closeDrawer);
   w.localStorage.setItem('staySteps', RUNNER_STEPS);
