@@ -147,12 +147,16 @@ def stopped_choices(record) -> str:
 
 
 def rollback_head(plan: RollbackPlan, scope: str = "") -> str:
-    applied = f"{fmt_time(plan.original_applied_at)} 적용" if plan.original_applied_at else "중간에 멈춘 변경"
+    if plan.mode == "restore":
+        head = (f"<b>{esc(fmt_time(plan.restore_to))} 에 저장해 둔 상태로 되돌립니다.</b><br>"
+                f"저장할 때 하신 말: “{esc(plan.original_sentence)}” (장부 {plan.reverses}번)")
+    else:
+        applied = f"{fmt_time(plan.original_applied_at)} 적용" if plan.original_applied_at else "중간에 멈춘 변경"
+        head = (f"<b>{esc(fmt_time(plan.restore_to))} 에 적어 둔 값으로 되돌립니다.</b><br>"
+                f"그때 한 일: “{esc(plan.original_sentence)}” ({esc(applied)}, 장부 {plan.reverses}번)")
     return (f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 '
             f"것입니다. 통화 {esc(plan.currency)}.</p>"
-            f'<div class="banner blue"><b>{esc(fmt_time(plan.restore_to))} 에 적어 둔 값으로 되돌립니다.</b><br>'
-            f"그때 한 일: “{esc(plan.original_sentence)}” ({esc(applied)}, 장부 {plan.reverses}번)"
-            f'{f"<br>되돌리는 범위: {esc(scope)}" if scope else ""}</div>')
+            f'<div class="banner blue">{head}{f"<br>되돌리는 범위: {esc(scope)}" if scope else ""}</div>')
 
 
 def _values(values: Mapping, field_labels: Mapping[str, str], currency: str, empty: str) -> str:
@@ -167,12 +171,10 @@ def kept_table(plan: RollbackPlan, field_labels: Mapping[str, str]) -> str:
         return ""
     currency = plan.currency
     heading = ("그 사이 값이 달라졌지만 말씀대로 같이 되돌리는 것" if plan.include_kept
-               else "그대로 두는 것 — 그 사이 값이 달라졌거나 되돌릴 수 없습니다")
+               else "그대로 두는 것 — 그 사이 값이 달라졌습니다")
     rows = []
     for item in plan.kept:
-        if item.cause.created:
-            why = '이 변경으로 새로 생겼습니다 <span class="sub">(지울 길이 없어 그대로 둡니다)</span>'
-        elif item.cause.outside:
+        if item.cause.outside:
             why = '도우미 밖에서 바뀜 <span class="sub">(ERP 에서 직접 고친 것으로 보임)</span>'
         else:
             why = (f'이 컴퓨터의 다른 변경 <span class="sub">({esc(fmt_time(item.cause.at))} '
@@ -189,12 +191,27 @@ def kept_table(plan: RollbackPlan, field_labels: Mapping[str, str]) -> str:
             f'<th>지금 값</th><th>왜</th></tr>{"".join(rows)}</table></div>')
 
 
+def unremovable_table(plan: RollbackPlan, field_labels: Mapping[str, str], unit: str = "칸") -> str:
+    """지울 수 없는 것 — 되돌리면 없어야 하지만 ERP 에 지우는 길이 없어 지금 값 그대로 남는 것."""
+    if not plan.unremovable:
+        return ""
+    why = ("저장해 둔 때에는 없었고 그 뒤에 생겼습니다" if plan.mode == "restore"
+           else "이 변경으로 새로 생겼습니다")
+    rows = "".join(f'<tr><td class="text">{esc(item.label)}</td>'
+                   f'<td>{_values(item.now.fields, field_labels, plan.currency, "없음")}</td>'
+                   f'<td class="text">{esc(why)}</td></tr>' for item in plan.unremovable)
+    return (f'<h2>지울 수 없는 {esc(unit)} — ERP 에 지우는 길이 없어 지금 값 그대로 남습니다</h2>'
+            f'<div class="scroll"><table><tr><th>무엇</th><th>지금 값</th><th>왜</th></tr>{rows}</table></div>')
+
+
 def rollback_ask(plan: RollbackPlan, unit: str = "칸") -> str:
     ask = f'"되돌려"라고 하시면 {len(plan.restored):,}{unit}을 되돌립니다.'
-    keepable = [item for item in plan.kept if not item.cause.created]
-    if keepable and not plan.include_kept:
-        ask += (f' 그 사이 달라진 {len(keepable):,}{unit}도 되돌리려면 "{len(keepable):,}{unit}도 포함해서 되돌려"라고 '
+    if plan.kept and not plan.include_kept:
+        ask += (f' 그 사이 달라진 {len(plan.kept):,}{unit}도 되돌리려면 "{len(plan.kept):,}{unit}도 포함해서 되돌려"라고 '
                 "해 주세요.")
+    if plan.unremovable:
+        ask += f" 지울 수 없는 {len(plan.unremovable):,}{unit}은 그대로 남습니다."
     return (f'<div class="banner blue">{esc(ask)}</div>'
             + notes(["이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.",
+                     "판매 마감·판매 가능 상태는 되돌리지 않고 값만 되돌립니다.",
                      "이 되돌리기도 장부에 한 번의 변경으로 적혀서, 다시 되돌릴 수 있습니다."]))

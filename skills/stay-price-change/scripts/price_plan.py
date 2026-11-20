@@ -21,7 +21,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 from change_core.items import Difference, Refused, stale_items
 from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import round_money
-from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_rollback
+from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_restore, plan_rollback
 from change_core.rules import BLOCKED, RED, Resolution, decide
 
 from price_model import (
@@ -333,6 +333,21 @@ def plan_cell_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str],
         raise PlanError(f"지금 값을 읽지 않은 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
     return plan_rollback(recorded, later, snapshot_reading(now), now.read_at, include_kept,
                          None if select is None else lambda kind, key: kind == ITEM_KIND and select(key_of_item(key)))
+
+
+def plan_cell_restore(snapshot: RecordedChange, now: Snapshot,
+                      select: Callable[[CellKey], bool] | None = None) -> RollbackPlan:
+    """저장해 둔 상태(장부의 지금 상태 저장)로 돌리기 — 지금 값을 그 범위만큼 읽었는지 보고 공통 계산에 넘긴다."""
+    if (now.hotel, now.offer) != (snapshot.hotel, snapshot.offer):
+        raise PlanError(f"지금 읽은 값은 {now.hotel} · {now.offer} 것이고, 저장해 둔 상태는 {snapshot.hotel} · {snapshot.offer} 입니다")
+    chosen = [key_of_item(item.key) for item in snapshot.items
+              if item.kind == ITEM_KIND and (select is None or select(key_of_item(item.key)))]
+    gaps = sorted({f"{key.room} · {key.rate_plan} · {key.date}" for key in chosen
+                   if not now.covers(key.room, key.rate_plan, key.date)})
+    if gaps:
+        raise PlanError(f"지금 값을 읽지 않은 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
+    return plan_restore(snapshot, snapshot_reading(now), now.read_at,
+                        None if select is None else lambda kind, key: kind == ITEM_KIND and select(key_of_item(key)))
 
 
 def rollback_writes(plan: RollbackPlan) -> tuple[CellWrite, ...]:

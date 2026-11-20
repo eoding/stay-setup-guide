@@ -72,10 +72,12 @@ class RollbackTest(unittest.TestCase):
                   rollback_writes(plan_cell_rollback(self.change, self.later, self.now))}
         self.assertEqual(writes, {SAME: (D("100.00"), None, ()), LISTED: (D("100.00"), D("105.00"), ())})
 
-    def test_a_field_that_was_empty_before_is_cleared_on_restore(self):
+    def test_a_field_that_was_empty_before_is_cleared_on_restore_through_the_cell_window(self):
         change = recorded(item(SAME, value("100.00"), list="150.00"))
         plan = plan_cell_rollback(change, {}, now({SAME: value("100.00", "150.00")}))
         self.assertEqual([(w.key, w.sell, w.list, w.clear) for w in rollback_writes(plan)], [(SAME, None, None, ("list",))])
+        self.assertEqual([(s.kind, s.key, s.clear) for s in save_steps(rollback_writes(plan))],
+                         [("cell_edit", SAME, ("list",))])
 
     def test_kept_cells_can_be_included_on_request(self):
         plan = plan_cell_rollback(self.change, self.later, self.now, include_kept=True)
@@ -91,15 +93,17 @@ class RollbackTest(unittest.TestCase):
         self.assertNotIn(REF[OUTSIDE][1], [item.key for item in plan.restored])
         self.assertNotIn(OUTSIDE, [write.key for write in rollback_writes(plan)])
 
-    def test_a_cell_gone_since_is_kept_as_outside_and_a_cell_the_change_created_is_never_removed(self):
+    def test_a_cell_gone_since_is_kept_as_outside_and_a_cell_the_change_created_cannot_be_removed(self):
         created = CellKey("R", "P", "2026-12-25", "A3", 1)
         change = recorded(item(SAME, value("100.00"), sell="110.00"), item(created, MISSING, sell="200.00"))
         plan = plan_cell_rollback(change, {}, now({SAME: MISSING, created: value("200.00")}), include_kept=True)
         kept = {i.key: i for i in plan.kept}
+        self.assertEqual(list(kept), [REF[SAME][1]])
         self.assertEqual(kept[REF[SAME][1]].now.state, "missing")
         self.assertTrue(kept[REF[SAME][1]].cause.outside)
-        self.assertTrue(kept[cell_item_key(created)].cause.created)
+        self.assertEqual([(i.key, i.now.fields["sell"]) for i in plan.unremovable], [(cell_item_key(created), D("200.00"))])
         self.assertEqual([i.key for i in plan.restored], [REF[SAME][1]])
+        self.assertNotIn(created, [w.key for w in rollback_writes(plan)])
 
     def test_nothing_written_or_not_read_now_is_refused(self):
         with self.assertRaises(Refused):

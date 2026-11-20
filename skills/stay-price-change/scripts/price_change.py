@@ -9,6 +9,7 @@
     verify        적용 뒤 다시 읽은 값과 견주기
     stale         미리보기 때 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
     rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다
+    restore       지금 상태 저장으로 적어 둔 상태로 되돌리는 계산(rollback.json 과 같은 모양). --record 면 변경으로 적는다
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록
 
@@ -42,7 +43,7 @@ from price_model import (
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback
 from price_plan import (
-    PlanError, cell_filter, counts, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
     snapshot_rows, stale_cells, step_plans,
 )
 
@@ -155,6 +156,20 @@ def cmd_rollback(args):
                 reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
 
 
+def cmd_restore(args):
+    ledger = Ledger()
+    snapshot = decode_snapshot(load(args.snapshot))
+    select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
+    plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), snapshot, select)
+    change_id = ledger.record_preview(
+        hotel=plan.hotel, offer=plan.offer, currency=plan.currency, sentence=args.sentence, read_at=plan.read_at,
+        rows=rollback_rows(plan),
+        request=dict(kind="restore_snapshot", snapshot=args.saved, scope=scope)) if args.record else None
+    return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
+                steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
+                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
+
+
 def cmd_save_snapshot(args):
     snapshot = decode_snapshot(load(args.snapshot))
     return dict(change_id=Ledger().record_snapshot(hotel=snapshot.hotel, offer=snapshot.offer, currency=snapshot.currency,
@@ -227,6 +242,17 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--occupancy", action="append", help="이 인원 조합 키의 칸만 (여러 번, 인원 무관은 빈 글자)")
     sub.add_argument("--record", action="store_true", help="장부에 되돌리기 미리보기로 적는다")
     sub.add_argument("--sentence", default="되돌리기", help="담당자가 한 말")
+
+    sub = command("restore", cmd_restore, "저장해 둔 상태로 되돌리는 계산")
+    sub.add_argument("--saved", type=int, required=True, help="지금 상태 저장(save-snapshot)으로 적은 장부 번호")
+    sub.add_argument("--snapshot", required=True, help="지금 읽은 값")
+    sub.add_argument("--record", action="store_true", help="장부에 변경 미리보기로 적는다(적용하면 이것도 되돌릴 수 있다)")
+    sub.add_argument("--sentence", default="저장해 둔 상태로 되돌리기", help="담당자가 한 말")
+    sub.add_argument("--room", action="append", help="이 객실의 칸만 (여러 번)")
+    sub.add_argument("--rate-plan", action="append", help="이 요금제의 칸만 (여러 번)")
+    sub.add_argument("--from", dest="date_from", help="이 날짜부터(ISO)")
+    sub.add_argument("--to", dest="date_to", help="이 날짜까지(ISO)")
+    sub.add_argument("--occupancy", action="append", help="이 인원 조합 키의 칸만 (여러 번)")
 
     sub = command("save-snapshot", cmd_save_snapshot, "지금 값을 장부에만 적기")
     sub.add_argument("--snapshot", required=True)

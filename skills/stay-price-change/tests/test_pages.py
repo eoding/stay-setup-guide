@@ -171,7 +171,7 @@ class RollbackPageTest(SelfContainedMixin, unittest.TestCase):
         self.assert_self_contained(page)
         self.assertIn("2026-11-20 14:02 에 적어 둔 값으로 되돌립니다.", text)
         self.assertIn(f"그때 한 일: “{scene.SENTENCE}” (2026-11-20 14:05 적용, 장부 4번)", text)
-        self.assertIn("1 되돌리는 칸 2 그대로 두는 칸 1 되돌리는 칸 중 예약 있는 날", text)
+        self.assertIn("1 되돌리는 칸 2 그대로 두는 칸 0 지울 수 없는 칸 1 되돌리는 칸 중 예약 있는 날", text)
         self.assertIn("1/1 금 · 디럭스 · 룸온리 · 성인 2 · 1박 판매가 480.00 판매가 528.00 판매가 550.00 도우미 밖에서 바뀜",
                       text)
         self.assertIn("1/2 토 · 디럭스 · 룸온리 · 성인 2 · 1박 판매가 270.00 판매가 297.00 판매가 310.00 이 컴퓨터의 다른 변경 "

@@ -17,7 +17,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
     esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list,
-    stopped_choices,
+    stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.money import scale_of
@@ -267,7 +267,9 @@ def _new_section(plan: Plan, currency: str) -> str:
         rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(after.sell, currency)}</td>'
                     f'<td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'
                     f'<td class="text">{esc(status)}</td></tr>')
-    return ('<h2>새로 생기는 칸 <span class="sub">— 지금은 가격이 없는 칸입니다</span></h2><div class="scroll"><table>'
+    return ('<h2>새로 생기는 칸 <span class="sub">— 지금은 가격이 없는 칸입니다</span></h2>'
+            '<div class="banner amber">ERP 에는 칸을 지우는 길이 없어, 이 칸들은 나중에 되돌려도 지울 수 없습니다'
+            '(되돌리기에서 「지울 수 없는 칸」으로 남습니다).</div><div class="scroll"><table>'
             '<tr><th>칸</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th></tr>' + "".join(rows) + "</table></div>")
 
 
@@ -353,10 +355,13 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None) -> str:
 
 def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "") -> str:
     currency = plan.currency
-    title = f"되돌리기 미리보기 · {plan.hotel} · {plan.offer}"
+    what = "저장해 둔 상태로 되돌리기" if plan.mode == "restore" else "되돌리기"
+    title = f"{what} 미리보기 · {plan.hotel} · {plan.offer}"
     reserved = set(reserved)
     restored = {key_of_item(item.key): item for item in plan.restored}
-    held = {key_of_item(item.key): item for item in plan.kept if item.cause.created or not plan.include_kept}
+    kept = {} if plan.include_kept else {key_of_item(item.key): item for item in plan.kept}
+    gone = {key_of_item(item.key): item for item in plan.unremovable}
+    held = {**kept, **gone}
     befores = {key: value_of(item.now) for key, item in restored.items()}
     closed = {key for key, value in befores.items() if value.state == "closed"}
     closed |= {key for key, item in held.items() if item.now.state == "closed"}
@@ -365,13 +370,13 @@ def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = ()
         if key in held:
             sell = held[key].now.fields.get("sell")
             return "red", (f'<span class="now">{"가격 없음" if sell is None else fmt_money(sell, currency)}</span>'
-                           '<small class="more">그대로 둠</small>')
+                           f'<small class="more">{"지울 수 없음" if key in gone else "그대로 둠"}</small>')
         return "", _move(befores[key], _with(befores[key], restored[key].targets), currency)
 
     body = [f"<h1>{esc(title)}</h1>", rollback_head(plan, scope),
-            stats([(len(restored), "되돌리는 칸"), (len(held), "그대로 두는 칸"),
+            stats([(len(restored), "되돌리는 칸"), (len(kept), "그대로 두는 칸"), (len(gone), "지울 수 없는 칸"),
                    (sum((key.room, key.date) in reserved for key in restored), "되돌리는 칸 중 예약 있는 날")]),
-            kept_table(plan, FIELD_LABELS),
+            kept_table(plan, FIELD_LABELS), unremovable_table(plan, FIELD_LABELS),
             '<h2>되돌리는 칸 <span class="sub">— 예약 있는 날도 포함합니다</span></h2>',
             grid([*restored, *held], cell, reserved, closed) if restored or held else
             '<p class="sub">되돌릴 칸이 없습니다.</p>',

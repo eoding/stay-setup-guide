@@ -1,8 +1,10 @@
-"""되돌리기 계산 — 장부의 변경 하나(또는 그 일부)를 적어 둔 값으로 돌린다.
+"""되돌리기 계산 — 장부의 변경 하나(또는 그 일부)를 적어 둔 값으로 돌리거나(plan_rollback), 저장해 둔 상태로 돌린다(plan_restore).
 
-항목마다 본다: 그 변경이 쓴 필드가 지금도 모두 그때 넣은 값이면 적어 둔 값으로 돌리고, 하나라도 다르면 그대로 둔다.
+되돌리기는 항목마다 본다: 그 변경이 쓴 필드가 지금도 모두 그때 넣은 값이면 적어 둔 값으로 돌리고, 하나라도 다르면 그대로 둔다.
 그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다. 까닭은 이 장부의 나중 변경 가운데 지금 값을
-넣은 가장 최근 것, 없으면 도우미 밖이다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 늘 그대로 둔다.
+넣은 가장 최근 것, 없으면 도우미 밖이다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 「지울 수 없는 것」이다.
+
+저장해 둔 상태로 돌리기는 그 범위의 모든 항목을 저장해 둔 값으로 맞춘다. 그때 없던 항목이 지금 있으면 「지울 수 없는 것」이다.
 """
 
 from __future__ import annotations
@@ -57,11 +59,10 @@ class Cause:
     change_id: int | None = None
     at: str | None = None
     sentence: str | None = None
-    created: bool = False
 
     @property
     def outside(self) -> bool:
-        return self.change_id is None and not self.created
+        return self.change_id is None
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class KeptItem:
 
 @dataclass(frozen=True)
 class RollbackPlan:
+    """`mode` 가 rollback 이면 `reverses` 변경을 되돌리고, restore 면 `reverses` 번 저장해 둔 상태로 돌린다."""
     reverses: int
     hotel: str
     offer: str
@@ -97,6 +99,8 @@ class RollbackPlan:
     restored: tuple[RestoredItem, ...]
     kept: tuple[KeptItem, ...]
     include_kept: bool
+    unremovable: tuple[KeptItem, ...] = ()
+    mode: str = "rollback"
 
 
 def holds(state: ItemState, written: Fields) -> bool:
@@ -112,12 +116,12 @@ def plan_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequ
     items = [item for item in recorded.items if select is None or select(item.kind, item.key)]
     if not items:
         raise Refused("고른 범위에 되돌릴 것이 없습니다")
-    restored, kept = [], []
+    restored, kept, unremovable = [], [], []
     for item in items:
         current = now.get((item.kind, item.key)) or absent(item.label)
         recorded_values = {name: item.before.get(name) for name in item.written}
         if item.state == MISSING_STATE:
-            kept.append(KeptItem(item.kind, item.key, item.label, recorded_values, item.written, current, Cause(created=True)))
+            unremovable.append(KeptItem(item.kind, item.key, item.label, recorded_values, item.written, current, Cause()))
             continue
         targets = {name: value for name, value in recorded_values.items()
                    if current.state == MISSING_STATE or current.fields.get(name) != value}
@@ -132,7 +136,34 @@ def plan_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequ
         if include_kept and restore:
             restored.append(restore)
     return RollbackPlan(recorded.id, recorded.hotel, recorded.offer, recorded.currency, recorded.read_at,
-                        recorded.sentence, recorded.applied_at, read_at, tuple(restored), tuple(kept), include_kept)
+                        recorded.sentence, recorded.applied_at, read_at, tuple(restored), tuple(kept), include_kept,
+                        tuple(unremovable))
+
+
+def plan_restore(snapshot: RecordedChange, now: Reading, read_at: str,
+                 select: Callable[[str, str], bool] | None = None) -> RollbackPlan:
+    """저장해 둔 상태(장부의 snapshot)로 돌리기 — 고른 범위의 항목마다 지금 값과 다른 필드를 저장해 둔 값으로 맞춘다.
+
+    그때 있었고 지금 없는 항목은 저장해 둔 값으로 다시 만든다. 그때 없었고 지금 있는 항목은 지울 수 없는 것으로 둔다.
+    """
+    items = [item for item in snapshot.items if select is None or select(item.kind, item.key)]
+    if not items:
+        raise Refused("고른 범위에 저장해 둔 값이 없습니다")
+    restored, unremovable = [], []
+    for item in items:
+        current = now.get((item.kind, item.key)) or absent(item.label)
+        if item.state == MISSING_STATE:
+            if current.state != MISSING_STATE:
+                unremovable.append(KeptItem(item.kind, item.key, item.label, {}, {}, current, Cause()))
+            continue
+        if current.state == MISSING_STATE:
+            targets = {name: value for name, value in item.before.items() if value is not None}
+        else:
+            targets = {name: value for name, value in item.before.items() if current.fields.get(name) != value}
+        if targets:
+            restored.append(RestoredItem(item.kind, item.key, item.label, current, targets))
+    return RollbackPlan(snapshot.id, snapshot.hotel, snapshot.offer, snapshot.currency, snapshot.read_at, snapshot.sentence,
+                        None, read_at, tuple(restored), (), False, tuple(unremovable), "restore")
 
 
 def _fields(values: Fields) -> dict:
@@ -143,17 +174,26 @@ def _read_fields(data: Mapping) -> dict:
     return {name: money(value) for name, value in data.items()}
 
 
+def _encode_kept(item: KeptItem) -> dict:
+    return dict(kind=item.kind, key=item.key, label=item.label, recorded=_fields(item.recorded),
+                written=_fields(item.written), now=encode_state(item.now),
+                cause=dict(change_id=item.cause.change_id, at=item.cause.at, sentence=item.cause.sentence))
+
+
+def _decode_kept(item: Mapping) -> KeptItem:
+    return KeptItem(item["kind"], item["key"], item["label"], _read_fields(item["recorded"]), _read_fields(item["written"]),
+                    decode_state(item["now"]), Cause(**item["cause"]))
+
+
 def encode_rollback(plan: RollbackPlan) -> dict:
     return dict(
-        reverses=plan.reverses, hotel=plan.hotel, offer=plan.offer, currency=plan.currency, restore_to=plan.restore_to,
+        mode=plan.mode, reverses=plan.reverses, hotel=plan.hotel, offer=plan.offer, currency=plan.currency, restore_to=plan.restore_to,
         original_sentence=plan.original_sentence, original_applied_at=plan.original_applied_at, read_at=plan.read_at,
         include_kept=plan.include_kept,
         restored=[dict(kind=item.kind, key=item.key, label=item.label, now=encode_state(item.now),
                        targets=_fields(item.targets)) for item in plan.restored],
-        kept=[dict(kind=item.kind, key=item.key, label=item.label, recorded=_fields(item.recorded),
-                   written=_fields(item.written), now=encode_state(item.now),
-                   cause=dict(change_id=item.cause.change_id, at=item.cause.at, sentence=item.cause.sentence,
-                              created=item.cause.created)) for item in plan.kept],
+        kept=[_encode_kept(item) for item in plan.kept],
+        unremovable=[_encode_kept(item) for item in plan.unremovable],
     )
 
 
@@ -163,8 +203,8 @@ def decode_rollback(data: Mapping) -> RollbackPlan:
         str(data.get("original_sentence") or ""), data.get("original_applied_at"), str(data["read_at"]),
         tuple(RestoredItem(item["kind"], item["key"], item["label"], decode_state(item["now"]),
                            _read_fields(item["targets"])) for item in data["restored"]),
-        tuple(KeptItem(item["kind"], item["key"], item["label"], _read_fields(item["recorded"]),
-                       _read_fields(item["written"]), decode_state(item["now"]), Cause(**item["cause"]))
-              for item in data.get("kept") or ()),
+        tuple(_decode_kept(item) for item in data.get("kept") or ()),
         bool(data.get("include_kept")),
+        tuple(_decode_kept(item) for item in data.get("unremovable") or ()),
+        str(data.get("mode") or "rollback"),
     )

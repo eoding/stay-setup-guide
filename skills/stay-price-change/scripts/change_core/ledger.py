@@ -353,7 +353,7 @@ class Ledger:
         with self._db() as db:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
-                raise LedgerError("지금 상태 저장으로 되돌리기는 이 판에 아직 없습니다")
+                raise LedgerError(f"{change_id}번은 저장해 둔 상태입니다. 그 상태로 돌리려면 '저장해 둔 상태로 되돌리기'를 씁니다")
             ours: dict[tuple[str, str], dict] = {}
             for row in self._written(db, change_id, still_ours=True):
                 ours.setdefault((row["item_kind"], row["item_key"]), {})[row["field"]] = money(row["after"])
@@ -365,6 +365,21 @@ class Ledger:
                                           {row["field"]: money(row["before"]) for row in rows}, written))
         return RecordedChange(header["id"], header["kind"], header["hotel"], header["offer"], header["currency"],
                               header["sentence"], header["read_at"], header["applied_at"], tuple(items))
+
+    def recorded_snapshot(self, change_id: int) -> RecordedChange:
+        """저장해 둔 상태로 돌리기의 재료 — snapshot 에 적은 항목 전부와 그때 값(넣은 값은 없다)."""
+        with self._db() as db:
+            header = self._header(db, change_id)
+            if header["kind"] != "snapshot":
+                raise LedgerError(f"{change_id}번은 저장해 둔 상태가 아닙니다(지금 상태 저장으로 적은 것만 됩니다)")
+            grouped: dict[tuple[str, str], list] = {}
+            for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)):
+                grouped.setdefault((row["item_kind"], row["item_key"]), []).append(row)
+        items = tuple(RecordedItem(kind, key, rows[0]["label"], rows[0]["state"],
+                                   {row["field"]: money(row["before"]) for row in rows}, {})
+                      for (kind, key), rows in grouped.items())
+        return RecordedChange(header["id"], header["kind"], header["hotel"], header["offer"], header["currency"],
+                              header["sentence"], header["read_at"], header["applied_at"], items)
 
     def later_writes(self, change_id: int) -> dict[tuple[str, str], list[LaterWrite]]:
         """이 변경 뒤에 같은 호텔·오퍼에 이 장부가 저장한 값 — 항목마다, 변경마다 하나씩, 오래된 것부터."""
