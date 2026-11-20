@@ -50,6 +50,7 @@ td.text { white-space: normal; }
 .was { color: var(--soft); } .now { font-weight: 700; } .arrow { color: var(--soft); padding: 0 3px; }
 td.red { background: var(--red-bg); } td.blocked { background: var(--amber-bg); } td.new { background: var(--blue-bg); }
 td.chosen { background: var(--pick-bg); }
+td.wait { outline: 2px dashed var(--amber); outline-offset: -3px; }
 td.none, td.same { color: var(--soft); text-align:center; }
 small.more { display:block; color: var(--soft); font-size: 12px; }
 .tag { display:inline-block; font-size: 11.5px; font-weight:700; padding: 0 7px; border-radius: 99px; margin-left: 4px;
@@ -58,6 +59,7 @@ small.more { display:block; color: var(--soft); font-size: 12px; }
 .tag.red { background: var(--red); color: var(--paper); } .tag.blocked { background: var(--amber); color: var(--paper); }
 .tag.ok { background: var(--pick); color: var(--paper); } .tag.new { background: var(--blue); color: var(--paper); }
 .tag.chosen { background: var(--paper); color: var(--pick); border: 1px solid var(--pick); }
+.tag.wait { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
 .steps { list-style:none; padding:0; margin: 8px 0; }
 .steps li { display:grid; grid-template-columns: 26px 1fr auto; gap: 8px; padding: 7px 10px; border-bottom:1px solid var(--line); }
 .steps .ok { color: var(--pick); font-weight:700; } .steps .fail { color: var(--red); font-weight:700; }
@@ -150,16 +152,19 @@ def notes(lines: Iterable[str]) -> str:
     return '<ul class="notes">' + "".join(f"<li>{esc(line)}</li>" for line in lines) + "</ul>"
 
 
-def steps_list(steps) -> str:
-    """저장 단계 목록 — 장부의 StepRecord 들(번호 · 이름 · 상태)."""
+def steps_list(steps, sizes: Mapping[int, int] | None = None, unit: str = "칸") -> str:
+    """저장 단계 목록 — 장부의 StepRecord 들(번호 · 이름 · 됐는지). `sizes` 는 단계마다 그 저장이 쓰는 항목 수."""
     if not steps:
         return ""
     marks = {"saved": ('<span class="ok">✓</span>', '<span class="sub">저장함</span>'),
+             "unknown": ('<span class="fail">?</span>', '<span class="fail">저장됐는지 모름 · 다시 읽어 가립니다</span>'),
              "failed": ('<span class="fail">✕</span>', '<span class="fail">여기서 멈춤 · 바뀌지 않음</span>')}
     items = []
     for step in steps:
-        mark, text = marks.get(step.status, ('<span class="wait">–</span>', '<span class="wait">아직 안 함</span>'))
-        items.append(f"<li>{mark}<span>{step.index}. {esc(step.label)}</span>{text}</li>")
+        state = "unknown" if step.status == "failed" and step.unknown else step.status
+        mark, text = marks.get(state, ('<span class="wait">–</span>', '<span class="wait">아직 안 함</span>'))
+        size = f" · {sizes[step.index]:,}{unit}" if sizes and step.index in sizes else ""
+        items.append(f"<li>{mark}<span>{step.index}. {esc(step.label)}{size}</span>{text}</li>")
     return '<h2>저장 단계</h2><ul class="steps">' + "".join(items) + "</ul>"
 
 
@@ -189,15 +194,17 @@ def result_banner(record, written: int, mismatched: int, unit: str = "칸") -> s
     return '<div class="banner blue"><b>아직 적용하지 않았습니다.</b></div>'
 
 
-def stopped_choices(record) -> str:
+def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> str:
+    """멈춘 변경의 선택지. `waiting` 은 남은 저장이 쓰는 항목 수(표에 「아직 저장 안 함」으로 보이는 것)."""
     if record.status != "stopped":
         return ""
     done = sum(step.status == "saved" for step in record.steps)
     left = len(record.steps) - done
     back = (f'<div><b>된 것까지 되돌리기</b> — 이미 바뀐 {done}번을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>'
             if done else "")
+    shown = f"(아래 표의 「아직 저장 안 함」 {waiting:,}{unit}이 그 값으로 바뀝니다)" if waiting else ""
     return ('<h2>어떻게 할까요?</h2><p>크롬에서 ERP 로그인을 확인한 뒤 대화창에서 골라 주세요.</p><div class="choices">'
-            f'<div><b>이어서</b> — 남은 {left}번을 마저 적용합니다. 그 전에 남은 값을 다시 읽어 확인합니다.</div>{back}'
+            f'<div><b>이어서</b> — 남은 {left}번을 마저 적용합니다{shown}. 그 전에 남은 값을 다시 읽어 확인합니다.</div>{back}'
             '<div><b>이대로 두기</b> — 장부에 "중간에 멈춤"으로 적혀 있어 나중에 이어서 할 수 있습니다.</div>'
             "</div>")
 

@@ -39,10 +39,12 @@ LABEL_FIELDS = {label: name for name, label in FIELD_LABELS.items()}
 
 
 class GridReader(HTMLParser):
-    """「칸마다 바뀌는 값」 아래의 칸 표 → {(객실 · 요금제 머리, 열 머리, 줄 머리): [(태그, class, 글자)]}. 머리는 그 칸의 첫 글자다."""
+    """`section` 머리(기본 「칸마다 바뀌는 값」) 아래의 칸 표 → {(객실 · 요금제 머리, 열 머리, 줄 머리): [(태그, class, 글자)]}.
+    머리는 그 칸의 첫 글자다. `classes` 는 같은 자리 → 그 칸(td)의 class."""
 
-    def __init__(self):
+    def __init__(self, section="칸마다 바뀌는 값"):
         super().__init__()
+        self.wanted, self.classes, self.td_class = section, {}, ""
         self.cells, self.section, self.heading, self.heads = {}, None, "", []
         self.label, self.row, self.parts, self.inline = None, None, None, None
 
@@ -55,7 +57,7 @@ class GridReader(HTMLParser):
             self.row = []
         elif tag == "td":
             if self.row:
-                self.parts = []
+                self.parts, self.td_class = [], dict(attrs).get("class", "")
             else:
                 self.label = ["td", None]
         elif tag in ("span", "small") and self.parts is not None:
@@ -83,16 +85,18 @@ class GridReader(HTMLParser):
             elif self.row is not None:
                 self.row.append(text)
         elif tag == "td":
-            if self.section == "칸마다 바뀌는 값":
+            if self.section == self.wanted:
                 self.cells[(self.heading, self.heads[len(self.row)], self.row[0])] = self.parts
+                self.classes[(self.heading, self.heads[len(self.row)], self.row[0])] = self.td_class
             self.row.append(None)
             self.parts = None
 
 
-def read_grid(page: str) -> dict:
-    reader = GridReader()
+def read_grid(page: str, section: str = "칸마다 바뀌는 값", classes: bool = False):
+    """페이지의 칸 표 → 칸마다 글자 조각. `classes` 면 (조각, 칸마다 td 의 class) 둘을 돌려준다."""
+    reader = GridReader(section)
     reader.feed(page)
-    return reader.cells
+    return (reader.cells, reader.classes) if classes else reader.cells
 
 
 def money(text: str):

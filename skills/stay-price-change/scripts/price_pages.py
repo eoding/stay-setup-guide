@@ -521,7 +521,9 @@ def _new_section(plan: Plan, currency: str) -> str:
 
 @dataclass
 class CellView:
-    """장부의 줄(필드마다 하나)을 칸 하나로 모은 것."""
+    """장부의 줄(필드마다 하나)을 칸 하나로 모은 것. `after` 는 저장이 끝난 단계가 넣은 값, `waiting` 은 아직 저장되지 않은 단계가
+    넣을 값(이어서 하면 이 값이 된다 — 비움은 None), `steps` 는 그 단계 번호들(한 칸의 필드를 묶음 저장과 셀 창 저장이 나눠 쓸 수
+    있다). 둘 다 비었으면 이 변경이 일부러 손대지 않는 칸이다."""
     before: CellValue
     after: dict = field(default_factory=dict)
     written: bool = False
@@ -529,6 +531,8 @@ class CellView:
     seen: dict = field(default_factory=dict)
     reserved: bool = False
     rolled_back_by: int | None = None
+    waiting: dict = field(default_factory=dict)
+    steps: set = field(default_factory=set)
 
 
 def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
@@ -541,6 +545,9 @@ def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
         view = CellView(CellValue(*(before.get(name) for name in FIELDS), rows[0].state),
                         reserved=RESERVED in rows[0].marks)
         for row in rows:
+            if row.action is not None and not row.written:
+                view.waiting[row.field] = row.after
+                view.steps |= {row.step} - {None}
             if not row.written:
                 continue
             view.written = True
@@ -554,10 +561,21 @@ def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
     return views
 
 
+def _waiting_tag(view: CellView, steps: Mapping) -> str:
+    """아직 저장되지 않은 칸의 꼬리표 — 어느 저장의 칸인지("3 · 4번째 저장")와, 그 저장이 눌렸는데 됐는지 모르면 그렇게."""
+    where = f" · {' · '.join(map(str, sorted(view.steps)))}번째 저장" if view.steps else ""
+    unknown = any(steps[index].status == "failed" and steps[index].unknown for index in view.steps if index in steps)
+    return f'<span class="tag wait">{"저장됐는지 모름" if unknown else "아직 저장 안 함"}{where}</span>'
+
+
 def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False) -> str:
+    """장부의 변경 하나의 결과. 칸마다 — 저장한 칸은 `전 → 넣은 값`, 아직 저장하지 않은 칸은 `지금 값 → 이어서 하면 넣을 값`과
+    「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만 「그대로」. 멈춘 변경을 이어서 할지 고르는 담당자가 보는 페이지다."""
     currency = record.currency
     views = cell_views(record)
+    steps = {step.index: step for step in record.steps}
     written = [view for view in views.values() if view.written and not view.rolled_back_by]
+    waiting = [view for view in views.values() if view.waiting]
     undone = sorted({view.rolled_back_by for view in views.values() if view.rolled_back_by})
     undone_count = sum(1 for view in views.values() if view.rolled_back_by)
     mismatched = [view for view in written if record.verified_at and not view.verified]
@@ -572,24 +590,38 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
                     f'{", ".join(f"{number}번" for number in undone)}).</p>')
     if (record.request or {}).get("from_sheet"):
         body.append(f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>')
-    body += [steps_list(record.steps), stopped_choices(record)]
+    body += [steps_list(record.steps, _step_sizes(record)), stopped_choices(record, len(waiting))]
     closed = {key for key, view in views.items() if view.before.state == "closed"}
     reserved = {(key.room, key.date) for key, view in views.items() if view.reserved}
 
     def cell(key: CellKey) -> tuple[str, str]:
         view = views[key]
-        if not view.written:
+        if not view.written and not view.waiting:
             return "same", f'<span class="was">{fmt_money(view.before.sell, currency)}</span><small class="more">그대로</small>'
-        moved = _move(view.before, _with(view.before, view.after), currency)
+        if not view.written:
+            return "wait", _move(view.before, _with(view.before, view.waiting), currency) + _waiting_tag(view, steps)
+        done = _with(view.before, view.after)
+        moved = _move(view.before, done, currency)
+        rest = (_move(done, _with(done, view.waiting), currency) + _waiting_tag(view, steps)) if view.waiting else ""
         if view.rolled_back_by:
-            return "same", f'{moved}<span class="tag closed">되돌림 · 장부 {view.rolled_back_by}번</span>'
+            return "same", f'{moved}<span class="tag closed">되돌림 · 장부 {view.rolled_back_by}번</span>{rest}'
         if record.verified_at and not view.verified:
             seen = " · ".join(f"{FIELD_LABELS[name]} {'읽지 못함' if value is None else fmt_money(value, currency)}"
                               for name, value in view.seen.items())
-            return "red", f'{moved}<small class="more">다시 읽은 값 {seen}</small>'
-        return "", moved + ('<span class="tag ok">확인</span>' if view.verified and record.verified_at else "")
+            return "red", f'{moved}<small class="more">다시 읽은 값 {seen}</small>{rest}'
+        if view.verified and record.verified_at:
+            moved += '<span class="tag ok">확인</span>'
+        elif waiting:   # 아직 저장하지 않은 칸이 있는 페이지에서는 저장한 칸도 저장했다고 단다
+            moved += '<span class="tag ok">저장함</span>'
+        return "wait" if rest else "", moved + rest
 
-    body += ["<h2>칸마다 넣은 값</h2>", grid(views, cell, reserved, closed, by_date)]
+    if waiting:
+        body += ["<h2>칸마다 넣은 값과 아직 넣지 않은 값</h2>",
+                 f'<p class="sub">「아직 저장 안 함」 {len(waiting):,}칸은 <b>지금 값 → 이어서 하면 넣을 값</b>입니다(지금 값은 적용 전에 '
+                 "ERP 에서 읽은 값이고, 이어서 하기 전에 다시 읽어 그대로인지 확인합니다). 「그대로」인 칸은 이 변경이 바꾸지 않는 칸입니다.</p>"]
+    else:
+        body.append("<h2>칸마다 넣은 값</h2>")
+    body.append(grid(views, cell, reserved, closed, by_date))
     if record.status in ("applied", "stopped"):
         lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
                  "이미 받은 예약의 금액은 그대로입니다.",
@@ -599,6 +631,15 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
             lines.insert(3, f"기록: {ledger_path}")
         body.append(notes(lines))
     return page(title, "\n".join(body), MAKER)
+
+
+def _step_sizes(record: ChangeRecord) -> dict[int, int]:
+    """저장 단계마다 그 저장이 쓰는 칸 수."""
+    cells: dict[int, set[str]] = {}
+    for row in record.rows:
+        if row.action is not None and row.step is not None:
+            cells.setdefault(row.step, set()).add(row.item_key)
+    return {index: len(keys) for index, keys in cells.items()}
 
 
 def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "", by_date: bool = False) -> str:
