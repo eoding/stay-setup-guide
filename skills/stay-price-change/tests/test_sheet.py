@@ -19,9 +19,11 @@ from change_core.items import Refused  # noqa: E402
 from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import CellKey, MISSING, decode_request  # noqa: E402
 from price_plan import plan_steps, unresolved  # noqa: E402
+from price_pages import render_sheet  # noqa: E402
 from price_sheet import (  # noqa: E402
-    Part, SheetCheck, coverage_counts, decode_sheet, encode_sheet, expand, line_figures, plan_sheet,
+    ChildPercentUnsaid, Part, SheetCheck, coverage_counts, decode_sheet, encode_sheet, expand, line_figures, plan_sheet,
 )
+from test_pages import visible  # noqa: E402
 
 PAIRS = (("디럭스", S.PLAN), ("스위트", S.PLAN), ("패밀리", S.PLAN))
 
@@ -121,6 +123,57 @@ class SheetDifferenceTest(unittest.TestCase):
         self.assertIn("성인 2 · 1박 이상 → 성인 3 · 1박 이상 → 성인 2 · 1박 이상", str(caught.exception))
         with self.assertRaises(Refused):
             figures([{"occupancy": "A2", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "1"}}])
+
+
+class ChildPercentTest(unittest.TestCase):
+    """F2 — 아동이 든 값의 퍼센트("3박 이상 10% 할인" 을 성인 2 + 아동 1 에)는 뜻이 둘이다. 적지 않으면 두 결과를 대고 묻게 하고,
+    적은 뜻마다 다른 숫자가 나오며, 「요금표를 이렇게 읽었습니다」가 어느 뜻인지 표시한다."""
+
+    @staticmethod
+    def rows(scale=None):
+        three = {"from": {"nights": 1}, "percent": "-10"}
+        if scale is not None:
+            three["scale_child_surcharge"] = scale
+        return [{"occupancy": "A2", "nights": 1, "sell": "240"},
+                {"occupancy": "A2C1", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "30"}},
+                {"occupancy": "A2C1", "nights": 3, "sell": three}]
+
+    def test_an_unsaid_reading_is_refused_with_both_results(self):
+        with self.assertRaises(ChildPercentUnsaid) as caught:
+            SheetCheck(one_line(self.rows()), PAIRS)
+        ask = caught.exception.ask
+        self.assertEqual([(a["occupancy"], a["nights"], a["base"], a["whole"], a["adult"], a["extra"], a["adults"]) for a in ask],
+                         [("A2C1", 3, "270.00", "243.00", "240.00", "30.00", "246.00")])
+        self.assertIn("칸 전체면 243.00", str(caught.exception))
+        self.assertIn("성인 몫(240.00)에만 곱하고 아동 추가분 30.00 은 그대로면 246.00", str(caught.exception))
+
+    def test_each_reading_gives_its_own_number_and_the_page_says_which(self):
+        shown = {}
+        for scale, value, words in ((True, D("243.00"), "아동 칸 %: 칸 전체에 곱함"),
+                                    (False, D("246.00"), "아동 칸 %: 성인 몫에만 곱하고 아동 추가분은 그대로")):
+            check = SheetCheck(one_line(self.rows(scale)), PAIRS)
+            self.assertEqual(check.cells[CellKey("디럭스", S.PLAN, "2027-01-04", "A2C1", 3)].values, (("sell", value),))
+            page = visible(render_sheet(check))
+            self.assertIn(words, page)
+            self.assertIn("아동이 든 값의 퍼센트", page)
+            shown[scale] = page
+        self.assertIn("아동이 든 값의 퍼센트 칸 전체에 곱함 1개", shown[True])
+        self.assertIn("아동이 든 값의 퍼센트 성인 몫에만 곱하고 아동 추가분은 그대로 1개", shown[False])
+        self.assertNotIn("아동 칸 %: 성인 몫에만", shown[True])
+        self.assertIn("가운데 성인 몫(성인 2 · 1박 이상) 240.00 - 10% + 아동 추가분 30.00", shown[False])
+
+    def test_the_reading_is_written_only_where_a_child_value_is_scaled_by_a_percentage(self):
+        with self.assertRaises(ValueError):   # 성인만 있는 값에서 셈한 퍼센트에는 뜻이 하나뿐이다
+            one_line([{"occupancy": "A2", "nights": 1, "sell": "240"},
+                      {"occupancy": "A2", "nights": 3, "sell": {"from": {"nights": 1}, "percent": "-10", "scale_child_surcharge": True}}])
+        with self.assertRaises(ValueError):
+            one_line(self.rows("false"))
+        self.assertEqual(decode_sheet(encode_sheet(one_line(self.rows(False)))), one_line(self.rows(False)))
+        rows = self.rows(False)[1:]   # 성인 2 줄이 없으면 성인 몫을 모른다
+        rows[0]["sell"] = "270"
+        with self.assertRaises(Refused) as caught:
+            SheetCheck(one_line(rows), PAIRS)
+        self.assertIn("성인 몫에만 곱하려면", str(caught.exception))
 
 
 class SheetExpandTest(unittest.TestCase):

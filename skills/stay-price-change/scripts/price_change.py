@@ -636,7 +636,7 @@ def main(argv=None) -> int:
     except (ParseError, PlanError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:
         message = str(error) if not isinstance(error, (KeyError, TypeError)) else f"입력 JSON 에 필요한 칸이 없습니다: {error}"
         payload = dict(error=message)
-        for extra in ("refetch", "choose"):   # 받을 조각 · 고를 줄(밴드 코드 없이 적은 인원 조합에 맞는 줄이 여럿)
+        for extra in ("refetch", "choose", "ask"):   # 받을 조각 · 고를 줄(아동 밴드가 여럿) · 물을 것(아동이 든 값의 퍼센트)
             if getattr(error, extra, None):
                 payload[extra] = getattr(error, extra)
         print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)

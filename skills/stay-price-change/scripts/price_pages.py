@@ -35,7 +35,7 @@ from price_model import (
     occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
 from price_plan import counts, day_runs, days_summary
-from price_sheet import SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
+from price_sheet import CHILD_READINGS, SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
 
 MAKER = "어딩 Stay 가격 변경 도우미"
 # 요금표로 날짜별 가격을 맞춘 미리보기 · 결과가 꼭 다는 한 문장(결정 32). SKILL.md 도 도우미가 이 문장 그대로 말하게 한다.
@@ -806,20 +806,37 @@ def render_prices(snapshot: Snapshot, by_date: bool = False) -> str:
     return page(title, "\n".join(body), MAKER)
 
 
+def _child_tag(figure) -> str:
+    """아동이 든 값에 퍼센트를 곱한 값이면 어느 뜻으로 셈했는지 — 「아동 칸 %: 칸 전체에 곱함」 · 「… 성인 몫에만 …」."""
+    return f'<span class="tag chosen">아동 칸 %: {esc(CHILD_READINGS[figure.child])}</span>' if figure.child else ""
+
+
 def _sheet_cell(line: SheetLine, currency: str) -> str:
-    """요금표 칸 하나 — 그 줄의 인원 · 박수마다 값(요금표에 적힌 차례). 셈한 값은 「계산」 꼬리표와 셈."""
+    """요금표 칸 하나 — 그 줄의 인원 · 박수마다 값(요금표에 적힌 차례). 셈한 값은 「계산」 꼬리표와 셈, 아동이 든 값에 퍼센트를
+    곱한 값은 어느 뜻으로 셈했는지의 꼬리표(F2)."""
     parts = [f'<small class="more">{line.no}번째 줄</small>']
     for (occupancy, nights), values in line_figures(line, currency).items():
         sell = values["sell"]
         parts.append(f'<div>{esc(line_label(occupancy, nights))} <span class="now">{fmt_money(sell.value, currency)}</span>'
-                     + ('<span class="tag new">계산</span>' if sell.formula else "") + "</div>")
+                     + ('<span class="tag new">계산</span>' if sell.formula else "") + _child_tag(sell) + "</div>")
         for name, figure in values.items():
             if name != "sell":
                 parts.append(f'<small class="more">{FIELD_LABELS[name]} {fmt_money(figure.value, currency)}'
-                             f'{" (계산)" if figure.formula else ""}</small>')
+                             f'{" (계산)" if figure.formula else ""}</small>{_child_tag(figure)}')
         parts += [f'<small class="more">{FIELD_LABELS[name]} = {esc(figure.formula)}</small>'
                   for name, figure in values.items() if figure.formula]
     return "".join(parts)
+
+
+def _child_percents(lines, currency: str) -> dict[str, int]:
+    """아동이 든 값에 퍼센트를 곱한 값의 수 — 뜻마다(whole · adults)."""
+    found: dict[str, int] = {}
+    for line in lines:
+        for values in line_figures(line, currency).values():
+            for figure in values.values():
+                if figure.child:
+                    found[figure.child] = found.get(figure.child, 0) + 1
+    return found
 
 
 def render_sheet(check: SheetCheck) -> str:
@@ -860,6 +877,12 @@ def render_sheet(check: SheetCheck) -> str:
         else:
             body.append(f'<div class="banner blue"><b>요금표에 없는 객실 · 요금제</b> {esc(gap.room)} · {esc(gap.rate_plan)} '
                         "— 가격을 그대로 둡니다.</div>")
+    children = _child_percents(lines, currency)
+    if children:
+        said = " · ".join(f"{CHILD_READINGS[reading]} {count}개" for reading, count in children.items())
+        body.append(f'<div class="banner amber"><b>아동이 든 값의 퍼센트</b> {esc(said)} — 「아동 칸 %」 꼬리표가 붙은 값입니다. 퍼센트를 칸 '
+                    "전체에 곱했는지, 성인 몫에만 곱하고 아동 추가분은 그대로 두었는지(ERP 의 퍼센트 가감은 이쪽) 꼬리표와 셈에 적었습니다. "
+                    "말씀하신 뜻과 다르면 알려 주세요.</div>")
     body += ["<h2>요금표</h2>",
              f'<div class="scroll"><table><tr><th>객실 · 요금제</th>{heads}</tr>{"".join(rows)}</table></div>']
     reads, scope = check.reads, check.range

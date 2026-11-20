@@ -29,8 +29,12 @@ from price_browser import PAGE_KEEPS, read_calls, reading_size, reserved_probes,
 from price_model import (
     FIELD_LABELS, FIELDS, GAP_KINDS, WEEKDAYS, CellKey, Gap, Plan, ReadRange, Snapshot, Target, TargetTable,
     decode_hotel, encode_gap, encode_hotel, hotel_label, iso_day, line_label, occupancy_label, occupancy_order, same_hotel,
+    split_occupancy,
 )
 from price_plan import PlanError, day_runs, matched_rows, plan_targets
+
+
+SCALE = "scale_child_surcharge"   # 아동이 든 값의 퍼센트 — true 칸 전체 · false 성인 몫에만(아동 추가분 그대로)
 
 
 @dataclass(frozen=True)
@@ -49,11 +53,16 @@ class Period:
 
 @dataclass(frozen=True)
 class Ref:
-    """같은 줄의 다른 인원 · 박수 값(같은 필드)에서 셈한 값 — 금액을 더하거나(`add`) 퍼센트만큼 바꾼다(`percent`)."""
+    """같은 줄의 다른 인원 · 박수 값(같은 필드)에서 셈한 값 — 금액을 더하거나(`add`) 퍼센트만큼 바꾼다(`percent`).
+
+    아동이 든 값에서 퍼센트로 셈하면 뜻이 둘이다 — 칸 전체에 곱함(`scale_child_surcharge` True), 성인 몫(같은 줄 · 같은 박수의
+    성인만 있는 값)에만 곱하고 아동 추가분은 그대로(False, ERP 의 퍼센트 가감과 같다). 그런 값은 둘 가운데 하나를 꼭 적고, 아동이
+    없는 값에는 적지 않는다."""
     occupancy: str
     nights: int
     add: Decimal | None = None
     percent: Decimal | None = None
+    scale_child_surcharge: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -90,9 +99,24 @@ class Sheet:
 
 @dataclass(frozen=True)
 class Figure:
-    """셈한 값 하나. `formula` 는 셈한 값이면 그 셈("성인 2 · 1박 이상 240.00 + 60"), 옮긴 숫자면 None."""
+    """셈한 값 하나. `formula` 는 셈한 값이면 그 셈("성인 2 · 1박 이상 240.00 + 60"), 옮긴 숫자면 None. `child` 는 아동이 든 값에
+    퍼센트를 곱한 값이면 어느 뜻으로 셈했는지 — "whole"(칸 전체) · "adults"(성인 몫에만, 아동 추가분 그대로), 아니면 None."""
     value: Decimal
     formula: str | None = None
+    child: str | None = None
+
+
+CHILD_READINGS = {"whole": "칸 전체에 곱함", "adults": "성인 몫에만 곱하고 아동 추가분은 그대로"}
+
+
+class ChildPercentUnsaid(PlanError):
+    """아동이 든 값에서 퍼센트로 셈한 값인데 두 뜻 가운데 어느 것인지 적지 않았다 — 아무것도 내지 않고, 값마다 두 뜻의 결과를
+    댄다(`ask`: `[{line, room, rate_plan, occupancy, nights, field, percent, base, whole, adult, extra, adults}]`, 성인만 있는 값이
+    그 줄에 없으면 `adult`·`extra`·`adults` 가 null)."""
+
+    def __init__(self, message: str, ask: list[dict]):
+        super().__init__(message)
+        self.ask = ask
 
 
 @dataclass(frozen=True)
@@ -188,11 +212,15 @@ def _value(data, occupancy: str, nights: int, where: str) -> Decimal | Ref:
     source = data.get("from")
     if not isinstance(source, Mapping) or not source or not set(source) <= {"occupancy", "nights"}:
         raise ValueError(f"{where}: 가리키는 값은 `from` 에 인원 조합(occupancy) · 박수(nights) 가운데 하나 이상을 적습니다")
-    if (data.get("add") is None) == (data.get("percent") is None) or not set(data) <= {"from", "add", "percent"}:
+    if (data.get("add") is None) == (data.get("percent") is None) or not set(data) <= {"from", "add", "percent", SCALE}:
         raise ValueError(f"{where}: 가리키는 값은 `add`(금액) 또는 `percent`(퍼센트) 하나를 적습니다")
-    return Ref(str(source["occupancy"]) if "occupancy" in source else occupancy,
-               _nights(source["nights"], where) if "nights" in source else nights,
-               money(data.get("add")), money(data.get("percent")))
+    ref = Ref(str(source["occupancy"]) if "occupancy" in source else occupancy,
+              _nights(source["nights"], where) if "nights" in source else nights,
+              money(data.get("add")), money(data.get("percent")), data.get(SCALE))
+    if ref.scale_child_surcharge is not None and (ref.percent is None or not split_occupancy(ref.occupancy)[1]
+                                                  or not isinstance(ref.scale_child_surcharge, bool)):
+        raise ValueError(f"{where}: `{SCALE}` 는 아동이 든 값에서 퍼센트로 셈할 때만 true(칸 전체) 또는 false(성인 몫에만)로 적습니다")
+    return ref
 
 
 def _row(data: Mapping, where: str) -> SheetRow:
@@ -243,7 +271,10 @@ def _encode_value(value: Decimal | Ref):
     if not isinstance(value, Ref):
         return money_text(value)
     out = {"from": dict(occupancy=value.occupancy, nights=value.nights)}
-    return dict(out, add=money_text(value.add)) if value.add is not None else dict(out, percent=money_text(value.percent))
+    if value.add is not None:
+        return dict(out, add=money_text(value.add))
+    return dict(out, percent=money_text(value.percent),
+                **({SCALE: value.scale_child_surcharge} if value.scale_child_surcharge is not None else {}))
 
 
 def encode_sheet(sheet: Sheet) -> dict:
@@ -264,9 +295,12 @@ def encode_sheet(sheet: Sheet) -> dict:
 def line_figures(line: SheetLine, currency: str) -> dict[tuple[str, int], dict[str, Figure]]:
     """줄의 인원 · 박수마다 필드 → Figure. 가리키는 값은 같은 줄 · 같은 필드에서 셈하고 통화 규칙으로 반올림한다.
 
-    가리킨 인원 · 박수가 그 줄에 없거나 그 필드를 적지 않았으면, 또는 서로를 가리키면(고리) 이름을 대고 거절한다."""
+    가리킨 인원 · 박수가 그 줄에 없거나 그 필드를 적지 않았으면, 또는 서로를 가리키면(고리) 이름을 대고 거절한다. 아동이 든 값에서
+    퍼센트로 셈하는 값은 적은 뜻대로 셈한다 — 성인 몫에만이면 ERP 의 퍼센트 가감처럼 `반올림(성인 몫 × 비율) + (값 − 성인 몫)`.
+    뜻을 적지 않았으면 줄을 다 셈한 뒤 값마다 두 뜻의 결과를 대고 거절한다(ChildPercentUnsaid)."""
     rows = {(row.occupancy, row.nights): dict(row.values) for row in line.rows}
     done: dict[tuple[str, int, str], Figure] = {}
+    asks: list[dict] = []
 
     def figure(at: tuple[str, int], name: str, chain: tuple[tuple[str, int], ...]) -> Figure:
         if (*at, name) in done:
@@ -282,16 +316,57 @@ def line_figures(line: SheetLine, currency: str) -> dict[tuple[str, int], dict[s
                                 "그 줄에 없습니다 — 요금표의 그 줄에 그 값을 옮겨 적거나 숫자로 적습니다")
             base = figure(source, name, (*chain, at)).value
             if value.add is not None:
-                result, how = round_money(base + value.add, currency), _amount(value.add)
+                found = Figure(round_money(base + value.add, currency), f"{line_label(*source)} {fmt_money(base, currency)} {_amount(value.add)}")
+            elif split_occupancy(value.occupancy)[1]:
+                found = child_percent(at, name, source, base, value, (*chain, at))
             else:
-                result, how = round_money(base * (100 + value.percent) / 100, currency), f"{_amount(value.percent)}%"
-            found = Figure(result, f"{line_label(*source)} {fmt_money(base, currency)} {how}")
+                found = Figure(round_money(base * (100 + value.percent) / 100, currency),
+                               f"{line_label(*source)} {fmt_money(base, currency)} {_amount(value.percent)}%")
         else:
             found = Figure(round_money(value, currency))
         done[(*at, name)] = found
         return found
 
-    return {at: {name: figure(at, name, ()) for name in values} for at, values in rows.items()}
+    def child_percent(at, name, source, base: Decimal, value: Ref, chain) -> Figure:
+        factor, how = (100 + value.percent) / 100, f"{_amount(value.percent)}%"
+        whole = Figure(round_money(base * factor, currency), f"{line_label(*source)} {fmt_money(base, currency)} {how} (칸 전체)", "whole")
+        adult_at = (split_occupancy(value.occupancy)[0], value.nights)
+        adults = None
+        if name in rows.get(adult_at, {}):
+            adult = figure(adult_at, name, chain).value
+            adults = Figure(round_money(adult * factor, currency) + (base - adult),
+                            f"{line_label(*source)} {fmt_money(base, currency)} 가운데 성인 몫({line_label(*adult_at)}) "
+                            f"{fmt_money(adult, currency)} {how} + 아동 추가분 {fmt_money(base - adult, currency)} (아동 추가분 그대로)",
+                            "adults")
+        if value.scale_child_surcharge is None:
+            asks.append(dict(line=line.no, room=line.room, rate_plan=line.rate_plan, occupancy=at[0], nights=at[1], field=name,
+                             percent=money_text(value.percent), base=money_text(base), whole=money_text(whole.value),
+                             adult=None if adults is None else money_text(adult), extra=None if adults is None else money_text(base - adult),
+                             adults=None if adults is None else money_text(adults.value)))
+            return whole
+        if value.scale_child_surcharge:
+            return whole
+        if adults is None:
+            raise PlanError(f"{line_name(line)} 의 {_value_name(*at, name)}: 성인 몫에만 곱하려면 같은 줄에 {_value_name(*adult_at, name)}가 "
+                            "있어야 합니다 — 요금표의 그 값을 옮겨 적거나, 칸 전체(true)인지 담당자에게 다시 묻습니다")
+        return adults
+
+    figures = {at: {name: figure(at, name, ()) for name in values} for at, values in rows.items()}
+    if asks:
+        raise ChildPercentUnsaid("", asks)
+    return figures
+
+
+def _ask_message(asks: list[dict], lines: Mapping[int, "SheetLine"], currency: str) -> str:
+    first = asks[0]
+    value = f"{line_name(lines[first['line']])} 의 {_value_name(first['occupancy'], first['nights'], first['field'])}"
+    shown = lambda text: fmt_money(money(text), currency)  # noqa: E731
+    adults = (f"성인 몫({shown(first['adult'])})에만 곱하고 아동 추가분 {shown(first['extra'])} 은 그대로면 {shown(first['adults'])}"
+              if first["adults"] else "성인 몫에만은 같은 줄에 성인만 있는 값이 없어 셈하지 못합니다")
+    return (f"아동이 든 값에서 퍼센트로 셈한 값 {len(asks)}개가 칸 전체에 곱하는지, 성인 몫에만 곱하고 아동 추가분은 그대로 두는지"
+            f"(ERP 의 퍼센트 가감은 뒤쪽) 적혀 있지 않습니다. 첫 값 {value} — {shown(first['base'])} 의 {first['percent']}%: 칸 전체면 "
+            f"{shown(first['whole'])}, {adults}. 담당자에게 묻고, 답에 따라 그 값마다 {SCALE} 를 true(칸 전체) 또는 false(성인 몫에만)로 "
+            "적습니다(sheet.md 3 · 「요금표를 고칠 때」). 값마다의 두 결과는 `ask` 에 있습니다")
 
 
 def expand(lines: Iterable[SheetLine], currency: str) -> dict[CellKey, SheetCell]:
@@ -299,9 +374,17 @@ def expand(lines: Iterable[SheetLine], currency: str) -> dict[CellKey, SheetCell
     cells: dict[CellKey, SheetCell] = {}
     clashes: list[tuple[CellKey, SheetCell, SheetCell]] = []
     names: dict[int, SheetLine] = {}
+    figured, asks = {}, []
     for line in lines:
         names[line.no] = line
-        for (occupancy, nights), figures in line_figures(line, currency).items():
+        try:
+            figured[line.no] = line_figures(line, currency)
+        except ChildPercentUnsaid as unsaid:
+            asks += unsaid.ask
+    if asks:
+        raise ChildPercentUnsaid(_ask_message(asks, names, currency), asks)
+    for line in names.values():
+        for (occupancy, nights), figures in figured[line.no].items():
             values = tuple((name, figures[name].value) for name in FIELDS if name in figures)
             for day in line.days:
                 key, cell = CellKey(line.room, line.rate_plan, day, occupancy, nights), SheetCell(values, line.no)

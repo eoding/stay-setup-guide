@@ -137,6 +137,16 @@ class SheetCommandTest(unittest.TestCase):
         self.assertIn("이 요금표(부분)는", error)
         self.assertIn(f"{PAGE_KEEPS}번까지", error)
 
+    def test_a_percentage_on_a_child_row_comes_back_as_a_question_with_both_numbers(self):
+        data = S.sheet_data()
+        data["lines"][0]["rows"].append({"occupancy": "A2C1_CHD", "nights": 3, "sell": {"from": {"nights": 1}, "percent": "-10"}})
+        refused = self.run_cli("sheet", "--sheet", self.write("sheet-1.json", data), "--look", self.look,
+                               "--out", self.dir / "sheet-check-1.json", code=2)
+        self.assertEqual([(a["line"], a["whole"], a["adults"]) for a in refused["ask"]], [(1, "207.00", "210.00")])
+        self.assertFalse((self.dir / "sheet-check-1.json").exists())
+        data["lines"][0]["rows"][-1]["sell"]["scale_child_surcharge"] = False
+        self.run_cli("sheet", "--sheet", self.write("sheet-2.json", data), "--look", self.look, "--out", self.dir / "sheet-check-1.json")
+
     def test_the_wrong_file_or_hotel_is_refused(self):
         snapshot = self.write("snapshot.json", encode_snapshot(S.reading()))
         self.assertIn("sheet 명령", self.run_cli("plan", "--snapshot", snapshot, "--request", self.sheet, code=2)["error"])
