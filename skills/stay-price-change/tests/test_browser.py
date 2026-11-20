@@ -222,6 +222,12 @@ class BodyTest(unittest.TestCase):
         unclosed = shown[:700]
         with self.assertRaises(CutAnswer):
             attach_bodies([result, takes[0], unclosed, takes[2]])
+        # 붙여 넣은 사람이 JSON 을 닫아 버린 잘린 답 — `[TRUNCATED]` 표시만이 잘렸다고 말해 준다(B19)
+        for closed in (shown[:990] + '[TRUNCATED]"}', json.dumps(dict(takes[1], text=takes[1]["text"][:300] + "[TRUNCATED]"), ensure_ascii=False)):
+            self.assertIsInstance(json.loads(closed), dict, "닫힌 JSON 이다")
+            with self.assertRaises(CutAnswer) as marked:
+                attach_bodies([result, takes[0], closed, takes[2]])
+            self.assertEqual(marked.exception.refetch, [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
         # 같은 자리에서 더 작게 다시 받은 쪽 둘이 빈 곳을 메우면 잘린 답은 그냥 지나간다
         text = "".join(take["text"] for take in takes)
         meta, mid = result["body"], takes[1]
