@@ -27,7 +27,9 @@
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록
 
-결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 여섯(read-calls · read · sheet · plan ·
+rollback · restore)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일
+자리이고, 칸 목록은 싣지 않는다(SHORT). 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
 장부 번호마다(미리보기 · 지금 상태 저장 · 되돌리기) 그 계산이 바탕으로 삼은 읽은 값을 적어 둔다. 그래서 같은 범위를 다시 읽을 때는
@@ -59,12 +61,13 @@ from price_browser import (
     BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reading_size, reserved_probes, reserved_round,
     step_call, step_outcome, too_big, unanswered,
 )
+from change_core.rules import BLOCKED
 from price_model import (
-    ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
-    encode_change, encode_hotel, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, iso_day, request_range,
-    same_hotel, snapshot_reading,
+    CELL_RULES, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
+    encode_change, encode_hotel, encode_key, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, iso_day,
+    key_of_item, line_label, request_range, same_hotel, snapshot_reading,
 )
-from price_pages import chosen_lines, red_lines, render_prices, render_preview, render_result, render_rollback, render_sheet
+from price_pages import EXAMPLES, chosen_lines, red_lines, render_prices, render_preview, render_result, render_rollback, render_sheet
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
     PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows,
@@ -418,6 +421,67 @@ def cmd_list(args):
     return dict(ledger=str(ledger.path), changes=ledger.list_changes())
 
 
+def short_read_calls(result: dict) -> dict:
+    """readPair 를 부를 값은 도우미가 그대로 넣어야 하므로 싣는다. 예약 있는 날 물음은 reserved 명령이 파일에서 읽는다."""
+    return dict(pairs=result["pairs"], reads=reading_size(result))
+
+
+def short_read(result: dict) -> dict:
+    cells = result["cells"]
+    dates = result["dates"]
+    return dict(hotel=result["hotel"], offer=result["offer"], currency=result["currency"], read_at=result["read_at"],
+                cells=len(cells), priced=sum(cell["state"] != "missing" for cell in cells),
+                closed=sum(cell["state"] == "closed" for cell in cells), missing=sum(cell["state"] == "missing" for cell in cells),
+                reserved=len(result["reserved"]), no_sale=len(result["no_sale"]), pairs=len(result["pairs"]),
+                dates=dict(first=dates[0] if dates else None, last=dates[-1] if dates else None, count=len(dates)))
+
+
+def short_sheet(result: dict) -> dict:
+    scope = result["range"]
+    return dict(hotel=result["sheet"]["hotel"], offer=result["sheet"]["offer"], currency=result["currency"],
+                lines=result["lines"], cells=result["cells"], part=result["part"], gaps=result["gaps"],
+                range=None if scope is None else dict(pairs=len(scope["pairs"]), first=scope["first"], last=scope["last"],
+                                                     days=scope["days"]),
+                reads=result["reads"])
+
+
+def short_plan(result: dict) -> dict:
+    """미리보기를 말하고 고를 것을 묻는 데 필요한 것 — 수, 저장 횟수(`saves`, 빨간 줄이 남았으면 null), 고를 빨간 줄과 고른 것의 말,
+    적용할 수 없는 칸의 까닭. 칸마다의 값은 계산 파일과 미리보기 페이지에 있다."""
+    plan = decode_plan(result["plan"])
+    blocked = [dict(rule=rule.code, label=rule.label, cells=result["counts"][rule.code],
+                    examples=[encode_key(change.key) for change in plan.changes if change.verdict == rule.code][:EXAMPLES])
+               for rule in CELL_RULES.rules if rule.severity == BLOCKED and result["counts"][rule.code]]
+    short = dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
+                 saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
+                 blocked=blocked, above_one_night_before=result["above_one_night_before"])
+    if isinstance(plan.request, TargetTable):   # 표에 인원 · 박수가 없던 목표는 명령이 고른 줄 — 담당자에게 어느 줄인지 말한다
+        short["lines"] = list(dict.fromkeys(line_label(target.key.occupancy, target.key.nights) for target in plan.request.targets))
+    if "coverage" in result:
+        short["coverage"] = result["coverage"]
+    return short
+
+
+def short_rollback(result: dict) -> dict:
+    """되돌리기를 말하는 데 필요한 것 — 적어 둔 시각, 되돌리는 · 그대로 두는 · 지울 수 없는 칸 수, 그대로 두는 까닭마다의 수,
+    저장 횟수, 되돌리는 칸 가운데 예약 있는 날의 칸 수."""
+    plan, reserved = decode_rollback(result["rollback"]), {(item["room"], item["date"]) for item in result["reserved"]}
+    causes: dict[tuple, int] = {}
+    for item in plan.kept:
+        cause = (item.cause.change_id, item.cause.at, item.cause.sentence)
+        causes[cause] = causes.get(cause, 0) + 1
+    restored = [key_of_item(item.key) for item in plan.restored]
+    return dict(change_id=result["change_id"], replaces=result["replaces"], scope=result["scope"], mode=plan.mode,
+                restore_to=plan.restore_to, restored=len(restored), kept=len(plan.kept), unremovable=len(plan.unremovable),
+                kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, cells=count)
+                          for (change_id, at, sentence), count in causes.items()],
+                saves=len(result["steps"]), reserved=sum((key.room, key.date) in reserved for key in restored))
+
+
+SHORT = {"read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,
+         "rollback": short_rollback, "restore": short_rollback}
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="price_change.py", description=__doc__.split("\n\n")[0],
                                    formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -553,6 +617,8 @@ def main(argv=None) -> int:
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out and args.command != "render":
         Path(args.out).write_text(text + "\n", encoding="utf-8")
+        if args.command in SHORT:
+            text = json.dumps(dict(out=str(Path(args.out).resolve()), **SHORT[args.command](result)), ensure_ascii=False, indent=2)
     print(text)
     return 1 if result.get("same") is False else 0
 

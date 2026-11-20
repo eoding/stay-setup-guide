@@ -127,8 +127,7 @@ class RestoreTest(unittest.TestCase):
         (folder / "saved.json").write_text(json.dumps(encode_snapshot(self.saved_state), ensure_ascii=False), encoding="utf-8")
         saved = run("save-snapshot", "--snapshot", folder / "saved.json")["change_id"]
         result = run("restore", "--saved", saved, "--snapshot", folder / "now.json", "--record", "--out", folder / "r.json")
-        self.assertEqual((len(result["rollback"]["restored"]), len(result["rollback"]["unremovable"]), len(result["steps"])),
-                         (90, 1, 8))
+        self.assertEqual((result["restored"], result["unremovable"], result["saves"]), (90, 1, 8))
         (folder / "fresh.json").write_text(json.dumps(encode_snapshot(scene.fresh(self.now)), ensure_ascii=False), encoding="utf-8")
         self.assertEqual(run("begin", "--change", result["change_id"], "--plan", folder / "r.json", "--snapshot", folder / "fresh.json")["steps"], 8)
         page = Path(run("render", "rollback", "--plan", folder / "r.json")["page"]).read_text(encoding="utf-8")

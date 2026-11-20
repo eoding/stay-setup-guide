@@ -71,11 +71,64 @@ class CommandTest(unittest.TestCase):
         self.assertIn("가격 수정", error["error"])
         self.assertIn("캘린더의 객실 이름=파일", self.run_cli("read", "--hotel", "H", "--hotel-id", "9", "--price-page", erp / "calendar-adjust--step2.html", code=2)["error"])
 
+    def brief(self, *args):
+        """`--out` 을 준 명령 → (표준 출력의 짧은 답, 파일의 온 답, 표준 출력의 글자)."""
+        done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        out = Path(str(args[args.index("--out") + 1]))
+        short = json.loads(done.stdout)
+        self.assertEqual(short["out"], str(out.resolve()), "짧은 답은 온 답이 있는 파일을 말한다")
+        return short, json.loads(out.read_text(encoding="utf-8")), done.stdout
+
+    def test_y6_commands_that_write_a_file_answer_briefly_and_never_with_the_cell_list(self):
+        short, whole, text = self.brief("read-calls", "--request", self.request, "--out", self.dir / "calls.json")
+        self.assertEqual((short["pairs"], short["reads"]["readPair"]), (whole["pairs"], len(whole["pairs"])),
+                         "readPair 에 그대로 넣을 값은 싣는다")
+        self.assertNotIn("reserved", short)
+
+        erp = HERE / "fixtures" / "erp"
+        short, whole, text = self.brief("read", "--hotel", "데모 호텔", "--hotel-id", "1",
+                                        "--price-page", f"디럭스={erp / 'price-runs-closed-absent-list.html'}",
+                                        "--read-at", "2026-11-20T14:02:00+09:00", "--out", self.dir / "read.json")
+        self.assertEqual((short["cells"], short["read_at"], short["dates"]["count"]),
+                         (len(whole["cells"]), "2026-11-20T14:02:00+09:00", len(whole["dates"])))
+        self.assertNotIn('"rate_plan"', text, "칸 목록을 싣지 않는다")
+
+        short, whole, text = self.brief("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",
+                                        "--out", self.dir / "plan-1.json")
+        self.assertEqual((short["counts"]["red"], short["saves"], [line["rule"] for line in short["red"]]), (2, None, ["ABOVE_LIST"]))
+        self.assertEqual(short["red"][0]["choices"][0]["example"],
+                         "1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 — 정가 500.00 → 550.00")
+        self.assertEqual(len(whole["plan"]["changes"]), 90)
+        for bulky in ('"plan"', '"unresolved"', '"steps"', '"before"', '"tiers"'):
+            self.assertNotIn(bulky, text, f"plan 의 짧은 답에 {bulky} 가 없다")
+        short, whole, text = self.brief("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                                        "--record", "--replaces", short["change_id"], "--out", self.dir / "plan-2.json")
+        self.assertEqual((short["saves"], [line["words"] for line in short["chosen"]]), (len(whole["steps"]), ["정가도 10% 올림"]))
+
+        change = short["change_id"]
+        fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan-2.json", "--snapshot", fresh)
+        for call in self.run_cli("calls", "--change", change)["calls"]:
+            self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))
+        after = scene.applied(scene.snapshot(), map(decode_step, whole["steps"]))
+        key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
+        moved = self.write("moved.json", encode_snapshot(replace(after, cells={**after.cells, key: replace(after.cells[key], sell=D("1.00"))})))
+        short, whole, text = self.brief("rollback", "--change", change, "--snapshot", moved, "--record", "--out", self.dir / "rollback-1.json")
+        self.assertEqual((short["restored"], short["kept"], short["saves"], short["reserved"]),
+                         (len(whole["rollback"]["restored"]), 1, len(whole["steps"]), 23))
+        self.assertEqual([(why["outside"], why["cells"]) for why in short["kept_why"]], [(True, 1)], "그대로 두는 까닭마다의 수")
+        self.assertNotIn('"rollback": {', text)
+        saved = self.run_cli("save-snapshot", "--snapshot", self.snapshot)["change_id"]
+        short, whole, text = self.brief("restore", "--saved", saved, "--snapshot", moved, "--record", "--out", self.dir / "rollback-2.json")
+        self.assertEqual((short["mode"], short["restored"]), ("restore", len(whole["rollback"]["restored"])))
+        self.assertNotIn('"targets"', text)
+
     def test_preview_apply_verify_rollback_and_list(self):
         first = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",
                              "--out", self.dir / "plan1.json")
         change = first["change_id"]
-        self.assertEqual((first["counts"]["cells"], len(first["unresolved"]), first["steps"]), (90, 2, None))
+        self.assertEqual((first["counts"]["cells"], first["counts"]["red"], first["saves"]), (90, 2, None))
         fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
         self.assertIn("빨간 줄", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan1.json", "--snapshot", fresh, code=2)["error"])
 
@@ -109,8 +162,7 @@ class CommandTest(unittest.TestCase):
 
         rollback = self.run_cli("rollback", "--change", change, "--snapshot", after, "--record", "--sentence", "방금 것 되돌려",
                                 "--out", self.dir / "rollback.json")
-        self.assertEqual((len(rollback["rollback"]["restored"]), rollback["rollback"]["kept"], len(rollback["steps"])),
-                         (90, [], 8))
+        self.assertEqual((rollback["restored"], rollback["kept"], rollback["saves"]), (90, 0, 8))
         page = Path(self.run_cli("render", "rollback", "--plan", self.dir / "rollback.json")["page"])
         self.assertIn("에 적어 둔 값으로 되돌립니다", page.read_text(encoding="utf-8"))
         fresh_after = self.write("fresh-after.json", encode_snapshot(scene.fresh(scene.applied(scene.snapshot(), map(decode_step, plan["steps"])))))
@@ -184,7 +236,7 @@ class CommandTest(unittest.TestCase):
         now = self.write("now.json", encode_snapshot(moved))
         rollback = ("rollback", "--change", change, "--snapshot", now, "--record", "--sentence", "방금 것 되돌려")
         first = self.run_cli(*rollback, "--out", self.dir / "rollback-1.json")
-        self.assertEqual(len(first["rollback"]["kept"]), 1, "그 사이 달라진 칸 하나는 그대로 둔다")
+        self.assertEqual(first["kept"], 1, "그 사이 달라진 칸 하나는 그대로 둔다")
         before = self.run_cli("list")["changes"]
 
         refused = self.run_cli(*rollback, "--include-kept", "--replaces", first["change_id"], "--out", self.dir / "rollback-1.json",
@@ -197,8 +249,8 @@ class CommandTest(unittest.TestCase):
                                                "--replaces", first["change_id"], code=2)["error"])
 
         second = self.run_cli(*rollback, "--include-kept", "--replaces", first["change_id"], "--out", self.dir / "rollback-2.json")
-        self.assertEqual((second["replaces"], len(second["rollback"]["restored"])),
-                         (first["change_id"], len(first["rollback"]["restored"]) + 1), "그대로 두던 칸도 되돌린다")
+        self.assertEqual((second["replaces"], second["restored"]), (first["change_id"], first["restored"] + 1),
+                         "그대로 두던 칸도 되돌린다")
         listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
         self.assertEqual((listed[first["change_id"]]["status"], listed[second["change_id"]]["status"],
                           listed[second["change_id"]]["replaces"]), ("replaced", "previewed", first["change_id"]))

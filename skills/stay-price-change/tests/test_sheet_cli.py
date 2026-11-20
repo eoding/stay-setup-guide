@@ -51,7 +51,9 @@ class SheetCommandTest(unittest.TestCase):
 
     def test_a_new_rate_sheet_end_to_end(self):
         check = self.run_cli("sheet", "--sheet", self.sheet, "--look", self.look, "--out", self.dir / "sheet-check.json")
-        self.assertEqual((check["kind"], check["lines"], check["cells"]), ("sheet_check", 8, 112))
+        self.assertEqual((check["lines"], check["cells"]), (8, 112))
+        self.assertNotIn("sheet", check, "Y6 — --out 의 짧은 답은 요금표를 다시 싣지 않는다")
+        self.assertEqual(check["out"], str((self.dir / "sheet-check.json").resolve()))
         self.assertEqual(check["gaps"], [{"kind": "unnamed", "room": "패밀리", "rate_plan": S.PLAN, "occupancy": None, "nights": None,
                                           "dates": [], "lines": []}])
         self.assertEqual(check["reads"], {"readPair": 2, "readReserved": 1, "limit": PAGE_KEEPS, "fits": True})
@@ -68,6 +70,7 @@ class SheetCommandTest(unittest.TestCase):
                                "--out", self.dir / "plan.json")
         self.assertEqual((planned["counts"]["will_change"], planned["counts"]["red"], planned["counts"]["new"]), (80, 0, 0))
         self.assertEqual(planned["coverage"], {"untouched": 13, "unseen": 0, "no_sale": 1, "unknown": 0, "unnamed": 1})
+        planned = dict(planned, **json.loads((self.dir / "plan.json").read_text(encoding="utf-8")))
         self.assertTrue(planned["plan"]["request"]["from_sheet"])
         changed = {(c["key"]["room"], c["key"]["date"], c["key"]["occupancy"], c["key"]["nights"]): (c["before"]["sell"], c["after"]["sell"])
                    for c in planned["plan"]["changes"]}
@@ -95,8 +98,9 @@ class SheetCommandTest(unittest.TestCase):
     def test_one_room_at_a_time_and_a_sheet_too_big_for_one_reading(self):
         part = self.run_cli("sheet", "--sheet", self.sheet, "--look", self.look, "--room", "스위트", "--from", "2027-01-11",
                             "--out", self.dir / "part.json")
-        self.assertEqual((part["cells"], part["range"]["pairs"], part["range"]["first"]),
-                         (7 * 4, [{"room": "스위트", "rate_plan": S.PLAN}], "2027-01-11"))
+        self.assertEqual((part["cells"], part["range"]["pairs"], part["range"]["first"]), (7 * 4, 1, "2027-01-11"))
+        self.assertEqual(json.loads((self.dir / "part.json").read_text(encoding="utf-8"))["range"]["pairs"],
+                         [{"room": "스위트", "rate_plan": S.PLAN}])
         rooms = [f"객실 {n}" for n in range(1, PAGE_KEEPS // 2 + 1)]   # 1년은 객실마다 가격 읽기 2번 + 예약 읽기 1번 — 하나 넘친다
         big = dict(S.sheet_data(), lines=[{"room": room, "rate_plan": S.PLAN, "periods": [{"from": "2027-01-01", "to": "2027-12-31"}],
                                            "rows": S.rows("200")} for room in rooms])

@@ -167,10 +167,11 @@ class PreviewTruthTest(CommandCase):
         folder = self.dir / name
         folder.mkdir()
         snap = self.write(f"{name}/snapshot.json", encode_snapshot(snapshot))
-        planned = self.run_cli("plan", "--snapshot", snap, "--request", self.write(f"{name}/request.json", encode_request(request)),
-                               "--resolutions", self.write(f"{name}/choices.json", choices), "--record",
-                               "--out", folder / "plan.json")
-        self.assertEqual(planned["unresolved"], [], name)
+        short = self.run_cli("plan", "--snapshot", snap, "--request", self.write(f"{name}/request.json", encode_request(request)),
+                             "--resolutions", self.write(f"{name}/choices.json", choices), "--record",
+                             "--out", folder / "plan.json")
+        planned = json.loads((folder / "plan.json").read_text(encoding="utf-8"))
+        self.assertEqual((planned["unresolved"], short["saves"]), ([], len(planned["steps"])), name)
         page = Path(self.run_cli("render", "preview", "--plan", folder / "plan.json", "--out", folder / "preview.html")["page"])
         grid = read_grid(page.read_text(encoding="utf-8"))
         writes = step_writes(planned["steps"])
@@ -275,8 +276,9 @@ class ChosenListThroughLedgerTest(CommandCase):
         self.assertTrue(verified["same"])
         result = Path(self.run_cli("render", "result", "--change", planned["change_id"],
                                    "--out", self.dir / f"{choice}-result.html")["page"]).read_text(encoding="utf-8")
-        back = self.run_cli("rollback", "--change", planned["change_id"], "--snapshot", self.dir / f"{choice}-after.json", "--record",
-                            "--out", self.dir / f"{choice}-rollback.json")
+        self.run_cli("rollback", "--change", planned["change_id"], "--snapshot", self.dir / f"{choice}-after.json", "--record",
+                     "--out", self.dir / f"{choice}-rollback.json")
+        back = json.loads((self.dir / f"{choice}-rollback.json").read_text(encoding="utf-8"))
         restored = next(item for item in back["rollback"]["restored"] if json.loads(item["key"]) == encode_key(over))
         undone = self.apply(f"{choice}-back", after, self.dir / f"{choice}-rollback.json", back["change_id"])
         return before, over, after, rows, result, restored, undone

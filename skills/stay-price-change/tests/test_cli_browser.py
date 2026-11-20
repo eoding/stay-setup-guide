@@ -293,7 +293,9 @@ class BrowserCommandTest(unittest.TestCase):
                          ["b1", "b2"], "빌릴 폴더가 없으면 둘 다 받아야 한다")
         self.assertTrue(self.run_cli("reserved", "--calls", calls_b, "--answers", change, "--earlier", saved)["done"])
         lent = self.run_cli("read", "--calls", calls_b, "--answers", change, "--earlier", saved)
-        self.assertEqual(lent["cells"], state["cells"], "다른 작업의 읽기에서 빌린 조각으로 같은 지금 값")
+        self.assertEqual(lent["cells"], json.loads((saved / "snapshot.json").read_text(encoding="utf-8"))["cells"],
+                         "다른 작업의 읽기에서 빌린 조각으로 같은 지금 값")
+        self.assertEqual(state["cells"], len(lent["cells"]), "--out 의 짧은 답은 칸 수만 말한다")
 
 
 if __name__ == "__main__":
