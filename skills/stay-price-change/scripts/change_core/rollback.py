@@ -4,7 +4,8 @@
 그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다. 까닭은 이 장부의 나중 변경 가운데 지금 값을
 넣은 가장 최근 것, 없으면 도우미 밖이다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 「지울 수 없는 것」이다.
 
-저장해 둔 상태로 돌리기는 그 범위의 모든 항목을 저장해 둔 값으로 맞춘다. 그때 없던 항목이 지금 있으면 「지울 수 없는 것」이다.
+저장해 둔 상태로 돌리기는 그 범위의 모든 항목을 저장해 둔 값으로 맞춘다. 그때 없던 항목(없음으로 적었거나 아예 적지 않은 것 —
+그 뒤에 새로 생긴 줄 · 박수 층 같은)이 지금 있으면 「지울 수 없는 것」이다.
 """
 
 from __future__ import annotations
@@ -146,11 +147,15 @@ def plan_restore(snapshot: RecordedChange, now: Reading, read_at: str,
                  select: Callable[[str, str], bool] | None = None) -> RollbackPlan:
     """저장해 둔 상태(장부의 snapshot)로 돌리기 — 고른 범위의 항목마다 지금 값과 다른 필드를 저장해 둔 값으로 맞춘다.
 
-    그때 있었고 지금 없는 항목은 저장해 둔 값으로 다시 만든다. 그때 없었고 지금 있는 항목은 지울 수 없는 것으로 둔다.
+    그때 있었고 지금 없는 항목은 저장해 둔 값으로 다시 만든다. 그때 없었고 지금 있는 항목은 지울 수 없는 것으로 둔다 — 없음으로
+    적어 둔 항목도, 저장해 둔 상태에 아예 없는 항목도. 지금 읽은 값(`now`)에서는 `select` 가 고른 항목만 본다(저장해 둔 범위 밖의
+    항목을 고르지 않는 것은 부르는 쪽의 몫이다).
     """
-    items = [item for item in snapshot.items if select is None or select(item.kind, item.key)]
+    chosen = select or (lambda _kind, _key: True)
+    items = [item for item in snapshot.items if chosen(item.kind, item.key)]
     if not items:
         raise Refused("고른 범위에 저장해 둔 값이 없습니다")
+    held = {(item.kind, item.key) for item in snapshot.items}
     restored, unremovable = [], []
     for item in items:
         current = now.get((item.kind, item.key)) or absent(item.label)
@@ -164,6 +169,9 @@ def plan_restore(snapshot: RecordedChange, now: Reading, read_at: str,
             targets = {name: value for name, value in item.before.items() if current.fields.get(name) != value}
         if targets:
             restored.append(RestoredItem(item.kind, item.key, item.label, current, targets))
+    for (kind, key), current in sorted(now.items()):
+        if (kind, key) not in held and current.state != MISSING_STATE and chosen(kind, key):
+            unremovable.append(KeptItem(kind, key, current.label, {}, {}, current, Cause()))
     return RollbackPlan(snapshot.id, snapshot.hotel, snapshot.offer, snapshot.currency, snapshot.read_at, snapshot.sentence,
                         None, read_at, tuple(restored), (), False, tuple(unremovable), "restore", snapshot.hotel_id)
 
