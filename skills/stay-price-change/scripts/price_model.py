@@ -323,7 +323,7 @@ class CellChange:
 
     `after` 는 저장하면 그 칸이 될 값이다. 빨간 줄을 고른 칸은 고른 대로다(정가도 올림이면 올린 정가, 정가 지움이면 빈 정가,
     안 바꿈이면 전 값 그대로). `verdict` 는 계산한 값이 걸린 규칙이고 고른 뒤에도 남는다. `choice` 는 그 빨간 줄에 담당자가 고른
-    것(CHOICE_LABELS)이고, 아직 고르지 않았으면 None — 그때 `after` 는 계산한 값이다. 적용할 수 없는 칸의 `after` 는 계산한
+    것(CHOICE_LABELS)이고, 아직 고르지 않았으면 None — 그때 `after` 는 계산한 값이다. `said` 는 그렇게 고르며 담당자가 한 말이다. 적용할 수 없는 칸의 `after` 는 계산한
     값(셈하지 못했으면 None)이고 저장하지 않는다.
 
     `list_follow` 는 정가보다 비싸지는 칸(ABOVE_LIST)에서 「정가도 같이 올림」을 고르면 정가가 될 값이다 — ERP 의 「정가도 같이
@@ -336,6 +336,7 @@ class CellChange:
     verdict: str | None
     choice: str | None = None
     list_follow: Decimal | None = None
+    said: str | None = None
 
     @property
     def changed(self) -> tuple[str, ...]:
@@ -691,12 +692,14 @@ def request_range(data: Mapping) -> ReadRange:
 
 def encode_change(change: CellChange) -> dict:
     return dict(key=encode_key(change.key), before=encode_value(change.before), after=encode_value(change.after),
-                marks=list(change.marks), verdict=change.verdict, choice=change.choice, list_follow=money_text(change.list_follow))
+                marks=list(change.marks), verdict=change.verdict, choice=change.choice, list_follow=money_text(change.list_follow),
+                said=change.said)
 
 
 def decode_change(data: Mapping) -> CellChange:
     return CellChange(decode_key(data["key"]), decode_value(data["before"]), decode_value(data.get("after")),
-                      tuple(data.get("marks") or ()), data.get("verdict"), data.get("choice"), money(data.get("list_follow")))
+                      tuple(data.get("marks") or ()), data.get("verdict"), data.get("choice"), money(data.get("list_follow")),
+                      data.get("said"))
 
 
 def encode_step(step: BulkStep | CellEditStep) -> dict:

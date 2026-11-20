@@ -139,7 +139,7 @@ class ResumeCommandTest(unittest.TestCase):
         self.clock = scene.NOW
         self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         self.write("request.json", encode_request(scene.request()))
-        self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         self.change = self.cli("plan", "--snapshot", self.dir / "snapshot.json", "--request", self.dir / "request.json",
                                "--resolutions", self.dir / "choice.json", "--record", "--out", self.dir / "plan.json")["change_id"]
 

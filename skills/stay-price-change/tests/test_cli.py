@@ -6,6 +6,7 @@
 """
 
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 from change_core.answers import ask_sum  # noqa: E402
+from change_core.ledger import DB_NAME  # noqa: E402
 from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import CellKey, Snapshot, decode_snapshot, decode_step, encode_request, encode_snapshot  # noqa: E402
 
@@ -38,7 +40,7 @@ class CommandTest(unittest.TestCase):
         self.env = scene.env(str(self.dir / "기록"))
         self.snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         self.request = self.write("request.json", encode_request(scene.request()))
-        self.choice = self.write("resolutions.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        self.choice = self.write("resolutions.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -142,6 +144,36 @@ class CommandTest(unittest.TestCase):
         self.assertIn("성인 2 · 1박 이상 | 200.00 → 220.00", shown["text"], "표의 줄은 한 줄, 칸은 | 로")
         self.assertNotIn("<", shown["text"])
         self.assertNotIn("text", self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--out", self.dir / "p.html"))
+
+    def test_g4_the_words_said_with_a_red_line_choice_are_kept_and_shown_next_to_the_choice(self):
+        said = "500 넘는 두 칸은 정가도 같이 올려 주세요"
+        bare = self.write("bare.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", bare, "--record",
+                               "--out", self.dir / "plan-0.json", code=2)
+        self.assertIn("(said)", refused["error"], "담당자의 말이 없는 고름은 받지 않는다")
+        self.assertEqual(self.run_cli("list")["changes"], [], "장부에 아무것도 적지 않았다")
+
+        choices = self.write("choices.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": said}])
+        short = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", choices, "--record",
+                             "--out", self.dir / "plan.json")
+        change = short["change_id"]
+        db = sqlite3.connect(self.dir / "기록" / DB_NAME)
+        kept = set(db.execute("SELECT DISTINCT item_key, choice, said FROM item_values WHERE change_id = ? AND choice IS NOT NULL",
+                              (change,)))
+        db.close()
+        self.assertEqual({(choice, words) for _key, choice, words in kept}, {("raise_list", said)}, "장부가 고른 칸마다 그 말을 적는다")
+        self.assertEqual(len(kept), 2)
+
+        plan = json.loads((self.dir / "plan.json").read_text(encoding="utf-8"))
+        fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", fresh)
+        for call in self.run_cli("calls", "--change", change)["calls"]:
+            self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))
+        after = self.write("after.json", encode_snapshot(scene.applied(scene.snapshot(), map(decode_step, plan["steps"]))))
+        self.assertTrue(self.run_cli("verify", "--change", change, "--snapshot", after)["same"])
+        text = self.run_cli("render", "result", "--change", change, "--text")["text"].splitlines()
+        self.assertIn("고르신 빨간 줄", text)
+        self.assertIn(f"정가보다 비싸집니다 | 정가도 10% 올림 | 2 | “{said}”", text, "고른 것 옆에 담당자의 말")
 
     def test_preview_apply_verify_rollback_and_list(self):
         first = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",

@@ -168,12 +168,12 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out "<파일>"]
 ## 빨간 줄 고름 파일
 
 ```json
-[{"rule": "ABOVE_LIST", "choice": "clear_list"},
- {"rule": "OVER_30", "choice": "include",
+[{"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가 넘는 칸은 정가 지워 주세요"},
+ {"rule": "OVER_30", "choice": "include", "said": "크리스마스 디럭스는 그대로 올려",
   "cells": [{"room": "디럭스", "rate_plan": "조식 포함", "date": "2026-12-25", "occupancy": "A2", "nights": 1}]}]
 ```
 
-파일 이름은 그 고름으로 만들 계산 파일과 같은 번호(`choices-2.json` → `plan-2.json`)이고, 지금까지 고른 것을 모두 적는다 — `plan` 은 매번 요청에서 처음부터 계산하고 이 파일의 고름만 단다. `cells` 가 없으면 그 규칙의 모든 칸, 있으면 그 칸만이다(칸을 짚은 고름이 앞선다). 「정가도 같이 올림」(`raise_list`)의 정가는 ERP [선택 날짜 가격 가감]의 「정가도 같이 조정」과 같다: 판매가를 금액(`amount`)으로 옮기면 정가도 같은 금액, 퍼센트(`percent`)면 같은 비율이고 아동이 있는 칸은 `반올림((정가 − 아동 추가분) × 비율) + 아동 추가분`(`scale_child_surcharge: true` 면 칸 전체), 반올림은 판매가와 같다. 새 값 지정(`set`) · 목표 값 표는 ERP 에 짝이 없어 판매가가 옮긴 만큼 정가도 옮긴다. 칸 키는 `plan` 의 짧은 답 `red[].examples`, 없으면 계산 파일의 `unresolved[].key` 에서 그 칸의 것을 그대로 옮긴다. 고를 수 있는 값: `ABOVE_LIST` → `raise_list`·`clear_list`·`keep`, `ABOVE_ONE_NIGHT` → `include`·`keep`, `BELOW_COST` → `include`·`keep`, `OVER_30` → `include`·`keep`. 칸마다 판정은 하나이고 차례는 ERP 와 같다: 정가보다 비싸짐 → 박수 층이 1박 이상 가격보다 비싸짐(ERP `_check_los_tiers` — 2박 이상 층이 그날 같은 인원 조합의 1박 이상보다 비싸지면 그 칸, 1박 이상을 내려 위 층보다 싸지면 그 1박 이상 칸, 바꾼 뒤의 값끼리 견준다) → 공급 원가 → 30%. 박수 층 규칙은 다른 칸의 고름(안 바꾸면 지금 값)을 단 뒤에 보므로, 고른 뒤 다시 계산하면 새로 걸리는 칸이 있을 수 있다. 바꾸기 전부터 어긴 칸도 이번에 판매가를 바꾸면 보고, 바꾸지 않는 칸은 보지 않는다. 적용할 수 없는 칸(`NOT_POSITIVE`·`NEGATIVE_SUPPLY`·`NO_ADULT_CELL`·`NO_BASE_CELL`·`NEW_WITHOUT_SELL`·`NEW_NOT_SHOWN`)은 고를 수 없다.
+파일 이름은 그 고름으로 만들 계산 파일과 같은 번호(`choices-2.json` → `plan-2.json`)이고, 지금까지 고른 것을 모두 적는다 — `plan` 은 매번 요청에서 처음부터 계산하고 이 파일의 고름만 단다. `said` 는 그렇게 고르며 담당자가 한 말 그대로다(앞에서 고른 것도 그때의 말 그대로). 없는 고름이 있으면 `plan` 은 아무것도 적지 않고 거절한다. 장부가 고른 칸마다 그 말을 적고, 결과 페이지의 「고르신 빨간 줄」이 고른 것 옆에 보인다. `cells` 가 없으면 그 규칙의 모든 칸, 있으면 그 칸만이다(칸을 짚은 고름이 앞선다). 「정가도 같이 올림」(`raise_list`)의 정가는 ERP [선택 날짜 가격 가감]의 「정가도 같이 조정」과 같다: 판매가를 금액(`amount`)으로 옮기면 정가도 같은 금액, 퍼센트(`percent`)면 같은 비율이고 아동이 있는 칸은 `반올림((정가 − 아동 추가분) × 비율) + 아동 추가분`(`scale_child_surcharge: true` 면 칸 전체), 반올림은 판매가와 같다. 새 값 지정(`set`) · 목표 값 표는 ERP 에 짝이 없어 판매가가 옮긴 만큼 정가도 옮긴다. 칸 키는 `plan` 의 짧은 답 `red[].examples`, 없으면 계산 파일의 `unresolved[].key` 에서 그 칸의 것을 그대로 옮긴다. 고를 수 있는 값: `ABOVE_LIST` → `raise_list`·`clear_list`·`keep`, `ABOVE_ONE_NIGHT` → `include`·`keep`, `BELOW_COST` → `include`·`keep`, `OVER_30` → `include`·`keep`. 칸마다 판정은 하나이고 차례는 ERP 와 같다: 정가보다 비싸짐 → 박수 층이 1박 이상 가격보다 비싸짐(ERP `_check_los_tiers` — 2박 이상 층이 그날 같은 인원 조합의 1박 이상보다 비싸지면 그 칸, 1박 이상을 내려 위 층보다 싸지면 그 1박 이상 칸, 바꾼 뒤의 값끼리 견준다) → 공급 원가 → 30%. 박수 층 규칙은 다른 칸의 고름(안 바꾸면 지금 값)을 단 뒤에 보므로, 고른 뒤 다시 계산하면 새로 걸리는 칸이 있을 수 있다. 바꾸기 전부터 어긴 칸도 이번에 판매가를 바꾸면 보고, 바꾸지 않는 칸은 보지 않는다. 적용할 수 없는 칸(`NOT_POSITIVE`·`NEGATIVE_SUPPLY`·`NO_ADULT_CELL`·`NO_BASE_CELL`·`NEW_WITHOUT_SELL`·`NEW_NOT_SHOWN`)은 고를 수 없다.
 
 ## 오류와 할 일
 

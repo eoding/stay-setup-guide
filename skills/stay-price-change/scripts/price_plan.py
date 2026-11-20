@@ -450,6 +450,7 @@ def _tier_breaks(plan: Plan, cells: Mapping[CellKey, CellChange], included: set[
 
 
 def _choose(change: CellChange, resolution: Resolution | None) -> CellChange:
+    """고름을 칸에 단다 — 고른 것(`choice`)과 그렇게 고르며 담당자가 한 말(`said`), 그리고 고른 대로의 후 값."""
     if resolution is None:
         return change
     choice = resolution.choice
@@ -465,7 +466,7 @@ def _choose(change: CellChange, resolution: Resolution | None) -> CellChange:
         after = replace(after, list=change.list_follow)
     elif choice == "clear_list":
         after = replace(after, list=None)
-    return replace(change, after=after, choice=choice)
+    return replace(change, after=after, choice=choice, said=resolution.said or None)
 
 
 def unresolved(plan: Plan) -> tuple[CellChange, ...]:
@@ -572,21 +573,21 @@ def step_plans(steps: Iterable[BulkStep | CellEditStep]) -> list[StepPlan]:
 
 
 def _rows(key: CellKey, before: CellValue, after: CellValue | None, writes: Mapping[str, Decimal | None],
-          verdict=None, marks=(), choice=None) -> list[ValueRow]:
+          verdict=None, marks=(), choice=None, said=None) -> list[ValueRow]:
     """칸 하나 → 필드마다 장부 한 줄. `after` 는 그 칸의 후 값(전과 다른 필드만 적힌다), `writes` 는 저장이 넣는 필드(비움은 None)."""
     rows = []
     for name in FIELDS:
         old, new = getattr(before, name), None if after is None else getattr(after, name)
         action = None if name not in writes else "clear" if writes[name] is None else "set"
         rows.append(ValueRow(ITEM_KIND, cell_item_key(key), cell_name(key), name, before.state, old, None if new == old else new,
-                             verdict, marks, action, choice))
+                             verdict, marks, action, choice, said))
     return rows
 
 
 def preview_rows(plan: Plan) -> list[ValueRow]:
-    """미리보기의 칸 그대로 — 필드마다 전 값 · 후 값 · 넣는지(set · clear) · 판정 · 표시 · 고른 것."""
+    """미리보기의 칸 그대로 — 필드마다 전 값 · 후 값 · 넣는지(set · clear) · 판정 · 표시 · 고른 것과 고르며 한 말."""
     return [row for change in plan.changes for row in _rows(change.key, change.before, change.after, change.writes,
-                                                             change.verdict, change.marks, change.choice)]
+                                                             change.verdict, change.marks, change.choice, change.said)]
 
 
 def snapshot_rows(snapshot: Snapshot) -> list[ValueRow]:

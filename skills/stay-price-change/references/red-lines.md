@@ -37,7 +37,7 @@ SKILL.md 가 이 파일을 여는 때: 미리보기의 `plan` 답에 `counts.red
 
 ## 고름 파일과 다시 계산
 
-이름은 그 고름으로 만들 계산 파일과 같은 번호다 — `choices-<k>.json` 으로 `plan-<k>.json` 을 만든다(k 는 그 작업의 다음 계산 번호: `plan-1.json` 다음이면 `choices-2.json` → `plan-2.json`). 계산은 매번 요청에서 처음부터 하므로, 고름 파일에는 이번에 고른 것만이 아니라 지금까지 고른 것을 모두 적는다(앞 고름을 빼면 그 칸은 다시 빨간 줄이 된다). 모양은 commands.md 「빨간 줄 고름 파일」. 고른 것을 `<작업>/choices-<k>.json` 에 적고 계산을 다시 한다(N 은 바로 앞 미리보기의 번호):
+이름은 그 고름으로 만들 계산 파일과 같은 번호다 — `choices-<k>.json` 으로 `plan-<k>.json` 을 만든다(k 는 그 작업의 다음 계산 번호: `plan-1.json` 다음이면 `choices-2.json` → `plan-2.json`). 계산은 매번 요청에서 처음부터 하므로, 고름 파일에는 이번에 고른 것만이 아니라 지금까지 고른 것을 모두 적는다(앞 고름을 빼면 그 칸은 다시 빨간 줄이 된다). 모양은 commands.md 「빨간 줄 고름 파일」. 고름마다 `said` 에 그렇게 고르며 담당자가 한 말을 그대로 적는다(앞에서 고른 것도 그때의 말 그대로 — 장부에 남고 결과 페이지에 보인다). 고른 것을 `<작업>/choices-<k>.json` 에 적고 계산을 다시 한다(N 은 바로 앞 미리보기의 번호):
 
 ```bash
 python3 scripts/price_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --resolutions "<작업>/choices-<k>.json" --replaces N --record --out "<작업>/plan-<k>.json"

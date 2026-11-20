@@ -192,7 +192,7 @@ class BrowserCommandTest(unittest.TestCase):
     def test_calls_list_unsaved_steps_and_record_result_writes_only_the_step_it_answers(self):
         snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         request = self.write("request.json", encode_request(scene.request()))
-        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         change = self.run_cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
                               "--out", self.dir / "plan.json")["change_id"]
         self.assertIn("begin", self.run_cli("calls", "--change", change, code=2)["error"])
@@ -224,7 +224,7 @@ class BrowserCommandTest(unittest.TestCase):
         snapshot["hotel"] = {"id": scene.HOTEL_ID, "name": "페이지가 부르는 이름"}
         read = self.write("snapshot.json", snapshot)
         request = self.write("request.json", encode_request(scene.request()))
-        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         change = self.run_cli("plan", "--snapshot", read, "--request", request, "--resolutions", choice, "--record",
                               "--out", self.dir / "plan.json")["change_id"]
         listed = self.run_cli("list")["changes"][0]
@@ -246,7 +246,7 @@ class BrowserCommandTest(unittest.TestCase):
     def test_g7_a_save_that_never_started_is_not_recorded_and_the_run_goes_on(self):
         snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         request = self.write("request.json", encode_request(scene.request()))
-        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         change = self.run_cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
                               "--out", self.dir / "plan.json")["change_id"]
         self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", self.fresh(snapshot))

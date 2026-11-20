@@ -200,12 +200,12 @@ class PreviewTruthTest(CommandCase):
         snapshot, request = scene.snapshot(), scene.request()
         over = above_list_cells(snapshot, request)
         cases = {
-            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list"}], 8),
-            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list"}], 10),
-            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep"}], 8),
+            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}], 8),
+            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워"}], 10),
+            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬"}], 8),
             # 1/2 만 정가를 지우면 1/1 · 1/2 의 줄이 서로 달라 스위트 · 조식 포함이 묶음 셋 + 셀 창 하나가 된다
-            "mixed": ([{"rule": "ABOVE_LIST", "choice": "raise_list"},
-                       {"rule": "ABOVE_LIST", "choice": "clear_list", "cells": [encode_key(over[1])]}], 10),
+            "mixed": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"},
+                       {"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워", "cells": [encode_key(over[1])]}], 10),
         }
         for name, (choices, saves) in cases.items():
             with self.subTest(name):
@@ -220,13 +220,13 @@ class PreviewTruthTest(CommandCase):
         # 1박 이상 줄을 안 바꾸면 스탠다드의 성인 2 · 3박 이상(90.00 → 100.80)이 그날 1박 이상(100.00)보다 비싸진다 — 박수 층 빨간 줄(Y2).
         # 안 바꿈은 네 날 모두, 섞음은 1박 이상을 안 바꾼 12/7 하루. 아동 줄의 3박 이상은 1박 이상보다 싸게 남는다.
         cases = {
-            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list"}], 2, 24),
-            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list"}], 26, 24),
-            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep"}, {"rule": "ABOVE_ONE_NIGHT", "choice": "keep"}], 1, 28),
-            "mixed": ([{"rule": "ABOVE_LIST", "choice": "raise_list"},
-                       {"rule": "ABOVE_LIST", "choice": "clear_list", "cells": [encode_key(sea[0])]},
-                       {"rule": "ABOVE_LIST", "choice": "keep", "cells": [encode_key(over[0]), encode_key(sea[-1])]},
-                       {"rule": "ABOVE_ONE_NIGHT", "choice": "include"}], 6, 25),
+            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}], 2, 24),
+            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워"}], 26, 24),
+            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬"}, {"rule": "ABOVE_ONE_NIGHT", "choice": "keep", "said": "그 칸은 그냥 둬"}], 1, 28),
+            "mixed": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"},
+                       {"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워", "cells": [encode_key(sea[0])]},
+                       {"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬", "cells": [encode_key(over[0]), encode_key(sea[-1])]},
+                       {"rule": "ABOVE_ONE_NIGHT", "choice": "include", "said": "그대로 바꿔"}], 6, 25),
         }
         for name, (choices, saves, chosen) in cases.items():
             with self.subTest(name):
@@ -238,7 +238,7 @@ class PreviewTruthTest(CommandCase):
 
     def test_the_trial_shape_says_the_raised_list_price_in_the_red_line_box_and_the_cell(self):
         planned, page = self.check("trial-words", trial_scene.snapshot(), trial_scene.request(),
-                                   [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+                                   [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         text = " ".join(re.sub(r"<[^>]+>", " ", re.sub(r"<style>.*?</style>", " ", page, flags=re.S)).split())
         self.assertIn("고르신 빨간 줄 · 24칸 (계산한 값이 정가를 넘던 칸) 정가도 12% 올림 (아동이 있는 칸은 아동 추가분은 그대로) · 24칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
                       "예: 12/7 월 · 스탠다드 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 100.00 → 112.00 정가 110.00 → 123.20", text)
@@ -259,7 +259,7 @@ class NothingToSaveTest(CommandCase):
         snapshot, request = trial_scene.snapshot(), replace(trial_scene.request(), nights=(1,))
         snap = self.write("snapshot.json", encode_snapshot(snapshot))
         short = self.run_cli("plan", "--snapshot", snap, "--request", self.write("request.json", encode_request(request)),
-                             "--resolutions", self.write("choices.json", [{"rule": "ABOVE_LIST", "choice": "keep"}]), "--record",
+                             "--resolutions", self.write("choices.json", [{"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬"}]), "--record",
                              "--out", self.dir / "plan.json")
         self.assertEqual((short["counts"]["will_change"], short["counts"]["red"], short["saves"], short["counts"]["keep"]), (0, 0, 0, 24))
         chosen, = short["chosen"]
@@ -310,7 +310,7 @@ class ChosenListThroughLedgerTest(CommandCase):
         before, over = scene.snapshot(), CellKey("스위트", "조식 포함", "2027-01-01", "A2", 1)
         planned = self.run_cli("plan", "--snapshot", self.write(f"{choice}-snapshot.json", encode_snapshot(before)),
                                "--request", self.write(f"{choice}-request.json", encode_request(scene.request())),
-                               "--resolutions", self.write(f"{choice}-choices.json", [{"rule": "ABOVE_LIST", "choice": choice}]),
+                               "--resolutions", self.write(f"{choice}-choices.json", [{"rule": "ABOVE_LIST", "choice": choice, "said": f"정가 넘는 칸은 {choice}"}]),
                                "--record", "--out", self.dir / f"{choice}-plan.json")
         after = self.apply(choice, before, self.dir / f"{choice}-plan.json", planned["change_id"])
         rows = {row["field"]: row for row in self.ledger_rows(planned["change_id"], over)}

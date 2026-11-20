@@ -58,7 +58,7 @@ from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, now_text
 from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback
-from change_core.rules import Resolution
+from change_core.rules import Resolution, said_in
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
     page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_call, too_big,
@@ -220,7 +220,7 @@ def cmd_plan(args):
         request = decode_request(data)
         plan = plan_targets(snapshot, request) if isinstance(request, TargetTable) else plan_change(snapshot, request)
     request = plan.request
-    resolutions = [Resolution(str(item["rule"]), str(item["choice"]), decode_resolution_items(item.get("cells")))
+    resolutions = [Resolution(str(item["rule"]), str(item["choice"]), decode_resolution_items(item.get("cells")), said_in(item))
                    for item in load(args.resolutions)] if args.resolutions else []
     plan = resolve(plan, resolutions)
     steps = plan_steps(plan)
@@ -555,7 +555,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--snapshot", required=True)
     sub.add_argument("--request", required=True,
                      help="요청 JSON — 바꾸는 방법(kind change) · 목표 값 표(kind targets) · sheet 가 낸 파일(kind sheet_check)")
-    sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "ABOVE_LIST", "choice": "raise_list"}]')
+    sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "ABOVE_LIST", "choice": "raise_list", '
+                     '"said": "<담당자 말>"}]')
     sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
     sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 미리보기의 장부 번호(빨간 줄을 고른 뒤 · 적용 직전에 값이 "
                      "달라 다시 계산할 때). 그 번호는 replaced 가 되고 begin 이 받지 않는다")

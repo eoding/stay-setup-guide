@@ -21,8 +21,8 @@ from decimal import Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
-    esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list,
-    stopped_choices, unremovable_table,
+    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
+    stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.money import scale_of
@@ -672,7 +672,7 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
                     f'{", ".join(f"{number}번" for number in undone)}).</p>')
     if (record.request or {}).get("from_sheet"):
         body.append(f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>')
-    body += [steps_list(record.steps, _step_sizes(record)), stopped_choices(record, len(waiting))]
+    body += [steps_list(record.steps, _step_sizes(record)), stopped_choices(record, len(waiting)), _chosen_table(record)]
     closed = {key for key, view in views.items() if view.before.state == "closed"}
     reserved = {(key.room, key.date) for key, view in views.items() if view.reserved}
 
@@ -713,6 +713,18 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
             lines.insert(3, f"기록: {ledger_path}")
         body.append(notes(lines))
     return page(title, "\n".join(body), MAKER)
+
+
+def _chosen_table(record: ChangeRecord) -> str:
+    """고르신 빨간 줄마다 — 빨간 줄 · 고르신 것 · 칸 수 · 고르실 때 하신 말(장부의 줄에서)."""
+    request = decode_request(record.request) if record.request and record.request.get("kind") in ("change", "targets") else None
+    entries = []
+    for verdict, choice, said, keys in chosen_groups(record.rows):
+        rule = CELL_RULES.by_code.get(verdict)
+        words = (choice_words(request, choice, record.currency, [key_of_item(key) for key in keys]) if request
+                 else CHOICE_LABELS[choice])
+        entries.append((rule.label if rule else str(verdict), words, len(keys), said))
+    return chosen_table(entries)
 
 
 def _step_sizes(record: ChangeRecord) -> dict[int, int]:

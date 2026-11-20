@@ -32,7 +32,7 @@ class CheckTest(unittest.TestCase):
         self.before = scene.snapshot()
         snapshot = self.write("snapshot.json", encode_snapshot(self.before))
         request = self.write("request.json", encode_request(scene.request()))
-        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         self.change = self.cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
                                "--out", self.dir / "plan.json")["change_id"]
         self.steps = [decode_step(step) for step in json.loads((self.dir / "plan.json").read_text(encoding="utf-8"))["steps"]]
