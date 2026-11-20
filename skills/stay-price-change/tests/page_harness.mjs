@@ -26,6 +26,7 @@ const RUNNER = join(SKILL, '..', 'stay-setup-run');
 export const HELPER = readFileSync(join(RUNNER, 'scripts', 'stay_helper.js'), 'utf8');
 export const BOOT = readFileSync(join(RUNNER, 'scripts', 'stay_boot.js'), 'utf8');
 export const PAGE = readFileSync(join(SKILL, 'scripts', 'page', 'stay_price.js'), 'utf8');
+export const LOADER = readFileSync(join(SKILL, 'scripts', 'page', 'stay_price_loader.js'), 'utf8');
 export const runFixture = (name) => readFileSync(join(RUNNER, 'tests', 'fixtures', 'erp', name), 'utf8');
 export const ownFixture = (name) => readFileSync(join(SKILL, 'tests', 'fixtures', 'erp', name), 'utf8');
 export const OWN_FIXTURES = join(SKILL, 'tests', 'fixtures', 'erp');
@@ -105,7 +106,7 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   onBulkSave   'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다) | 'hang'(요청이 끝나지 않는다)
  *   drawerStuck  true 면 드로어가 닫혀도 내용이 비지 않는다(쉬는 화면이 오지 않는다)
  *   cell         셀 창 그리기 값 {date, plan, rows} · cellSave 'ok'|'error'
- *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다
+ *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다 · bare 면 아무것도 올리지 않는다(올리개 시험)
  */
 export function erpPage(opts = {}) {
   const o = Object.assign({ start: 'coord', bulkReview: runFixture('calendar-bulk--price-step2.html'), adjustReview: ownFixture('adjust-rejected.html'),
@@ -216,8 +217,8 @@ export function erpPage(opts = {}) {
   w.addEventListener('stay-drawer-close', closeDrawer);
   w.localStorage.setItem('staySteps', RUNNER_STEPS);
   w.localStorage.setItem('stayRunCursor', RUNNER_CURSOR);
-  if (o.withScripts) { w.eval(HELPER); w.eval(BOOT); }
-  w.eval(PAGE);
+  if (o.withScripts && !o.bare) { w.eval(HELPER); w.eval(BOOT); }
+  if (!o.bare) w.eval(PAGE);
   return { dom, w, doc, log, render, closeDrawer, drawerOpen: () => drawer.classList.contains('is-open') };
 }
 
