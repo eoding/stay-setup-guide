@@ -79,14 +79,15 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
             self.assertIn(f"{number} {label}", text)
         self.assertNotIn("골라 주세요", text)
         self.assertNotIn("넘음", text, "고른 칸은 「정가 넘음」이 아니라 고른 것으로 보인다")
-        self.assertIn("고르신 빨간 줄 · 2칸 (정가보다 비싸집니다) 정가도 10% 올림 · 2칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
+        self.assertIn("고르신 빨간 줄 · 2칸 (계산한 값이 정가를 넘던 칸) 정가도 10% 올림 · 2칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
                       "예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 480.00 → 528.00 정가 500.00 → 550.00", text)
-        self.assertIn("480.00 → 528.00 정가 500.00 → 550.00 정가도 10% 올림 정가보다 비싸집니다 · 고르신 대로", text)
-        self.assertIn("500.00 → 550.00 없음 고름 정가보다 비싸집니다 고르신 것: 정가도 10% 올림", text)
+        self.assertIn("480.00 → 528.00 정가 500.00 → 550.00 정가도 10% 올림 ", text, "Y4 — 칸은 고른 것과 그 결과만")
+        self.assertIn("500.00 → 550.00 없음 고름 정가도 10% 올림 고르신 대로 저장합니다", text)
+        self.assertNotIn("정가보다 비싸집니다", text, "Y4 — 고른 뒤에는 일어나지 않을 일을 쓰지 않는다")
         self.assertIn("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다.", text)
         self.assertIn("ERP 에 8번 나눠 저장합니다", text)
         self.assertIn("객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번", text, "T7 — 저장 묶음을 말하는 글")
-        self.assertIn("다만 정가를 넘는 2칸은 고르신 대로 정가도 같이 바뀝니다", text)
+        self.assertIn("다만 고르신 대로 2칸은 정가도 같이 바뀝니다", text)
 
         kept = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "keep")])
         text = visible(render_preview(kept, steps=plan_steps(kept)))

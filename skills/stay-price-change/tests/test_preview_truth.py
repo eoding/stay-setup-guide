@@ -237,11 +237,12 @@ class PreviewTruthTest(CommandCase):
         planned, page = self.check("trial-words", trial_scene.snapshot(), trial_scene.request(),
                                    [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
         text = " ".join(re.sub(r"<[^>]+>", " ", re.sub(r"<style>.*?</style>", " ", page, flags=re.S)).split())
-        self.assertIn("고르신 빨간 줄 · 24칸 (정가보다 비싸집니다) 정가도 12% 올림 (아동이 있는 칸은 아동 추가분은 그대로) · 24칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
+        self.assertIn("고르신 빨간 줄 · 24칸 (계산한 값이 정가를 넘던 칸) 정가도 12% 올림 (아동이 있는 칸은 아동 추가분은 그대로) · 24칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
                       "예: 12/7 월 · 스탠다드 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 100.00 → 112.00 정가 110.00 → 123.20", text)
         cell = read_grid(page)[("스탠다드 · 조식 포함", "12/7 월", "성인 2 · 1박 이상")]
         self.assertEqual([text for _tag, _cls, text in cell],
-                         ["100.00", "→", "112.00", "정가 110.00 → 123.20", "정가도 12% 올림", "정가보다 비싸집니다 · 고르신 대로"])
+                         ["100.00", "→", "112.00", "정가 110.00 → 123.20", "정가도 12% 올림"], "Y4 — 고른 것과 그 결과만")
+        self.assertNotIn("정가보다 비싸집니다", text)
         self.assertEqual(planned["plan"]["changes"][0]["after"]["list"], "123.20", "plan.json 의 칸도 올린 정가를 갖는다")
         self.assertEqual(planned["plan"]["changes"][0]["choice"], "raise_list")
 
