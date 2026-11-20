@@ -26,9 +26,9 @@ import trial_scene  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_change import listed  # noqa: E402
-from price_model import CellKey, encode_request, encode_snapshot  # noqa: E402
+from price_model import CellKey, Target, TargetTable, encode_request, encode_snapshot  # noqa: E402
 from price_pages import cells_scope  # noqa: E402
-from price_plan import plan_change, plan_steps, preview_rows, resolve, snapshot_rows, step_plans  # noqa: E402
+from price_plan import plan_change, plan_steps, plan_targets, preview_rows, resolve, snapshot_rows, step_plans  # noqa: E402
 
 REAL = datetime.now().astimezone()
 TRIAL = "스탠다드(조식 포함), 스탠다드 바다 전망(조식 포함) · 12/7 월 ~ 12/8 화 · 12/10 목 · 12/14 월 (4일, 2026년)"
@@ -72,6 +72,23 @@ class ListScopeTest(unittest.TestCase):
         self.assertEqual(self.scope(0, saved), f"{TRIAL} · 지금 상태 저장")
         many = [CellKey(f"객실 {n}", "조식 포함", "2026-12-07", "A2", 1) for n in range(1, 6)]
         self.assertEqual(cells_scope(many), "객실 1(조식 포함), 객실 2(조식 포함), 객실 3(조식 포함) 외 2객실 · 12/7 월 (1일, 2026년)")
+
+    def test_a_target_table_counts_the_cells_it_writes_not_the_ones_kept_on_a_red_line(self):
+        """F5 — 요금표 시운전: 8칸을 넣고 4칸을 빨간 줄에 그대로 둔 변경을 「새 요금표 12칸」이라고 읽어 주었다."""
+        reading = scene.snapshot(read_at=REAL.isoformat(timespec="seconds"))
+        sells = dict(zip(scene.DATES, ("420", "420", "600", "600")))   # 1/1 · 1/2 는 정가 500 — 600 이면 정가를 넘는 빨간 줄
+        table = TargetTable(scene.HOTEL, scene.OFFER, tuple(Target(CellKey("스위트", "조식 포함", day, "A2", 1), (("sell", Decimal(sell)),))
+                                                           for day, sell in sells.items()), hotel_id=scene.HOTEL_ID, from_sheet=True)
+        plan = resolve(plan_targets(reading, table), [Resolution("ABOVE_LIST", "keep")])
+        self.assertEqual(sum(change.choice == "keep" for change in plan.changes), 2)
+        number = self.ledger(0).record_preview(
+            hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표대로",
+            read_at=reading.read_at, rows=preview_rows(plan), request=encode_request(plan.request), reading=encode_snapshot(reading))
+        self.assertTrue(self.scope(0, number).endswith("· 새 요금표 2칸"), self.scope(0, number))
+        self.ledger(0).begin(number, step_plans(plan_steps(plan)), read_at=reading.read_at)
+        for step in range(1, len(plan_steps(plan)) + 1):
+            self.ledger(1).record_step(number, step, saved=True)
+        self.assertTrue(self.scope(2, number).endswith("· 새 요금표 2칸"), "적용한 뒤에도 넣은 칸 수 — 되돌리기 확인이 읽어 준다")
 
     def test_check_gives_the_same_line(self):
         env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir)}

@@ -373,10 +373,11 @@ def narrowed(occupancies: Iterable[str], nights: Iterable[int]) -> str:
     return f"{shown}만" if shown else ""
 
 
-def record_what(kind: str, request: Mapping | None, reverses: int | None, currency: str) -> str:
+def record_what(kind: str, request: Mapping | None, reverses: int | None, currency: str, cells: int | None = None) -> str:
     """장부의 번호가 한 일 — "판매가 +12%" · "판매가 -10% (1박 이상만)" · "목표 값 6칸" · "새 요금표 120칸" · "3번 되돌리기" ·
     "3번 되돌리기 (성인 2만)" · "5번 저장 상태로 되돌리기" · "지금 상태 저장". 칸을 좁혔으면(인원 조합 · 박수 층, 되돌리기의 고른 칸)
-    괄호로 그렇게 말한다 — 되돌리기 확인이 이 줄을 읽어 준다."""
+    괄호로 그렇게 말한다 — 되돌리기 확인이 이 줄을 읽어 준다. 목표 값 · 새 요금표의 칸 수는 저장이 넣는(넣을) 칸이다(`cells`,
+    장부의 `planned` — 빨간 줄에 안 바꾸기로 고른 칸은 세지 않는다)."""
     if kind == "snapshot":
         return "지금 상태 저장"
     picked = f" ({request['scope']}만)" if request and request.get("scope") else ""
@@ -388,7 +389,7 @@ def record_what(kind: str, request: Mapping | None, reverses: int | None, curren
         return f"{request.get('snapshot')}번 저장 상태로 되돌리기{picked}"
     parsed = decode_request(request)
     if isinstance(parsed, TargetTable):
-        return f"{'새 요금표' if parsed.from_sheet else '목표 값'} {len(parsed.targets):,}칸"
+        return f"{'새 요금표' if parsed.from_sheet else '목표 값'} {len(parsed.targets) if cells is None else cells:,}칸"
     narrow = narrowed(parsed.occupancies, parsed.nights)
     return operation_label(parsed, currency) + (f" ({narrow})" if narrow else "")
 
@@ -412,7 +413,8 @@ def record_progress(entry: Mapping) -> str:
 def record_scope(entry: Mapping, keys: Iterable[CellKey]) -> str:
     """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지."""
     return " · ".join(part for part in (cells_scope(keys), record_what(entry["kind"], entry["request"], entry["reverses"],
-                                                                      entry["currency"]), record_progress(entry)) if part)
+                                                                      entry["currency"], entry["planned"]),
+                                         record_progress(entry)) if part)
 
 
 def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:
