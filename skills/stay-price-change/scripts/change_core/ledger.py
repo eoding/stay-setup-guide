@@ -341,24 +341,38 @@ class Ledger:
         """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다. `reading` 은 그 계산이 바탕으로 삼은
         읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다.
 
-        `replaces` 는 이 미리보기가 바꾸는 앞 미리보기 번호다(빨간 줄을 고른 뒤 · 적용 직전에 값이 달라 다시 계산함). 같은 종류 ·
-        같은 호텔 · 같은 오퍼의, 아직 적용을 시작하지 않은 미리보기여야 하고, 그 번호는 `replaced` 가 되어 begin 이 받지 않는다."""
+        `replaces` 는 이 미리보기가 바꾸는 앞 미리보기 번호다(빨간 줄을 고른 뒤 · 그대로 둔 칸도 되돌릴 때 · 적용 직전에 값이 달라
+        다시 계산함). 같은 것을 하는(`_acts` — 가격 바꾸기 · 같은 변경 되돌리기 · 같은 저장 상태로 되돌리기) 같은 호텔 · 오퍼의,
+        아직 적용을 시작하지 않은 미리보기여야 하고, 그 번호는 `replaced` 가 되어 begin 이 받지 않는다."""
         kind = "rollback" if reverses is not None else "change"
         with self._db() as db:
             if reverses is not None:
                 self._header(db, reverses)
             if replaces is not None:
-                self._replace(db, replaces, kind, hotel_id, offer)
+                self._replace(db, replaces, self._acts(kind, reverses, request), hotel_id, offer)
             return self._insert(db, kind, "previewed", hotel, hotel_id, offer, currency, sentence, read_at, rows, reverses,
                                 request, reading, replaces)
 
-    def _replace(self, db, change_id: int, kind: str, hotel_id: str, offer: str) -> None:
+    @staticmethod
+    def _acts(kind: str, reverses: int | None, request: Mapping | None) -> str:
+        """미리보기가 하는 일 — 다시 계산한 미리보기는 같은 일을 하는 앞 미리보기만 바꾼다. 저장 상태로 되돌리기는 장부의 종류가
+        change 라 요청(`restore_snapshot`)으로 가른다."""
+        if kind == "rollback":
+            return f"{reverses}번 되돌리기"
+        if request and request.get("kind") == "restore_snapshot":
+            return f"{request.get('snapshot')}번 저장 상태로 되돌리기"
+        return "가격 바꾸기"
+
+    def _replace(self, db, change_id: int, acts: str, hotel_id: str, offer: str) -> None:
         old = self._header(db, change_id)
         if old["status"] == "replaced":
             raise LedgerError(f"{change_id}번 미리보기는 이미 {self._replacer(db, change_id)}번으로 바뀌었습니다 — 그 번호를 바꿉니다")
-        if old["kind"] != kind or old["status"] != "previewed":
+        if old["status"] != "previewed":
             raise LedgerError(f"{change_id}번은 바꿀 수 있는 미리보기가 아닙니다(종류 {old['kind']} · 상태 {self._status(old)}) — "
-                              "아직 적용을 시작하지 않은 같은 종류의 미리보기만 바꿉니다")
+                              "아직 적용을 시작하지 않은 미리보기만 바꿉니다")
+        was = self._acts(old["kind"], old["reverses"], None if old["request"] is None else json.loads(old["request"]))
+        if was != acts:
+            raise LedgerError(f"{change_id}번은 {was} 미리보기이고 이 계산은 {acts} 입니다 — 같은 것을 다시 계산한 미리보기만 바꿉니다")
         if old["hotel_id"] != hotel_id or old["offer"] != offer:
             raise LedgerError(f"{change_id}번은 호텔 {old['hotel_id']} · {old['offer']} 의 미리보기입니다 — 같은 호텔 · 오퍼의 미리보기만 바꿉니다")
         db.execute("UPDATE changes SET status = 'replaced', updated_at = ? WHERE id = ?", (self._stamp(), change_id))

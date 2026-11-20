@@ -21,8 +21,9 @@
     record-result 브라우저 답(applyBulk · applyCell JSON) 하나 → 그 단계를 장부에 됨·멈춤으로 적는다
     verify        적용 뒤 다시 읽은 값과 견주기
     stale         장부 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
-    rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다
-    restore       지금 상태 저장으로 적어 둔 상태로 되돌리는 계산(rollback.json 과 같은 모양). --record 면 변경으로 적는다
+    rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다.
+                  다시 계산하면 새 파일(rollback-2.json)에 쓰고 --replaces 로 앞 번호를 댄다(plan 과 같다)
+    restore       지금 상태 저장으로 적어 둔 상태로 되돌리는 계산(rollback 과 같은 모양 · 같은 두 규칙). --record 면 변경으로 적는다
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록
 
@@ -216,12 +217,17 @@ def cmd_sheet(args):
     return encode_check(SheetCheck(sheet, tuple((str(item["room"]), str(item["rate_plan"])) for item in look["pairs"]), part))
 
 
-def cmd_plan(args):
-    """계산 파일은 기록이라 덮어쓰지 않는다 — 다시 계산하면 새 이름(plan-2.json …)에 쓰고 `--replaces` 로 앞 번호를 댄다."""
+def fresh_record(args, name: str) -> None:
+    """계산 파일(plan · rollback · restore)은 기록이라 덮어쓰지 않는다 — 다시 계산하면 새 이름(`<name>-2.json` …)에 쓰고
+    `--replaces` 로 앞 번호를 댄다. 무엇이든 셈하거나 장부에 적기 전에 본다."""
     if args.out and Path(args.out).exists():
-        raise ValueError(f"이미 있는 파일입니다: {args.out} — 다시 계산한 미리보기는 새 이름(plan-2.json · plan-3.json …)으로 씁니다")
+        raise ValueError(f"이미 있는 파일입니다: {args.out} — 다시 계산한 미리보기는 새 이름({name}-2.json · {name}-3.json …)으로 씁니다")
     if args.replaces is not None and not args.record:
         raise ValueError("--replaces 는 장부에 적을 때(--record)만 줍니다")
+
+
+def cmd_plan(args):
+    fresh_record(args, "plan")
     snapshot, data = decode_snapshot(load(args.snapshot)), load(args.request)
     if data.get("kind") == "sheet_check":
         plan = plan_sheet(snapshot, decode_check(data))
@@ -359,7 +365,14 @@ def cmd_stale(args):
     return dict(same=not differences, differences=differences)
 
 
+def rollback_answer(change_id, args, scope, plan, snapshot) -> dict:
+    return dict(change_id=change_id, replaces=args.replaces, scope=scope, rollback=encode_rollback(plan),
+                steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
+                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
+
+
 def cmd_rollback(args):
+    fresh_record(args, "rollback")
     ledger = Ledger()
     snapshot = decode_snapshot(load(args.snapshot))
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
@@ -367,13 +380,13 @@ def cmd_rollback(args):
                               args.include_kept, select)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan),
-                                      reverses=args.change, reading=encode_snapshot(snapshot)) if args.record else None
-    return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
-                steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
-                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
+                                      reverses=args.change, reading=encode_snapshot(snapshot),
+                                      replaces=args.replaces) if args.record else None
+    return rollback_answer(change_id, args, scope, plan, snapshot)
 
 
 def cmd_restore(args):
+    fresh_record(args, "rollback")
     ledger = Ledger()
     snapshot = decode_snapshot(load(args.snapshot))
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
@@ -381,10 +394,8 @@ def cmd_restore(args):
     change_id = ledger.record_preview(
         hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
         read_at=plan.read_at, rows=rollback_rows(plan), reading=encode_snapshot(snapshot),
-        request=dict(kind="restore_snapshot", snapshot=args.saved, scope=scope)) if args.record else None
-    return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
-                steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
-                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
+        request=dict(kind="restore_snapshot", snapshot=args.saved, scope=scope), replaces=args.replaces) if args.record else None
+    return rollback_answer(change_id, args, scope, plan, snapshot)
 
 
 def cmd_save_snapshot(args):
@@ -452,7 +463,7 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("render", cmd_render, "페이지 만들기")
     sub.add_argument("kind", choices=sorted(PAGE_NAMES))
-    sub.add_argument("--plan", help="preview 는 plan.json, rollback 은 rollback.json, sheet 는 sheet 가 낸 파일")
+    sub.add_argument("--plan", help="preview 는 plan-<k>.json, rollback 은 rollback-<k>.json, sheet 는 sheet 가 낸 파일")
     sub.add_argument("--snapshot", help="prices 의 지금 값")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
     sub.add_argument("--by-date", action="store_true",
@@ -460,7 +471,7 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("begin", cmd_begin, "적용 시작 — 적용 직전에 읽은 값이 미리보기 때와 같을 때만")
     sub.add_argument("--change", type=int, required=True)
-    sub.add_argument("--plan", required=True, help="steps 가 든 plan.json 또는 rollback.json")
+    sub.add_argument("--plan", required=True, help="steps 가 든 plan-<k>.json 또는 rollback-<k>.json")
     sub.add_argument("--snapshot", required=True, help="적용 직전에 같은 범위로 읽은 값(read-calls --record N 으로 읽는다, 15분 안)")
 
     sub = command("calls", cmd_calls, "아직 저장되지 않은 단계 → applyBulk · applyCell 부를 값")
@@ -492,12 +503,16 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--to", dest="date_to", help="이 날짜까지(ISO)")
     sub.add_argument("--occupancy", action="append", help="이 인원 조합 키의 칸만 (여러 번, 인원 무관은 빈 글자)")
     sub.add_argument("--record", action="store_true", help="장부에 되돌리기 미리보기로 적는다")
+    sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 되돌리기 미리보기(같은 변경을 되돌리는 것)의 장부 번호"
+                     "(--include-kept 로 · 적용 직전에 값이 달라 다시 계산할 때). 그 번호는 replaced 가 되고 begin 이 받지 않는다")
     sub.add_argument("--sentence", default="되돌리기", help="담당자가 한 말")
 
     sub = command("restore", cmd_restore, "저장해 둔 상태로 되돌리는 계산")
     sub.add_argument("--saved", type=int, required=True, help="지금 상태 저장(save-snapshot)으로 적은 장부 번호")
     sub.add_argument("--snapshot", required=True, help="지금 읽은 값")
     sub.add_argument("--record", action="store_true", help="장부에 변경 미리보기로 적는다(적용하면 이것도 되돌릴 수 있다)")
+    sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 미리보기(같은 저장 상태로 되돌리는 것)의 장부 번호"
+                     "(적용 직전에 값이 달라 다시 계산할 때). 그 번호는 replaced 가 되고 begin 이 받지 않는다")
     sub.add_argument("--sentence", default="저장해 둔 상태로 되돌리기", help="담당자가 한 말")
     sub.add_argument("--room", action="append", help="이 객실의 칸만 (여러 번)")
     sub.add_argument("--rate-plan", action="append", help="이 요금제의 칸만 (여러 번)")

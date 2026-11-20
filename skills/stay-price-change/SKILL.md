@@ -137,13 +137,13 @@ metadata:
 2. 되돌리기 계산. 일부만이면 고르기 플래그를 붙인다: `--room`·`--rate-plan`(여러 번)·`--from`·`--to`(날짜)·`--occupancy`(인원 조합 키를 읽은 값에서 골라서, 성인 2 는 `A2`).
 
    ```bash
-   python3 scripts/price_change.py rollback --change <N> --snapshot <R>/snapshot.json --record --sentence "<담당자 말>" --out <작업>/rollback.json
-   python3 scripts/price_change.py restore --saved <S> --snapshot <R>/snapshot.json --record --sentence "<담당자 말>" --out <작업>/rollback.json
+   python3 scripts/price_change.py rollback --change <N> --snapshot <R>/snapshot.json --record --sentence "<담당자 말>" --out <작업>/rollback-1.json
+   python3 scripts/price_change.py restore --saved <S> --snapshot <R>/snapshot.json --record --sentence "<담당자 말>" --out <작업>/rollback-1.json
    ```
 
-   답의 `change_id` 가 이 되돌리기의 번호다.
-3. `render rollback --plan <작업>/rollback.json` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`rollback.restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(가격이 없던 칸에 새로 생긴 칸, ERP 에 지우는 길이 없다), 예약 있는 날도 되돌리고 이미 받은 예약의 금액은 그대로라는 것. 그대로 두는 칸(`rollback.kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭을 말한다. 칸마다 적어 둔 값 · 도우미가 넣은 값 · 지금 값은 페이지에 있다.
-4. "되돌려" → 「적용하기」(이 되돌리기의 번호, 계산 파일 `rollback.json`). "○칸도 포함해서 되돌려"면 2 의 `rollback` 을 `--include-kept` 를 붙여 다시 하고, 새 번호로 「적용하기」.
+   답의 `change_id` 가 이 되돌리기의 번호다(아래 M). 계산 파일은 기록이라 다시 쓰지 않는다. 그 작업에서 k 번째 되돌리기 계산은 `<작업>/rollback-<k>.json` 이다(명령이 있는 파일을 덮어쓰지 않는다).
+3. `render rollback --plan <작업>/rollback-<k>.json` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`rollback.restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(가격이 없던 칸에 새로 생긴 칸, ERP 에 지우는 길이 없다), 예약 있는 날도 되돌리고 이미 받은 예약의 금액은 그대로라는 것. 그대로 두는 칸(`rollback.kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭을 말한다. 칸마다 적어 둔 값 · 도우미가 넣은 값 · 지금 값은 페이지에 있다.
+4. "되돌려" → 「적용하기」(이 되돌리기의 번호 M, 계산 파일 `rollback-<k>.json`). "○칸도 포함해서 되돌려"면 2 의 `rollback` 을 `--include-kept --replaces <M>` 을 붙여 다음 이름 `--out <작업>/rollback-<k>.json` 으로 다시 하고, 3 으로 새 미리보기를 보인 뒤 "되돌려"에 새 번호로 「적용하기」. 앞 번호 M 은 장부에 `replaced` 로 남고 `begin` 이 받지 않는다.
 
 ## 5. 새 요금표로 맞추기
 
@@ -154,10 +154,10 @@ metadata:
 
 ## 적용하기 — 바꾸기·되돌리기 공통
 
-필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일(`plan-<k>.json` 또는 `rollback.json`).
+필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일(`plan-<k>.json` 또는 `rollback-<k>.json`).
 
 1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan <계산 파일> --snapshot S2`. `begin` 이 S2 를 미리보기 때 읽은 값과 견준다.
-   - 종료 1(`same: false`)이면 아무것도 시작하지 않았다. "적용 직전에 ERP 를 다시 읽었더니 미리보기 때와 다른 칸이 ○칸 있어 아무것도 바꾸지 않았습니다. 새 미리보기를 보여 드립니다." S2 로 계산을 다시 하고(`plan` 은 `--replaces N --record --out <작업>/plan-<k>.json`, 되돌리기는 `rollback`/`restore` 를 `--record`) 미리보기부터 다시 한다. 빨간 줄도 다시 고른다.
+   - 종료 1(`same: false`)이면 아무것도 시작하지 않았다. "적용 직전에 ERP 를 다시 읽었더니 미리보기 때와 다른 칸이 ○칸 있어 아무것도 바꾸지 않았습니다. 새 미리보기를 보여 드립니다." S2 로 계산을 다시 하고(`plan` 은 `--replaces N --record --out <작업>/plan-<k>.json`, 되돌리기는 `rollback`/`restore` 를 같은 고르기 플래그로 `--replaces N --record --out <작업>/rollback-<k>.json`) 미리보기부터 다시 한다. 빨간 줄도 다시 고른다.
    - `…분 전 것입니다` 면 읽은 지 15분이 지났다. 1 을 다시 한다.
    - `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다."
 2. `calls --change N` 의 `calls` 를 차례로 하나씩 한다.

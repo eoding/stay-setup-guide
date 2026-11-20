@@ -165,6 +165,85 @@ class CommandTest(unittest.TestCase):
         self.assertEqual({row["id"]: row["status"] for row in self.run_cli("list")["changes"]}[third], "previewed",
                          "거절한 바꾸기는 앞 번호를 그대로 둔다")
 
+    def applied_change(self):
+        """적용까지 끝난 변경 하나 → (번호, 적용 뒤 지금 값)."""
+        change = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                              "--record", "--out", self.dir / "plan-1.json")["change_id"]
+        fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", fresh)
+        for call in self.run_cli("calls", "--change", change)["calls"]:
+            self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))
+        steps = json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["steps"]
+        return change, scene.applied(scene.snapshot(), map(decode_step, steps))
+
+    def test_w3_a_rollback_calculated_again_writes_a_new_file_and_replaces_the_preview_it_names(self):
+        change, after = self.applied_change()
+        key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
+        moved = replace(after, cells={**after.cells, key: replace(after.cells[key], sell=after.cells[key].sell + 1)})
+        now = self.write("now.json", encode_snapshot(moved))
+        rollback = ("rollback", "--change", change, "--snapshot", now, "--record", "--sentence", "방금 것 되돌려")
+        first = self.run_cli(*rollback, "--out", self.dir / "rollback-1.json")
+        self.assertEqual(len(first["rollback"]["kept"]), 1, "그 사이 달라진 칸 하나는 그대로 둔다")
+        before = self.run_cli("list")["changes"]
+
+        refused = self.run_cli(*rollback, "--include-kept", "--replaces", first["change_id"], "--out", self.dir / "rollback-1.json",
+                               code=2)["error"]
+        self.assertIn("이미 있는 파일입니다", refused)
+        self.assertEqual(self.run_cli("list")["changes"], before, "덮어쓰기를 거절하면 장부에도 적지 않는다")
+        self.assertEqual(len(json.loads((self.dir / "rollback-1.json").read_text(encoding="utf-8"))["rollback"]["kept"]), 1,
+                         "앞 계산 파일은 그대로")
+        self.assertIn("--record", self.run_cli("rollback", "--change", change, "--snapshot", now, "--include-kept",
+                                               "--replaces", first["change_id"], code=2)["error"])
+
+        second = self.run_cli(*rollback, "--include-kept", "--replaces", first["change_id"], "--out", self.dir / "rollback-2.json")
+        self.assertEqual((second["replaces"], len(second["rollback"]["restored"])),
+                         (first["change_id"], len(first["rollback"]["restored"]) + 1), "그대로 두던 칸도 되돌린다")
+        listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
+        self.assertEqual((listed[first["change_id"]]["status"], listed[second["change_id"]]["status"],
+                          listed[second["change_id"]]["replaces"]), ("replaced", "previewed", first["change_id"]))
+        self.assertEqual([row["id"] for row in listed.values() if row["sentence"] == "방금 것 되돌려" and row["status"] == "previewed"],
+                         [second["change_id"]], "같은 문장의 미리보기는 하나만 남는다")
+        fresh = self.write("fresh-now.json", encode_snapshot(scene.fresh(moved)))
+        old = self.run_cli("begin", "--change", first["change_id"], "--plan", self.dir / "rollback-2.json", "--snapshot", fresh,
+                           code=2)["error"]
+        self.assertIn(f"{first['change_id']}번 미리보기는 다시 계산해 {second['change_id']}번으로 바뀌었습니다", old)
+        self.assertEqual(self.run_cli("begin", "--change", second["change_id"], "--plan", self.dir / "rollback-2.json",
+                                      "--snapshot", fresh)["status"], "applying")
+
+    def test_w3_a_restore_calculated_again_writes_a_new_file_and_replaces_only_a_restore_of_the_same_state(self):
+        saved = self.run_cli("save-snapshot", "--snapshot", self.snapshot)["change_id"]
+        change, after = self.applied_change()
+        now = self.write("now.json", encode_snapshot(after))
+        restore = ("restore", "--saved", saved, "--snapshot", now, "--record", "--sentence", "저장해 둔 대로")
+        first = self.run_cli(*restore, "--out", self.dir / "rollback-1.json")
+        before = self.run_cli("list")["changes"]
+        self.assertIn("이미 있는 파일입니다", self.run_cli(*restore, "--replaces", first["change_id"],
+                                                    "--out", self.dir / "rollback-1.json", code=2)["error"])
+        self.assertEqual(self.run_cli("list")["changes"], before, "덮어쓰기를 거절하면 장부에도 적지 않는다")
+        self.assertIn("--record", self.run_cli("restore", "--saved", saved, "--snapshot", now, "--replaces", first["change_id"],
+                                               code=2)["error"])
+
+        second = self.run_cli(*restore, "--room", "디럭스", "--replaces", first["change_id"], "--out", self.dir / "rollback-2.json")
+        self.assertEqual(second["replaces"], first["change_id"])
+        listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
+        self.assertEqual((listed[first["change_id"]]["status"], listed[second["change_id"]]["status"]), ("replaced", "previewed"))
+        fresh = self.write("fresh-now.json", encode_snapshot(scene.fresh(after)))
+        self.assertIn("다시 계산해", self.run_cli("begin", "--change", first["change_id"], "--plan", self.dir / "rollback-2.json",
+                                              "--snapshot", fresh, code=2)["error"])
+
+        # 다른 것을 하는 미리보기는 바꾸지 않는다 — 바꾸기 · 변경 되돌리기 · 다른 저장 상태로 되돌리기
+        rollback = self.run_cli("rollback", "--change", change, "--snapshot", now, "--record")["change_id"]
+        preview = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record")["change_id"]
+        other_saved = self.run_cli("save-snapshot", "--snapshot", now)["change_id"]
+        for args, target in ((restore, rollback), (restore, preview),
+                             (("restore", "--saved", other_saved, "--snapshot", now, "--record"), second["change_id"]),
+                             (("rollback", "--change", change, "--snapshot", now, "--record"), second["change_id"]),
+                             (("plan", "--snapshot", self.snapshot, "--request", self.request, "--record"), second["change_id"])):
+            self.assertIn("같은 것을 다시 계산한 미리보기만", self.run_cli(*args, "--replaces", target, code=2)["error"], (args[0], target))
+        statuses = {row["id"]: row["status"] for row in self.run_cli("list")["changes"]}
+        self.assertEqual([statuses[n] for n in (rollback, preview, second["change_id"])], ["previewed"] * 3,
+                         "거절한 바꾸기는 앞 번호를 그대로 둔다")
+
     def test_a_request_on_another_value_and_a_clear_request_plan_through_the_command(self):
         clear = self.write("clear.json", encode_request(scene.request(operation="clear", value=None, field="list")))
         result = self.run_cli("plan", "--snapshot", self.snapshot, "--request", clear)
