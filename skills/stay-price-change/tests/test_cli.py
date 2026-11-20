@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from dataclasses import replace
+from decimal import Decimal as D
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -117,6 +118,14 @@ class CommandTest(unittest.TestCase):
                          [(snapshot_id, "snapshot", "applied"), (rollback["change_id"], "rollback", "applying"),
                           (change, "change", "applied")])
         self.assertTrue(listed["ledger"].endswith("가격장부.sqlite3"))
+
+    def test_a_request_on_another_value_and_a_clear_request_plan_through_the_command(self):
+        clear = self.write("clear.json", encode_request(scene.request(operation="clear", value=None, field="list")))
+        result = self.run_cli("plan", "--snapshot", self.snapshot, "--request", clear)
+        self.assertEqual([(step["kind"], step["clear"]) for step in result["steps"]], [("cell_edit", ["list"])] * 2)
+        self.assertEqual(result["counts"]["skipped"], 94)
+        supply = self.write("supply.json", encode_request(scene.request(operation="percent", value=D("10"), field="supply")))
+        self.assertEqual(self.run_cli("plan", "--snapshot", self.snapshot, "--request", supply)["counts"]["skipped"], 96)
 
     def test_mismatched_input_and_a_plan_for_another_request_are_refused(self):
         other = self.write("other.json", {**encode_request(scene.request()), "hotel": "다른 호텔"})

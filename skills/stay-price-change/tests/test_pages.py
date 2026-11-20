@@ -94,6 +94,20 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("읽었지만 가격이 하나도 없어 건너뛰는 객실·요금제: 디럭스 · 반값 요금, 스위트 · 반값 요금",
                       visible(render_preview(plan)))
 
+    def test_list_and_supply_changes_are_shown_when_they_change(self):
+        listed = plan_change(scene.snapshot(), scene.request(operation="amount", value=D("20"), field="list",
+                                                             rooms=("스위트",), rate_plans=("조식 포함",)))
+        text = visible(render_preview(listed))
+        self.assertIn("미리보기 · 데모 호텔 · 기본 오퍼 · 정가 +20.00 USD", text)
+        self.assertIn("정가 500.00 → 520.00", text)
+        self.assertIn("판매가와 공급 원가는 바꾸지 않습니다", text)
+        cleared = plan_change(scene.snapshot(), scene.request(operation="clear", value=None, field="list",
+                                                              rooms=("스위트",), rate_plans=("조식 포함",)))
+        steps = save_steps(resolve(cleared, [])[0])
+        text = visible(render_preview(cleared, steps=steps))
+        self.assertIn("정가 500.00 → 비움", text)
+        self.assertIn("그중 정가·원가를 비우는 셀 창 저장 2번", text)
+
     def test_names_are_shown_as_text_not_markup(self):
         snapshot = scene.snapshot()
         snapshot = Snapshot("<b>호텔</b>", snapshot.offer, snapshot.currency, snapshot.read_at, snapshot.cells,
