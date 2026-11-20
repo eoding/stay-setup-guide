@@ -8,7 +8,8 @@
                   시험용으로 ERP 화면 조각(HTML) 파일도 받는다
     sheet         요금표 파일(kind sheet) + look 의 답 → 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위와
                   페이지 작업 수(sheet-check.json). read-calls · plan · render sheet 가 이 파일을 받는다
-    plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다.
+    plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다.
+                  다시 계산하면 새 파일(plan-2.json)에 쓰고 --replaces 로 앞 번호를 댄다(있는 파일은 덮어쓰지 않는다).
                   요청이 sheet-check.json 이면 요금표를 칸마다 펼쳐 계산하고 넣지 않는 것(coverage)을 단다
     render        preview | result | rollback | prices | sheet 페이지(HTML) 만들기
     begin         적용 시작 — 적용 직전에 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어, 한 칸이라도 다르면
@@ -34,8 +35,8 @@
 예:
     python3 price_change.py read-calls --request range.json --out R/calls.json
     python3 price_change.py read --calls R/calls.json --answers R --out R/snapshot.json
-    python3 price_change.py plan --snapshot R/snapshot.json --request request.json --record --out plan.json
-    python3 price_change.py render preview --plan plan.json
+    python3 price_change.py plan --snapshot R/snapshot.json --request request.json --record --out plan-1.json
+    python3 price_change.py render preview --plan plan-1.json
 """
 
 from __future__ import annotations
@@ -216,6 +217,11 @@ def cmd_sheet(args):
 
 
 def cmd_plan(args):
+    """계산 파일은 기록이라 덮어쓰지 않는다 — 다시 계산하면 새 이름(plan-2.json …)에 쓰고 `--replaces` 로 앞 번호를 댄다."""
+    if args.out and Path(args.out).exists():
+        raise ValueError(f"이미 있는 파일입니다: {args.out} — 다시 계산한 미리보기는 새 이름(plan-2.json · plan-3.json …)으로 씁니다")
+    if args.replaces is not None and not args.record:
+        raise ValueError("--replaces 는 장부에 적을 때(--record)만 줍니다")
     snapshot, data = decode_snapshot(load(args.snapshot)), load(args.request)
     if data.get("kind") == "sheet_check":
         plan = plan_sheet(snapshot, decode_check(data))
@@ -230,9 +236,9 @@ def cmd_plan(args):
     change_id = Ledger().record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=request.offer,
                                         currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
-                                        request=encode_request(plan.request),
-                                        reading=encode_snapshot(snapshot)) if args.record else None
-    result = dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
+                                        request=encode_request(plan.request), reading=encode_snapshot(snapshot),
+                                        replaces=args.replaces) if args.record else None
+    result = dict(change_id=change_id, replaces=args.replaces, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
                   unresolved=[encode_change(change) for change in unresolved(plan)],
                   steps=None if steps is None else [encode_step(step) for step in steps])
     if isinstance(request, TargetTable) and request.from_sheet:
@@ -441,6 +447,8 @@ def parser() -> argparse.ArgumentParser:
                      help="요청 JSON — 바꾸는 방법(kind change) · 목표 값 표(kind targets) · sheet 가 낸 파일(kind sheet_check)")
     sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "ABOVE_LIST", "choice": "raise_list"}]')
     sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
+    sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 미리보기의 장부 번호(빨간 줄을 고른 뒤 · 적용 직전에 값이 "
+                     "달라 다시 계산할 때). 그 번호는 replaced 가 되고 begin 이 받지 않는다")
 
     sub = command("render", cmd_render, "페이지 만들기")
     sub.add_argument("kind", choices=sorted(PAGE_NAMES))

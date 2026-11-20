@@ -79,7 +79,7 @@ class CommandTest(unittest.TestCase):
         self.assertIn("빨간 줄", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan1.json", "--snapshot", fresh, code=2)["error"])
 
         change = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
-                              "--record", "--out", self.dir / "plan.json")["change_id"]
+                              "--record", "--replaces", change, "--out", self.dir / "plan.json")["change_id"]
         plan = json.loads((self.dir / "plan.json").read_text(encoding="utf-8"))
         self.assertEqual(len(plan["steps"]), 8)
         page = Path(self.run_cli("render", "preview", "--plan", self.dir / "plan.json")["page"])
@@ -124,8 +124,46 @@ class CommandTest(unittest.TestCase):
         listed = self.run_cli("list")
         self.assertEqual([(row["id"], row["kind"], row["status"]) for row in listed["changes"]],
                          [(snapshot_id, "snapshot", "applied"), (rollback["change_id"], "rollback", "applying"),
-                          (change, "change", "applied"), (first["change_id"], "change", "previewed")])
+                          (change, "change", "applied"), (first["change_id"], "change", "replaced")])
         self.assertTrue(listed["ledger"].endswith("가격장부.sqlite3"))
+
+    def test_v3_planning_again_writes_a_new_file_and_replaces_the_preview_it_names(self):
+        first = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",
+                             "--out", self.dir / "plan-1.json")["change_id"]
+        refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                               "--record", "--replaces", first, "--out", self.dir / "plan-1.json", code=2)["error"]
+        self.assertIn("이미 있는 파일입니다", refused)
+        self.assertEqual([row["id"] for row in self.run_cli("list")["changes"]], [first], "덮어쓰기를 거절하면 장부에도 적지 않는다")
+        self.assertIsNone(json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["steps"], "앞 계산 파일은 그대로")
+
+        second = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                              "--record", "--replaces", first, "--out", self.dir / "plan-2.json")
+        self.assertEqual(second["replaces"], first)
+        listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
+        self.assertEqual((listed[first]["status"], listed[first]["replaces"]), ("replaced", None))
+        self.assertEqual((listed[second["change_id"]]["status"], listed[second["change_id"]]["replaces"]), ("previewed", first))
+
+        fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
+        old = self.run_cli("begin", "--change", first, "--plan", self.dir / "plan-2.json", "--snapshot", fresh, code=2)["error"]
+        self.assertIn(f"{first}번 미리보기는 다시 계산해 {second['change_id']}번으로 바뀌었습니다", old)
+        again = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                             "--record", "--replaces", first, "--out", self.dir / "plan-3.json", code=2)["error"]
+        self.assertIn(f"이미 {second['change_id']}번으로 바뀌었습니다", again)
+        self.assertEqual(self.run_cli("begin", "--change", second["change_id"], "--plan", self.dir / "plan-2.json",
+                                      "--snapshot", fresh)["status"], "applying")
+        started = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                               "--record", "--replaces", second["change_id"], "--out", self.dir / "plan-4.json", code=2)["error"]
+        self.assertIn("바꿀 수 있는 미리보기가 아닙니다", started, "적용을 시작한 번호는 바꾸지 않는다")
+        self.assertIn("--record", self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request,
+                                               "--replaces", first, code=2)["error"])
+        other = self.write("other-hotel.json", {**encode_snapshot(scene.snapshot()), "hotel": {"id": "9", "name": "다른 호텔"}})
+        other_request = self.write("other-request.json", {**encode_request(scene.request()), "hotel": {"id": "9", "name": "다른 호텔"}})
+        third = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record")["change_id"]
+        self.assertIn("같은 호텔 · 오퍼의 미리보기만", self.run_cli("plan", "--snapshot", other, "--request", other_request,
+                                                          "--resolutions", self.choice, "--record", "--replaces", third,
+                                                          code=2)["error"])
+        self.assertEqual({row["id"]: row["status"] for row in self.run_cli("list")["changes"]}[third], "previewed",
+                         "거절한 바꾸기는 앞 번호를 그대로 둔다")
 
     def test_a_request_on_another_value_and_a_clear_request_plan_through_the_command(self):
         clear = self.write("clear.json", encode_request(scene.request(operation="clear", value=None, field="list")))

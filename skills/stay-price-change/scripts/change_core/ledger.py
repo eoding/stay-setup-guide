@@ -5,7 +5,8 @@
 도우미가 모두 이 장부 하나에 적는다.
 
     meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
-    changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied),
+    changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied,
+                 다시 계산해 새 번호로 바뀐 미리보기는 replaced — 새 번호의 `replaces` 가 그 번호다),
                  호텔(페이지가 알아본 번호와 이름), 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON),
                  그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다), 마지막으로 이어 가도 된다고 본
                  때(`active_at` — begin 이 받아들인 읽은 값의 시각, 저장 결과를 적은 때, 이어서 해도 된다고 한 check 의
@@ -52,7 +53,7 @@ CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS changes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL CHECK (kind IN ('change', 'snapshot', 'rollback')),
-  status TEXT NOT NULL CHECK (status IN ('previewed', 'applying', 'stopped', 'applied')),
+  status TEXT NOT NULL CHECK (status IN ('previewed', 'applying', 'stopped', 'applied', 'replaced')),
   hotel TEXT NOT NULL,
   hotel_id TEXT NOT NULL DEFAULT '',
   offer TEXT NOT NULL,
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS changes (
   applied_at TEXT,
   verified_at TEXT,
   reverses INTEGER REFERENCES changes(id),
+  replaces INTEGER REFERENCES changes(id),
   request TEXT,
   reading TEXT,
   active_at TEXT
@@ -225,6 +227,7 @@ class ChangeRecord:
     steps: tuple[StepRecord, ...]
     rows: tuple[RowRecord, ...]
     cause: str | None = None
+    replaces: int | None = None
 
 
 @dataclass(frozen=True)
@@ -317,13 +320,13 @@ class Ledger:
             db.close()
 
     def _insert(self, db, kind, status, hotel, hotel_id, offer, currency, sentence, read_at, rows: Iterable[ValueRow],
-                reverses=None, request=None, reading=None) -> int:
+                reverses=None, request=None, reading=None, replaces=None) -> int:
         stamp = self._stamp()
         change_id = db.execute(
             "INSERT INTO changes (kind, status, hotel, hotel_id, offer, currency, sentence, read_at, created_at, updated_at,"
-            " applied_at, reverses, request, reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " applied_at, reverses, replaces, request, reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (kind, status, hotel, hotel_id, offer, currency, sentence, read_at, stamp, stamp,
-             stamp if status == "applied" else None, reverses, None if request is None else _body(request),
+             stamp if status == "applied" else None, reverses, replaces, None if request is None else _body(request),
              None if reading is None else _body(reading))).lastrowid
         db.executemany(
             "INSERT INTO item_values (change_id, item_kind, item_key, label, field, state, before, after, action, verdict, marks,"
@@ -334,14 +337,35 @@ class Ledger:
 
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
                        hotel_id: str, rows: Iterable[ValueRow], request: Mapping | None = None,
-                       reverses: int | None = None, reading: Mapping | None = None) -> int:
+                       reverses: int | None = None, reading: Mapping | None = None, replaces: int | None = None) -> int:
         """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다. `reading` 은 그 계산이 바탕으로 삼은
-        읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다."""
+        읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다.
+
+        `replaces` 는 이 미리보기가 바꾸는 앞 미리보기 번호다(빨간 줄을 고른 뒤 · 적용 직전에 값이 달라 다시 계산함). 같은 종류 ·
+        같은 호텔 · 같은 오퍼의, 아직 적용을 시작하지 않은 미리보기여야 하고, 그 번호는 `replaced` 가 되어 begin 이 받지 않는다."""
+        kind = "rollback" if reverses is not None else "change"
         with self._db() as db:
             if reverses is not None:
                 self._header(db, reverses)
-            return self._insert(db, "rollback" if reverses is not None else "change", "previewed", hotel, hotel_id, offer,
-                                currency, sentence, read_at, rows, reverses, request, reading)
+            if replaces is not None:
+                self._replace(db, replaces, kind, hotel_id, offer)
+            return self._insert(db, kind, "previewed", hotel, hotel_id, offer, currency, sentence, read_at, rows, reverses,
+                                request, reading, replaces)
+
+    def _replace(self, db, change_id: int, kind: str, hotel_id: str, offer: str) -> None:
+        old = self._header(db, change_id)
+        if old["status"] == "replaced":
+            raise LedgerError(f"{change_id}번 미리보기는 이미 {self._replacer(db, change_id)}번으로 바뀌었습니다 — 그 번호를 바꿉니다")
+        if old["kind"] != kind or old["status"] != "previewed":
+            raise LedgerError(f"{change_id}번은 바꿀 수 있는 미리보기가 아닙니다(종류 {old['kind']} · 상태 {self._status(old)}) — "
+                              "아직 적용을 시작하지 않은 같은 종류의 미리보기만 바꿉니다")
+        if old["hotel_id"] != hotel_id or old["offer"] != offer:
+            raise LedgerError(f"{change_id}번은 호텔 {old['hotel_id']} · {old['offer']} 의 미리보기입니다 — 같은 호텔 · 오퍼의 미리보기만 바꿉니다")
+        db.execute("UPDATE changes SET status = 'replaced', updated_at = ? WHERE id = ?", (self._stamp(), change_id))
+
+    @staticmethod
+    def _replacer(db, change_id: int) -> int:
+        return db.execute("SELECT id FROM changes WHERE replaces = ?", (change_id,)).fetchone()["id"]
 
     def record_snapshot(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
                         hotel_id: str, rows: Iterable[ValueRow], reading: Mapping | None = None) -> int:
@@ -403,6 +427,9 @@ class Ledger:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
                 raise LedgerError("지금 상태 저장은 적용할 것이 없습니다")
+            if header["status"] == "replaced":
+                raise LedgerError(f"{change_id}번 미리보기는 다시 계산해 {self._replacer(db, change_id)}번으로 바뀌었습니다 — "
+                                  "그 번호와 그 계산 파일로 적용합니다")
             if request is not None and header["request"] is not None and json.loads(header["request"]) != dict(request):
                 raise LedgerError(f"{change_id}번 변경의 요청과 다른 계산입니다. 미리보기를 다시 만들어 주세요")
             if header["status"] != "previewed":
@@ -636,7 +663,8 @@ class Ledger:
         return ChangeRecord(header["id"], header["kind"], self._status(header), header["hotel"], header["hotel_id"],
                             header["offer"], header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
-                            None if header["request"] is None else json.loads(header["request"]), steps, rows, cause)
+                            None if header["request"] is None else json.loads(header["request"]), steps, rows, cause,
+                            header["replaces"])
 
     def reading(self, change_id: int) -> dict:
         """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""
@@ -660,4 +688,4 @@ class Ledger:
                      offer=row["offer"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
-                     items=row["items"], written=row["written"], rolled_back=row["rolled_back"]) for row in rows]
+                     replaces=row["replaces"], items=row["items"], written=row["written"], rolled_back=row["rolled_back"]) for row in rows]
