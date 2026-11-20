@@ -19,7 +19,7 @@ const FIXTURES = [
   ['adjust', 'adjust-rejected.html']
 ];
 
-// FNV-1a 32비트 — 파이썬 `price_browser.fnv1a` 와 같은 셈(시험이 따로 셈한다)
+// FNV-1a 32비트 — 파이썬 `change_core.answers.fnv1a` 와 같은 셈(시험이 따로 셈한다)
 function fnv1a(bytes) {
   let h = 0x811c9dc5;
   for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;

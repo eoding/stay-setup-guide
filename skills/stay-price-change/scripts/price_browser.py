@@ -25,7 +25,7 @@ from datetime import date, timedelta
 from typing import Iterable, Mapping
 
 from change_core import answers as shared
-from change_core.answers import BrowserError, ask_sum, attach_bodies, fnv1a
+from change_core.answers import BrowserError, ask_sum, attach_bodies
 from change_core.money import money_text
 from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
 from price_model import ERP_MAX_DAYS, FIELDS, WEEKDAYS, day_windows, decode_step, iso_day

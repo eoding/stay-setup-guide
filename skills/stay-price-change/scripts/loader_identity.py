@@ -18,7 +18,7 @@ import sys
 import zlib
 from pathlib import Path
 
-from price_browser import fnv1a
+from change_core.answers import fnv1a
 
 SCRIPTS = Path(__file__).resolve().parent
 LOADER = SCRIPTS / "page" / "stay_price_loader.js"
