@@ -234,7 +234,10 @@ class ChangeRequest:
 
 @dataclass(frozen=True)
 class Target:
-    """칸 하나의 목표 값. 적지 않은 필드는 그대로, None 으로 적은 필드(정가·공급 원가)는 비운다."""
+    """칸 하나의 목표 값. 적지 않은 필드는 그대로, None 으로 적은 필드(정가·공급 원가)는 비운다.
+
+    담당자의 표에는 인원 조합 · 박수가 없을 때가 많다. 그러면 `key.occupancy`·`key.nights` 가 None 이고, 계산(`plan_targets`)이
+    읽은 값에서 그 객실 · 요금제의 줄이 하나뿐일 때만 그 줄로 채운다(여럿이면 고를 줄을 대며 거절한다)."""
     key: CellKey
     values: tuple[tuple[str, Decimal | None], ...]
 
@@ -415,8 +418,14 @@ def nights_label(nights: int) -> str:
     return "1박" if nights == 1 else f"{nights}박 이상"
 
 
+def line_label(occupancy: str | None, nights: int | None) -> str:
+    """인원 · 박수 줄 하나의 이름. 표에 없던 것(None)은 「인원 조합 ?」 · 「박수 ?」."""
+    return (f"{'인원 조합 ?' if occupancy is None else occupancy_label(occupancy)} · "
+            f"{'박수 ?' if nights is None else nights_label(nights)}")
+
+
 def cell_name(key: CellKey) -> str:
-    return f"{day_label(key.date)} · {key.room} · {key.rate_plan} · {occupancy_label(key.occupancy)} · {nights_label(key.nights)}"
+    return f"{day_label(key.date)} · {key.room} · {key.rate_plan} · {line_label(key.occupancy, key.nights)}"
 
 
 # ─── 공통 모양(change_core)으로 ───
@@ -429,6 +438,13 @@ def encode_key(key: CellKey) -> dict:
 def decode_key(data: Mapping) -> CellKey:
     return CellKey(str(data["room"]), str(data["rate_plan"]), iso_day(data["date"]),
                    str(data.get("occupancy") or ""), int(data["nights"]))
+
+
+def decode_target_key(data: Mapping) -> CellKey:
+    """목표 값 표의 칸 — 인원 조합 · 박수를 적지 않았거나 null 이면 None(줄이 하나뿐일 때 계산이 채운다). `""` 는 인원 무관이다."""
+    occupancy, nights = data.get("occupancy"), data.get("nights")
+    return CellKey(str(data["room"]), str(data["rate_plan"]), iso_day(data["date"]),
+                   None if occupancy is None else str(occupancy), None if nights is None else int(nights))
 
 
 def cell_item_key(key: CellKey) -> str:
@@ -516,7 +532,7 @@ def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
     hotel, hotel_id = decode_hotel(data["hotel"])
     if data.get("kind") == "targets":
         return TargetTable(hotel, str(data["offer"]),
-                           tuple(Target(decode_key(item["key"]), tuple((str(name), money(value)) for name, value in
+                           tuple(Target(decode_target_key(item["key"]), tuple((str(name), money(value)) for name, value in
                                                                       item["values"].items())) for item in data["targets"]),
                            str(data.get("sentence") or ""), hotel_id)
     operation = data["operation"]

@@ -3,7 +3,7 @@
 브라우저·파일을 모르는 순수 함수만 둔다.
 
     plan_change(snapshot, request)      → Plan          칸마다 전 → 후, 표시, 판정
-    plan_targets(snapshot, table)       → Plan          목표 값 표 — 다른 칸만, 새로 생기는 칸 포함
+    plan_targets(snapshot, table)       → Plan          목표 값 표 — 다른 칸만, 새로 생기는 칸 포함. 인원·박수가 없는 줄은 하나뿐인 줄로
     resolve(plan, resolutions)          → (writes, unresolved)   빨간 줄을 고른 뒤 넣을 값
     save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 이어진 날짜(줄마다 같은 값)
     stale_cells(then, now)              → 다른 항목들   (change_core.items.stale_items)
@@ -27,7 +27,7 @@ from change_core.rules import BLOCKED, RED, Resolution, decide
 from price_model import (
     CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    cell_state, day_label, encode_step, hotel_label, key_of_item, occupancy_label, occupancy_order, same_hotel,
+    cell_state, day_label, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
     snapshot_reading, split_occupancy, value_of,
 )
 
@@ -168,12 +168,36 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent, no_sale)
 
 
+def fill_lines(snapshot: Snapshot, table: TargetTable) -> TargetTable:
+    """인원 조합 · 박수를 적지 않은 목표 → 읽은 값에서 그 객실 · 요금제의 줄 가운데 적은 것과 맞는 줄이 꼭 하나면 그 줄.
+    없거나 여럿이면 고를 수 있는 줄을 대며 거절한다(담당자의 표는 보통 객실 · 요금제 · 날짜 · 값만 적는다)."""
+    lines: dict[tuple[str, str], set[tuple[str, int]]] = {}
+    for key in snapshot.cells:
+        lines.setdefault((key.room, key.rate_plan), set()).add((key.occupancy, key.nights))
+    targets = []
+    for target in table.targets:
+        key = target.key
+        if key.occupancy is not None and key.nights is not None:
+            targets.append(target)
+            continue
+        seen = sorted(lines.get((key.room, key.rate_plan), ()), key=lambda line: (occupancy_order(line[0]), line[1]))
+        fits = [line for line in seen if key.occupancy in (None, line[0]) and key.nights in (None, line[1])]
+        if len(fits) != 1:
+            shown = " / ".join(f"{line_label(*line)}({line[0] or '빈 키'} · {line[1]})" for line in (fits or seen)) or "없음"
+            raise PlanError(f"{key.room} · {key.rate_plan} 의 {line_label(key.occupancy, key.nights)} 에 맞는 줄이 "
+                            f"{'여럿' if fits else '없'}습니다 — 고를 줄: {shown}. 표의 줄마다 인원 조합(occupancy)과 박수(nights)를 적습니다")
+        targets.append(replace(target, key=replace(key, occupancy=fits[0][0], nights=fits[0][1])))
+    return replace(table, targets=tuple(targets))
+
+
 def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
-    """목표 값 표 → 미리보기. 지금 값과 다른 칸만 남긴다. 가격 없던 칸의 목표는 새로 생기는 칸이다 — 판매가가 있어야 하고,
-    읽은 값에서 그 객실·요금제에 보인 적 없는 인원 조합·박수라면 만들지 않는다(적용할 수 없음)."""
+    """목표 값 표 → 미리보기. 지금 값과 다른 칸만 남긴다. 인원 조합 · 박수를 적지 않은 줄은 `fill_lines` 로 채운다(미리보기의
+    요청은 채운 표다). 가격 없던 칸의 목표는 새로 생기는 칸이다 — 판매가가 있어야 하고, 읽은 값에서 그 객실·요금제에 보인 적
+    없는 인원 조합·박수라면 만들지 않는다(적용할 수 없음)."""
     keys = [target.key for target in table.targets]
     _check_scope(snapshot, table, [(k.room, k.rate_plan) for k in keys],
                  [(k.room, k.rate_plan, k.date) for k in keys])
+    table = fill_lines(snapshot, table)
     shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key in snapshot.cells}
     rooms = {room: rank for rank, room in enumerate(dict.fromkeys(t.key.room for t in table.targets))}
     plans = {plan: rank for rank, plan in enumerate(dict.fromkeys(t.key.rate_plan for t in table.targets))}

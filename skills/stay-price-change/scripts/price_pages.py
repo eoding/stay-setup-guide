@@ -26,7 +26,7 @@ from change_core.rules import BLOCKED, RED
 
 from price_model import (
     CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellKey, CellValue, ChangeRequest, Plan,
-    Snapshot, cell_name, day_label, key_of_item, nights_label, occupancy_label, occupancy_order, value_of,
+    Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label, occupancy_order, value_of,
 )
 from price_plan import counts, days_summary
 
@@ -222,7 +222,10 @@ def _request_box(request: ChangeRequest | TargetTable, currency: str, absent: It
         keys = [target.key for target in request.targets]
         rows = [("호텔", request.hotel), ("오퍼", request.offer),
                 ("객실 · 요금제", pairs_label(dict.fromkeys((key.room, key.rate_plan) for key in keys))),
-                ("날짜", days_summary({key.date for key in keys})), ("목표 값", f"{len(keys):,}칸")]
+                ("날짜", days_summary({key.date for key in keys})),
+                ("칸", " / ".join(dict.fromkeys(line_label(key.occupancy, key.nights) for key in sorted(
+                    keys, key=lambda k: (occupancy_order(k.occupancy), k.nights))))),
+                ("목표 값", f"{len(keys):,}칸")]
     else:
         rows = [("호텔", request.hotel), ("오퍼", request.offer), ("객실 · 요금제", pairs_label(request.pairs)),
                 ("날짜", days_summary(request.dates)), ("바꾸는 값", operation_label(request, currency)),
