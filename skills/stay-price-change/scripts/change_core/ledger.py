@@ -736,7 +736,8 @@ class Ledger:
     def list_changes(self, change_id: int | None = None) -> list[dict]:
         """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만, 종류로 열었으면 그 종류의 번호만). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
         `partly_rolled_back` 이다(`written` · `rolled_back` 이 그 수, `undone_by` 가 되돌린 번호들) — 되돌린 변경이 살아 있는
-        것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None)."""
+        것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None).
+        `planned` 는 적힌 항목 가운데 저장이 값을 넣는(넣을) 항목 수다 — 안 바꾸기로 고른 항목 · 적용할 수 없는 항목은 들지 않는다."""
         item = "item_values.item_kind || '|' || item_values.item_key"
         where, params = [], []
         if change_id is not None:
@@ -748,6 +749,7 @@ class Ledger:
         with self._db() as db:
             rows = db.execute(
                 f"SELECT changes.*, COUNT(DISTINCT {item}) AS items,"
+                f" COUNT(DISTINCT CASE WHEN item_values.action IS NOT NULL THEN {item} END) AS planned,"
                 f" COUNT(DISTINCT CASE WHEN steps.status = 'saved' THEN {item} END) AS written,"
                 f" COUNT(DISTINCT CASE WHEN item_values.rolled_back_by IS NOT NULL THEN {item} END) AS rolled_back,"
                 " GROUP_CONCAT(DISTINCT item_values.rolled_back_by) AS undone_by,"
@@ -761,7 +763,8 @@ class Ledger:
                      offer=row["offer"], currency=row["currency"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
-                     replaces=row["replaces"], items=row["items"], written=row["written"], rolled_back=row["rolled_back"],
+                     replaces=row["replaces"], items=row["items"], planned=row["planned"], written=row["written"],
+                     rolled_back=row["rolled_back"],
                      undone_by=sorted(int(number) for number in (row["undone_by"] or "").split(",") if number),
                      steps=row["step_count"], saved_steps=row["saved_steps"],
                      request=None if row["request"] is None else json.loads(row["request"])) for row in rows]
