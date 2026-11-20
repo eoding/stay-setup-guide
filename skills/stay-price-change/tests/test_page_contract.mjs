@@ -9,10 +9,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { erpPage, inPage, plain, takeAll, runFixture, ownFixture, HERE, SKILL, OFFER, HOTEL } from './page_harness.mjs';
 
-// price_browser 의 함수 하나를 부른다 — 값은 표준 입력 JSON 으로 주고받는다
+// price_browser(가격 칸 — `b`) · change_core.answers(답의 공통 부분 — `a`)의 함수 하나를 부른다 — 값은 표준 입력 JSON 으로 주고받는다
 function python(fn, args) {
   const code = `import json, sys; sys.path.insert(0, ${JSON.stringify(join(SKILL, 'scripts'))})\n`
-    + 'import price_browser as b\nargs = json.load(sys.stdin)\n'
+    + 'import price_browser as b\nimport change_core.answers as a\nargs = json.load(sys.stdin)\n'
     + `out = ${fn}\nprint(json.dumps(out, ensure_ascii=False, default=str))`;
   const done = spawnSync('python3', ['-I', '-c', code], { input: JSON.stringify(args), encoding: 'utf8' });
   assert.equal(done.status, 0, done.stderr);
@@ -27,7 +27,7 @@ test('B7 · 장부의 저장 단계로 만든 부를 값을 페이지가 받아 
     assert.equal(r.saved, true, r.error);
     if (call.op === 'applyBulk') assert.equal(page.log.posts[0]['prices-0-price'], call.payload.rows[0].sell);
     else assert.equal(page.log.posts[0].original_price, '');
-    assert.deepEqual(python('(lambda o: [o.saved, o.note])(b.step_outcome(args["call"], args["result"]))', { call, result: r }), [true, r.note]);
+    assert.deepEqual(python('(lambda o: [o.saved, o.note])(a.step_outcome(args["call"], args["result"]))', { call, result: r }), [true, r.note]);
     page.w.close();
   }
 });
@@ -41,7 +41,7 @@ test('G7 · 앞 화면이 아직 정리 중이면 저장 작업은 아무것도 
   const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, call.payload)));
   assert.deepEqual([r.ok, r.started, r.wait, r.no], [false, false, 5, call.no], r.error);
   assert.deepEqual(page.log.posts, [], '저장 단추를 누르지 않았다');
-  assert.deepEqual(python('(lambda o: [o.saved, o.started, o.wait])(b.step_outcome(args["call"], args["result"]))', { call, result: r }), [null, false, 5]);
+  assert.deepEqual(python('(lambda o: [o.saved, o.started, o.wait])(a.step_outcome(args["call"], args["result"]))', { call, result: r }), [null, false, 5]);
   page.w.close();
 });
 
