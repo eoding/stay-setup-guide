@@ -12,7 +12,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -84,6 +86,68 @@ class ListScopeTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         report = json.loads(done.stdout)
         self.assertEqual((report["can_continue"], report["scope"]), (True, f"{TRIAL} · 판매가 +12% · 저장 2번 중 1번 함 · 적용 중"))
+
+
+class NarrowedScopeTest(unittest.TestCase):
+    """R5 — 칸을 좁힌 변경(인원 조합 · 박수 층)은 범위 한 줄이 그렇게 말한다. 되돌리기 확인은 그 줄을 읽어 주므로 "1박 이상만 −5%"
+    가 "판매가 -5%" 로만 들리면 안 된다. rollback · restore 의 짧은 답도 범위를 싣는다(장부 목록의 그 번호 줄과 같다)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir)}
+        self.snapshot = trial_scene.snapshot(read_at=datetime.now().astimezone().isoformat(timespec="seconds"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def cli(self, *args):
+        done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def write(self, name, data) -> Path:
+        path = self.dir / name
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    def applied_change(self, name: str, **narrow) -> tuple[int, Path]:
+        request = replace(trial_scene.request(), value=Decimal("-5"), sentence="1박 이상만 5% 내려줘", **narrow)
+        short = self.cli("plan", "--snapshot", self.write(f"{name}-snapshot.json", encode_snapshot(self.snapshot)),
+                         "--request", self.write(f"{name}-request.json", encode_request(request)), "--record",
+                         "--out", self.dir / f"{name}-plan.json")
+        self.assertEqual(short["counts"]["red"], 0)
+        steps = plan_steps(plan_change(self.snapshot, request))
+        ledger = Ledger(self.dir / DB_NAME)
+        ledger.begin(short["change_id"], step_plans(steps), read_at=self.snapshot.read_at)
+        for index in range(1, len(steps) + 1):
+            ledger.record_step(short["change_id"], index, saved=True)
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        return short["change_id"], self.write(f"{name}-after.json", encode_snapshot(scene.applied(self.snapshot, steps, now)))
+
+    def line(self, number: int) -> str:
+        return next(item for item in self.cli("list")["changes"] if item["id"] == number)["scope"]
+
+    def test_r5_a_narrowed_change_says_which_cells_and_its_rollback_and_restore_answers_carry_the_scope(self):
+        nights, after = self.applied_change("nights", nights=(1,))
+        self.assertEqual(self.line(nights), f"{TRIAL} · 판매가 -5% (1박 이상만)")
+        both, _after = self.applied_change("both", nights=(1,), occupancies=("A2",))
+        self.assertEqual(self.line(both), f"{TRIAL} · 판매가 -5% (성인 2 / 1박 이상만)")
+
+        back = self.cli("rollback", "--change", nights, "--snapshot", after, "--record", "--out", self.dir / "rollback-1.json")
+        self.assertEqual(back["scope"], self.line(back["change_id"]), "짧은 답의 범위 = 장부 목록의 그 번호 줄")
+        self.assertTrue(back["scope"].endswith(f"· {nights}번 되돌리기"), back["scope"])
+        part = self.cli("rollback", "--change", nights, "--snapshot", after, "--occupancy", "A2", "--record", "--replaces",
+                        back["change_id"], "--out", self.dir / "rollback-2.json")
+        self.assertEqual(part["scope"], self.line(part["change_id"]))
+        self.assertTrue(part["scope"].endswith(f"· {nights}번 되돌리기 (성인 2만)"), part["scope"])
+        unrecorded = self.cli("rollback", "--change", nights, "--snapshot", after, "--out", self.dir / "rollback-3.json")
+        self.assertEqual(unrecorded["scope"], back["scope"], "장부에 적지 않은 계산도 같은 줄")
+
+        saved = self.cli("save-snapshot", "--snapshot", self.write("saved.json", encode_snapshot(self.snapshot)))["change_id"]
+        restore = self.cli("restore", "--saved", saved, "--snapshot", after, "--record", "--out", self.dir / "restore-1.json")
+        self.assertEqual(restore["scope"], self.line(restore["change_id"]))
+        self.assertTrue(restore["scope"].endswith(f"· {saved}번 저장 상태로 되돌리기"), restore["scope"])
 
 
 if __name__ == "__main__":

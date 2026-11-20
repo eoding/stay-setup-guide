@@ -182,7 +182,8 @@ class PartialRollbackTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         result = json.loads(done.stdout)
         self.assertEqual((result["scope"], len(result["rollback"]["restored"]), len(result["steps"])),
-                         ("스위트 / 룸온리 / 1/1 금 ~ 끝", 6, 1))
+                         (f"스위트(룸온리) · 1/1 금 (1일, 2027년) · {self.change}번 되돌리기 (스위트 / 룸온리 / 1/1 금 ~ 끝만)", 6, 1),
+                         "범위는 되돌리는 칸 · 한 일 · 고른 칸 — 장부 목록의 줄과 같은 셈")
 
 
 if __name__ == "__main__":

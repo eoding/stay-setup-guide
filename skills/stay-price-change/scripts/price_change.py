@@ -70,8 +70,8 @@ from price_model import (
     key_of_item, line_label, request_range, same_hotel, snapshot_reading,
 )
 from price_pages import (
-    EXAMPLES, cells_scope, chosen_lines, record_scope, red_lines, render_prices, render_preview, render_result, render_rollback,
-    render_sheet, result_name,
+    EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, render_prices, render_preview, render_result,
+    render_rollback, render_sheet, result_name,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
@@ -370,18 +370,28 @@ def undone_before(ledger: Ledger, change_id: int) -> list[dict]:
             for entry in ledger.undone(change_id)]
 
 
+def rollback_scope(ledger: Ledger, change_id: int | None, kind: str, request: dict | None, reverses: int | None, plan) -> str:
+    """되돌리기 계산이 덮는 범위 한 줄 — 장부에 적었으면 `list` 의 그 번호 줄, 아니면 같은 셈(되돌리는 칸 · 한 일 · 고른 칸)."""
+    if change_id is not None:
+        return listed(ledger, change_id)[0]["scope"]
+    keys = {key_of_item(row.item_key) for row in rollback_rows(plan)}
+    return " · ".join((cells_scope(keys), record_what(kind, request, reverses, plan.currency)))
+
+
 def cmd_rollback(args):
     fresh_record(args, "rollback")
     ledger = open_ledger()
     snapshot = decode_snapshot(load(args.snapshot))
-    select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
+    select, picked = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
                               args.include_kept, select)
     undone = undone_before(ledger, args.change)
+    request = dict(kind="rollback", scope=picked) if picked else None   # 고른 칸 — 장부 목록의 범위 한 줄이 말한다
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan),
-                                      reverses=args.change, reading=encode_snapshot(snapshot),
+                                      reverses=args.change, reading=encode_snapshot(snapshot), request=request,
                                       replaces=args.replaces) if args.record else None
+    scope = rollback_scope(ledger, change_id, "rollback", request, args.change, plan)
     return rollback_answer(change_id, args, scope, plan, snapshot, undone)
 
 
@@ -389,13 +399,14 @@ def cmd_restore(args):
     fresh_record(args, "rollback")
     ledger = open_ledger()
     snapshot = decode_snapshot(load(args.snapshot))
-    select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
+    select, picked = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), snapshot, select)
+    request = dict(kind="restore_snapshot", snapshot=args.saved, scope=picked)
     change_id = ledger.record_preview(
         hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
         read_at=plan.read_at, rows=rollback_rows(plan), reading=encode_snapshot(snapshot),
-        request=dict(kind="restore_snapshot", snapshot=args.saved, scope=scope), replaces=args.replaces) if args.record else None
-    return rollback_answer(change_id, args, scope, plan, snapshot)
+        request=request, replaces=args.replaces) if args.record else None
+    return rollback_answer(change_id, args, rollback_scope(ledger, change_id, "change", request, None, plan), plan, snapshot)
 
 
 def cmd_save_snapshot(args):

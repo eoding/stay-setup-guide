@@ -362,20 +362,31 @@ def cells_scope(keys: Iterable[CellKey]) -> str:
     return f"{shown}{more} · {days_summary({key.date for key in keys})}"
 
 
+def narrowed(occupancies: Iterable[str], nights: Iterable[int]) -> str:
+    """좁힌 칸 — "1박 이상만" · "성인 2 · 성인 3만" · "성인 2 / 1박 이상만". 좁히지 않았으면 빈 글자."""
+    parts = (" · ".join(occupancy_label(key) for key in occupancies), " · ".join(nights_label(n) for n in sorted(nights)))
+    shown = " / ".join(part for part in parts if part)
+    return f"{shown}만" if shown else ""
+
+
 def record_what(kind: str, request: Mapping | None, reverses: int | None, currency: str) -> str:
-    """장부의 번호가 한 일 — "판매가 +12%" · "목표 값 6칸" · "새 요금표 120칸" · "3번 되돌리기" · "5번 저장 상태로 되돌리기" · "지금 상태 저장"."""
+    """장부의 번호가 한 일 — "판매가 +12%" · "판매가 -10% (1박 이상만)" · "목표 값 6칸" · "새 요금표 120칸" · "3번 되돌리기" ·
+    "3번 되돌리기 (성인 2만)" · "5번 저장 상태로 되돌리기" · "지금 상태 저장". 칸을 좁혔으면(인원 조합 · 박수 층, 되돌리기의 고른 칸)
+    괄호로 그렇게 말한다 — 되돌리기 확인이 이 줄을 읽어 준다."""
     if kind == "snapshot":
         return "지금 상태 저장"
+    picked = f" ({request['scope']}만)" if request and request.get("scope") else ""
     if kind == "rollback":
-        return f"{reverses}번 되돌리기"
+        return f"{reverses}번 되돌리기{picked}"
     if request is None:
         return "가격 바꾸기"
     if request.get("kind") == "restore_snapshot":
-        return f"{request.get('snapshot')}번 저장 상태로 되돌리기"
+        return f"{request.get('snapshot')}번 저장 상태로 되돌리기{picked}"
     parsed = decode_request(request)
     if isinstance(parsed, TargetTable):
         return f"{'새 요금표' if parsed.from_sheet else '목표 값'} {len(parsed.targets):,}칸"
-    return operation_label(parsed, currency)
+    narrow = narrowed(parsed.occupancies, parsed.nights)
+    return operation_label(parsed, currency) + (f" ({narrow})" if narrow else "")
 
 
 def record_progress(entry: Mapping) -> str:
