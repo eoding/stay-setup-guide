@@ -159,10 +159,12 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
     body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed),
              _flagged_section(plan, currency), _new_section(plan, currency)]
     if targets:
-        body += [notes([_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).",
-                        "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
-                        "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다.",
-                        "새로 생기는 칸은 나중에 되돌리기로 지울 수 없습니다. 꼭 필요한 칸인지 확인해 주세요."]),
+        lines = [_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).",
+                 "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
+                 "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다."]
+        if tally["new"]:   # 있던 칸에 넣은 정가·공급 원가는 새 칸이 아니다 — 되돌리면 다시 비워진다
+            lines.append("새로 생기는 칸은 나중에 되돌리기로 지울 수 없습니다. 꼭 필요한 칸인지 확인해 주세요.")
+        body += [notes(lines),
                  '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
         return page(title, "\n".join(body), MAKER)
     others = [FIELD_LABELS[name] for name in FIELDS if name != request.field]

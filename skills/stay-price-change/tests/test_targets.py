@@ -110,6 +110,11 @@ class TargetPageAndCommandTest(unittest.TestCase):
         self.assertIn("새로 → 450.00 새 칸", text)
         self.assertIn("새로 생기는 칸 — 지금은 가격이 없는 칸입니다", text)
         self.assertIn("새로 생기는 칸은 나중에 되돌리기로 지울 수 없습니다", text)
+        # T5 — 있던 칸에 정가 · 공급 원가를 넣는 것은 새 칸이 아니다(되돌리면 비워진다). 그 말은 새 칸이 있을 때만 나온다
+        onto = visible(render_preview(plan_targets(scene.snapshot(), table((key("2026-12-25"), {"list": "260.00", "supply": "150.00"})))))
+        self.assertIn("1 바뀌는 칸", onto)
+        self.assertNotIn("새로 생기는 칸", onto)
+        self.assertNotIn("지울 수 없습니다", onto)
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             (folder / "s.json").write_text(json.dumps(encode_snapshot(scene.snapshot()), ensure_ascii=False), encoding="utf-8")
