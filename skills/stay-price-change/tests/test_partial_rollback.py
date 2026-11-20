@@ -17,7 +17,7 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
-from change_core.ledger import DB_NAME, Ledger  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import encode_request, encode_snapshot, key_of_item, snapshot_reading  # noqa: E402
 from price_pages import render_result, render_rollback  # noqa: E402
@@ -37,7 +37,7 @@ class PartialRollbackTest(unittest.TestCase):
         self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
                                                  request=encode_request(plan.request))
-        self.ledger.begin(self.change, step_plans(steps))
+        self.ledger.begin(self.change, step_plans(steps), read_at=now_text())
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(self.change, index, saved=True)
         self.now = scene.applied(scene.snapshot(), steps, "2026-11-25T09:00:00+09:00")
@@ -55,7 +55,7 @@ class PartialRollbackTest(unittest.TestCase):
                                          sentence="일부 되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback),
                                          reverses=self.change)
         steps = save_steps(rollback_writes(rollback))
-        self.ledger.begin(rid, step_plans(steps))
+        self.ledger.begin(rid, step_plans(steps), read_at=now_text())
         for index in range(1, (len(steps) if saved is None else saved) + 1):
             self.ledger.record_step(rid, index, saved=True)
         self.now = scene.applied(self.now, steps[:saved] if saved is not None else steps)

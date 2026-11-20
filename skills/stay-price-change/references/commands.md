@@ -25,16 +25,16 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | `read` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) · `--read-at` | 브라우저 답 → 지금 값 `{hotel, offer, currency, read_at, cells, reserved, pairs, room_names, no_sale, dates}`. 호텔은 페이지가 알아본 것이다. readPair 답이 없는 부를 값이나 남은 예약 물음이 있으면 거절하고, 어디에도 없는 조각이 있으면 종료 2 와 `refetch`. `--hotel`·`--hotel-id`·`--price-page`·`--adjust-page` 는 화면 조각 파일로 읽는 시험용이다. |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` | 미리보기 계산 → `{change_id, counts, plan, unresolved, steps}`. `--record` 면 장부에 미리보기와 그 읽은 값을 적고 `change_id` 를 준다. 빨간 줄을 다 고르지 않았으면 `steps` 가 null. |
 | `render` | `preview`·`result`·`rollback`·`prices` 중 하나 + `--plan` (preview·rollback) · `--change` (result) · `--snapshot` (prices) | 페이지 HTML. `--out` 이 없으면 기록 폴더에 `<날짜 시각> · <호텔> · <페이지 이름>.html` 로 쓴다. 답 `{page}` 는 그 경로. |
-| `begin` | `--change` · `--plan` (`steps` 가 든 plan.json 또는 rollback.json) | 적용 시작. 저장 단계를 장부에 적는다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. → `{change_id, status, steps}` |
-| `calls` | `--change` | 아직 저장되지 않은 단계 → `{change_id, status, calls: [{no, op, payload}]}`. `op` 는 `applyBulk` 또는 `applyCell`, `payload` 는 그 작업에 그대로 넘긴다(장부의 호텔이 든다). 멈춘 변경은 `check` 가 이어서 해도 된다고 한 뒤에만 낸다. |
-| `record-result` | `--change` · `--result` (답 파일 하나) | 브라우저 답 하나 → 그 단계를 됨·멈춤으로 적는다 → `{change_id, step, started, saved, note, status}`. 답이 `started: false` 면 적지 않고 `{started: false, wait}` 만 돌려준다(그 초만큼 기다려 같은 값으로 다시 부른다). `saved: "unknown"` 은 「모름」 표시를 달아 멈춤으로 적는다. 다른 단계·다른 값을 물은 답이면 거절한다. |
-| `check` | `--change` · `--snapshot` | 방금 같은 범위로 읽은 값으로 → `{change_id, status, steps: [{no, label, ledger, seen, settled, moved}], remaining, can_continue, why}`. `seen`: `saved` 넣은 값 그대로 · `not_saved` 전 값 그대로 · `mixed` 섞임 · `changed` 그 사이 다른 값. 「모름」인 단계는 읽은 값이 말하는 대로 가려 장부에 적는다(`settled`). `can_continue` 면 멈춘 변경을 적용 중으로 돌린다. |
+| `begin` | `--change` · `--plan` (`steps` 가 든 plan.json 또는 rollback.json) · `--snapshot` (적용 직전에 같은 범위로 읽은 값) | 적용 시작. 먼저 `--snapshot` 을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견준다 — 한 칸이라도 다르면 아무것도 시작하지 않고 `stale` 과 같은 `{change_id, status, same: false, differences}` (종료 1). 읽은 지 15분이 넘은 값이면 거절한다. 같으면 저장 단계를 장부에 적는다 → `{change_id, status, steps}`. 이미 시작한 번호에 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. |
+| `calls` | `--change` | 아직 저장되지 않은 단계 → `{change_id, status, calls: [{no, op, payload}]}`. `op` 는 `applyBulk` 또는 `applyCell`, `payload` 는 그 작업에 그대로 넘긴다(장부의 호텔이 든다). 멈춘 변경(아래 `list` 의 `stopped`)은 다시 읽어 `check` 가 이어서 해도 된다고 한 뒤에만 낸다. |
+| `record-result` | `--change` · `--result` (답 파일 하나) | 브라우저 답 하나 → 그 단계를 됨·멈춤으로 적는다 → `{change_id, step, started, saved, note, status}`. 답이 `started: false` 면 적지 않고 `{started: false, wait}` 만 돌려준다(그 초만큼 기다려 같은 값으로 다시 부른다). `saved: "unknown"` 은 「모름」 표시를 달아 멈춤으로 적는다. 이미 멈춘 변경에 적힌 저장은 적기만 하고 `status` 는 `stopped` 그대로다. 다른 단계·다른 값을 물은 답이면 거절한다. |
+| `check` | `--change` · `--snapshot` | 방금 같은 범위로 읽은 값으로 → `{change_id, status, cause, note, last_saved, next, steps: [{no, label, ledger, seen, settled, moved}], remaining, can_continue, why}`. `seen`: `saved` 넣은 값 그대로 · `not_saved` 전 값 그대로 · `mixed` 섞임 · `changed` 그 사이 다른 값. 「모름」인 단계는 읽은 값이 말하는 대로 가려 장부에 적는다(`settled`). `cause`: `failed` 저장이 실패함 · `unknown` 저장됐는지 몰랐음 · `cut_off` 실패 없이 끊김 · 멈추지 않았으면 null. `note` 는 멈춘 저장의 메모, `last_saved`·`next` 는 마지막으로 저장된 단계와 다음 단계 `{no, label}`(없으면 null). 읽은 지 15분이 넘은 값으로는 이어 가게 하지 않는다. `can_continue` 면 변경을 적용 중으로 두고, 그 읽은 값에서 15분 안이면 `calls` 가 남은 단계를 낸다. 아니면 멈춘 변경으로 둔다. |
 | `verify` | `--change` · `--snapshot` | 적용 뒤 다시 읽은 값과 견준다 → `{change_id, same, mismatches: [{key, label, field, after, seen, seen_state}]}`. 저장된 단계의 값만 본다. |
-| `stale` | `--change` · `--snapshot` | 그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 → `{same, differences: [{key, then, now}]}`. 한쪽에만 있는 칸도 다른 칸이다. 예약 표시는 견주지 않는다. 다른 호텔의 값이면 거절한다. |
+| `stale` | `--change` · `--snapshot` | 그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 → `{same, differences: [{key, then, now}]}`. 알리기만 하고 장부는 바꾸지 않는다(적용 직전의 확인은 `begin` 이 한다). 한쪽에만 있는 칸도 다른 칸이다. 예약 표시는 견주지 않는다. 다른 호텔의 값이면 거절한다. |
 | `rollback` | `--change` · `--snapshot` · `--include-kept` · `--room`·`--rate-plan`·`--occupancy` (여러 번) · `--from`·`--to` · `--record` · `--sentence` | 변경 하나(또는 고른 일부)를 되돌리는 계산 → `{change_id, scope, rollback, steps, reserved}`. 저장된 단계의 칸만 되돌린다. `rollback` 안에 `restore_to`(적어 둔 값의 시각)·`restored`·`kept`(세 값과 `cause`)·`unremovable`. 다른 호텔의 값이면 거절한다. |
 | `restore` | `--saved` · `--snapshot` · 고르기 플래그 · `--record` · `--sentence` | 지금 상태 저장으로 적은 상태로 되돌리는 계산. 답은 `rollback` 과 같은 모양. 장부에는 변경으로 적혀 이것도 되돌릴 수 있다. |
 | `save-snapshot` | `--snapshot` · `--sentence` | 지금 값을 장부에만 적는다 → `{change_id}`. |
-| `list` | 없음 | `{ledger, changes: [{id, kind, status, hotel, hotel_id, offer, sentence, read_at, created_at, applied_at, verified_at, reverses, items, written, rolled_back}]}`. 새것부터. `kind`: change · snapshot · rollback. `status`: previewed → applying → stopped / applied. |
+| `list` | 없음 | `{ledger, changes: [{id, kind, status, hotel, hotel_id, offer, sentence, read_at, created_at, applied_at, verified_at, reverses, items, written, rolled_back}]}`. 새것부터. `kind`: change · snapshot · rollback. `status`: previewed → applying → stopped / applied. 적용 중인데 15분 동안 아무 일(받아들인 읽은 값 · 적힌 저장 결과 · 이어서 해도 된다고 한 check)이 없으면 `stopped` 다(세션이 끊겼다). |
 
 `counts` 의 칸: `cells`(계산한 칸) · `will_change`(그중 적용할 수 없는 칸을 뺀 수) · `blocked` · `red` · `reserved` · `closed` · `new` · `skipped`, 그리고 규칙 코드마다의 수(`ABOVE_LIST` 등).
 
@@ -134,6 +134,7 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | `저장 단계가 없습니다. 빨간 줄 칸을 먼저 골라 주세요` | 빨간 줄을 다 고르지 않았다 |
 | `…번 변경의 요청과 다른 계산입니다. 미리보기를 다시 만들어 주세요` | `begin` 에 다른 번호의 계산 파일을 줬다. 그 번호를 낸 `plan` 의 파일을 쓴다 |
 | `이미 다른 저장 단계로 적용을 시작했습니다` | 그 번호는 이미 적용을 시작했다. `calls` 로 남은 단계만 한다 |
+| `적용 직전에 읽은 값이 …분 전 것입니다` | 읽은 지 15분이 지났다. 「적용하기」 1 의 읽기를 다시 한다 |
 | `아직 적용을 시작하지 않았습니다(begin)` | `begin` 을 먼저 |
 | `…번 변경은 멈춰 있습니다` | 「중간에 멈췄을 때」. 다시 읽고 `check` 가 이어서 해도 된다고 하면 `calls` 를 다시 부른다 |
 | `…번 저장(…)의 답이 아닙니다` · `…의 답이 장부의 그 단계와 다른 값을 물었습니다` · `…번째 저장이 없습니다` | 다른 단계의 답이거나 payload 를 바꿔 넣었다. 장부에 적히지 않았다. 그 단계를 다시 부르지 말고 `stayPrice.last()` 로 맞는 답을 찾는다 |

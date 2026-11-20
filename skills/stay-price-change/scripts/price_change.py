@@ -8,11 +8,12 @@
                   시험용으로 ERP 화면 조각(HTML) 파일도 받는다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다
     render        preview | result | rollback | prices 페이지(HTML) 만들기
-    begin         적용 시작 — 저장 단계를 장부에 적는다
-    calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell). 멈춘 변경은 check 가
-                  이어서 해도 된다고 한 뒤에만 낸다
-    check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 계획대로 해도 되는지와 까닭.
-                  「모름」인 저장은 읽은 값으로 가려 장부에 적는다
+    begin         적용 시작 — 적용 직전에 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어, 한 칸이라도 다르면
+                  아무것도 시작하지 않고 다른 칸을 댄다(종료 1). 같으면 저장 단계를 장부에 적는다
+    calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell). 멈춘 변경(저장이 실패했거나
+                  15분 동안 아무 일이 없던)은 다시 읽어 check 가 이어서 해도 된다고 한 뒤에만 낸다
+    check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 계획대로 해도 되는지와 까닭,
+                  어디까지 됐고 왜 멈췄는지. 「모름」인 저장은 읽은 값으로 가려 장부에 적는다
     record-result 브라우저 답(applyBulk · applyCell JSON) 하나 → 그 단계를 장부에 됨·멈춤으로 적는다
     verify        적용 뒤 다시 읽은 값과 견주기
     stale         장부 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
@@ -25,7 +26,7 @@
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
 장부 번호마다(미리보기 · 지금 상태 저장 · 되돌리기) 그 계산이 바탕으로 삼은 읽은 값을 적어 둔다. 그래서 같은 범위를 다시 읽을 때는
-`read-calls --record N`, 적용 직전 낡음 확인은 `stale --change N` 처럼 번호만 준다.
+`read-calls --record N`, 적용 직전 확인은 `begin --change N --snapshot <방금 읽은 값>` 처럼 번호만 준다.
 
 예:
     python3 price_change.py read-calls --request range.json --out R/calls.json
@@ -230,13 +231,28 @@ def cmd_render(args):
     return dict(page=str(path.resolve()))
 
 
+def differences_since(ledger: Ledger, change_id: int, now) -> list[dict]:
+    """그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값(`now`)이 다른 칸 — 한쪽에만 있는 칸도. 다른 호텔·오퍼면 거절."""
+    then = recorded_reading(ledger, change_id)
+    if not same_hotel(then.hotel, then.hotel_id, now.hotel, now.hotel_id) or then.offer != now.offer:
+        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {change_id}번은 "
+                        f"{hotel_label(then.hotel, then.hotel_id)} · {then.offer} 입니다")
+    return [dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now))
+            for item in stale_cells(then, now)]
+
+
 def cmd_begin(args):
+    """적용 직전에 읽은 값(`--snapshot`)이 미리보기 때 값과 한 칸이라도 다르면 아무것도 시작하지 않는다(종료 1, stale 과 같은 답)."""
     data = load(args.plan)
     if not data.get("steps"):
         raise PlanError("저장 단계가 없습니다. 빨간 줄 칸을 먼저 골라 주세요")
-    ledger = Ledger()
+    ledger, now = Ledger(), decode_snapshot(load(args.snapshot))
+    if ledger.change(args.change).status == "previewed":
+        differences = differences_since(ledger, args.change, now)
+        if differences:
+            return dict(change_id=args.change, status="previewed", same=False, differences=differences)
     ledger.begin(args.change, step_plans(decode_step(step) for step in data["steps"]),
-                 data["plan"]["request"] if "plan" in data else None)
+                 data["plan"]["request"] if "plan" in data else None, read_at=now.read_at)
     record = ledger.change(args.change)
     return dict(change_id=record.id, status=record.status, steps=len(record.steps))
 
@@ -251,8 +267,8 @@ def cmd_calls(args):
     if not record.steps:
         raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
     if record.status == "stopped":
-        raise LedgerError(f"{args.change}번 변경은 멈춰 있습니다 — 같은 범위를 다시 읽고(read-calls --record {args.change}) "
-                          f"check 가 이어서 해도 된다고 하면 calls 를 다시 부릅니다")
+        raise LedgerError(f"{args.change}번 변경은 멈춰 있습니다(저장이 실패했거나 15분 동안 아무 일이 없었습니다) — 같은 범위를 "
+                          f"다시 읽고(read-calls --record {args.change}) check 가 이어서 해도 된다고 하면 calls 를 다시 부릅니다")
     return dict(change_id=record.id, status=record.status,
                 calls=[step_call(step.index, record_hotel(record), record.offer, step.kind, step.body)
                        for step in record.steps if step.status != "saved"])
@@ -280,8 +296,10 @@ def cmd_check(args):
     if not same_hotel(record.hotel, record.hotel_id, now.hotel, now.hotel_id) or record.offer != now.offer:
         raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {args.change}번은 "
                         f"{hotel_label(record.hotel, record.hotel_id)} · {record.offer} 입니다")
-    report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)))
-    return dict(change_id=report.change_id, status=report.status, remaining=list(report.remaining),
+    report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at)
+    step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
+    return dict(change_id=report.change_id, status=report.status, cause=report.cause, note=report.note,
+                last_saved=step_ref(report.last_saved), next=step_ref(report.next), remaining=list(report.remaining),
                 can_continue=report.can_continue, why=list(report.why),
                 steps=[dict(no=step.index, label=step.label, ledger=step.ledger, seen=step.seen, settled=step.settled,
                             moved=step.moved) for step in report.steps])
@@ -295,13 +313,8 @@ def cmd_verify(args):
 
 
 def cmd_stale(args):
-    then, now = recorded_reading(Ledger(), args.change), decode_snapshot(load(args.snapshot))
-    if not same_hotel(then.hotel, then.hotel_id, now.hotel, now.hotel_id) or then.offer != now.offer:
-        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {args.change}번은 "
-                        f"{hotel_label(then.hotel, then.hotel_id)} · {then.offer} 입니다")
-    differences = stale_cells(then, now)
-    return dict(same=not differences, differences=[
-        dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in differences])
+    differences = differences_since(Ledger(), args.change, decode_snapshot(load(args.snapshot)))
+    return dict(same=not differences, differences=differences)
 
 
 def cmd_rollback(args):
@@ -391,9 +404,10 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--snapshot", help="prices 의 지금 값")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
 
-    sub = command("begin", cmd_begin, "적용 시작")
+    sub = command("begin", cmd_begin, "적용 시작 — 적용 직전에 읽은 값이 미리보기 때와 같을 때만")
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--plan", required=True, help="steps 가 든 plan.json 또는 rollback.json")
+    sub.add_argument("--snapshot", required=True, help="적용 직전에 같은 범위로 읽은 값(read-calls --record N 으로 읽는다, 15분 안)")
 
     sub = command("calls", cmd_calls, "아직 저장되지 않은 단계 → applyBulk · applyCell 부를 값")
     sub.add_argument("--change", type=int, required=True)

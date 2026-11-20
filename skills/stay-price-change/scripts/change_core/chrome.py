@@ -119,6 +119,13 @@ def result_banner(record, written: int, mismatched: int, unit: str = "칸") -> s
     """적용 결과 머리 띠 — 장부의 ChangeRecord 상태와 다시 읽어 맞았는지로 정한다."""
     failed = next((step for step in record.steps if step.status == "failed"), None)
     done = sum(step.status == "saved" for step in record.steps)
+    if record.status == "stopped" and record.cause == "cut_off":
+        waiting = next((step for step in record.steps if step.status != "saved"), None)
+        if not done:
+            return ('<div class="banner red"><b>첫 저장 전에 끊겼습니다.</b> 저장이 실패한 것은 아니고, 아무것도 바뀌지 않았습니다. '
+                    '이어서 하려면 다시 읽어 확인합니다.</div>')
+        return (f'<div class="banner red"><b>{waiting.index}번째 저장 앞에서 끊겼습니다.</b> 저장이 실패한 것은 아니고, '
+                f'{done}번째 저장까지 됐습니다. 지금은 일부만 바뀐 상태입니다. 이어서 하려면 다시 읽어 확인합니다.</div>')
     if record.status == "stopped" and failed is not None:
         return (f'<div class="banner red"><b>{failed.index}번째 저장에서 멈췄습니다.</b> 지금은 일부만 바뀐 상태입니다.'
                 f'{f" ({esc(failed.note)})" if failed.note else ""}</div>')
@@ -139,10 +146,11 @@ def stopped_choices(record) -> str:
         return ""
     done = sum(step.status == "saved" for step in record.steps)
     left = len(record.steps) - done
+    back = (f'<div><b>된 것까지 되돌리기</b> — 이미 바뀐 {done}번을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>'
+            if done else "")
     return ('<h2>어떻게 할까요?</h2><p>크롬에서 ERP 로그인을 확인한 뒤 대화창에서 골라 주세요.</p><div class="choices">'
-            f'<div><b>이어서</b> — 남은 {left}번을 마저 적용합니다. 그 전에 남은 값을 다시 읽어 확인합니다.</div>'
-            f'<div><b>된 것까지 되돌리기</b> — 이미 바뀐 {done}번을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>'
-            '<div><b>이대로 두기</b> — 일부만 바뀐 채로 둡니다. 장부에 "중간에 멈춤"으로 적혀 있어 나중에 이어서 할 수 있습니다.</div>'
+            f'<div><b>이어서</b> — 남은 {left}번을 마저 적용합니다. 그 전에 남은 값을 다시 읽어 확인합니다.</div>{back}'
+            '<div><b>이대로 두기</b> — 장부에 "중간에 멈춤"으로 적혀 있어 나중에 이어서 할 수 있습니다.</div>'
             "</div>")
 
 

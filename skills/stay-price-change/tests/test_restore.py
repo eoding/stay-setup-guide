@@ -18,7 +18,7 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
-from change_core.ledger import DB_NAME, Ledger, LedgerError  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger, LedgerError, now_text  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, Snapshot, Target, TargetTable, cell_item_key, encode_request, encode_snapshot, snapshot_reading,
@@ -55,7 +55,7 @@ class RestoreTest(unittest.TestCase):
                                             sentence=plan.request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                             request=encode_request(plan.request))
         steps = save_steps(resolve(plan, resolutions)[0])
-        self.ledger.begin(change, step_plans(steps))
+        self.ledger.begin(change, step_plans(steps), read_at=now_text())
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
         return scene.applied(current, steps, "2026-11-26T09:00:00+09:00")
@@ -77,7 +77,7 @@ class RestoreTest(unittest.TestCase):
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
                                              request=dict(kind="restore_snapshot", snapshot=self.saved))
         steps = save_steps(rollback_writes(plan))
-        self.ledger.begin(restore, step_plans(steps))
+        self.ledger.begin(restore, step_plans(steps), read_at=now_text())
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(restore, index, saved=True)
         restored = scene.applied(self.now, steps, "2026-11-27T09:00:00+09:00")
@@ -128,7 +128,8 @@ class RestoreTest(unittest.TestCase):
         result = run("restore", "--saved", saved, "--snapshot", folder / "now.json", "--record", "--out", folder / "r.json")
         self.assertEqual((len(result["rollback"]["restored"]), len(result["rollback"]["unremovable"]), len(result["steps"])),
                          (90, 1, 8))
-        self.assertEqual(run("begin", "--change", result["change_id"], "--plan", folder / "r.json")["steps"], 8)
+        (folder / "fresh.json").write_text(json.dumps(encode_snapshot(scene.fresh(self.now)), ensure_ascii=False), encoding="utf-8")
+        self.assertEqual(run("begin", "--change", result["change_id"], "--plan", folder / "r.json", "--snapshot", folder / "fresh.json")["steps"], 8)
         page = Path(run("render", "rollback", "--plan", folder / "r.json")["page"]).read_text(encoding="utf-8")
         self.assertIn("저장해 둔 상태로 되돌리기 미리보기", page)
         refused = run("restore", "--saved", result["change_id"], "--snapshot", folder / "now.json", code=2)
@@ -151,7 +152,7 @@ class UnremovableTest(unittest.TestCase):
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표",
                                            read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(plan.request))
             steps = save_steps(resolve(plan, [])[0])
-            ledger.begin(change, step_plans(steps))
+            ledger.begin(change, step_plans(steps), read_at=now_text())
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)
             now = scene.applied(before, steps)

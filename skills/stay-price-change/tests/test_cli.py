@@ -75,7 +75,8 @@ class CommandTest(unittest.TestCase):
                              "--out", self.dir / "plan1.json")
         change = first["change_id"]
         self.assertEqual((first["counts"]["cells"], len(first["unresolved"]), first["steps"]), (90, 2, None))
-        self.assertIn("빨간 줄", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan1.json", code=2)["error"])
+        fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
+        self.assertIn("빨간 줄", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan1.json", "--snapshot", fresh, code=2)["error"])
 
         self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
                      "--out", self.dir / "plan.json")
@@ -95,7 +96,7 @@ class CommandTest(unittest.TestCase):
         stale = self.run_cli("stale", "--change", change, "--snapshot", self.write("moved.json", encode_snapshot(moved)), code=1)
         self.assertEqual([item["key"]["date"] for item in stale["differences"]], ["2026-12-25"])
 
-        self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")["status"], "applying")
+        self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", fresh)["status"], "applying")
         for call in self.run_cli("calls", "--change", change)["calls"]:
             last = self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))
         self.assertEqual(last["status"], "applied")
@@ -111,7 +112,9 @@ class CommandTest(unittest.TestCase):
                          (90, [], 8))
         page = Path(self.run_cli("render", "rollback", "--plan", self.dir / "rollback.json")["page"])
         self.assertIn("에 적어 둔 값으로 되돌립니다", page.read_text(encoding="utf-8"))
-        self.assertEqual(self.run_cli("begin", "--change", rollback["change_id"], "--plan", self.dir / "rollback.json")["steps"], 8)
+        fresh_after = self.write("fresh-after.json", encode_snapshot(scene.fresh(scene.applied(scene.snapshot(), map(decode_step, plan["steps"])))))
+        self.assertEqual(self.run_cli("begin", "--change", rollback["change_id"], "--plan", self.dir / "rollback.json",
+                                      "--snapshot", fresh_after)["steps"], 8)
         self.assertEqual(self.run_cli("read-calls", "--record", rollback["change_id"]), self.run_cli("read-calls", "--record", change),
                          "G5 — 되돌리기 번호도 다시 읽을 범위를 안다")
         self.assertTrue(self.run_cli("stale", "--change", rollback["change_id"], "--snapshot", after)["same"],
@@ -143,7 +146,9 @@ class CommandTest(unittest.TestCase):
         fifteen = self.write("request15.json", encode_request(scene.request("15")))
         self.run_cli("plan", "--snapshot", self.snapshot, "--request", fifteen, "--resolutions", self.choice,
                      "--out", self.dir / "plan15.json")
-        self.assertIn("다른 계산", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan15.json", code=2)["error"])
+        fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
+        self.assertIn("다른 계산", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan15.json", "--snapshot", fresh,
+                                            code=2)["error"])
         self.assertIn("파일이 없습니다", self.run_cli("stale", "--change", change, "--snapshot", "없는.json", code=2)["error"])
 
 

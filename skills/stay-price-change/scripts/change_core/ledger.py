@@ -7,7 +7,9 @@
     meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
     changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied),
                  호텔(페이지가 알아본 번호와 이름), 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON),
-                 그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다)
+                 그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다), 마지막으로 이어 가도 된다고 본
+                 때(`active_at` — begin 이 받아들인 읽은 값의 시각, 저장 결과를 적은 때, 이어서 해도 된다고 한 check 의
+                 읽은 값의 시각)
     item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 넣을 값,
                  넣는 방법(set / clear, 넣지 않으면 비어 있음), 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값,
                  되돌린 되돌리기 번호
@@ -15,6 +17,11 @@
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 applied 다.
+
+적용 중인 변경이 `IDLE`(15분) 동안 아무 일이 없으면 멈춘 변경이다 — 목록 · calls · check · 결과 페이지 어디서나. 세션이
+저장 사이에서 끊겨도 장부는 적용 중으로 남는데, 그 사이 ERP 값이 바뀌었을 수 있어 다시 읽지 않고는 남은 저장을 내지 않는다.
+멈춘 뒤에 적힌 저장 결과는 적기만 하고 변경을 다시 살리지 않는다. 다시 살리는 것은 방금 읽은 값으로 이어서 해도 된다고 본
+check 뿐이다.
 """
 
 from __future__ import annotations
@@ -24,7 +31,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, Sequence
@@ -37,6 +44,7 @@ LEDGER_ENV = "STAY_PRICE_LEDGER_DIR"
 FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
 SCHEMA_VERSION = 2
+IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -56,7 +64,8 @@ CREATE TABLE IF NOT EXISTS changes (
   verified_at TEXT,
   reverses INTEGER REFERENCES changes(id),
   request TEXT,
-  reading TEXT
+  reading TEXT,
+  active_at TEXT
 );
 CREATE TABLE IF NOT EXISTS item_values (
   change_id INTEGER NOT NULL REFERENCES changes(id),
@@ -111,6 +120,15 @@ def ledger_dir() -> Path:
 
 def now_text() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _moment(text: str) -> datetime:
+    moment = datetime.fromisoformat(text)
+    return moment if moment.tzinfo else moment.astimezone()
+
+
+def _minutes(span: timedelta) -> int:
+    return int(span.total_seconds() // 60)
 
 
 @dataclass(frozen=True)
@@ -194,6 +212,7 @@ class ChangeRecord:
     request: dict | None
     steps: tuple[StepRecord, ...]
     rows: tuple[RowRecord, ...]
+    cause: str | None = None
 
 
 @dataclass(frozen=True)
@@ -212,12 +231,18 @@ class StepSeen:
 
 @dataclass(frozen=True)
 class CheckReport:
+    """`cause` 는 멈춘 까닭 — failed 저장이 실패함 · unknown 저장됐는지 모름 · cut_off 실패 없이 중간에 끊김(멈추지 않았으면
+    None). `last_saved` · `next` 는 마지막으로 저장된 단계와 다음에 할 단계(없으면 None), `note` 는 멈춘 저장의 메모."""
     change_id: int
     status: str
     steps: tuple[StepSeen, ...]
     remaining: tuple[int, ...]
     can_continue: bool
     why: tuple[str, ...]
+    cause: str | None = None
+    last_saved: StepSeen | None = None
+    next: StepSeen | None = None
+    note: str | None = None
 
 
 def _absent(item) -> bool:
@@ -254,8 +279,10 @@ def _body(data) -> str:
 
 
 class Ledger:
-    def __init__(self, path: Path | None = None):
+    def __init__(self, path: Path | None = None, now=None):
+        """`now` 는 지금 시각을 주는 함수(시험이 시계를 옮겨 본다). 장부가 적는 시각과, 멈춤 · 읽은 값의 나이를 이것으로 셈한다."""
         self.path = Path(path) if path else ledger_dir() / DB_NAME
+        self._now = now or (lambda: datetime.now().astimezone())
         with self._db() as db:
             has_meta = db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone()
             found = db.execute("SELECT value FROM meta WHERE name = 'schema_version'").fetchone() if has_meta else None
@@ -279,7 +306,7 @@ class Ledger:
 
     def _insert(self, db, kind, status, hotel, hotel_id, offer, currency, sentence, read_at, rows: Iterable[ValueRow],
                 reverses=None, request=None, reading=None) -> int:
-        stamp = now_text()
+        stamp = self._stamp()
         change_id = db.execute(
             "INSERT INTO changes (kind, status, hotel, hotel_id, offer, currency, sentence, read_at, created_at, updated_at,"
             " applied_at, reverses, request, reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -316,10 +343,45 @@ class Ledger:
             raise LedgerError(f"장부에 {change_id}번 변경이 없습니다")
         return row
 
-    def begin(self, change_id: int, steps: Sequence[StepPlan], request: Mapping | None = None) -> None:
+    def _stamp(self) -> str:
+        return self._now().isoformat(timespec="seconds")
+
+    def _age(self, moment: str) -> timedelta:
+        return self._now() - _moment(moment)
+
+    def _status(self, header) -> str:
+        """적용 중인데 IDLE 동안 아무 일이 없었으면 멈춘 것이다."""
+        if header["status"] == "applying" and (header["active_at"] is None or self._age(header["active_at"]) > IDLE):
+            return "stopped"
+        return header["status"]
+
+    def _cause(self, header, steps) -> str | None:
+        """멈춘 까닭. 장부가 적용 중인데 멈춘 것이면 끊긴 것이다(실패한 저장이 그 앞에 있었어도 그 뒤 이어서 했다)."""
+        if self._status(header) != "stopped":
+            return None
+        failed = [step for step in steps if step["status"] == "failed"]
+        if header["status"] == "applying" or not failed:
+            return "cut_off"
+        return "unknown" if any(step["unknown"] for step in failed) else "failed"
+
+    @staticmethod
+    def _mark_saved(db, header, index: int, note: str | None, stamp: str) -> None:
+        """단계 하나를 저장됨으로 적는다. 되돌리기의 저장이면 되돌린 변경의 그 값들에 이 번호를 단다."""
+        db.execute("UPDATE steps SET status = 'saved', finished_at = ?, note = ?, unknown = 0 WHERE change_id = ? AND idx = ?",
+                   (stamp, note, header["id"], index))
+        if header["kind"] == "rollback":
+            for row in db.execute("SELECT item_kind, item_key, field FROM item_values WHERE change_id = ? AND step = ?",
+                                  (header["id"], index)).fetchall():
+                db.execute(f"UPDATE item_values SET rolled_back_by = ? WHERE change_id = ? AND {ROW}"
+                           " AND action IS NOT NULL AND rolled_back_by IS NULL",
+                           (header["id"], header["reverses"], row["item_kind"], row["item_key"], row["field"]))
+
+    def begin(self, change_id: int, steps: Sequence[StepPlan], request: Mapping | None = None, *, read_at: str) -> None:
         """적용 시작 — 저장 단계를 적고 단계가 쓰는 필드마다 넣을 값·방법·단계 번호를 단다.
 
-        같은 단계로 다시 부르면 아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은 요청과 같은 계산인지 본다.
+        `read_at` 은 적용 직전에 읽어 미리보기 때 값과 같다고 본 읽은 값의 시각이다. IDLE 보다 오래된 읽은 값으로는 시작하지
+        않는다. 그 시각이 첫 활동이다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은
+        요청과 같은 계산인지 본다.
         """
         encoded = [(step.kind, _body(step.body)) for step in steps]
         with self._db() as db:
@@ -334,6 +396,9 @@ class Ledger:
                 if stored == encoded:
                     return
                 raise LedgerError(f"{change_id}번 변경은 이미 다른 저장 단계로 적용을 시작했습니다")
+            if self._age(read_at) > IDLE:
+                raise LedgerError(f"적용 직전에 읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — "
+                                  f"{_minutes(IDLE)}분 안에 읽은 값으로만 시작합니다. 다시 읽고 begin 을 부릅니다")
             for index, step in enumerate(steps, 1):
                 for write in step.writes:
                     row = db.execute(f"SELECT step FROM item_values WHERE change_id = ? AND {ROW}",
@@ -347,34 +412,35 @@ class Ledger:
                                 write.item_kind, write.item_key, write.field))
                 db.execute("INSERT INTO steps (change_id, idx, kind, label, body, status) VALUES (?, ?, ?, ?, ?, 'pending')",
                            (change_id, index, step.kind, step.label, _body(step.body)))
-            db.execute("UPDATE changes SET status = 'applying', updated_at = ? WHERE id = ?", (now_text(), change_id))
+            db.execute("UPDATE changes SET status = 'applying', updated_at = ?, active_at = ? WHERE id = ?",
+                       (self._stamp(), read_at, change_id))
 
     def record_step(self, change_id: int, index: int, saved: bool, note: str | None = None, unknown: bool = False) -> str:
-        """저장 한 번이 끝날 때마다 부른다. 되돌리기의 저장이 끝나면 되돌린 변경의 그 값들에 이 번호를 단다. 새 상태를 돌려준다.
+        """저장 한 번이 끝날 때마다 부른다. 새 상태를 돌려준다.
 
-        `unknown` 은 저장 단추는 눌렸고 저장됐는지 모르는 단계다 — failed 로 적고 표시를 단다(다시 읽어 가린다)."""
+        `unknown` 은 저장 단추는 눌렸고 저장됐는지 모르는 단계다 — failed 로 적고 표시를 단다(다시 읽어 가린다). 저장 결과는
+        활동이다. 다만 이미 멈춘 변경(실패했거나 IDLE 동안 아무 일이 없던)에 적힌 저장은 적기만 하고 변경을 다시 살리지
+        않는다 — 끊긴 뒤의 저장이 낡은 값으로 이어 간 것일 수 있어, 다시 읽어 check 를 거쳐야 남은 저장을 낸다."""
         with self._db() as db:
             header = self._header(db, change_id)
             step = db.execute("SELECT * FROM steps WHERE change_id = ? AND idx = ?", (change_id, index)).fetchone()
             if step is None:
                 raise LedgerError(f"{change_id}번 변경에 {index}번째 저장이 없습니다")
             if step["status"] == "saved":
-                return header["status"]
-            stamp = now_text()
-            db.execute("UPDATE steps SET status = ?, finished_at = ?, note = ?, unknown = ? WHERE change_id = ? AND idx = ?",
-                       ("saved" if saved else "failed", stamp, note, int(unknown and not saved), change_id, index))
-            if saved and header["kind"] == "rollback":
-                for row in db.execute("SELECT item_kind, item_key, field FROM item_values WHERE change_id = ? AND step = ?",
-                                      (change_id, index)).fetchall():
-                    db.execute(f"UPDATE item_values SET rolled_back_by = ? WHERE change_id = ? AND {ROW}"
-                               " AND action IS NOT NULL AND rolled_back_by IS NULL",
-                               (change_id, header["reverses"], row["item_kind"], row["item_key"], row["field"]))
+                return self._status(header)
+            stamp, alive = self._stamp(), self._status(header) == "applying"
+            if saved:
+                self._mark_saved(db, header, index, note, stamp)
+            else:
+                db.execute("UPDATE steps SET status = 'failed', finished_at = ?, note = ?, unknown = ? WHERE change_id = ? AND idx = ?",
+                           (stamp, note, int(unknown), change_id, index))
             left = db.execute("SELECT COUNT(*) FROM steps WHERE change_id = ? AND status != 'saved'",
                               (change_id,)).fetchone()[0]
-            status = "stopped" if not saved else "applied" if left == 0 else "applying"
-            db.execute("UPDATE changes SET status = ?, updated_at = ?, applied_at = COALESCE(applied_at, ?) WHERE id = ?",
-                       (status, stamp, stamp if status == "applied" else None, change_id))
-        return status
+            status = "stopped" if not saved else "applied" if left == 0 else header["status"]
+            db.execute("UPDATE changes SET status = ?, updated_at = ?, applied_at = COALESCE(applied_at, ?),"
+                       " active_at = CASE WHEN ? THEN ? ELSE active_at END WHERE id = ?",
+                       (status, stamp, stamp if status == "applied" else None, saved and alive, stamp, change_id))
+            return self._status(self._header(db, change_id))
 
     @staticmethod
     def _written(db, change_id, still_ours=False):
@@ -400,16 +466,18 @@ class Ledger:
                 db.execute(f"UPDATE item_values SET verified = ?, seen = ?, seen_state = ? WHERE change_id = ? AND {ROW}",
                            (int(held), money_text(seen), None if item is None else item.state, change_id,
                             row["item_kind"], row["item_key"], row["field"]))
-            stamp = now_text()
+            stamp = self._stamp()
             db.execute("UPDATE changes SET verified_at = ?, updated_at = ? WHERE id = ?", (stamp, stamp, change_id))
         return mismatches
 
-    def check(self, change_id: int, now: Reading, then: Reading) -> CheckReport:
-        """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`)이 말하는 것과, 남은 저장을 계획대로 해도 되는지.
+    def check(self, change_id: int, now: Reading, then: Reading, read_at: str) -> CheckReport:
+        """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
+        해도 되는지, 어디까지 됐고 왜 멈췄는지.
 
         「모름」(눌렸고 저장됐는지 모르는 단계)은 읽은 값이 넣은 값 그대로면 저장됨으로, 전 값 그대로면 저장 안 됨으로 가려 적는다.
         남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
-        바탕으로 삼은 읽은 값(`then`)과 모두 같을 때뿐이다. 그러면 멈춘 변경을 다시 적용 중으로 돌린다(calls 가 남은 단계를 낸다).
+        바탕으로 삼은 읽은 값(`then`)과 모두 같고, 읽은 값이 IDLE 안의 것일 때뿐이다. 그러면 변경을 적용 중으로 두고 그 읽은
+        값의 시각을 활동으로 적는다(IDLE 안이면 calls 가 남은 단계를 낸다). 아니면 멈춘 변경으로 둔다.
         """
         with self._db() as db:
             header = self._header(db, change_id)
@@ -418,6 +486,8 @@ class Ledger:
                 raise LedgerError(f"{change_id}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
             rows = {step["idx"]: db.execute("SELECT * FROM item_values WHERE change_id = ? AND step = ? ORDER BY rowid",
                                             (change_id, step["idx"])).fetchall() for step in steps}
+        cause = self._cause(header, steps)
+        note = next((step["note"] for step in steps if step["status"] == "failed"), None) if cause in ("failed", "unknown") else None
         seen_steps, settle = [], []
         for step in steps:
             kinds = {_field_seen(row, now.get((row["item_kind"], row["item_key"]))) for row in rows[step["idx"]]}
@@ -433,13 +503,6 @@ class Ledger:
             items = {(row["item_kind"], row["item_key"]) for row in rows[step["idx"]]}
             moved = 0 if done else sum(not _same_item(then.get(item), now.get(item)) for item in items)
             seen_steps.append(StepSeen(step["idx"], step["label"], state, seen, settled, moved))
-        for index, settled in settle:
-            if settled == "saved":
-                self.record_step(change_id, index, True, "다시 읽어 저장된 것을 확인했습니다")
-            else:
-                with self._db() as db:
-                    db.execute("UPDATE steps SET unknown = 0, note = ? WHERE change_id = ? AND idx = ?",
-                               ("다시 읽어 저장되지 않은 것을 확인했습니다", change_id, index))
         why, remaining = [], []
         for step in seen_steps:
             name = f"{step.index}번째 저장({step.label})"
@@ -458,13 +521,26 @@ class Ledger:
                 why.append(f"{name}의 칸이 넣으려던 값도 그 전 값도 아닙니다")
             if step.moved:
                 why.append(f"{name}의 칸 {step.moved}개가 미리보기 때 읽은 값과 다릅니다")
+        if remaining and self._age(read_at) > IDLE:
+            why.append(f"읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — {_minutes(IDLE)}분 안에 읽은 값으로만 이어 갑니다. "
+                       "다시 읽고 check 를 부릅니다")
         can_continue = bool(remaining) and not why
+        stamp = self._stamp()
         with self._db() as db:
-            status = self._header(db, change_id)["status"]
-            if can_continue and status == "stopped":
-                status = "applying"
-                db.execute("UPDATE changes SET status = ?, updated_at = ? WHERE id = ?", (status, now_text(), change_id))
-        return CheckReport(header["id"], status, tuple(seen_steps), tuple(remaining), can_continue, tuple(why))
+            for index, settled in settle:
+                if settled == "saved":
+                    self._mark_saved(db, header, index, "다시 읽어 저장된 것을 확인했습니다", stamp)
+                else:
+                    db.execute("UPDATE steps SET unknown = 0, note = ? WHERE change_id = ? AND idx = ?",
+                               ("다시 읽어 저장되지 않은 것을 확인했습니다", change_id, index))
+            status = "applied" if not remaining else "applying" if can_continue else "stopped"
+            db.execute("UPDATE changes SET status = ?, updated_at = ?, applied_at = COALESCE(applied_at, ?),"
+                       " active_at = CASE WHEN ? THEN ? ELSE active_at END WHERE id = ?",
+                       (status, stamp, stamp if status == "applied" else None, can_continue, read_at, change_id))
+        saved = [step for step in seen_steps if step.ledger == "saved" or step.settled == "saved"]
+        return CheckReport(header["id"], status, tuple(seen_steps), tuple(remaining), can_continue, tuple(why), cause,
+                           saved[-1] if saved else None,
+                           next((step for step in seen_steps if step.index == remaining[0]), None) if remaining else None, note)
 
     def recorded_change(self, change_id: int) -> RecordedChange:
         """되돌리기 계산의 재료 — 실제로 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만."""
@@ -534,10 +610,11 @@ class Ledger:
                           money(row["seen"]), row["seen_state"], row["rolled_back_by"], row["verdict"],
                           tuple(mark for mark in row["marks"].split(",") if mark))
                 for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
-        return ChangeRecord(header["id"], header["kind"], header["status"], header["hotel"], header["hotel_id"], header["offer"],
-                            header["currency"], header["sentence"], header["read_at"], header["created_at"],
+        cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps])
+        return ChangeRecord(header["id"], header["kind"], self._status(header), header["hotel"], header["hotel_id"],
+                            header["offer"], header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
-                            None if header["request"] is None else json.loads(header["request"]), steps, rows)
+                            None if header["request"] is None else json.loads(header["request"]), steps, rows, cause)
 
     def reading(self, change_id: int) -> dict:
         """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""
@@ -557,7 +634,7 @@ class Ledger:
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
                 " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 " GROUP BY changes.id ORDER BY changes.id DESC").fetchall()
-        return [dict(id=row["id"], kind=row["kind"], status=row["status"], hotel=row["hotel"], hotel_id=row["hotel_id"],
+        return [dict(id=row["id"], kind=row["kind"], status=self._status(row), hotel=row["hotel"], hotel_id=row["hotel_id"],
                      offer=row["offer"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],

@@ -37,7 +37,7 @@ class CheckTest(unittest.TestCase):
         self.change = self.cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
                                "--out", self.dir / "plan.json")["change_id"]
         self.steps = [decode_step(step) for step in json.loads((self.dir / "plan.json").read_text(encoding="utf-8"))["steps"]]
-        self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json")
+        self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json", "--snapshot", self.reading(self.before, "before.json"))
         self.calls = self.cli("calls", "--change", self.change)["calls"]
 
     def tearDown(self):
@@ -59,7 +59,7 @@ class CheckTest(unittest.TestCase):
         return self.cli("record-result", "--change", self.change, "--result", self.write(f"answer-{no}.json", result))
 
     def reading(self, snapshot, name="now.json"):
-        return self.write(name, encode_snapshot(snapshot))
+        return self.write(name, encode_snapshot(scene.fresh(snapshot)))
 
     def check(self, snapshot):
         return self.cli("check", "--change", self.change, "--snapshot", self.reading(snapshot))

@@ -19,6 +19,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 from browser_replies import reply  # noqa: E402
+from change_core.ledger import now_text  # noqa: E402
 from price_browser import ask_sum  # noqa: E402
 from price_model import decode_snapshot, encode_request, encode_snapshot  # noqa: E402
 
@@ -40,6 +41,11 @@ class BrowserCommandTest(unittest.TestCase):
         path = self.dir / name
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return str(path)
+
+    def fresh(self, snapshot):
+        """적용 직전에 방금 읽은 값 — 미리보기 때와 같은 칸, 읽은 시각만 지금(15분 안)"""
+        data = json.loads(Path(snapshot).read_text(encoding="utf-8")) if isinstance(snapshot, str) else snapshot
+        return self.write("fresh.json", dict(data, read_at=now_text()))
 
     def run_cli(self, *args, code=0):
         done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)
@@ -121,7 +127,7 @@ class BrowserCommandTest(unittest.TestCase):
         change = self.run_cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
                               "--out", self.dir / "plan.json")["change_id"]
         self.assertIn("begin", self.run_cli("calls", "--change", change, code=2)["error"])
-        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", self.fresh(snapshot))
         calls = self.run_cli("calls", "--change", change)["calls"]
         self.assertEqual([(call["no"], call["op"]) for call in calls], [(index, "applyBulk") for index in range(1, 9)])
         self.assertEqual(calls[0]["payload"]["offer"], scene.request().offer)
@@ -155,7 +161,7 @@ class BrowserCommandTest(unittest.TestCase):
         listed = self.run_cli("list")["changes"][0]
         self.assertEqual((listed["hotel"], listed["hotel_id"]), ("페이지가 부르는 이름", scene.HOTEL_ID),
                          "장부에는 요청에 적은 이름이 아니라 페이지가 알아본 호텔이 적힌다")
-        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", self.fresh(snapshot))
         call = self.run_cli("calls", "--change", change)["calls"][0]
         self.assertEqual(call["payload"]["hotel"], {"id": scene.HOTEL_ID, "name": "페이지가 부르는 이름"}, "부를 값마다 그 호텔이 실린다")
         saved = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True}
@@ -174,7 +180,7 @@ class BrowserCommandTest(unittest.TestCase):
         choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
         change = self.run_cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
                               "--out", self.dir / "plan.json")["change_id"]
-        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", self.fresh(snapshot))
         call = self.run_cli("calls", "--change", change)["calls"][0]
         later = {"ok": False, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "started": False, "wait": 5,
                  "clicks": {}, "error": "앞 화면(드로어·요청)이 아직 정리되지 않았습니다"}

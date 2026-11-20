@@ -8,6 +8,7 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from change_core.ledger import now_text
 from change_core.money import round_money
 from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot
 
@@ -69,6 +70,11 @@ def applied(snapshot: Snapshot, steps, read_at="2026-11-20T14:06:00+09:00") -> S
                 cells[key] = CellValue(new.get("sell", old.sell), new.get("list", old.list), new.get("supply", old.supply),
                                        "open" if old.state == "missing" else old.state)
     return replace(snapshot, read_at=read_at, cells=cells)
+
+
+def fresh(snapshot: Snapshot) -> Snapshot:
+    """방금 읽은 것처럼 읽은 시각만 지금으로 — 적용 직전 · 이어서의 읽은 값은 15분 안의 것이어야 한다."""
+    return replace(snapshot, read_at=now_text())
 
 
 def with_cells(snapshot: Snapshot, changes: dict, read_at=None) -> Snapshot:
