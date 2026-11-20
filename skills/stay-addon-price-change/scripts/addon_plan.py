@@ -79,9 +79,14 @@ class LineChange:
         return LINE_RULES.severity(self.verdict) == RED and self.choice is None
 
     @property
+    def blocked(self) -> bool:
+        return LINE_RULES.severity(self.verdict) == BLOCKED
+
+    @property
     def writes(self) -> dict[str, Decimal | None]:
-        """저장이 이 줄에 넣는 필드 → 값(비우면 None). 적용할 수 없는 줄 · 아직 고르지 않은 · 안 바꾸기로 고른 빨간 줄은 넣지 않는다."""
-        if LINE_RULES.severity(self.verdict) == BLOCKED or self.waiting or self.choice == "keep":
+        """저장이 이 줄에 넣는 필드 → 값(비우면 None). 적용할 수 없는 줄 · 아직 고르지 않은 빨간 줄은 넣지 않는다(안 바꾸기로 고른
+        줄은 고를 때 후 값이 전 값이 된다)."""
+        if self.blocked or self.waiting:
             return {}
         return {name: self.after[name] for name in self.changed}
 
@@ -96,7 +101,8 @@ class Plan:
 
     @property
     def unchanged(self) -> tuple[LineChange, ...]:
-        return tuple(change for change in self.changes if not change.changed and change.verdict is None)
+        """그대로인 줄 — 바뀌지 않거나 안 바꾸기로 고른 줄. 바뀌는 · 그대로 · 바꿀 수 없는 · 고를 줄이 고른 줄을 빠짐없이 나눈다."""
+        return tuple(change for change in self.changes if not change.writes and not change.blocked and not change.waiting)
 
 
 def _after(line: Line, request: ChangeRequest, currency: str) -> tuple[dict | None, str | None]:
@@ -147,7 +153,14 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
              for item in resolutions]
     flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
     chosen, _waiting = decide(LINE_RULES, flagged, keyed, lambda key: f"가격 줄 {getattr(key, 'line', key)}번")
-    return replace(plan, changes=tuple(replace(change, choice=chosen.get(change.key)) for change in plan.changes))
+    return replace(plan, changes=tuple(_choose(change, chosen.get(change.key)) for change in plan.changes))
+
+
+def _choose(change: LineChange, choice: str | None) -> LineChange:
+    """고른 것을 단다 — 「그 줄은 안 바꿈」이면 후 값이 전 값이 된다(가격 캘린더 도우미와 같다)."""
+    if choice is None:
+        return change
+    return replace(change, choice=choice, after=change.before if choice == "keep" else change.after)
 
 
 def unresolved(plan: Plan) -> tuple[LineChange, ...]:
@@ -158,8 +171,8 @@ def counts(plan: Plan) -> dict:
     """줄 수 — 고른 줄 · 바뀌는 줄 · 그대로인 줄 · 없는 줄, 그리고 판정마다."""
     found = dict(lines=len(plan.changes) + len(plan.missing), will_change=sum(bool(change.writes) for change in plan.changes),
                  unchanged=len(plan.unchanged), missing=len(plan.missing),
-                 blocked=sum(LINE_RULES.severity(change.verdict) == BLOCKED for change in plan.changes),
-                 red=sum(change.waiting for change in plan.changes))
+                 blocked=sum(change.blocked for change in plan.changes), red=sum(change.waiting for change in plan.changes),
+                 chosen=sum(change.choice is not None for change in plan.changes))
     for rule in LINE_RULES.rules:
         found[rule.code] = sum(change.verdict == rule.code for change in plan.changes)
     return found

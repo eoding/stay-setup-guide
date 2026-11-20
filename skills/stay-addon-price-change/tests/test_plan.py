@@ -76,6 +76,11 @@ class RuleTest(unittest.TestCase):
         self.assertEqual(counts(result)["red"], 1)
         kept = resolve(result, [Resolution("BELOW_COST", "keep", ("1",))])
         self.assertEqual([step.line for step in plan_steps(kept)], ["2"])
+        self.assertEqual(moves(kept)["1"][:2], (D("20.00"), D("15.00")), "안 바꾸기로 고른 줄은 후 값이 전 값이다")
+        found = counts(kept)
+        self.assertEqual((found["will_change"], found["unchanged"], found["blocked"], found["red"], found["chosen"]), (1, 1, 0, 0, 1))
+        rows = {(row.item_key, row.field): row for row in preview_rows(kept)}
+        self.assertTrue(all(row.after is None and row.action is None for (key, _f), row in rows.items() if '"1"' in key))
         taken = resolve(result, [Resolution("BELOW_COST", "include")])
         self.assertEqual([step.line for step in plan_steps(taken)], ["1", "2"])
         self.assertEqual(moves(plan(snap, percent="30"))["2"][2], None, "30% 는 넘지 않았다")

@@ -111,7 +111,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
     for change in plan.changes:
         severity = LINE_RULES.severity(change.verdict)
         rule = LINE_RULES.by_code.get(change.verdict)
-        after = change.after if change.writes or severity == RED or severity == BLOCKED else None
+        after = change.after if change.writes or change.waiting or severity == BLOCKED else None
         cells = []
         for name in FIELDS:
             new = change.before[name] if after is None else after[name]
