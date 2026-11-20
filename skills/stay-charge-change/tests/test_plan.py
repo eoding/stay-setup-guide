@@ -55,6 +55,12 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(self.verdict(place("705", "amount", age="CHD"), percent="10")[2], Decimal("55.00"))
         self.assertEqual(self.verdict(place("702", "pct", "07:00-12:00"), percent="15")[2], Decimal("34.50"))
 
+    def test_an_age_band_may_be_named_as_the_screen_shows_it_and_a_time_band_with_a_tilde(self):
+        plan = plan_change(self.snapshot, request(place("705", "amount", age="소아"), place("701", "pct", "14:01 ~ 18:00"), value="52"))
+        self.assertEqual([change.id for change in plan.changes], ["705 CHD amount", "701 14:01-18:00 pct"])
+        with self.assertRaises(PlanError):
+            plan_change(self.snapshot, request(place("705", "amount", age="소아"), place("705", "amount", age="CHD"), value="1"))
+
     def test_an_amount_the_charge_shape_does_not_use_cannot_be_applied(self):
         for amount in (place("701", "pct"), place("701", "amount"), place("703", "pct"), place("703", "onsite"),
                        place("701", "amount", "14:01-18:00"), place("701", "pct", "12:01-14:00")):

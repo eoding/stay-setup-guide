@@ -292,6 +292,15 @@ class Charge:
                 entry["label"] = band.label
         return tuple(AgeRate(code, entry["label"], entry["amount"], entry["onsite"]) for code, entry in found.items())
 
+    def normal(self, place: Place) -> Place:
+        """요청이 연령 구간을 화면의 이름(「소아」)으로 짚었으면 구간 코드로 바꾼 자리 — 장부의 키는 코드로 적는다."""
+        if place.part != AGE or any(rate.code == place.at for rate in self.ages()):
+            return place
+        named = [rate.code for rate in self.ages() if rate.label == place.at]
+        if len(named) != 1:
+            raise ModelError(f"부과금 {self.id}번에 연령 구간 {place.at} 이(가) {'둘 이상' if named else '없습니다'} — 구간 코드로 적습니다")
+        return Place(place.charge, place.part, named[0], place.field)
+
     def where(self, place: Place) -> tuple[str, int]:
         """금액 칸 → 창의 (칸 이름, 몇 번째). 창에 그 칸이 없으면 ModelError."""
         if place.part == MAIN:
@@ -499,7 +508,9 @@ def decode_target(item: Mapping) -> Target:
     time, age = item.get("time"), item.get("age")
     if time is not None and age is not None:
         raise ModelError("한 금액 칸에는 time(시간대) 과 age(연령 구간) 가운데 하나만 적습니다")
-    part, at = (TIME, str(time)) if time is not None else (AGE, str(age)) if age is not None else (MAIN, "")
+    part, at = (TIME, str(time)) if time is not None else (AGE, str(age).strip()) if age is not None else (MAIN, "")
+    if part == TIME:
+        at = re.sub(r"\s*[~\-]\s*", "-", at.strip())
     if part == TIME and not re.fullmatch(r"\d{2}:\d{2}-\d{2}:\d{2}", at):
         raise ModelError(f"시간대는 창에 보이는 시작~종료 시각을 「14:01-18:00」 꼴로 적습니다: {at!r}")
     return Target(offer, Place(charge, part, at, str(item.get("field") or "")))

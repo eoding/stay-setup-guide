@@ -214,11 +214,14 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
             continue
         if charge.offer != target.offer:
             raise PlanError(f"부과금 {charge.id}번은 오퍼 {charge.offer} 의 것입니다(요청은 오퍼 {target.offer}) — look 의 번호를 씁니다")
-        charge.where(target.place)            # 그 시간대 줄 · 연령 구간이 창에 있는지(없으면 ModelError)
-        before = charge.value(target.place)
-        after = _after(before, request, rounder(charge, target.place, charge.currency or currency))
-        changes.append(AmountChange(target.offer, target.place, charge.place_label(target.place), before, after,
-                                    _verdict(charge, target.place, before, after)))
+        place = charge.normal(target.place)
+        charge.where(place)                   # 그 시간대 줄 · 연령 구간이 창에 있는지(없으면 ModelError)
+        if any(change.place == place for change in changes):
+            raise PlanError(f"같은 금액 칸을 두 번 적었습니다: {charge.place_label(place)}")
+        before = charge.value(place)
+        after = _after(before, request, rounder(charge, place, charge.currency or currency))
+        changes.append(AmountChange(target.offer, place, charge.place_label(place), before, after,
+                                    _verdict(charge, place, before, after)))
         charges[charge.id] = charge
     if not changes and not missing:
         raise PlanError("읽은 값에 요청이 짚은 부과금이 없습니다")
