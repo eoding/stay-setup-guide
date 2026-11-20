@@ -17,8 +17,9 @@
  * 글자는 예전 판이다 — `load()` 는 올라온 파일이, `again()` 은 적어 둔 원본이 그 값과 다르면 아무것도 실행하지 않고 어느 파일인지
  * 말한다. 플러그인을 새로 깐 뒤 예전 탭이 예전 코드를 되살리지 않는다.
  *
- * localStorage 에는 원본만, `stayPrice` 로 시작하는 제 키에만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·`stayPriceSrc`, 부가옵션
- * 묶음은 `stayPriceAddonSrc` 까지). 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 —
+ * localStorage 에는 `stayPrice` 로 시작하는 키 다섯만 생긴다. 이 올리개는 원본만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·
+ * `stayPriceSrc`, 부가옵션 묶음은 `stayPriceAddonSrc` 까지). 올린 가격 도우미는 마지막 작업의 답을 `stayPriceLast` 에 적는다(부가옵션
+ * 도우미의 작업도 같은 작업 틀을 지나 같은 키에). 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 —
  * 탭에 예전 러너 실행의 원본(다른 판일 수 있다)과 계획·이어 하기 자리가 남아 있을 수 있고, 덮으면 그 실행이 깨진다.
  * 돌려주는 값에는 주소가 없다(파일 이름 · 바이트 수 · 판 번호뿐). 판 번호는 점을 `·` 로 바꿔 보낸다(`0·15·0`).
  */
@@ -40,7 +41,7 @@
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 87965, crc32: '0a2d6c16', fnv: '58ba8fef' },
+    'stay_price.js': { bytes: 88131, crc32: '834dee09', fnv: 'f8907fcf' },
     'stay_addon_price.js': { bytes: 21769, crc32: 'f2e7195b', fnv: '3d496ceb' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다

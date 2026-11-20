@@ -25,7 +25,7 @@ test('B12 · 판매일 없는 날이 끼어도 읽기가 통째로 실패하지 
   const sent = sentRanges(page);
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, ASK('2026-07-01', '2026-07-03'))));
   assert.equal(r.ok, true, r.error);
-  assert.deepEqual(r.days, { asked: 3, open: 1, noSale: 2 });
+  assert.deepEqual(r.days, { asked: 3, withCell: 1, noSale: 2 });
   assert.deepEqual(sent, ['2026-07-01'], '가격 수정 창에는 열린 날만 보냈다');
   const { body } = takeAll(page.w, r);
   assert.deepEqual(body.noSale, ['2026-07-02', '2026-07-03']);
@@ -50,7 +50,7 @@ test('B12 · 두 달에 걸치면 달마다 칸을 보고 열린 날만 구간 �
   const ask = ASK('2026-07-01', '2026-08-31');
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, ask)));
   assert.equal(r.ok, true, r.error);
-  assert.deepEqual(r.days, { asked: 62, open: 2, noSale: 60 });
+  assert.deepEqual(r.days, { asked: 62, withCell: 2, noSale: 60 });
   assert.equal(r.clicks.month, 1, '8월로 한 번 넘겼다');
   assert.deepEqual(sent, ['2026-07-01\n2026-08-01']);
   const results = [r, ...takeAll(page.w, r).takes];

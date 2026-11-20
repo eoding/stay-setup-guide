@@ -46,7 +46,7 @@ test('B5 · readPair — 객실 × 요금제 칩을 고르고 ② 를 줄여 돌
   const { body, takes } = takeAll(ok.w, read);
   assert.deepEqual(body.asked, PAIR);
   assert.equal(read.what, '디럭스 · 조식 포함 · 2026-07-01');
-  assert.deepEqual(read.days, { asked: 1, open: 1, noSale: 0 });
+  assert.deepEqual(read.days, { asked: 1, withCell: 1, noSale: 0 });
   assert.deepEqual(body.noSale, []);
   assert.deepEqual([read.clicks.bulkOpen, read.clicks.bulkNext], [1, 1]);
   assert.ok(takes.every((t) => t.ok && charsOf(t) <= 800));

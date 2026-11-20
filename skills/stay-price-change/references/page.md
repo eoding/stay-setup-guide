@@ -57,7 +57,7 @@
 | `body` | 읽기 작업과 긴 `look()` 만. `{id, chars, bytes, crc32, fnv}` — 조각 id 와 그 글자를 알아볼 값(글자 수 · UTF-8 바이트 수 · CRC-32 · FNV-1a). 명령이 `refetch` 로 댄 조각만 `take` 로 받는다. 조각 안에는 페이지가 알아본 `hotel` 이 든다 |
 | `hotel` | `look()` 은 이 탭의 호텔 `{id, name}`. 다른 호텔이라 거절한 작업의 답에도 이 탭의 호텔이 든다 |
 | `rest` · `warn` | 답할 때 화면(드로어 · 셀 창 · 요청)이 정리됐는지. 정리되지 않았으면 다음 작업이 `started: false` 로 기다릴 초를 알려 준다 |
-| `what` · `days` · `note` | 무엇을 했는지 · 읽은 날 수(`asked`·`open`·`noSale`) · 메모 |
+| `what` · `days` · `note` | 무엇을 했는지 · 읽은 날 수(`asked` 물은 날 · `withCell` 가격 칸이 있는 날 — 판매 마감인 날도 든다 · `noSale` 판매일 없는 날) · 메모 |
 | `error` · `errors` | 까닭(200자 안) · 화면이 보인 오류 줄 |
 | `clicks` · `blocked` · `blockedMore` | 누른 것 수 · 막은 클릭(처음 둘) · 더 막은 수 |
 | `cut` | 800자를 넘어 꼭 필요한 칸만 남긴 답 |

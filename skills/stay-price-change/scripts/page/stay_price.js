@@ -840,19 +840,20 @@
     });
     return runs.map(function (r) { return r.from === r.to ? r.from : r.from + ' ~ ' + r.to; });
   }
-  // 고른 날 가운데 판매일이 열린 날 — 그 객실·요금제 달력의 칸으로 안다(열린 날은 칸이 [셀 창] 단추, 안 열린 날은 「판매일 없음」 글자)
-  async function openDays(ctx, days) {
-    var open = [];
+  // 고른 날 가운데 가격 칸이 있는 날 — 그 객실·요금제 달력의 칸으로 안다(칸이 [셀 창] 단추면 있다, 「판매일 없음」 글자면 없다).
+  // 판매일이 있는 날이고, 판매 마감인 날도 든다(마감은 가격 칸이 말한다)
+  async function daysWithCell(ctx, days) {
+    var withCell = [];
     var months = days.map(function (d) { return d.slice(0, 7); }).filter(function (m, i, list) { return list.indexOf(m) === i; });
     for (var i = 0; i < months.length; i++) {
       await toMonth(ctx, months[i] + '-01');
       days.filter(function (d) { return d.slice(0, 7) === months[i]; }).forEach(function (day) {
         var td = document.querySelector('#stay_calendar td[data-stay-date="' + day + '"]');
         if (!td) fail('달력에서 ' + day + ' 칸을 찾지 못했습니다');
-        if ([].slice.call(td.children).some(function (el) { return el.matches('[data-stay-action="open_cell"]'); })) open.push(day);
+        if ([].slice.call(td.children).some(function (el) { return el.matches('[data-stay-action="open_cell"]'); })) withCell.push(day);
       });
     }
-    return open;
+    return withCell;
   }
 
   function readPair(input) {
@@ -860,13 +861,13 @@
       var want = { offer: text(p.offer, 'offer'), room: text(p.room, 'room'), ratePlan: text(p.ratePlan, 'ratePlan'), from: p.from, to: p.to, weekdays: p.weekdays };
       var span = period(want.from, want.to, want.weekdays);
       await toPair(ctx, want.offer, want.room, want.ratePlan);
-      var open = await openDays(ctx, span.days);
-      var noSale = span.days.filter(function (d) { return open.indexOf(d) < 0; });
-      var counts = { asked: span.days.length, open: open.length, noSale: noSale.length };
-      if (!open.length) return { ok: true, what: clip(ctx.pins.chip + ' · 고른 날이 모두 판매일 없음', 120), days: counts, keep: { fragment: null, noSale: noSale } };
-      // 열린 날만 고른다 — 날은 숨은 date_selection_0 의 구간 줄이 정한다(기간·요일 칸은 그 바깥 테두리)
-      var openSpan = { ranges: runsOf(open), days: open };
-      var review = await openBulkReview(ctx, { offer: want.offer, ratePlan: want.ratePlan, from: open[0], to: open[open.length - 1], weekdays: want.weekdays }, openSpan);
+      var withCell = await daysWithCell(ctx, span.days);
+      var noSale = span.days.filter(function (d) { return withCell.indexOf(d) < 0; });
+      var counts = { asked: span.days.length, withCell: withCell.length, noSale: noSale.length };
+      if (!withCell.length) return { ok: true, what: clip(ctx.pins.chip + ' · 고른 날이 모두 판매일 없음', 120), days: counts, keep: { fragment: null, noSale: noSale } };
+      // 가격 칸이 있는 날만 고른다 — 날은 숨은 date_selection_0 의 구간 줄이 정한다(기간·요일 칸은 그 바깥 테두리)
+      var openSpan = { ranges: runsOf(withCell), days: withCell };
+      var review = await openBulkReview(ctx, { offer: want.offer, ratePlan: want.ratePlan, from: withCell[0], to: withCell[withCell.length - 1], weekdays: want.weekdays }, openSpan);
       var fragment = reduce(review);
       await closeDrawer(Date.now() + 3000);
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
