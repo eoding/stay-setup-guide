@@ -46,7 +46,8 @@ test('B5 · readPair — 객실 × 요금제 칩을 고르고 ② 를 줄여 돌
   const { body, takes } = takeAll(ok.w, read);
   assert.deepEqual(body.asked, PAIR);
   assert.equal(read.what, '디럭스 · 조식 포함 · 2026-07-01');
-  assert.equal(read.days, 1);
+  assert.deepEqual(read.days, { asked: 1, open: 1, noSale: 0 });
+  assert.deepEqual(body.noSale, []);
   assert.deepEqual([read.clicks.bulkOpen, read.clicks.bulkNext], [1, 1]);
   assert.ok(takes.every((t) => t.ok && bytesOf(t) <= 1500));
   assert.deepEqual(read.blocked, []);
@@ -70,7 +71,7 @@ test('B5 · readPair — 다른 탭·전체 보기에서 시작하면 [가격 �
 test('B5 · readPair — 화면이 다른 객실·다른 기간·다른 오퍼를 보여 주면 읽은 것을 돌려주지 않는다', async () => {
   const cases = [
     ['다른 객실(드로어의 rate_plan)', { bulkReview: runFixture('calendar-bulk--price-step2.html').replace('name="rate_plan" value="{rate_plan:1}"', 'name="rate_plan" value="{rate_plan:2}"') }, PAIR, /다른 객실·요금제/],
-    ['다른 기간(상태 표의 날)', {}, Object.assign({}, PAIR, { to: '2026-07-02' }), /드로어의 날짜\(1일\)가 물은 날짜\(2일\)/],
+    ['다른 기간(상태 표의 날)', { bulkReview: runFixture('calendar-bulk--price-step2.html').replace('<tr><td>2026-07-01</td><td>가격 판매 가능</td></tr>', '<tr><td>2026-07-02</td><td>가격 판매 가능</td></tr>') }, PAIR, /드로어의 날짜.*와 다릅니다/],
     ['다른 오퍼', {}, Object.assign({}, PAIR, { offer: '다른 계약' }), /오퍼가 `〈오퍼 관리용 이름〉`/],
     ['없는 칩', {}, Object.assign({}, PAIR, { room: '디럭스 (시티뷰)' }), /칩이 없습니다/],
     ['요일 글자가 아님', {}, Object.assign({}, PAIR, { weekdays: ['Mon'] }), /weekdays/],

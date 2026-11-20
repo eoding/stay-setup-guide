@@ -59,6 +59,12 @@ class ReadCallsTest(unittest.TestCase):
         self.assertEqual(periods(["2026-07-01", "2026-07-02", "2026-07-09"]),
                          [("2026-07-01", "2026-07-02", list("월화수목금토일")), ("2026-07-09", "2026-07-09", list("월화수목금토일"))])
 
+    def test_reads_are_cut_at_186_days_so_one_call_walks_few_calendar_months(self):
+        year = [(date(2027, 1, 1) + timedelta(days=offset)).isoformat() for offset in range(365)]
+        calls = read_calls("O", [("R", "P")], year)
+        self.assertEqual([(call["from"], call["to"]) for call in calls], [("2027-01-01", "2027-07-05"), ("2027-07-06", "2027-12-31")])
+        self.assertEqual(len(reserved_probes("O", [("R", "P")], year)), 1, "가감 물음은 550일까지 한 번에")
+
     def test_a_span_longer_than_550_days_is_split(self):
         thursdays = [(date(2026, 1, 1) + timedelta(weeks=week)).isoformat() for week in range(79)]
         self.assertEqual(periods(thursdays), [("2026-01-01", "2027-07-01", ["목"])], "546일 — 한 번에 읽는다")
@@ -73,7 +79,7 @@ class ReadCallsTest(unittest.TestCase):
              "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"], "occupancy": "*", "nights": "all"}])
 
     def test_read_answers_must_be_what_was_asked(self):
-        asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함"}
+        asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}
         read, = pair_reads(reply("readPair", asked, {"fragment": PRICE}))
         self.assertEqual((read.offer, read.room, read.rate_plan, read.page.room, read.page.currency),
                          ("샘플 오퍼", "디럭스", "조식 포함", "샘플 오퍼 · 디럭스", "USD"))

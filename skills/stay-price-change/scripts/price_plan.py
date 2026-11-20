@@ -55,7 +55,7 @@ def _check_scope(snapshot: Snapshot, hotel: str, offer: str, pairs: Iterable[tup
         raise PlanError(f"읽지 않은 객실·요금제가 있습니다: {', '.join(unread)}. 그 객실·요금제의 가격을 먼저 읽어야 합니다")
     filled = {(key.room, key.rate_plan) for key in snapshot.cells}
     gaps = sorted({f"{room} · {plan} · {day}" for room, plan, day in days
-                   if (room, plan) in filled and not snapshot.covers(room, plan, day)})
+                   if (room, plan) in filled and not snapshot.covers(room, plan, day) and (room, day) not in snapshot.no_sale})
     if gaps:
         raise PlanError(f"읽은 값에 없는 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
     return tuple(pair for pair in pairs if pair not in filled)
@@ -128,6 +128,9 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     keys = [key for key in snapshot.cells if (key.room, key.rate_plan) in wanted and key.date in dates]
     empty = _check_scope(snapshot, request.hotel, request.offer, pairs,
                          [(room, plan, day) for room, plan in pairs for day in request.dates])
+    no_sale = tuple((room, plan, day) for room, plan in pairs for day in sorted(set(request.dates))
+                    if (room, day) in snapshot.no_sale)
+    empty = tuple(pair for pair in empty if not all((pair[0], day) in snapshot.no_sale for day in request.dates))
     keys.sort(key=lambda k: (rooms[k.room], plans[k.rate_plan], occupancy_order(k.occupancy), k.nights, k.date))
     changes, skipped = [], []
     for key in keys:
@@ -143,7 +146,7 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
             continue
         changes.append(CellChange(key, before, after, _marks(snapshot, key, before),
                                   CELL_RULES.verdict(before, after, lacking)))
-    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent)
+    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent, no_sale)
 
 
 def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
@@ -155,10 +158,13 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
     shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key in snapshot.cells}
     rooms = {room: rank for rank, room in enumerate(dict.fromkeys(t.key.room for t in table.targets))}
     plans = {plan: rank for rank, plan in enumerate(dict.fromkeys(t.key.rate_plan for t in table.targets))}
-    changes = []
+    changes, no_sale = [], {}
     for target in sorted(table.targets, key=lambda t: (rooms[t.key.room], plans[t.key.rate_plan],
                                                       occupancy_order(t.key.occupancy), t.key.nights, t.key.date)):
         key = target.key
+        if (key.room, key.date) in snapshot.no_sale:
+            no_sale[(key.room, key.rate_plan, key.date)] = None
+            continue
         before = snapshot.cells.get(key, MISSING)
         wanted = {name: None if value is None else round_money(value, snapshot.currency) for name, value in target.values}
         merged = {name: wanted[name] if name in wanted else getattr(before, name) for name in FIELDS}
@@ -172,7 +178,7 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
         if after == before:
             continue
         changes.append(CellChange(key, before, after, _marks(snapshot, key, before), CELL_RULES.verdict(before, after, lacking)))
-    return Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), ())
+    return Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), (), no_sale=tuple(sorted(no_sale)))
 
 
 def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:

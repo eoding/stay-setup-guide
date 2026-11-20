@@ -94,6 +94,20 @@ function echoHidden(html, values, offerName) {
   if (offerName) out = out.replace(/<dt>오퍼<\/dt><dd>[^<]*<\/dd>/, `<dt>오퍼</dt><dd>${offerName}</dd>`);
   return out;
 }
+// 가격 수정 ② 의 상태 표와 기존 값 줄을 받은 날짜 구간대로 다시 그린다(캡처 price-step2 의 7/1 줄을 구간마다 되풀이) — 서버와 같이
+function echoDays(html, ranges) {
+  const label = (line) => {
+    const [a, b] = line.split(' ~ ');
+    if (!b) return a;
+    const n = Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1;
+    return `${a} ~ ${b} (${n}일)`;
+  };
+  const lines = String(ranges || '').split('\n').map((x) => x.trim()).filter(Boolean).map(label);
+  return html
+    .replace('<tbody><tr><td>2026-07-01</td><td>가격 판매 가능</td></tr></tbody>', `<tbody>${lines.map((d) => `<tr><td>${d}</td><td>가격 판매 가능</td></tr>`).join('')}</tbody>`)
+    .replace('<tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>',
+      lines.map((d) => `<tr data-stay-existing><td>${d}</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>`).join(''));
+}
 const formValues = (root, names) => Object.fromEntries(names.map((name) => [name, [...root.querySelectorAll(`[name="${name}"]`)]
   .filter((el) => !(el.type === 'checkbox' || el.type === 'radio') || el.checked).map((el) => el.value)]));
 
@@ -106,6 +120,7 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   onBulkSave   'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다) | 'hang'(요청이 끝나지 않는다)
  *   drawerStuck  true 면 드로어가 닫혀도 내용이 비지 않는다(쉬는 화면이 오지 않는다)
  *   cell         셀 창 그리기 값 {date, plan, rows} · cellSave 'ok'|'error'
+ *   echoDays     true 면 가격 수정 ② 의 상태 표·기존 값 줄을 받은 날짜 구간대로 다시 그린다
  *   panelEdit · adjustSelectEdit  캘린더 판 · 가감 ① 조각을 바꾸는 함수(객실 이름 변형 등)
  *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다 · bare 면 아무것도 올리지 않는다(올리개 시험)
  */
@@ -168,7 +183,8 @@ export function erpPage(opts = {}) {
     } else if (b.matches('[data-calendar-adjust-action="open"]')) {
       render((o.adjustSelectEdit || ((html) => html))(runFixture('calendar-adjust--step1.html')));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="next"]')) {
-      render(echoHidden(o.bulkReview, formValues(body, ['date_selection_0'])));
+      const sent = formValues(body, ['date_selection_0']);
+      render(echoHidden(o.echoDays ? echoDays(o.bulkReview, sent.date_selection_0[0]) : o.bulkReview, sent));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="save"]')) {
       const root = b.closest('[data-stay-screen="calendar-bulk"]');
       const post = { screen: 'calendar-bulk' };

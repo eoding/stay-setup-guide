@@ -58,7 +58,7 @@ class BrowserCommandTest(unittest.TestCase):
         probes = self.write("probes.json", [probe])
         first = self.run_cli("reserved", "--probes", probes)
         self.assertEqual((first["done"], first["ask"], first["answered"]), (False, [probe], 0))
-        pair = self.write("pair.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함"}, {"fragment": PRICE}))
+        pair = self.write("pair.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
         left = self.run_cli("read", "--hotel", "데모 호텔", "--pair-result", pair, "--reserved-probes", probes, code=2)
         self.assertIn("물음이 1개 남았습니다", left["error"])
 
@@ -70,7 +70,7 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual((snapshot.offer, snapshot.currency, len(snapshot.cells)), ("샘플 오퍼", "USD", 16))
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
 
-        wrong = self.write("wrong.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리"}, {"fragment": PRICE}))
+        wrong = self.write("wrong.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
         self.assertIn("물었는데 화면은", self.run_cli("read", "--hotel", "H", "--pair-result", wrong, code=2)["error"])
 
     def test_calls_list_unsaved_steps_and_record_result_writes_only_the_step_it_answers(self):

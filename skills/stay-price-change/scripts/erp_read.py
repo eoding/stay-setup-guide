@@ -268,16 +268,26 @@ def parse_adjust_page(html: str) -> AdjustPage:
 @dataclass(frozen=True)
 class PairRead:
     """객실 × 요금제 하나를 읽은 것. `room` 은 캘린더 칩에 보이는 이름(담당자가 말하는 이름)이고 칸의 키가 된다.
-    `page` 는 그 칩으로 연 [선택 날짜 가격 수정] 확인 단계 — 화면의 오퍼·요금제가 물은 것과 다르면 만들어지지 않는다."""
+    `page` 는 그 칩으로 연 [선택 날짜 가격 수정] 확인 단계 — 화면의 오퍼·요금제가 물은 것과 다르면 만들어지지 않는다.
+    `no_sale` 은 캘린더 칸이 「판매일 없음」이라 읽지 않은 날이다(가격 수정 창은 그런 날이 끼면 기간을 통째로 거절한다).
+    판매일 있는 날이 하나도 없으면 `page` 는 None 이다."""
     offer: str
     room: str
     rate_plan: str
-    page: PricePage
+    page: PricePage | None
+    no_sale: tuple[str, ...] = ()
 
     def __post_init__(self):
+        if self.page is None:
+            if not self.no_sale:
+                raise ParseError(f"{self.room} · {self.rate_plan} 는 읽은 화면도 판매일 없는 날도 없습니다")
+            return
         if (self.page.offer, self.page.rate_plan) != (self.offer, self.rate_plan):
             raise ParseError(f"{self.offer} · {self.room} · {self.rate_plan} 를 물었는데 화면은 {self.page.offer} · "
                              f"{self.page.rate_plan} 입니다")
+        both = sorted(set(self.page.days) & set(self.no_sale))
+        if both:
+            raise ParseError(f"{self.room} · {self.rate_plan} 의 {', '.join(both[:3])} 가 판매일 없음이면서 읽은 화면에도 있습니다")
 
     @classmethod
     def of(cls, room: str, page: PricePage) -> "PairRead":
@@ -291,18 +301,23 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if not reads:
         raise ParseError("가격 수정 확인 단계를 하나 이상 읽어야 합니다")
     offers = {read.offer for read in reads} | {page.offer for page in adjust_pages}
-    currencies = {read.page.currency for read in reads}
+    currencies = {read.page.currency for read in reads if read.page is not None}
     if len(offers) != 1:
         raise ParseError(f"오퍼가 섞였습니다: {' · '.join(sorted(offers))}")
+    if not currencies:
+        raise ParseError("판매일 있는 날을 하나도 읽지 못해 통화를 모릅니다 — 고른 날이 모두 판매일 없음입니다")
     if len(currencies) != 1 or not re.fullmatch(r"[A-Z]{3}", next(iter(currencies))):
         raise ParseError(f"통화를 하나로 정하지 못했습니다: {' · '.join(sorted(currencies))}")
     offer = offers.pop()
-    cells, pairs, names = {}, set(), {}
+    cells, pairs, names, no_sale = {}, set(), {}, set()
     for read in reads:
         page, room = read.page, read.room
+        pairs.add((room, read.rate_plan))
+        no_sale.update((room, day) for day in read.no_sale)
+        if page is None:
+            continue
         if names.setdefault(room, page.room) != page.room:
             raise ParseError(f"캘린더의 객실 {room} 이 드로어에서 두 이름으로 보입니다: {names[room]} · {page.room}")
-        pairs.add((room, page.rate_plan))
         for row in page.rows:
             for day, value in row.values.items():
                 key = CellKey(room, page.rate_plan, day, row.occupancy, row.nights)
@@ -338,4 +353,5 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
             reserved.update((room, day) for day in row.days)
     if unknown:
         raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(sorted(unknown))}")
-    return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names)
+    return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names,
+                    frozenset(no_sale))

@@ -1,6 +1,6 @@
 """price_browser.py — 브라우저 쪽 `window.stayPrice`(`scripts/page/stay_price.js`)와 주고받는 모양.
 
-    read_calls(offer, pairs, dates)       readPair 부를 값 — 객실 × 요금제마다, 고른 날만 덮는 기간·요일로(550일씩)
+    read_calls(offer, pairs, dates)       readPair 부를 값 — 객실 × 요금제마다, 고른 날만 덮는 기간·요일로(186일씩)
     reserved_probes(offer, pairs, dates)  readReserved 첫 물음 — 같은 기간마다 객실·요금제 전부
     attach_bodies(results)                읽기 답에 페이지에 남겨 둔 조각을 붙인다 — 쪽(take 답)을 잇고 바이트 수·CRC-32 를 맞춰 본다
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
@@ -30,6 +30,7 @@ from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
 from price_model import FIELDS, WEEKDAYS, decode_step, iso_day
 
 MAX_SPAN = 550                       # ERP 가 한 번에 받는 기간(일)
+READ_SPAN = 186                      # readPair 한 번의 기간 — 달마다 달력 칸을 보므로(판매일 확인) 여섯 달 남짓으로 끊어 45초 안에
 PROBE_FIELDS = ("offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
 OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
 
@@ -95,7 +96,7 @@ def selected(first: str, last: str, weekdays: Iterable[str]) -> list[str]:
             if (start + timedelta(days=offset)).weekday() in wanted]
 
 
-def periods(dates: Iterable[str]) -> list[tuple[str, str, list[str]]]:
+def periods(dates: Iterable[str], span: int = MAX_SPAN) -> list[tuple[str, str, list[str]]]:
     """고른 날만 덮는 (시작일, 종료일, 요일) 목록. 「기간 ∩ 요일」 하나로 꼭 그 날들이 되면 하나, 아니면 이어진 날마다 하나.
 
     가격 수정 창은 판매일이 없는 날이 하루라도 끼면 기간을 통째로 거절하므로, 고르지 않은 날을 덮지 않는다.
@@ -105,7 +106,7 @@ def periods(dates: Iterable[str]) -> list[tuple[str, str, list[str]]]:
         raise ValueError("날짜가 없습니다")
     windows: list[list[str]] = []
     for day in days:
-        if windows and (date.fromisoformat(day) - date.fromisoformat(windows[-1][0])).days < MAX_SPAN:
+        if windows and (date.fromisoformat(day) - date.fromisoformat(windows[-1][0])).days < span:
             windows[-1].append(day)
         else:
             windows.append([day])
@@ -126,7 +127,7 @@ def periods(dates: Iterable[str]) -> list[tuple[str, str, list[str]]]:
 
 
 def read_calls(offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
-    spans = periods(dates)
+    spans = periods(dates, READ_SPAN)
     return [{"offer": offer, "room": room, "ratePlan": plan, "from": first, "to": last, "weekdays": weekdays}
             for room, plan in dict.fromkeys(pairs) for first, last, weekdays in spans]
 
@@ -197,7 +198,10 @@ def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Rou
 
 
 def pair_reads(results: Iterable[Mapping]) -> list[PairRead]:
-    """`results` 는 readPair 답과 그 조각의 take 답들. 객실은 물은 이름(캘린더 칩의 이름)으로 적는다."""
+    """`results` 는 readPair 답과 그 조각의 take 답들. 객실은 물은 이름(캘린더 칩의 이름)으로 적는다.
+
+    읽은 날과 「판매일 없음」인 날을 합치면 물은 날(기간 ∩ 요일)과 꼭 같아야 한다 — 하루라도 빠지거나 남으면 거절한다.
+    """
     reads = []
     for result in attach_bodies(results):
         if result.get("op") != "readPair":
@@ -205,7 +209,12 @@ def pair_reads(results: Iterable[Mapping]) -> list[PairRead]:
         if not result.get("ok"):
             raise BrowserError(f"{result.get('what') or '객실 · 요금제'} 를 읽지 못했습니다: {result.get('error')}")
         asked = result["asked"]
-        reads.append(PairRead(asked["offer"], asked["room"], asked["ratePlan"], parse_price_page(result["fragment"])))
+        page = parse_price_page(result["fragment"]) if result.get("fragment") else None
+        no_sale = tuple(sorted(iso_day(day) for day in result.get("noSale") or ()))
+        wanted = set(selected(asked["from"], asked["to"], asked["weekdays"]))
+        if set(page.days if page else ()) | set(no_sale) != wanted or (page and set(page.days) & set(no_sale)):
+            raise BrowserError(f"{asked['room']} · {asked['ratePlan']}: 읽은 날과 판매일 없는 날을 합쳐도 물은 날과 맞지 않습니다")
+        reads.append(PairRead(asked["offer"], asked["room"], asked["ratePlan"], page, no_sale))
     return reads
 
 
