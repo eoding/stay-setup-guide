@@ -6,6 +6,7 @@
     attach_bodies(results, earlier)       읽기 답에 페이지에 남겨 둔 조각을 붙인다 — 쪽(take 답)을 잇고 바이트 수·CRC-32·FNV-1a 를
                                           맞춰 본다. 앞선 읽기(earlier)에서 다 받은 같은 조각이면 그것을 쓴다
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
+    reading_time(results)                 읽기 한 번이 ERP 를 읽은 시각 — 그 읽기의 작업 답이 말하는 끝난 시각 가운데 가장 이른 것
     pair_reads(results)                   readPair 답 → PairRead — 객실은 물은(캘린더 칩의) 이름, 화면의 오퍼·요금제가 다르면 거절
     step_call(no, hotel, offer, kind, body)  장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
 
@@ -33,7 +34,7 @@ import json
 import re
 import zlib
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Iterable, Mapping
 
 from change_core.money import money_text
@@ -323,6 +324,32 @@ def unanswered(calls: Iterable[Mapping], results: Iterable, op: str) -> list[dic
     """부를 값 가운데 그 작업의 답이 하나도 없는 것(지문 `ask` 로 짝짓는다)."""
     asked = {str(result.get("ask")) for result in answers(answers_for(results, op))[0] if result.get("op") == op}
     return [call for call in calls if ask_sum(call) not in asked]
+
+
+READS = ("readPair", "readReserved")
+
+
+def reading_time(results: Iterable) -> str:
+    """읽기 한 번이 ERP 를 읽은 시각(지금 시각대의 ISO, 초까지) — 그 읽기에서 부른 readPair · readReserved 의 온전한 답마다 페이지가
+    적은 끝난 시각(`doneAt`) 가운데 가장 이른 것. 명령을 부른 때가 아니다(읽기가 끝나고 몇 분 뒤에 부를 수 있다). 15분 창도 이
+    시각에서 잰다. 끝난 시각이 없는 답(예전 판 페이지의 답)이 하나라도 있으면 언제 읽었는지 모르므로 거절한다."""
+    moments = []
+    for result in answers(results)[0]:
+        if result.get("op") not in READS or not result.get("ok"):
+            continue
+        if not result.get("doneAt"):
+            raise BrowserError(f"{result['op']} 의 답에 끝난 시각(doneAt)이 없어 언제 읽었는지 모릅니다 — 예전 판 페이지의 답입니다. "
+                               "도우미를 다시 올리고 새 읽기 폴더로 처음부터 읽습니다")
+        try:
+            moment = datetime.fromisoformat(str(result["doneAt"]).replace("Z", "+00:00"))
+        except ValueError:
+            raise BrowserError(f"{result['op']} 의 끝난 시각을 읽지 못했습니다: {result['doneAt']}") from None
+        if moment.tzinfo is None:
+            raise BrowserError(f"{result['op']} 의 끝난 시각에 시간대가 없습니다: {result['doneAt']}")
+        moments.append(moment)
+    if not moments:
+        raise BrowserError("읽기 답이 하나도 없어 언제 읽었는지 모릅니다")
+    return min(moments).astimezone().isoformat(timespec="seconds")
 
 
 def page_hotel(results: Iterable) -> dict:

@@ -95,6 +95,10 @@ test('B11 · 표시명이 있는 호텔 — 칩 이름으로 읽고 묻고, 스�
     assert.deepEqual(snapshot.room_names, [{ room: SHOWN, drawer: `${OFFER} · 디럭스` }]);
     assert.ok(snapshot.cells.every((cell) => cell.room === SHOWN));
     assert.ok(snapshot.reserved.some((item) => item.room === SHOWN && item.date === '2026-12-24'), JSON.stringify(snapshot.reserved));
+    // Z6 — 작업의 답은 끝난 시각을 싣고, 읽은 시각은 그 가운데 가장 이른 것이다(명령을 부른 때가 아니다)
+    const earliest = Math.min(Date.parse(read.doneAt), Date.parse(reserved.doneAt));
+    assert.ok(Number.isFinite(earliest), `${read.doneAt} · ${reserved.doneAt}`);
+    assert.equal(Math.floor(Date.parse(snapshot.read_at) / 1000), Math.floor(earliest / 1000), snapshot.read_at);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

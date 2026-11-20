@@ -5,7 +5,7 @@
     read-calls    읽을 범위(요청 파일, 또는 장부 번호) → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음(calls.json)
     reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
-                  시험용으로 ERP 화면 조각(HTML) 파일도 받는다
+                  읽은 시각(read_at)은 그 작업들이 끝난 시각 가운데 가장 이른 것이다. 시험용으로 ERP 화면 조각(HTML) 파일도 받는다
     sheet         요금표 파일(kind sheet) + look 의 답 → 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위와
                   페이지 작업 수(sheet-check.json). read-calls · plan · render sheet 가 이 파일을 받는다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다.
@@ -59,8 +59,8 @@ from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reading_size, reserved_probes, reserved_round,
-    step_call, step_outcome, too_big, unanswered,
+    BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes,
+    reserved_round, step_call, step_outcome, too_big, unanswered,
 )
 from change_core.rules import BLOCKED
 from price_model import (
@@ -160,13 +160,15 @@ def cmd_read(args):
     if args.calls or args.answers:
         if not (args.calls and args.answers):
             raise ValueError("브라우저 답으로 읽을 때는 --calls(read-calls 가 낸 파일)와 --answers(답 파일·폴더)를 함께 줍니다")
-        if args.hotel or args.hotel_id or args.price_page or args.adjust_page:
-            raise ValueError("브라우저 답으로 읽을 때 호텔은 페이지가 알아본 것을 씁니다 — --hotel · --hotel-id · 화면 조각 파일을 같이 주지 않습니다")
+        if args.hotel or args.hotel_id or args.price_page or args.adjust_page or args.read_at:
+            raise ValueError("브라우저 답으로 읽을 때 호텔은 페이지가 알아본 것을, 읽은 시각은 답의 끝난 시각을 씁니다 — --hotel · "
+                             "--hotel-id · --read-at · 화면 조각 파일을 같이 주지 않습니다")
         calls, results = load_calls(args.calls), load_results(args.answers)
         missing = unanswered(calls["pairs"], results, "readPair")
         if missing:
             raise BrowserError(f"readPair 답이 없는 부를 값이 {len(missing)}개 있습니다 — 처음 것: {missing[0]['room']} · "
                                f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다")
+        read_at = reading_time(results)
         results = attach_bodies(results, load_results(args.earlier))
         pair_answers, reserved_answers = answers_for(results, "readPair"), answers_for(results, "readReserved")
         done = reserved_round(calls["reserved"], reserved_answers)
@@ -180,7 +182,8 @@ def cmd_read(args):
         hotel = {"id": args.hotel_id, "name": args.hotel}
         pages = [price_page_arg(text) for text in args.price_page or ()]
         adjusts = [parse_adjust_page(Path(path).read_text(encoding="utf-8")) for path in args.adjust_page or ()]
-    return encode_snapshot(build_snapshot(hotel["name"], args.read_at or now_text(), pages, adjusts, hotel["id"]))
+        read_at = args.read_at or now_text()
+    return encode_snapshot(build_snapshot(hotel["name"], read_at, pages, adjusts, hotel["id"]))
 
 
 def recorded_reading(ledger: Ledger, change_id: int):
@@ -511,7 +514,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--calls", help="read-calls 가 낸 파일")
     sub.add_argument("--answers", action="append", help="readPair · readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
     sub.add_argument("--earlier", action="append", help=EARLIER_HELP)
-    sub.add_argument("--read-at", help="읽은 시각(ISO). 없으면 지금")
+    sub.add_argument("--read-at", help="시험용: 화면 조각 파일로 읽을 때의 읽은 시각(ISO), 없으면 지금 — 브라우저 답은 작업들의 끝난 "
+                     "시각(doneAt) 가운데 가장 이른 것이 읽은 시각이다")
     sub.add_argument("--hotel", help="시험용: 화면 조각 파일로 읽을 때의 호텔 이름 — 브라우저 답은 페이지가 알아본 호텔을 쓴다")
     sub.add_argument("--hotel-id", help="시험용: 화면 조각 파일로 읽을 때의 호텔 번호")
     sub.add_argument("--price-page", action="append", help="시험용: '캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")

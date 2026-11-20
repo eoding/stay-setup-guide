@@ -32,7 +32,7 @@
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 83090, crc32: 'ee2c2742', fnv: 'afa9b026' }
+    'stay_price.js': { bytes: 83278, crc32: 'a777e3d4', fnv: '29002560' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
 

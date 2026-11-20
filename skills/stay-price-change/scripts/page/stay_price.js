@@ -230,7 +230,7 @@
     return out;
   }
   // 거르기를 지나 800자 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
-  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'error'];
+  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'doneAt', 'error'];
   function fit(result) {
     var out = scrub(result);
     if (shownLength(out) <= RESULT_CHARS) return out;
@@ -493,6 +493,7 @@
     if (blocked.length > 2) out.blockedMore = blocked.length - 2;
     if (out.error) out.error = clip(out.error, 200);
     out.ms = Date.now() - started;
+    out.doneAt = new Date().toISOString();   // 끝난 시각 — 명령은 읽기의 작업들 가운데 가장 이른 것을 ERP 에서 읽은 시각으로 삼는다
     return remember(fit(out));
   }
 
@@ -789,8 +790,8 @@
       if (offer && shown.picked !== offer) fail('캘린더에 오퍼 `' + offer + '` 이 없습니다 (보이는 오퍼: ' + shown.names.join(' / ') + ')');
       var pairs = all('#stay_calendar [data-stay-entity="rate_plan"][data-stay-action="goto"]').map(function (c) { return pairOf(C(c.getAttribute('data-stay-name'))); });
       var whole = { ok: true, login: false, hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs };
-      // 답의 나머지 칸(ask · clicks · rest · ms …)이 200자 안팎이다 — 목록까지 800자에 들면 그대로, 아니면 조각으로
-      if (shownLength(whole) <= RESULT_CHARS - 260) return whole;
+      // 답의 나머지 칸(ask · clicks · rest · ms · doneAt …)이 250자 안팎이다 — 목록까지 800자에 들면 그대로, 아니면 조각으로
+      if (shownLength(whole) <= RESULT_CHARS - 300) return whole;
       return { ok: true, login: false, hotel: hotel, offer: shown.picked, count: { offers: shown.names.length, pairs: pairs.length },
         keep: { hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs } };
     });

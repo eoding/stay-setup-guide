@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -18,7 +19,7 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
-from browser_replies import reply  # noqa: E402
+from browser_replies import done_at, reply  # noqa: E402
 from change_core.ledger import now_text  # noqa: E402
 from price_browser import ask_sum  # noqa: E402
 from price_model import decode_snapshot, encode_request, encode_snapshot  # noqa: E402
@@ -81,8 +82,7 @@ class BrowserCommandTest(unittest.TestCase):
         for index, item in enumerate(reply("readReserved", probe, {"fragment": REJECTED})):
             self.write(f"읽기-1/resv-1{'' if index == 0 else '-' + str(index)}.json", item)
         self.assertTrue(self.run_cli("reserved", "--calls", calls, "--answers", folder)["done"])
-        self.run_cli("read", "--calls", calls, "--answers", folder, "--read-at", "2026-11-20T18:00:00+09:00",
-                     "--out", folder / "snapshot.json")
+        self.run_cli("read", "--calls", calls, "--answers", folder, "--out", folder / "snapshot.json")
         snapshot = decode_snapshot(json.loads((folder / "snapshot.json").read_text(encoding="utf-8")))
         self.assertEqual((snapshot.offer, snapshot.currency, len(snapshot.cells)), ("샘플 오퍼", "USD", 16))
         self.assertEqual((snapshot.hotel_id, snapshot.hotel), (scene.HOTEL_ID, scene.HOTEL), "호텔은 페이지의 답에서")
@@ -93,6 +93,25 @@ class BrowserCommandTest(unittest.TestCase):
         wrong = self.write("wrong.json", reply("readPair", wrong_asked, {"fragment": PRICE}))
         wrong_calls = self.write("wrong-calls.json", {"pairs": [wrong_asked], "reserved": []})
         self.assertIn("물었는데 화면은", self.run_cli("read", "--calls", wrong_calls, "--answers", wrong, code=2)["error"])
+
+    def test_z6_read_at_is_when_the_page_finished_the_earliest_operation_not_when_the_command_ran(self):
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+        calls = self.write("calls.json", {"pairs": [asked], "reserved": [probe]})
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        # 시운전처럼 — 페이지 작업은 3분 전과 2분 전에 끝났고, 명령은 지금 부른다
+        pair = reply("readPair", asked, {"fragment": PRICE}, doneAt=done_at(now - timedelta(minutes=3)))
+        resv = reply("readReserved", probe, {"fragment": REJECTED}, doneAt=done_at(now - timedelta(minutes=2)))
+        read = self.run_cli("read", "--calls", calls, "--answers", self.write("answers.json", pair + resv))
+        self.assertEqual(datetime.fromisoformat(read["read_at"]), now - timedelta(minutes=3), "가장 이른 작업이 끝난 시각")
+        self.assertEqual(datetime.fromisoformat(read["read_at"]).utcoffset(), datetime.now().astimezone().utcoffset(), "지금 시각대로")
+        self.assertIn("--read-at", self.run_cli("read", "--calls", calls, "--answers", self.dir / "answers.json", "--read-at",
+                                                "2026-11-20T18:00:00+09:00", code=2)["error"], "답의 시각을 덮어쓰지 않는다")
+        timeless = [dict(pair[0], doneAt=None), *pair[1:]] + resv
+        self.assertIn("끝난 시각", self.run_cli("read", "--calls", calls, "--answers", self.write("timeless.json", timeless),
+                                            code=2)["error"], "시각이 없는 답으로 모은 읽기는 거절한다")
 
     def test_g4_a_range_with_no_operation_gives_the_calls_and_g5_a_record_number_gives_them_again(self):
         range_ = {"kind": "range", "hotel": scene.HOTEL_REF, "offer": scene.OFFER,
