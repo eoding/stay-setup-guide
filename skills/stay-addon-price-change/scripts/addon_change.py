@@ -244,8 +244,10 @@ def same_hotel_or_refuse(change_id: int, then: Snapshot, now: Snapshot) -> None:
 def cmd_begin(args):
     """적용 직전에 읽은 값(`--snapshot`)이 미리보기 때 값과 한 줄이라도 다르면 아무것도 시작하지 않는다(종료 1)."""
     data = load(args.plan)
-    if not data.get("steps"):
-        raise PlanError("저장 단계가 없습니다. 빨간 줄을 먼저 골라 주세요(바뀌는 줄이 없으면 적용할 것이 없습니다)")
+    if data.get("steps") is None:
+        raise PlanError("저장 단계가 없습니다. 빨간 줄을 먼저 골라 주세요")
+    if not data["steps"]:
+        raise PlanError(f"{args.change}번 미리보기는 바꿀 줄이 없어 적용할 것이 없습니다 — 아무것도 시작하지 않았습니다")
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     then = recorded_snapshot(ledger, args.change)
     same_hotel_or_refuse(args.change, then, now)

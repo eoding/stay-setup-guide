@@ -245,6 +245,39 @@ class OneLedgerTest(Flow):
         self.assertEqual((kinds, fields), ({"addon_price"}, {"sell", "supply"}))
 
 
+class NothingToSaveTest(Flow):
+    """F7 — 빨간 줄을 모두 「그 줄은 안 바꿈」으로 골라 바꿀 줄이 없는 미리보기(`saves` 0)는 어디서나 그렇게 말한다: 짧은 답, 페이지,
+    안내문. "적용"을 청하지 않고, begin 이 받지 않는다(첫 실호텔 시험의 모양 — 공급 원가 아래의 새 값 → 안 바꿈)."""
+
+    def test_keeping_every_red_line_saves_nothing_asks_for_nothing_and_begin_refuses_the_record(self):
+        request = self.request(lines=BOTH[:1], value="14.00")
+        first, _plan = self.preview(request)
+        snapshot = self.read(request=request)
+        plan = self.work / "plan-2.json"
+        short = self.cli("plan", "--snapshot", snapshot, "--request", request, "--record", "--replaces", first,
+                         "--resolutions", self.file("고름.json", [{"rule": "BELOW_COST", "choice": "keep"}]), "--out", plan)
+        self.assertEqual((short["saves"], short["counts"]["will_change"], short["counts"]["red"], short["counts"]["unchanged"]),
+                         (0, 0, 0, 1))
+
+        text = self.cli("render", "preview", "--plan", plan, "--text", "--out", self.work / "미리보기.html")["text"]
+        self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", text)
+        self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "줄에서도 저장하지 않는다고 말한다")
+        for said in ("저장 0번", '"적용"이라고 해 주세요', "저장은 줄마다 한 번"):
+            self.assertNotIn(said, text, "저장할 것이 없는 미리보기는 저장한다고도, 적용하라고도 말하지 않는다")
+
+        refused = self.cli("begin", "--change", short["change_id"], "--plan", plan, "--snapshot",
+                           self.read(record=short["change_id"]), code=2)
+        self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", refused["error"], "빨간 줄을 고르라는 말이 아니다")
+        entry, = [item for item in self.cli("list")["changes"] if item["id"] == short["change_id"]]
+        self.assertEqual((entry["status"], entry["steps"]), ("previewed", 0), "begin 이 받지 않아 아무것도 시작하지 않았다")
+        self.assertEqual(self.erp.posts, [])
+
+        skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        step = skill[skill.index("**읽고 미리보기.**"):skill.index("## 3. 되돌리기")]
+        self.assertIn("`saves` 가 0 이면 저장할 것이 없다", step)
+        self.assertIn('"적용"을 청하지 않는다', step)
+
+
 class SameNameTest(Flow):
     """F6 — 오퍼마다 이름 · 줄 이름 · 적용 대상이 같은 부가옵션이 있다(첫 실호텔 시험의 모양). 담당자에게 줄을 말하는 곳마다 오퍼로
     가른다: 빨간 줄의 예, 미리보기, 결과, 장부 목록(범위 · 오퍼), 되돌리기 미리보기."""

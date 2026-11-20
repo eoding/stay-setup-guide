@@ -13,7 +13,7 @@
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readLine` 답과 조각 → 지금 값(`kind: addon_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
 | `render` | `preview` · `result` · `rollback` · `prices` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다 |
-| `begin` | `--change` · `--plan` · `--snapshot` | 적용 시작. 방금 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 줄이라도(딸린 칸까지) 다르면 아무것도 시작하지 않는다(종료 1, `differences`). 15분보다 오래된 읽은 값은 받지 않는다 |
+| `begin` | `--change` · `--plan` · `--snapshot` | 적용 시작. 방금 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 줄이라도(딸린 칸까지) 다르면 아무것도 시작하지 않는다(종료 1, `differences`). 15분보다 오래된 읽은 값, 저장할 줄이 없는(`saves` 0) 계산은 받지 않는다 |
 | `calls` | `--change` | 아직 저장되지 않은 단계 → `applyLine` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다 |
 | `record-result` | `--change` · `--result` | `applyLine` 답 하나 → 장부에 됨 · 멈춤. 다른 단계 · 다른 값을 물은 답이면 거절한다. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |
 | `check` | `--change` · `--snapshot` | 멈춘 변경을 방금 읽은 값으로 본다(stopped.md) |
@@ -77,6 +77,8 @@
 | `부가옵션 · 전부로 고른 요청은 목록이 필요합니다` | `read-calls` 에 `--look "<작업>/look.json"` 을 붙인다 |
 | `목록에 없는 가격 줄입니다` · `목록에 없는 부가옵션 번호입니다` | 요청의 번호를 `look` 의 답에서 다시 옮긴다 |
 | `요청한 줄 가운데 읽지 않은 줄이 있습니다` | 그 요청 파일로 읽기를 다시 한다 |
+| `저장 단계가 없습니다. 빨간 줄을 먼저 골라 주세요` | 빨간 줄이 남은 계산이다. 담당자가 고른 뒤 다시 계산한 파일과 그 번호로 `begin` 을 부른다 |
+| `…번 미리보기는 바꿀 줄이 없어 적용할 것이 없습니다` | 고른 대로면 저장할 줄이 없다(`saves` 0). 아무것도 시작하지 않았다. 담당자에게 저장할 것이 없다고만 말한다(SKILL.md 「2」 4) |
 | `이미 있는 파일입니다` | 다시 계산한 것은 새 이름(`plan-2.json` …)으로 쓴다 |
 | `…번은 가격 캘린더 도우미의 기록입니다` | 그 번호는 이 도우미의 것이 아니다. 담당자에게 그 도우미로 보자고 한다 |
 | `적용 직전에 읽은 값이 …분 전 것입니다` | 다시 읽고 `begin` 을 다시 부른다 |

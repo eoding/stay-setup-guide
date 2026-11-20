@@ -121,7 +121,8 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
         if rule is None:
             verdict = "바뀜" if change.writes else "그대로"
         elif change.choice:
-            verdict = f'{esc(rule.label)} <span class="tag chosen">{esc(CHOICE_LABELS[change.choice])}</span>'
+            verdict = (f'{esc(rule.label)} <span class="tag chosen">{esc(CHOICE_LABELS[change.choice])}</span>'
+                       + ('<small class="more">고르신 대로 그대로 둡니다(저장하지 않습니다)</small>' if change.choice == "keep" else ""))
         elif severity == RED:
             verdict = f'<span class="tag red">빨간 줄</span> {esc(rule.label)}'
         else:
@@ -142,11 +143,12 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
             "손님 화면에는 저장하면 곧(길어야 몇 분) 새 금액이 보입니다. 이미 받은 예약의 금액은 바뀌지 않습니다.", HIDDEN_NOTE]
     if _scope_card(lines):
         said.insert(1, SCOPE_NOTE)
-    body.append(notes(said))
-    if steps is not None:
-        body.append(f'<div class="banner blue">저장 {len(steps)}번(줄마다 한 번). 맞으면 "적용"이라고 해 주세요.</div>')
+    if steps is None:
+        body += [notes(said), '<div class="banner red">아직 적용할 수 없습니다. 먼저 빨간 줄을 골라 주세요.</div>']
+    elif not steps:     # 고른 대로면 바꿀 줄이 없다 — 저장이 하는 일도, "적용"도 말하지 않는다
+        body.append('<div class="banner blue">바꿀 줄이 없어 적용할 것이 없습니다. 아무것도 바뀌지 않았습니다.</div>')
     else:
-        body.append('<div class="banner red">아직 적용할 수 없습니다. 먼저 빨간 줄을 골라 주세요.</div>')
+        body += [notes(said), f'<div class="banner blue">저장 {len(steps)}번(줄마다 한 번). 맞으면 "적용"이라고 해 주세요.</div>']
     return page(title, "\n".join(body), MAKER)
 
 

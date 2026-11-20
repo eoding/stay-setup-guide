@@ -77,9 +77,10 @@ metadata:
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」 — 줄은 `lines` · `addons` · `all` 가운데 하나). 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 가 저장 횟수(빨간 줄이 남았으면 null). 다시 계산하면 `plan-2.json` 처럼 새 이름에 쓰고 `--replaces <앞 번호>` 를 붙인다.
 3. `python3 scripts/addon_change.py render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
-4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 줄 · 그대로인 줄 · 바꿀 수 없는 줄(`blocked` 의 줄마다 `label`)을 말한다. 그리고 꼭 말한다: "저장하면 ERP 가 이 줄들의 금액 출처를 'ERP 손입력'으로 적고, 되돌려도 그 표시는 돌아오지 않습니다." 편집 창에 적용 범위 칸이 있는 호텔이면 "저장할 때 ERP 가 그 줄의 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
+4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 줄 · 그대로인 줄 · 바꿀 수 없는 줄(`blocked` 의 줄마다 `label`)을 말한다. `saves` 가 0 이 아니면 꼭 말한다: "저장하면 ERP 가 이 줄들의 금액 출처를 'ERP 손입력'으로 적고, 되돌려도 그 표시는 돌아오지 않습니다." 편집 창에 적용 범위 칸이 있는 호텔이면 "저장할 때 ERP 가 그 줄의 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 줄과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 줄은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 고름은 담당자의 말에서만 나온다. 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다.
-   - **빨간 줄이 없으면** 저장 횟수(`saves`)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
+   - **빨간 줄이 없고 저장할 것이 있으면**(`saves` 가 1 이상) 저장 횟수(`saves`)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
+   - **`saves` 가 0 이면 저장할 것이 없다** — 빨간 줄을 모두 안 바꾸기로 골랐거나 바뀌는 줄이 없다(`counts.will_change` 가 0). 이렇게만 말한다: "고르신 대로면 바꿀 줄이 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다." 저장 횟수를 말하지 않고 "적용"을 청하지 않는다. 미리보기 페이지도 그렇게 말하고, 그 번호는 `begin` 이 받지 않는다. 다른 값으로 바꾸려면 담당자의 새 말로 처음부터 한다.
 
 ## 3. 되돌리기
 
@@ -87,7 +88,7 @@ metadata:
 
 1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.
-3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept` — 그 사이 값이 달라진 줄)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다.
+3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept` — 그 사이 값이 달라진 줄)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
 4. "되돌려" → 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그 줄도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.
 
 ## 적용하기 — 바꾸기 · 되돌리기 공통
