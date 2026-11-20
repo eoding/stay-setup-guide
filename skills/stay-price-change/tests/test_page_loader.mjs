@@ -32,9 +32,9 @@ test('B10 · 올리개를 실행하면 숨은 파일 칸이 생기고, 세 파�
   runnerLeftovers(page);
   const before = Object.keys(page.w.localStorage);
   const started = plain(page.w.eval(LOADER));
-  assert.deepEqual(started, { ok: true, bridge: 'stay_price_bridge', want: ['stay_helper.js', 'stay_boot.js', 'stay_price.js'] });
+  assert.deepEqual(started, { ok: true, bridge: 'stay_price_bridge', label: 'stay price file bridge', want: ['stay_helper.js', 'stay_boot.js', 'stay_price.js'] });
   const input = page.doc.getElementById('stay_price_bridge');
-  assert.ok(input.type === 'file' && input.multiple && input.hidden);
+  assert.ok(input.type === 'file' && input.multiple);
   upload(page, [['stay_price.min.js', PAGE]]);
   upload(page, [['stay_boot.js', BOOT], ['stay_helper.js', HELPER]]);
   const r = plain(await page.w.stayPriceLoader.load());
@@ -50,6 +50,29 @@ test('B10 · 올리개를 실행하면 숨은 파일 칸이 생기고, 세 파�
   runnerKeysUntouched(page);
   const read = plain(await page.w.stayPrice.readPair(inPage(page.w, { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ['월', '화', '수', '목', '금', '토', '일'] })));
   assert.equal(read.ok, true, `올린 뒤 작업이 돈다: ${read.error}`);
+  page.w.close();
+});
+
+test('B18 · 올리개의 파일 칸은 이름(aria-label)으로 찾히고, 보이지 않지만 접근성 트리에 남으며, ERP 의 사진 칸과 헷갈리지 않는다', () => {
+  const page = erpPage({ bare: true });
+  page.doc.body.insertAdjacentHTML('beforeend', '<input type="file" name="image" accept="image/*" data-stay-field="image">');   // ERP 의 사진 올리기 칸
+  const status = plain(page.w.eval(LOADER));
+  assert.equal(status.label, 'stay price file bridge', '상태가 찾을 이름을 말한다');
+  const named = page.doc.querySelectorAll(`input[type="file"][aria-label="${status.label}"]`);
+  assert.equal(named.length, 1);
+  assert.equal(named[0].id, 'stay_price_bridge');
+  assert.equal(page.doc.querySelectorAll('input[type="file"]').length, 2, '파일 칸이 둘인 화면에서도 이름으로 하나만 걸린다');
+  const input = named[0], style = page.w.getComputedStyle(input);
+  assert.equal(input.hidden, false, 'hidden 이 아니다(접근성 트리에서 빠지지 않는다)');
+  assert.ok(style.display !== 'none' && style.visibility !== 'hidden' && !input.closest('[aria-hidden="true"]'), '접근성 트리에 남는다');
+  assert.ok(style.width === '1px' && style.height === '1px' && Number(style.opacity) < 0.05 && style.position === 'fixed', '보이지 않는다');
+  assert.notEqual(status.label, 'stay file bridge', '러너의 칸 이름과 다르다');
+  input.removeAttribute('aria-label');
+  input.hidden = true;
+  page.w.eval(LOADER);
+  assert.equal(page.doc.querySelectorAll('#stay_price_bridge').length, 1, '다시 실행해도 칸은 하나');
+  assert.ok(input.getAttribute('aria-label') === status.label && !input.hidden, '다시 실행하면 이름과 모양을 되잡는다');
+  assert.equal(plain(page.w.stayPriceLoader.status()).label, status.label);
   page.w.close();
 });
 

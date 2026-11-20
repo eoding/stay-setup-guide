@@ -1,8 +1,10 @@
 /* stay_price_loader.js — 가격 변경 도우미를 로그인된 ERP 탭에 올리는 작은 실행 묶음 (stay-price-change).
  *
  * 쓰는 법(브라우저 도구 셋):
- *   1. JS 실행 도구로 이 파일 전체를 실행한다 → 숨은 파일 칸 `input#stay_price_bridge` 가 생기고 `window.stayPriceLoader` 가 선다.
- *   2. 업로드 도구로 그 칸에 세 파일을 올린다(한 번에 셋이든 하나씩이든): 러너의 `stay_helper.js`·`stay_boot.js`, 그리고
+ *   1. JS 실행 도구로 이 파일 전체를 실행한다 → 파일 칸 `input#stay_price_bridge`(접근성 이름 `stay price file bridge`)가 생기고
+ *      `window.stayPriceLoader` 가 선다. 칸은 1px · 거의 투명이라 보이지 않지만 접근성 트리에는 남아 도구가 이름으로 찾는다.
+ *   2. 업로드 도구로 **그 이름의** 칸에 세 파일을 올린다(ERP 의 사진 올리기 칸과 헷갈리지 않게 — 한 번에 셋이든 하나씩이든):
+ *      러너의 `stay_helper.js`·`stay_boot.js`, 그리고
  *      `stay_price.js`(`.min.js` 도 받는다).
  *   3. `await stayPriceLoader.load()` → 이름으로 골라 도우미 → 부트 → 가격 도우미 차례로 실행하고 작은 상태를 돌려준다.
  *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()` — 적어 둔 원본을 같은 차례로 다시 실행한다.
@@ -16,6 +18,7 @@
   'use strict';
 
   var BRIDGE = 'stay_price_bridge';
+  var LABEL = 'stay price file bridge';   // 러너의 칸은 `stay file bridge` — 이름이 달라 서로 헷갈리지 않는다
   var FILES = [
     { name: 'stay_helper.js', key: 'stayPriceHelperSrc' },
     { name: 'stay_boot.js', key: 'stayPriceBootSrc' },
@@ -46,16 +49,20 @@
       input.id = BRIDGE;
       input.multiple = true;
       input.accept = '.js';
-      input.hidden = true;
       input.addEventListener('change', function () { collect(input); });
       (document.body || document.documentElement).appendChild(input);
     }
-    return { ok: true, bridge: BRIDGE, want: FILES.map(function (f) { return f.name; }) };
+    // 숨기되 접근성 트리에서 빼지 않는다(hidden · display:none 은 빼 버린다) — 러너의 칸과 같은 방식
+    input.hidden = false;
+    input.setAttribute('aria-label', LABEL);
+    input.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;z-index:2147483647;';
+    return { ok: true, bridge: BRIDGE, label: LABEL, want: FILES.map(function (f) { return f.name; }) };
   }
   function clean(result) { return window.stayPrice && typeof window.stayPrice.scrub === 'function' ? window.stayPrice.scrub(result) : result; }
   function status() {
     return clean({
       ok: !!(window.stayRun && window.stayPrice),
+      label: LABEL,
       helper: window.stayRun ? window.stayRun.version : null,
       price: window.stayPrice ? window.stayPrice.version : null,
       stored: FILES.filter(function (f) { return !!localStorage.getItem(f.key); }).map(function (f) { return f.key; })
@@ -77,7 +84,7 @@
     var input = document.getElementById(BRIDGE);
     if (input) collect(input);       // change 사건 없이 올린 도구도 있다
     var missing = FILES.filter(function (f) { return !picked[f.name]; }).map(function (f) { return f.name; });
-    if (missing.length) return clean({ ok: false, error: '올라온 파일에 없는 것: ' + missing.join(', ') + ' — 세 파일을 이 칸에 올린 뒤 다시 부릅니다', got: Object.keys(picked) });
+    if (missing.length) return clean({ ok: false, label: LABEL, error: '올라온 파일에 없는 것: ' + missing.join(', ') + ' — 세 파일을 「' + LABEL + '」 칸에 올린 뒤 다시 부릅니다', got: Object.keys(picked) });
     var texts;
     try { texts = await Promise.all(FILES.map(function (f) { return picked[f.name]; })); } catch (e) {
       return clean({ ok: false, error: '올라온 파일을 읽지 못했습니다: ' + String(e && e.message || e).slice(0, 160) });
