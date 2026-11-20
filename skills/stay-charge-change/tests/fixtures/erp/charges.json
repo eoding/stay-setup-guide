@@ -1,0 +1,76 @@
+{
+  "_note": "손으로 지은 시험 데이터다. 호텔 · 오퍼 · 객실 · 연령 구간 · 부과금의 이름 · 번호 · 금액은 모두 지어낸 값이다(공개 저장소). 모양만 facts-extras-data.md 2절의 로컬 기록을 따랐다 — 시간대 요율 둘인 정률 부과금(701 · 702), 날짜 하나에 붙는 인당 정액 의무 부과금(703), 현장 결제 부과금(704), 연령별 단가가 있는 부과금(705), 금액이 미정인 부과금(706). 값은 저장된 값(Decimal 글자, 없으면 null)이고, 편집 창은 ChargeEditForm 처럼 그린다: 금액이 있으면 amount_mode 「set」 · 없으면 「blank」, 의무면 date_mode 「mandatory」, 날짜는 「, 」로 잇는다. 화면 마크업은 charges_erp.mjs(페이지 시험)와 charge_scene.py(파이썬 시험)가 같은 규칙으로 그린다.",
+  "hotel": { "id": "1", "name": "데모 호텔" },
+  "currency": "USD",
+  "currencies": [
+    { "id": "2", "code": "USD" },
+    { "id": "3", "code": "KRW" }
+  ],
+  "offers": [
+    {
+      "id": "601", "name": "데모 오퍼 2027",
+      "rooms": [ { "id": "51", "name": "디럭스" }, { "id": "52", "name": "스위트" } ],
+      "bands": [],
+      "charges": [
+        {
+          "id": "701", "kind": 1, "name": "레이트 체크아웃 (14시 이후 · 1박 요금의 50%)", "basis": 1, "per": 0,
+          "amount": null, "pct": "50.00", "mandatory": false, "dates": [], "rooms": [],
+          "onsite_currency": null, "onsite_amount": null, "ages": {}, "onsite_ages": {},
+          "tiers": [
+            { "from": "12:01", "to": "14:00", "basis": 0, "amount": "0.00", "pct": null },
+            { "from": "14:01", "to": "18:00", "basis": 1, "amount": null, "pct": "50.00" }
+          ],
+          "description": ""
+        },
+        {
+          "id": "702", "kind": 0, "name": "얼리 체크인 (07시부터 · 1박 요금의 30%)", "basis": 1, "per": 0,
+          "amount": null, "pct": "30.00", "mandatory": false, "dates": [], "rooms": [],
+          "onsite_currency": null, "onsite_amount": null, "ages": {}, "onsite_ages": {},
+          "tiers": [
+            { "from": "00:00", "to": "06:59", "basis": 1, "amount": null, "pct": "100.00" },
+            { "from": "07:00", "to": "12:00", "basis": 1, "amount": null, "pct": "30.00" }
+          ],
+          "description": "체크인 시각은 호텔 확인 뒤 정해집니다"
+        },
+        {
+          "id": "703", "kind": 9, "name": "크리스마스 갈라 디너 (12/24 · 의무 · 성인)", "basis": 0, "per": 2,
+          "amount": "90.00", "pct": null, "mandatory": true, "dates": ["2026-12-24"], "rooms": ["51"],
+          "onsite_currency": null, "onsite_amount": null, "ages": {}, "onsite_ages": {},
+          "tiers": [],
+          "description": ""
+        },
+        {
+          "id": "704", "kind": 9, "name": "현장 결제 리조트피", "basis": 0, "per": 0,
+          "amount": "0.00", "pct": null, "mandatory": false, "dates": [], "rooms": [],
+          "onsite_currency": "2", "onsite_amount": "15.00", "ages": {}, "onsite_ages": {},
+          "tiers": [],
+          "description": "체크인 때 호텔에 직접 냅니다"
+        }
+      ]
+    },
+    {
+      "id": "602", "name": "데모 연말 오퍼",
+      "rooms": [ { "id": "53", "name": "디럭스" } ],
+      "bands": [
+        { "id": "81", "code": "INF", "name": "유아", "range": "만 0세 이상 ~ 만 2세 미만" },
+        { "id": "82", "code": "CHD", "name": "소아", "range": "만 2세 이상 ~ 만 12세 미만" }
+      ],
+      "charges": [
+        {
+          "id": "705", "kind": 9, "name": "연말 갈라 디너 (12/31 · 의무 · 연령별)", "basis": 0, "per": 2,
+          "amount": "100.00", "pct": null, "mandatory": true, "dates": ["2026-12-31"], "rooms": [],
+          "onsite_currency": null, "onsite_amount": null, "ages": { "81": "0.00", "82": "50.00" }, "onsite_ages": {},
+          "tiers": [],
+          "description": ""
+        },
+        {
+          "id": "706", "kind": 9, "name": "공항 픽업 (금액 미정)", "basis": 0, "per": 0,
+          "amount": null, "pct": null, "mandatory": false, "dates": [], "rooms": [],
+          "onsite_currency": null, "onsite_amount": null, "ages": {}, "onsite_ages": {},
+          "tiers": [],
+          "description": ""
+        }
+      ]
+    }
+  ]
+}
