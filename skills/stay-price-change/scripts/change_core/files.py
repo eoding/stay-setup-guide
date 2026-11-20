@@ -102,9 +102,10 @@ def lent_answers(calls_path: str, answer_paths, calls: dict, prefixes: tuple[str
 
 
 def fresh_record(out: str | None, replaces: int | None, record: bool, name: str) -> None:
-    """계산 파일(plan · rollback · restore)은 기록이라 덮어쓰지 않는다 — 다시 계산하면 새 이름(`<name>-2.json` …)에 쓰고
-    `--replaces` 로 앞 번호를 댄다. 무엇이든 셈하거나 장부에 적기 전에 본다."""
+    """계산 파일(plan · rollback · restore · sheet-check …)은 기록이라 덮어쓰지 않는다 — 다시 계산하면 새 이름(`<name>-2.json` …)에
+    쓰고, 장부에 적는 계산이면 `--replaces` 로 앞 번호를 댄다. 무엇이든 셈하거나 장부에 적기 전에 본다."""
     if out and Path(out).exists():
-        raise ValueError(f"이미 있는 파일입니다: {out} — 다시 계산한 미리보기는 새 이름({name}-2.json · {name}-3.json …)으로 씁니다")
+        raise ValueError(f"이미 있는 파일입니다: {out} — 계산 파일은 기록이라 덮어쓰지 않습니다. 다시 계산한 것은 새 이름"
+                         f"({name}-2.json · {name}-3.json …)으로 씁니다")
     if replaces is not None and not record:
         raise ValueError("--replaces 는 장부에 적을 때(--record)만 줍니다")
