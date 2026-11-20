@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
-    read          ERP 화면 조각(HTML) → 지금 값(snapshot.json)
+    read          ERP 화면 조각(HTML) 또는 브라우저 답(readPair · readReserved JSON) → 지금 값(snapshot.json)
+    read-calls    요청 → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음
+    reserved      readReserved 물음과 답 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다
     render        preview | result | rollback | prices 페이지(HTML) 만들기
     begin         적용 시작 — 저장 단계를 장부에 적는다
     record-step   저장 한 번이 끝날 때마다 — 됨(--saved) 또는 멈춤(--failed)
+    calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell)
+    record-result 브라우저 답(applyBulk · applyCell JSON) 하나 → 그 단계를 장부에 됨·멈춤으로 적는다
     verify        적용 뒤 다시 읽은 값과 견주기
     stale         미리보기 때 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
     rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다
@@ -37,6 +41,7 @@ from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import ParseError, build_snapshot, parse_adjust_page, parse_price_page
+from price_browser import BrowserError, price_pages, read_calls, reserved_probes, reserved_round, step_call, step_outcome
 from price_model import (
     decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_plan,
     TargetTable, encode_request, encode_snapshot, encode_step, snapshot_reading,
@@ -68,10 +73,43 @@ def page_path(hotel: str, kind: str) -> Path:
     return path
 
 
+def load_results(paths) -> list:
+    """브라우저 답 파일들 — 파일 하나에 답 하나(객체) 또는 여럿(목록)."""
+    results = []
+    for path in paths or ():
+        data = load(path)
+        results += data if isinstance(data, list) else [data]
+    return results
+
+
 def cmd_read(args):
-    pages = [parse_price_page(Path(path).read_text(encoding="utf-8")) for path in args.price_page]
+    pages = [parse_price_page(Path(path).read_text(encoding="utf-8")) for path in args.price_page or ()]
+    pages += price_pages(load_results(args.pair_result))
     adjusts = [parse_adjust_page(Path(path).read_text(encoding="utf-8")) for path in args.adjust_page or ()]
+    if args.reserved_probes:
+        done = reserved_round(load(args.reserved_probes), load_results(args.reserved_result))
+        if not done.done:
+            raise BrowserError(f"예약 있는 날 물음이 {len(done.ask)}개 남았습니다 — reserved 명령으로 남은 물음을 보세요")
+        adjusts += done.pages
     return encode_snapshot(build_snapshot(args.hotel, args.read_at or now_text(), pages, adjusts))
+
+
+def request_scope(request) -> tuple[str, list[tuple[str, str]], list[str]]:
+    if isinstance(request, TargetTable):
+        keys = [target.key for target in request.targets]
+        return request.offer, [(key.room, key.rate_plan) for key in keys], [key.date for key in keys]
+    pairs = list(request.pairs) or [(room, plan) for room in request.rooms for plan in request.rate_plans]
+    return request.offer, pairs, list(request.dates)
+
+
+def cmd_read_calls(args):
+    offer, pairs, dates = request_scope(decode_request(load(args.request)))
+    return dict(pairs=read_calls(offer, pairs, dates), reserved=reserved_probes(offer, pairs, dates))
+
+
+def cmd_reserved(args):
+    done = reserved_round(load(args.probes), load_results(args.result))
+    return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 
 
 def cmd_plan(args):
@@ -127,6 +165,26 @@ def cmd_begin(args):
 def cmd_record_step(args):
     return dict(change_id=args.change, step=args.step,
                 status=Ledger().record_step(args.change, args.step, args.saved, args.note))
+
+
+def cmd_calls(args):
+    record = Ledger().change(args.change)
+    if not record.steps:
+        raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
+    return dict(change_id=record.id, status=record.status,
+                calls=[step_call(step.index, record.offer, step.kind, step.body) for step in record.steps if step.status != "saved"])
+
+
+def cmd_record_result(args):
+    result = load(args.result)
+    ledger = Ledger()
+    record = ledger.change(args.change)
+    step = next((step for step in record.steps if step.index == result.get("no")), None)
+    if step is None:
+        raise LedgerError(f"{args.change}번 변경에 {result.get('no')}번째 저장이 없습니다")
+    saved, note = step_outcome(step_call(step.index, record.offer, step.kind, step.body), result)
+    return dict(change_id=record.id, step=step.index, saved=saved, note=note,
+                status=ledger.record_step(record.id, step.index, saved, note))
 
 
 def cmd_verify(args):
@@ -195,9 +253,19 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("read", cmd_read, "ERP 화면 조각 → 지금 값")
     sub.add_argument("--hotel", required=True)
-    sub.add_argument("--price-page", action="append", required=True, help="[선택 날짜 가격 수정] 확인 단계 HTML (여러 번)")
+    sub.add_argument("--price-page", action="append", help="[선택 날짜 가격 수정] 확인 단계 HTML (여러 번)")
+    sub.add_argument("--pair-result", action="append", help="stayPrice.readPair 답 JSON — 답 하나 또는 목록 (여러 번)")
     sub.add_argument("--adjust-page", action="append", help="[선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
+    sub.add_argument("--reserved-probes", help="read-calls 가 낸 readReserved 첫 물음(reserved 목록) JSON")
+    sub.add_argument("--reserved-result", action="append", help="stayPrice.readReserved 답 JSON — 답 하나 또는 목록 (여러 번)")
     sub.add_argument("--read-at", help="읽은 시각(ISO). 없으면 지금")
+
+    sub = command("read-calls", cmd_read_calls, "요청 → readPair · readReserved 부를 값")
+    sub.add_argument("--request", required=True)
+
+    sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
+    sub.add_argument("--probes", required=True, help="read-calls 가 낸 reserved 목록 JSON")
+    sub.add_argument("--result", action="append", help="stayPrice.readReserved 답 JSON — 답 하나 또는 목록 (여러 번)")
 
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)
@@ -222,6 +290,13 @@ def parser() -> argparse.ArgumentParser:
     done.add_argument("--saved", action="store_true", dest="saved")
     done.add_argument("--failed", action="store_false", dest="saved")
     sub.add_argument("--note", help="멈춘 까닭 등")
+
+    sub = command("calls", cmd_calls, "아직 저장되지 않은 단계 → applyBulk · applyCell 부를 값")
+    sub.add_argument("--change", type=int, required=True)
+
+    sub = command("record-result", cmd_record_result, "브라우저 답 하나를 장부에 적기")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--result", required=True, help="stayPrice.applyBulk · applyCell 답 JSON")
 
     sub = command("verify", cmd_verify, "적용 뒤 다시 읽은 값과 견주기")
     sub.add_argument("--change", type=int, required=True)
@@ -270,7 +345,7 @@ def main(argv=None) -> int:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
     try:
         result = args.handler(args)
-    except (ParseError, PlanError, LedgerError, ValueError, KeyError, TypeError) as error:
+    except (ParseError, PlanError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:
         message = str(error) if not isinstance(error, (KeyError, TypeError)) else f"입력 JSON 에 필요한 칸이 없습니다: {error}"
         print(json.dumps(dict(error=message), ensure_ascii=False), file=sys.stderr)
         return 2
