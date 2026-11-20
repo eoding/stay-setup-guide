@@ -1,0 +1,82 @@
+# 명령 — 하위 명령 · 요청 파일 · 판정 · 답 · 오류
+
+차례: 하위 명령 · 요청 파일 · 판정 · 짧은 답 · 장부 · 오류
+
+`python3 scripts/addon_change.py <명령> …` 은 JSON 을 표준 출력에 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령(`look` · `read-calls` · `read` · `plan` · `rollback`)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(`begin` · `verify`) · 2 입력이나 순서가 맞지 않음(표준 오류에 `{"error": "…"}`, 조각을 더 받아야 하면 `refetch`). 장부 자리는 가격 캘린더 도우미와 같다(`~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3`, 환경 변수 `STAY_PRICE_LEDGER_DIR` 로 바꾼다).
+
+## 하위 명령
+
+| 명령 | 플래그 | 하는 일 |
+|---|---|---|
+| `look` | `--answers` (여러 번) · `--out` | `stayAddonPrice.look()` 의 답과 조각 → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로 — 번호 · 이름 · 적용 대상 · 판매가 · 통화별 금액). `kind: addon_listing` |
+| `read-calls` | `--request` 또는 `--record` · `--look` · `--out` | 읽을 줄 → `readLine` 부를 값 `{lines: [{hotel, addon, line}]}`. 요청이 `addons` · `all` 로 고르면 `--look` 이 있어야 한다. 한 번에 200줄까지 |
+| `read` | `--calls` · `--answers` (여러 번) · `--out` | `readLine` 답과 조각 → 지금 값(`kind: addon_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
+| `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
+| `render` | `preview` · `result` · `rollback` · `prices` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다 |
+| `begin` | `--change` · `--plan` · `--snapshot` | 적용 시작. 방금 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 줄이라도(딸린 칸까지) 다르면 아무것도 시작하지 않는다(종료 1, `differences`). 15분보다 오래된 읽은 값은 받지 않는다 |
+| `calls` | `--change` | 아직 저장되지 않은 단계 → `applyLine` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다 |
+| `record-result` | `--change` · `--result` | `applyLine` 답 하나 → 장부에 됨 · 멈춤. 다른 단계 · 다른 값을 물은 답이면 거절한다. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |
+| `check` | `--change` · `--snapshot` | 멈춘 변경을 방금 읽은 값으로 본다(stopped.md) |
+| `verify` | `--change` · `--snapshot` | 적용 뒤 견주기. `mismatches` 넣은 값과 다른 필드, `moved` 저장한 줄에서 그대로여야 할 금액 · 칸이 달라진 것. 하나라도 있으면 종료 1 |
+| `rollback` | `--change` · `--snapshot` · `--include-kept` · `--line` (여러 번) · `--record` · `--replaces` · `--sentence` · `--out` | 되돌리기 계산. 그 변경이 넣은 값이 지금도 그대로인 줄만 적어 둔 값으로 돌리고, 그 사이 달라진 줄은 그대로 두며 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다 |
+| `list` | 없음 | 장부의 부가옵션 가격 줄 변경 목록. 줄마다 `scope`(몇 줄 · 처음 줄 · 한 일 · 멈췄으면 어디까지) |
+
+## 요청 파일
+
+```json
+{"kind": "addon_change", "hotel": {"id": "1", "name": "데모 호텔"},
+ "lines": [{"addon": "201", "line": "301"}, {"addon": "201", "line": "302"}],
+ "field": "sell", "amount": "5000", "sentence": "조식 추가 가격 5,000원 올려줘"}
+```
+
+- `hotel` — `look` 의 답 `hotel` 그대로.
+- 줄 고르기는 하나만: `lines`(줄 번호 — `look` 의 `addon` · `line`), `addons`(부가옵션 번호 목록 — 그 부가옵션의 줄 전부), `all: true`(호텔의 줄 전부). `addons` · `all` 은 `read-calls --look` 이 줄로 펼친다.
+- `field` — `sell` 판매가(말이 없으면 이것) 또는 `supply` 공급 원가.
+- 방법은 하나만: `amount` 금액(내리면 `-5000`), `percent` 퍼센트(`10`, `-10`), `value` 새 값(`120000`), `clear: true` 공급 원가 비우기(판매가는 비울 수 없다).
+- `sentence` — 담당자의 말 그대로.
+
+**도우미가 할 일.** 금액 · 퍼센트는 담당자의 말에서 숫자만 옮긴다("5,000원 올려" → `"amount": "5000"`, "10% 내려" → `"percent": "-10"`, "120,000 으로" → `"value": "120000"`). 셈하지 않는다. 통화 자릿수(달러는 소수 둘, 원 · 동은 정수)에 맞춘 반올림은 명령이 한다.
+
+## 판정
+
+명령이 줄마다 하나를 정한다(위에서부터 처음 맞는 것). 바꿀 수 없는 줄은 저장하지 않고, 빨간 줄은 담당자가 고른 뒤에야 저장 단계가 생긴다.
+
+| 코드 | 무게 | 뜻 | 담당자에게 |
+|---|---|---|---|
+| `HIDDEN` | 바꿀 수 없음 | 목록의 통화별 금액이 「별도 금액 없음」 — 이 줄의 금액 기록이 ERP 화면에 보이지 않는다. 편집 창이 저장된 공급 원가를 못 보고 빈칸으로 열렸을 수 있어 저장하면 그 원가가 지워진다 | "이 줄은 ERP 화면에 금액 기록이 보이지 않아 바꾸지 않습니다. ERP 담당 쪽에 확인해 주세요." |
+| `DIFFER` | 바꿀 수 없음 | 목록과 편집 창이 판매가나 공급 원가를 다르게 보인다 | "목록과 편집 창의 금액이 달라 바꾸지 않습니다." |
+| `NO_SUPPLY` | 바꿀 수 없음 | 공급 원가가 없는 줄에 원가를 금액 · 퍼센트로 바꾸라고 했다 | "공급 원가가 없는 줄이라 셈할 수 없습니다. 새 값으로 말씀해 주세요." |
+| `NOT_POSITIVE` | 바꿀 수 없음 | 판매가를 바꿔 0 이하가 된다(판매가를 바꾸지 않는 무료 줄의 원가 바꾸기는 된다) | "판매가가 0 이하가 되어 바꾸지 않습니다." |
+| `NEGATIVE_SUPPLY` | 바꿀 수 없음 | 공급 원가가 0 아래가 된다 | "공급 원가가 0 아래가 되어 바꾸지 않습니다." |
+| `BELOW_COST` | 빨간 줄 | 바꾼 뒤 판매가가 공급 원가보다 싸다 | 고름: `include` 이대로 바꿈 · `keep` 그 줄은 안 바꿈 |
+| `OVER_30` | 빨간 줄 | 바꾸는 값이 지금보다 30% 넘게 오르거나 내린다(0 에서 움직이면 넘은 것) | 고름: `include` 이대로 바꿈 · `keep` 그 줄은 안 바꿈 |
+
+고름은 `--resolutions "<작업>/resolutions.json"` 의 목록으로 준다: `[{"rule": "OVER_30", "choice": "include"}]`(그 규칙의 줄 전부) 또는 `[{"rule": "BELOW_COST", "choice": "keep", "lines": ["301"]}]`(그 줄만, 줄 번호 글자). 그 규칙의 줄이 아니거나 바꿀 수 없음 규칙이면 거절한다. 고른 뒤 `plan` 을 새 이름 · `--replaces <앞 번호>` 로 다시 한다.
+
+## 짧은 답
+
+- `look`: `hotel` · `currency` · `read_at` · `addons`(수) · `lines`(수).
+- `read`: `hotel` · `currency` · `read_at`(ERP 에서 읽은 시각 — 15분 창도 여기서 잰다) · `asked` · `found` · `missing`(목록에 없는 줄 번호) · `doubt`(목록과 편집 창이 다른 줄 번호).
+- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` · `unchanged` · `missing` · `blocked` · `red` 와 판정 코드마다의 수) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄과 그 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`).
+- `rollback`: `change_id` · `replaces` · `scope` · `restore_to`(적어 둔 시각) · `restored` · `kept` · `kept_why`(까닭마다 — 이 장부의 나중 변경 `change_id` · `at` · `sentence`, 아니면 `outside: true` 도우미 밖) · `saves`.
+
+## 장부
+
+가격 캘린더 도우미와 같은 장부 파일 · 같은 모양이다. 이 명령은 그 장부를 부가옵션 가격 줄(`addon_price`)의 장부로 연다 — 목록에는 이 종류의 번호만 나오고, 가격 캘린더 도우미의 번호를 주면 "그 번호는 가격 캘린더 도우미의 기록입니다"로 거절한다(그쪽도 이쪽 번호를 거절한다). 항목 키는 부가옵션 번호와 가격 줄 번호, 필드는 `sell` · `supply` 다. 편집 창의 나머지 칸은 그 번호의 읽은 값에 적혀 적용 직전 확인과 적용 뒤 견주기에 쓰인다.
+
+## 오류
+
+| 오류 (앞부분) | 뜻 · 할 일 |
+|---|---|
+| `readLine 답이 없는 부를 값이 …개 있습니다` | 그 값으로 `readLine` 을 부른다. 불렀는데 답이 끊겼으면 `stayAddonPrice.last()` 를 새 파일로 |
+| `받지 못했거나 잘린 쪽이 있습니다` (`refetch`) | SKILL.md 「읽기」 4 |
+| `가격 줄 …번을 읽지 못했습니다: …` | 페이지가 읽지 못했다. 뒤의 까닭을 page.md 「오류」에서 찾는다 |
+| `가격 줄 …번의 편집 창이 다른 부가옵션(…)의 것입니다` · `… 편집 창이 오류를 보입니다` | 화면이 어긋났다. 탭을 새로 고쳐 달라고 하고 「준비」 2 부터 |
+| `부가옵션 · 전부로 고른 요청은 목록이 필요합니다` | `read-calls` 에 `--look "<작업>/look.json"` 을 붙인다 |
+| `목록에 없는 가격 줄입니다` · `목록에 없는 부가옵션 번호입니다` | 요청의 번호를 `look` 의 답에서 다시 옮긴다 |
+| `요청한 줄 가운데 읽지 않은 줄이 있습니다` | 그 요청 파일로 읽기를 다시 한다 |
+| `이미 있는 파일입니다` | 다시 계산한 것은 새 이름(`plan-2.json` …)으로 쓴다 |
+| `…번은 가격 캘린더 도우미의 기록입니다` | 그 번호는 이 도우미의 것이 아니다. 담당자에게 그 도우미로 보자고 한다 |
+| `적용 직전에 읽은 값이 …분 전 것입니다` | 다시 읽고 `begin` 을 다시 부른다 |
+| `…번 변경은 멈춰 있습니다` | stopped.md |
+| `저장은 판매가(price) · 공급 원가(net_amount)만 바꿉니다` · `공급 원가가 빈 채로 저장될 뻔했습니다` | 계산 파일이 상했다. 고치지 말고 미리보기를 다시 만든다 |
