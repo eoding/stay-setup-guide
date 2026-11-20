@@ -1,10 +1,12 @@
 """시험용 — 페이지(`window.stayPrice`)가 돌려주는 답의 모양을 파이썬에서 만든다.
 
-읽기 답은 작은 답 하나 + 조각을 글자 자리(at)로 나눠 담은 take 답들이다(`stay_price.js` 의 keep · take 와 같은 모양).
+읽기 답은 작은 답 하나 + 조각을 글자 자리(at)로 나눠 담은 take 답들이다(`stay_price.js` 의 keep · take 와 같은 모양 — 조각은
+따옴표 없는 JSON, 쪽마다 검사값 sum).
 unittest 가 찾지 않도록 이름이 test_ 로 시작하지 않는다.
 """
 
 import json
+import re
 import zlib
 from datetime import datetime, timezone
 
@@ -17,6 +19,22 @@ def done_at(moment: datetime | None = None) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
+def pack(value) -> str:
+    """페이지(`stay_price.js` 의 `pack`)가 조각을 두는 모양 — 따옴표 없는 JSON. 글자는 작은따옴표로 감싸고 & ' " \\ 와 제어
+    글자는 `&#번호;` 로 적는다."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return "'" + re.sub(r"""[&'"\\\x00-\x1f]""", lambda found: f"&#{ord(found.group(0))};", value) + "'"
+    if isinstance(value, (int, float)):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ",".join(map(pack, value)) + "]"
+    return "{" + ",".join(f"{pack(str(name))}:{pack(item)}" for name, item in value.items()) + "}"
+
+
 def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, body_id: str | None = None, **fields) -> list[dict]:
     """작은 답 하나 + 조각을 `pieces` 쪽으로 나눈 take 답들. 페이지는 읽을 때마다 새 조각 id 를 붙인다 — 같은 글자를 다시 읽은
     답을 만들려면 `body_id` 를 달리 준다. 끝난 시각(`doneAt`)은 따로 주지 않으면 지금이다."""
@@ -25,7 +43,7 @@ def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, body_
         return [result]
     # 페이지는 조각에 자기가 알아본 호텔을 싣는다 — 물은 호텔(없으면 시험 호텔)을 그대로, keep 의 hotel 이 있으면 그것으로
     body = {"op": op, "asked": {k: v for k, v in asked.items() if k != "no"}, "hotel": asked.get("hotel"), **keep}
-    text = json.dumps(body, ensure_ascii=False)
+    text = pack(body)
     size = max(1, -(-len(text) // pieces))
     data = text.encode("utf-8")
     meta = {"id": body_id or f"b{zlib.crc32(data):08x}", "chars": len(text), "bytes": len(data),

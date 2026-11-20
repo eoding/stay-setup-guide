@@ -19,8 +19,9 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
-from browser_replies import done_at, reply  # noqa: E402
-from change_core.answers import ask_sum  # noqa: E402
+from browser_replies import done_at, pack, reply  # noqa: E402
+from change_core.answers import BrowserError, ask_sum, unpack  # noqa: E402
+from erp_read import parse_html  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"
 PRICE = (ERP / "price-runs-closed-absent-list.html").read_text(encoding="utf-8")
@@ -281,6 +282,30 @@ class PageMiscopyTest(Cli):
         asked, = self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder, code=2)["refetch"]
         self.save(folder, f"{asked['save']}{page['at']}.json", page)
         self.assertEqual(len(self.run_cli("read", "--calls", folder / "calls.json", "--answers", folder)["cells"]), 16)
+
+
+class QuoteFreeFormTest(unittest.TestCase):
+    """R3 — 페이지가 두는 조각은 따옴표 없는 JSON 이고 화면 조각의 속성은 따옴표 없이 적는다. 읽기는 그 모양을 푼다(페이지 쪽의 같은
+    모양은 test_page_dotted.mjs · test_page_scrub_reduce.mjs 가 진짜 stay_price.js 로 본다)."""
+
+    def test_r3_the_quote_free_body_round_trips_every_awkward_value_and_has_no_quote_or_backslash(self):
+        value = {"op": "readPair", "hotel": {"id": "1", "name": 'L\'호텔 "본관" \\ & 1<2'}, "noSale": ["2026-12-24"],
+                 "fragment": '<td data-stay-name=a&#32;b>"3" &amp; 4\n</td>', "n": [1, 2.5, None, True, False], "": ""}
+        text = pack(value)
+        self.assertNotRegex(text, r'["\\]', "큰따옴표 · 역슬래시가 없다")
+        self.assertNotIn("\\", json.dumps({"text": text}, ensure_ascii=False), "도구가 보이는 모양에도 이스케이프가 붙지 않는다")
+        self.assertEqual(unpack(text), value)
+        for broken in (text.replace("&#34;", '"', 1), text[:-1] + "\\}"):
+            with self.assertRaises(BrowserError):
+                unpack(broken)
+
+    def test_r3_the_reader_takes_attributes_without_quotes_and_characters_written_as_numbers(self):
+        root = parse_html("<table data-stay-rows=prices><tbody data-stay-occupancy-key=A2C1_CHD data-stay-los-nights=3 "
+                          "data-stay-name=디럭스&#32;&#34;킹&#34;&#32;a&#61;b&#47; data-stay-existing><tr><td colspan=4>x</td></tr></tbody></table>")
+        tbody, = root.find_all("tbody")
+        self.assertEqual(tbody.attrs, {"data-stay-occupancy-key": "A2C1_CHD", "data-stay-los-nights": "3",
+                                       "data-stay-name": '디럭스 "킹" a=b/', "data-stay-existing": ""})
+        self.assertEqual(tbody.find_all("td")[0].attrs, {"colspan": "4"})
 
 
 if __name__ == "__main__":

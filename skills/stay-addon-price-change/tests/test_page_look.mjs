@@ -18,6 +18,8 @@ test('A1 · 부가옵션 탭이면 아무것도 누르지 않고, 부가옵션 �
   const { takes, body } = takeAll(page.w, r);
   assert.ok(takes.length >= 2, '목록은 800자를 넘어 조각 여럿으로 온다');
   for (const piece of takes) assert.ok(charsOf(piece) <= 800, `쪽 하나도 800자 안: ${charsOf(piece)}`);
+  // 가격 캘린더 도우미와 같은 조각 모양(R3) — 쪽 글자에는 큰따옴표도 역슬래시도 없어 도구가 이스케이프를 붙이지 않는다
+  for (const piece of takes) assert.ok(!/["\\]/.test(piece.text) && !JSON.stringify(piece).includes('\\'), `쪽 ${piece.at} 에 큰따옴표나 역슬래시가 있다`);
   assert.deepEqual(body.hotel, HOTEL);
   assert.deepEqual(body.addons, LISTED);
   page.w.close();

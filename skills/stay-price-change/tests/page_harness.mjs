@@ -299,6 +299,15 @@ export const plain = (value) => JSON.parse(JSON.stringify(value));
 
 // B9 · B16 — 답과 쪽은 도구가 보이는 모양(JSON 글자)으로 800자 안이다. 읽기 답의 조각은 take 로 자리(at)를 따라 받는다
 export const charsOf = (value) => JSON.stringify(value).length;
+// 페이지가 둔 조각의 모양(따옴표 없는 JSON)을 푼다 — 파이썬 `change_core.answers.unpack` 과 같은 셈. 큰따옴표 · 역슬래시가 있으면
+// 페이지가 둔 모양이 아니다
+export function unpack(text) {
+  if (/["\\]/.test(text)) throw new Error('조각 글자에 큰따옴표나 역슬래시가 있습니다');
+  const back = (s) => s.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  const walk = (v) => (typeof v === 'string' ? back(v) : Array.isArray(v) ? v.map(walk)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [back(k), walk(x)])) : v);
+  return walk(JSON.parse(text.replace(/'/g, '"')));
+}
 export function takeAll(w, result, size) {
   const meta = result.body;
   const takes = [];
@@ -309,7 +318,7 @@ export function takeAll(w, result, size) {
     at = piece.next;
   }
   const text = takes.map((t) => t.text).join('');
-  return { takes, text, body: JSON.parse(text) };
+  return { takes, text, body: unpack(text) };
 }
 
 // 사람이 누른 클릭 — jsdom 에서는 스크립트가 만든 사건이 늘 isTrusted=false 다. jsdom 안쪽 길로 사람의 클릭(isTrusted=true)을

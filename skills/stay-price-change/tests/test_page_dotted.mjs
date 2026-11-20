@@ -38,7 +38,7 @@ test('T4 · 올리개의 답(칸 세우기 · load · status · again)에는 도
   page.w.close();
 });
 
-test('T4 · 페이지의 모든 작업 답과 쪽에는 도구가 가리는 모양의 글자가 없다', async () => {
+test('T4 · R3 · 페이지의 모든 작업 답과 쪽에는 도구가 가리는 모양의 글자가 없고, 쪽 글자에는 큰따옴표 · 역슬래시가 없다', async () => {
   const page = erpPage({ hotel: HOTEL });
   const sp = page.w.stayPrice;
   const call = async (op, value) => plain(await sp[op](inPage(page.w, value)));
@@ -58,5 +58,12 @@ test('T4 · 페이지의 모든 작업 답과 쪽에는 도구가 가리는 모�
   answers.push(plain(sp.take(pair.body.id, 0)), plain(sp.take('없는.조각.id', 0)), plain(sp.last()), plain(sp.idle()), plain(sp.config()),
     plain(sp.standDown()), plain(sp.standUp()));
   assert.deepEqual(blocked(answers), []);
+  // R3 — 쪽 글자에는 큰따옴표도 역슬래시도 없다. 도구는 쪽을 JSON 으로 보이므로 그런 글자에 이스케이프를 붙이고, 도우미는 그
+  // 이스케이프까지 옮겨 적어야 한다(세 번째 시운전의 잘못 옮겨 적기가 거기서 났다)
+  const texts = answers.filter((a) => a && a.op === 'take' && a.ok).map((a) => a.text);
+  assert.ok(texts.length >= 3, `쪽 ${texts.length}개`);
+  assert.deepEqual(texts.filter((text) => /["\\]/.test(text)), [], '큰따옴표 · 역슬래시가 든 쪽');
+  assert.deepEqual(answers.filter((a) => a && a.op === 'take' && a.ok).map((a) => JSON.stringify(a).includes('\\')), texts.map(() => false),
+    '도구가 보이는 모양에도 역슬래시가 없다');
   page.w.close();
 });

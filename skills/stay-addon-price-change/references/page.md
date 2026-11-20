@@ -39,7 +39,7 @@
 | `stayAddonPrice.look()` | 없음 | 이 탭이 어디인지. 로그인 화면이면 `{login: true}` 만. 아니면 `hotel` 과 `count`(`addons` · `lines`), 목록 전부는 `body` — 답을 `<작업>/look/look-1.json` 에 저장하고 조각을 받아 같은 폴더에 둔 뒤 `addon_change.py look` |
 | `stayAddonPrice.readLine(v)` | `{hotel, addon, line}` | 그 부가옵션 카드의 그 줄의 [편집] 을 눌러 가격 편집 창을 열고, 창이 그 호텔 · 그 줄의 것인지 본 뒤(저장 단추의 주소) 목록 줄과 저장 단추가 보낼 칸 전부를 읽고 닫는다. 저장 단추는 허용 목록에 없다. 목록에 그 줄이 없으면 아무것도 열지 않고 `missing: true` |
 | `stayAddonPrice.applyLine(v)` | `{no, hotel, addon, line, form, set}` | 창을 같은 길로 연다. 창이 보낼 칸이 `form`(읽은 값)과 하나라도 다르면 아무것도 치지 않고 거절한다. 같으면 `set` 의 칸(판매가 `price` · 공급 원가 `net_amount`)만 치고, 친 뒤의 칸이 `form` 에서 그 칸만 바뀐 것인지 다시 본 뒤 [저장] 을 한 번 누른다. 공급 원가는 `set` 이 `""` 로 비우라고 할 때만 빈 채로 간다 |
-| `stayAddonPrice.take(id, at, size)` | 조각 id, 자리(0 부터), 크기(200~800) | 읽은 조각의 한 쪽 |
+| `stayAddonPrice.take(id, at, size)` | 조각 id, 자리(0 부터), 크기(200~800) | 읽은 조각의 한 쪽 `{op, ok, id, at, size, next, end, sum, text}` — 가격 캘린더 도우미와 같은 모양이다(`sum` 은 그 쪽 하나의 검사값, `text` 에는 큰따옴표도 역슬래시도 없어 도구가 보인 그대로 옮긴다 — `../stay-price-change/references/page.md` 「답의 모양」). 마지막 쪽은 `next` 가 `end` 와 같은 수다 |
 | `stayAddonPrice.last()` | 없음 | 마지막 작업의 답(호출이 끊겼거나 답이 잘렸을 때 — 읽기면 새 파일로 저장, 저장이면 그 답으로 `record-result`). 돌고 있으면 `{running: {op, no, at}}` |
 | `stayAddonPrice.idle()` | 없음 | 작업 밖 벽의 상태 `{idle, blocked, count}` |
 

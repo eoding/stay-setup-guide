@@ -14,6 +14,7 @@
 같은 값으로 다시 불러도 된다(같은 물음의 답이 여럿이면 가장 늦게 끝난 것을 쓴다).
 
     ask_sum(value)                        물은 값의 지문(페이지와 같은 셈)
+    unpack(text) · page_sum(...)          페이지가 둔 조각 글자(따옴표 없는 JSON) → 값 · 쪽 하나의 검사값
     answers(results, latest)              답 목록 → 온전한 답과 잘린 쪽의 단서
     attach_bodies(results, earlier)       읽기 답에 페이지에 남겨 둔 조각을 붙인다
     answers_for(results, op) · unanswered(calls, results, op)   한 작업의 답 · 답이 없는 부를 값
@@ -172,6 +173,31 @@ def _identity_of(text: str) -> tuple:
     """이은 글자 자체의 알아볼 값 — 머리(`_identity`)와 같은 모양."""
     data = text.encode("utf-8")
     return _units(text), len(data), f"{zlib.crc32(data):08x}", fnv1a(data)
+
+
+_CHAR = re.compile(r"&#(\d+);")
+
+
+def unpack(text: str):
+    """페이지가 둔 조각 글자(따옴표 없는 JSON — stay_price.js `pack`) → 값. 글자는 작은따옴표로 감쌌고 그 안의 `&` · `'` · `"` ·
+    `\\` · 제어 글자는 `&#번호;` 로 적었다. 그래서 작은따옴표를 큰따옴표로 바꾸면 이스케이프 없는 JSON 이고, 글자마다 `&#번호;` 를
+    한 번 돌리면 원래 값이다(화면 조각 안의 HTML 문자 참조는 `&#38;` 로 한 겹 싸여 있어 한 번 돌리면 그대로 남는다)."""
+    if '"' in text or "\\" in text:
+        raise BrowserError("조각 글자에 큰따옴표나 역슬래시가 있습니다 — 페이지가 둔 모양이 아닙니다")
+
+    def back(value):
+        if isinstance(value, str):
+            return _CHAR.sub(lambda found: chr(int(found.group(1))), value)
+        if isinstance(value, list):
+            return [back(item) for item in value]
+        if isinstance(value, dict):
+            return {back(name): back(item) for name, item in value.items()}
+        return value
+
+    try:
+        return back(json.loads(text.replace("'", '"')))
+    except ValueError:
+        raise BrowserError("조각 글자를 읽지 못했습니다 — 페이지가 둔 모양이 아닙니다") from None
 
 
 RETAKE = "그 쪽을 다시 받아 새 파일로 저장합니다"
@@ -385,8 +411,8 @@ def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
         if text is None:
             refetch.append(_retake(meta, joined.get(str(meta["id"])), bad, names))
             continue
-        body = json.loads(text)
-        if body.get("op") != result.get("op") or ask_sum(body.get("asked") or {}) != result.get("ask"):
+        body = unpack(text)
+        if not isinstance(body, dict) or body.get("op") != result.get("op") or ask_sum(body.get("asked") or {}) != result.get("ask"):
             continue
         merged = {**result, **body}
         merged.pop("body", None)

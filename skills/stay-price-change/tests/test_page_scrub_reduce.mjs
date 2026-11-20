@@ -66,13 +66,13 @@ test('B4 · 줄인 조각에는 태그·글자·data-stay-*·data-calendar-*·co
   const box = doc.createElement('div');
   box.innerHTML = `<section class="stay-card" data-stay-summary id="s1" style="color:red" title="t" onclick="x()">
     <table class="t" data-stay-rows="prices" data-calendar-link-base hx-get="/stay/1/calendar/?a=1"><thead><tr><th colspan="4" scope="rowgroup">머리</th></tr></thead>
-    <tbody data-stay-occupancy-key="A2" data-stay-los-nights="1" data-stay-href="/stay/1/x/?y=1" data-stay-token="${CSRF}"><tr data-stay-existing><td rowspan="2" class="n">1 &lt; 2 &amp; "3"</td></tr></tbody></table>
+    <tbody data-stay-occupancy-key="A2" data-stay-los-nights="1" data-stay-href="/stay/1/x/?y=1" data-stay-token="${CSRF}" data-stay-name='디럭스 "킹" a=b'><tr data-stay-existing><td rowspan="2" class="n">1 &lt; 2 &amp; "3"</td></tr></tbody></table>
     <input type="hidden" name="csrfmiddlewaretoken" value="${CSRF}"><button data-stay-action="save">입력한 가격 적용</button><select name="s"><option>보이는 옵션</option></select>
     <textarea name="t">글</textarea><script>var leak = 1;</script><style>.x{}</style><template><b>틀</b></template><a href="/stay/1/?q=1" data-stay-action="goto">링크 글자</a><!-- 주석 --><br></section>`;
   assert.equal(w.stayPrice.reduce(box.firstElementChild),
-    '<section data-stay-summary> <table data-stay-rows="prices" data-calendar-link-base><thead><tr><th colspan="4">머리</th></tr></thead>'
-    + '<tbody data-stay-occupancy-key="A2" data-stay-los-nights="1"><tr data-stay-existing><td rowspan="2">1 &lt; 2 &amp; "3"</td></tr></tbody></table>'
-    + ' <a data-stay-action="goto">링크 글자</a><br></section>', '표 뼈대 사이 빈칸은 지우고 다른 빈칸 줄은 한 칸으로');
+    '<section data-stay-summary> <table data-stay-rows=prices data-calendar-link-base><thead><tr><th colspan=4>머리</th></tr></thead>'
+    + '<tbody data-stay-occupancy-key=A2 data-stay-los-nights=1 data-stay-name=디럭스&#32;&#34;킹&#34;&#32;a&#61;b><tr data-stay-existing><td rowspan=2>1 &lt; 2 &amp; "3"</td></tr></tbody></table>'
+    + ' <a data-stay-action=goto>링크 글자</a><br></section>', '표 뼈대 사이 빈칸은 지우고 다른 빈칸 줄은 한 칸으로 · 속성은 따옴표 없이, 설 수 없는 글자는 &#번호;');
   w.close();
 });
 
@@ -129,7 +129,7 @@ test('B9 · 줄인 조각에는 들여쓰기가 남지 않는다(파이썬 읽�
   }
 });
 
-test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 쪽으로 나뉘며(따옴표 이스케이프 포함), 쪽마다 제 검사값(sum)이 있고, 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
+test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 쪽으로 나뉘며(쪽 글자에 따옴표 · 역슬래시가 없다), 쪽마다 제 검사값(sum)이 있고, 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
   const long = '아주 긴 "객실" 이름 칸 '.repeat(400);
   const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('인원 무관 단일가 · 1박 이상', long) });
   const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
@@ -145,7 +145,8 @@ test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 �
     assert.equal(t.sum, crc32(Buffer.from(`${t.id}:${t.at}:${t.end}:${t.text}`, 'utf8')).toString(16).padStart(8, '0'), `쪽 ${t.at}: 쪽 하나의 검사값은 id:at:end:글자의 CRC-32`);
     assert.equal(t.bytes, undefined, '쪽에는 전체의 바이트 수 · CRC-32 가 없다(머리에 있다)');
   }
-  assert.ok(takes.some((t) => t.text.includes('"')), '따옴표가 든 쪽이 있다(도구는 \\" 로 보인다)');
+  assert.ok(!takes.some((t) => /["\\]/.test(t.text) || JSON.stringify(t).includes('\\')), '화면 글자에 따옴표가 있어도 쪽 글자 · 도구가 보이는 모양에는 큰따옴표 · 역슬래시가 없다');
+  assert.ok(text.includes('&#34;객실&#34;'), '보이는 글자의 따옴표는 &#34; 로 적는다');
   assert.equal(text.length, r.body.chars);
   assert.equal(Buffer.byteLength(text), r.body.bytes);
   assert.equal(crc32(Buffer.from(text, 'utf8')).toString(16).padStart(8, '0'), r.body.crc32);

@@ -247,6 +247,15 @@ export const LISTED = [
 ];
 
 // 답의 조각을 take 로 자리(at)를 따라 모두 받아 잇는다
+// 페이지가 둔 조각의 모양(따옴표 없는 JSON)을 푼다 — 파이썬 `change_core.answers.unpack` 과 같은 셈. 큰따옴표 · 역슬래시가 있으면
+// 페이지가 둔 모양이 아니다
+export function unpack(text) {
+  if (/["\\]/.test(text)) throw new Error('조각 글자에 큰따옴표나 역슬래시가 있습니다');
+  const back = (s) => s.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  const walk = (v) => (typeof v === 'string' ? back(v) : Array.isArray(v) ? v.map(walk)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [back(k), walk(x)])) : v);
+  return walk(JSON.parse(text.replace(/'/g, '"')));
+}
 export function takeAll(w, result, size) {
   const meta = result.body;
   const takes = [];
@@ -257,5 +266,5 @@ export function takeAll(w, result, size) {
     at = piece.next;
   }
   const text = takes.map((t) => t.text).join('');
-  return { takes, text, body: JSON.parse(text) };
+  return { takes, text, body: unpack(text) };
 }

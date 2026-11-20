@@ -30,9 +30,10 @@
  *    않는다. 화면을 바꾼 뒤(칩·오퍼·보기·탭·달·드로어 단계·셀 창)에는 바뀐 조각이 왔고 도는 요청이 없을 때(`settle`) 넘어간다.
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
  *    조각 셋 이상뿐인 글자(`0.15.0`)는 점을 `·` 로 바꾼다(도구가 토큰으로 보고 가린다). 러너 함수의 결과는 그대로 넘기지 않는다.
- *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
- *    페이지에 두고 답에는 `body`(id 와 그 글자를 알아볼 값 — 글자 수 · 바이트 수 · CRC-32 · FNV-1a)만 싣는다. 파이썬은 앞선 읽기에서
- *    이미 받은 같은 조각이면 다시 받지 않는다. 답 하나·쪽 하나는 JSON 으로 800자 안이다.
+ *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만, 속성은 따옴표
+ *    없이. 줄인 조각은 따옴표 없는 JSON(`pack`)으로 페이지에 두고 답에는 `body`(id 와 그 글자를 알아볼 값 — 글자 수 · 바이트 수 ·
+ *    CRC-32 · FNV-1a)만 싣는다. 쪽(take)마다 제 검사값(sum)이 있다. 파이썬은 앞선 읽기에서 이미 받은 같은 조각이면 다시 받지 않는다.
+ *    답 하나·쪽 하나는 JSON 으로 800자 안이고, 쪽 글자에는 큰따옴표도 역슬래시도 없다.
  *  - localStorage 는 `stayPrice` 로 시작하는 키만 쓴다(`stayPriceLast`). 러너의 `staySteps`·`stayRunCursor` 는 쓰지 않는다.
  */
 (function () {
@@ -100,10 +101,10 @@
   var QUIET_PARENTS = { table: 1, thead: 1, tbody: 1, tfoot: 1, tr: 1, colgroup: 1, dl: 1, ul: 1, ol: 1 };
   var VOID_TAGS = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, link: 1, meta: 1, source: 1, track: 1, wbr: 1 };
   function keepAttr(name) { return /^data-(stay|calendar)-/.test(name) || name === 'colspan' || name === 'rowspan'; }
-  function esc(text, quote) {
-    var out = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return quote ? out.replace(/"/g, '&quot;') : out;
-  }
+  function esc(text) { return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // 속성 값은 따옴표 없이 적는다(`이름=값`) — 따옴표 없는 값에 설 수 없는 글자(빈칸 · 따옴표 · = · < · > · ` · & · / · \ ·
+  // 제어 글자)는 `&#번호;` 로. 파이썬 읽기(html.parser)는 따옴표 없는 값의 `&#번호;` 도 글자로 돌린다
+  function attrValue(text) { return String(text).replace(/[\s"'`=<>&\/\\\u0000-\u001f]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
   function reduce(node) {
     var out = [];
     (function walk(n) {
@@ -118,7 +119,7 @@
       var tag = n.localName;
       if (DROP_TAGS[tag]) return;
       var attrs = [].slice.call(n.attributes).filter(function (a) { return keepAttr(a.name) && !addressLike(a.value); })
-        .map(function (a) { return ' ' + a.name + (a.value === '' ? '' : '="' + esc(a.value, true) + '"'); });
+        .map(function (a) { return ' ' + a.name + (a.value === '' ? '' : '=' + attrValue(a.value)); });
       out.push('<' + tag + attrs.join('') + '>');
       if (VOID_TAGS[tag]) return;
       [].forEach.call(n.childNodes, walk);
@@ -129,7 +130,8 @@
 
   /* ───────────── 2b. 답의 크기 — 브라우저 도구는 답을 1,000자쯤에서 자른다 ───────────── */
 
-  // 작업의 답과 쪽 하나는 도구가 보이는 모양(JSON 으로 적은 글자)으로 800자 안이다 — 쪽 글자 안의 따옴표는 \" 로 두 자다.
+  // 작업의 답과 쪽 하나는 도구가 보이는 모양(JSON 으로 적은 글자)으로 800자 안이다. 쪽 글자에는 큰따옴표 · 역슬래시가 없어(pack)
+  // 글자 하나가 한 자다.
   // 화면 조각은 페이지에 두고(`keep`) `take(id, at, size)` 로 글자 자리 at 부터 size 자 안의 쪽을 받는다(size 는 200~800).
   // 쪽마다 다음 자리(next) · 전체 길이(end) · 그 쪽 하나의 검사값(sum — `id:at:end:글자` 의 CRC-32)을 싣는다. 파이썬은 쪽마다
   // 따로 맞춰 보고, 맞는 쪽만 0 부터 end 까지 이어 붙여 머리(body)의 알아볼 값과 견준다(`change_core.answers.attach_bodies`).
@@ -190,6 +192,20 @@
     return copy;
   }
 
+  // 페이지에 두는 조각의 모양 — 따옴표 없는 JSON. 글자는 작은따옴표로 감싸고, 글자 안의 & ' " \ 와 제어 글자는 `&#번호;` 로
+  // 적는다. 그래서 조각 글자에는 큰따옴표도 역슬래시도 없다 — 도구가 쪽을 JSON 으로 보일 때 이스케이프가 붙지 않아, 보인 그대로
+  // 옮겨 적으면 된다. 작은따옴표를 큰따옴표로 바꾸면 이스케이프 없는 JSON 이다(파이썬 `change_core.answers.unpack`)
+  function packText(text) { return "'" + String(text).replace(/[&'"\\\u0000-\u001f]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }) + "'"; }
+  function pack(value) {
+    if (value === null || value === undefined) return 'null';
+    if (typeof value === 'string') return packText(value);
+    if (typeof value === 'number') return isFinite(value) ? JSON.stringify(value) : 'null';
+    if (typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) return '[' + value.map(pack).join(',') + ']';
+    return '{' + Object.keys(value).filter(function (k) { return value[k] !== undefined; })
+      .map(function (k) { return packText(k) + ':' + pack(value[k]); }).join(',') + '}';
+  }
+
   var BODIES = window.__stayPriceBodies = window.__stayPriceBodies || { order: [], items: {} };
   // at 부터 size 자 안의 쪽 하나. 되도록 `>`·`,` 바로 뒤에서 자른다(거르기가 쪽마다 같은 답을 내도록). 한 글자도 못 담으면 null
   function pieceAt(item, id, at, size) {
@@ -212,7 +228,7 @@
     return piece;
   }
   function keep(body) {
-    var text = JSON.stringify(scrub(body));
+    var text = pack(scrub(body));
     var id = 'b' + Date.now().toString(36) + (BODIES.order.length + 1);
     var item = BODIES.items[id] = { text: text, bytes: byteLength(text), crc32: crc32(text) };
     BODIES.order.push(id);
