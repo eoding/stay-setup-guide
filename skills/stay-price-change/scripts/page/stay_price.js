@@ -17,7 +17,15 @@
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
  *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
  *   window.stayPageKit                                                         벽 · 작업 틀 · press · 답 거르기를 다른 페이지 모듈
- *                                                                              (부가옵션 `stay_addon_price.js`)이 제 표(spec)로 쓴다
+ *                                                                              (부가옵션 `stay_addon_price.js` · 부과금 `stay_charge.js`)이
+ *                                                                              제 표(spec)로 쓴다. 드로어 편집 창 부품도 함께 낸다 —
+ *     sent(root)                                                               저장 단추가 보낼 [이름, 값] 목록(hx-include 가 창 뿌리 전부일
+ *                                                                              때만, 아니면 null)
+ *     differs(seen, want) · pairs(form, readOp) · errors(root)                 다른 칸 이름들 · 작업 값 form 검사 · 창의 오류 글
+ *     fill(ctx, root, form, edits, opts)                                       읽은 그대로 보내고 고른 칸만 바꾸기 — edits 는 [이름, 몇 번째,
+ *                                                                              값]. 치기 전 창 = form, 친 뒤 창 = form 에서 그 자리만 바꾼
+ *                                                                              것이어야 한다. 아니면 누르기 전에 refused 로 멈춘다
+ *     saveOnce(ctx, {root, panel, window, what})                               저장 단추를 한 번 누르고 saved true · false · "unknown"
  *
  * 지키는 것
  *  - 작업 하나 = 호출 하나. 34초에 답을 정하고 화면이 쉴 때(드로어가 다 닫힌 뒤) 돌려준다 — 45초 안이다. 저장은 다시 누르지
@@ -463,7 +471,7 @@
     remember({ running: { op: op, no: no, at: new Date(started).toISOString() } });
     var wall = Wall(op, spec), out, saves = spec.saves[op];
     var ctx = {
-      wall: wall, pins: wall.pins, hotel: here,
+      wall: wall, pins: wall.pins, hotel: here, saves: saves,
       left: function () { return Math.max(0, Math.min(started + limits.budgetMs, hardAt) - Date.now()); },
       wait: function (cond, ms) { return window.stayRun.waitFor(cond, Math.max(1, Math.min(ms, ctx.left()))); },
       check: function () {
@@ -1139,6 +1147,119 @@
     }, CALENDAR);
   }
 
+  /* ───────────── 7. 편집 창 — 드로어 창 하나를 읽은 그대로 보내고 고른 칸만 바꾼다(부가옵션 · 부과금 모듈이 쓴다) ───────────── */
+
+  function saveButton(root) { return root ? root.querySelector('[data-stay-action="save"]') : null; }
+  // 저장 단추가 보낼 [이름, 값] 목록 — 그 단추의 hx-include 가 이 창 뿌리의 칸 전부(`#<뿌리 id> :is(input,select,textarea)`)일 때만
+  // 안다(아니면 null). 이름이 있고 막히지 않은 칸, 체크·라디오는 켜진 것만, 여러 고르기는 고른 것마다 한 쌍. `<template>` 안의 칸은
+  // 문서에 없어 고르지 않는다(Alpine 이 그려 낸 행만 보낸다)
+  function sent(root) {
+    var save = saveButton(root);
+    var include = save ? (save.getAttribute('hx-include') || save.getAttribute('data-hx-include') || '') : '';
+    if (!root.id || include !== '#' + root.id + ' :is(input,select,textarea)') return null;
+    var out = [];
+    all('input,select,textarea', root).forEach(function (el) {
+      if (!el.name || el.matches(':disabled')) return;
+      if (el.localName === 'input' && (el.type === 'checkbox' || el.type === 'radio')) { if (el.checked) out.push([el.name, el.value]); return; }
+      if (el.localName === 'select' && el.multiple) { [].forEach.call(el.options, function (o) { if (o.selected) out.push([el.name, o.value]); }); return; }
+      out.push([el.name, el.value]);
+    });
+    return out;
+  }
+  // 두 [이름, 값] 목록이 다른 칸 이름들. 이름마다 값 목록을 견주고, 같은데 차례만 다르면 「(칸 순서)」
+  function differs(seen, want) {
+    var group = function (list) { var out = Object.create(null); list.forEach(function (x) { (out[x[0]] = out[x[0]] || []).push(x[1]); }); return out; };
+    var a = group(seen), b = group(want), names = [];
+    Object.keys(a).concat(Object.keys(b)).forEach(function (name) {
+      if (names.indexOf(name) < 0 && JSON.stringify(a[name] || []) !== JSON.stringify(b[name] || [])) names.push(name);
+    });
+    if (!names.length && JSON.stringify(seen) !== JSON.stringify(want)) names.push('(칸 순서)');
+    return names;
+  }
+  // 작업 값의 `form` — 읽기 작업(readOp)이 돌려준 [이름, 값] 목록 그대로인지 보고 베낀다
+  function pairs(value, readOp) {
+    var bad = !Array.isArray(value) || !value.length || value.some(function (x) {
+      return !Array.isArray(x) || x.length !== 2 || typeof x[0] !== 'string' || typeof x[1] !== 'string';
+    });
+    if (bad) fail('`form` 은 ' + readOp + ' 이 돌려준 window.form([이름, 값] 목록) 그대로입니다');
+    return value.map(function (x) { return [x[0], x[1]]; });
+  }
+  function windowErrors(root) { return all('[data-stay-result="error"], small.error', root).map(function (el) { return C(el.textContent); }).filter(Boolean); }
+  // 「읽은 그대로 보내고 고른 칸만 바꾸기」 — edits 는 [이름, 몇 번째(그 이름의 보낼 칸 가운데 0 부터), 값] 목록이다. 치기 전에 창이
+  // 보낼 칸이 form 과 꼭 같아야 하고, 친 뒤에는 form 에서 그 자리들만 바뀌어야 한다. opts 는 {window: 창 이름, settable(이름) → 칸의
+  // 이름(글자) 또는 null, guard(after): 더 볼 것}. 누르기 전에 멈추면 refused 다. 친 뒤에 보낼 칸을 돌려준다
+  function fill(ctx, root, form, edits, opts) {
+    var refused = { refused: true };
+    var before = sent(root);
+    if (!before) fail(opts.window + '의 저장 단추가 무엇을 보내는지 알 수 없어(hx-include) 저장하지 않았습니다', refused);
+    var off = differs(before, form);
+    if (off.length) fail('창의 값이 읽은 값과 다릅니다(' + off.join(', ') + ') — 아무것도 치지 않았습니다. 다시 읽고 미리보기를 새로 만듭니다', { refused: true, differ: off });
+    // 칠 칸을 모두 먼저 찾는다 — 하나라도 어긋나면 한 글자도 치지 않는다
+    var targets = edits.map(function (edit) {
+      var name = edit[0], nth = edit[1], label = opts.settable(name);
+      if (!label) fail('`' + clip(name, 30) + '` 칸은 이 도우미가 치지 않습니다 — 저장하지 않았습니다', refused);
+      var count = form.filter(function (x) { return x[0] === name; }).length;
+      var els = all('input,select,textarea', root).filter(function (el) { return el.name === name && !el.matches(':disabled'); });
+      var what = label + (count > 1 ? ' ' + (nth + 1) + '번째' : '') + '(' + name + ')';
+      if (els.length !== count) fail('창에 ' + label + '(' + name + ') 칸이 ' + (count === 1 ? '하나' : count + '개') + '가 아닙니다 — 저장하지 않았습니다', refused);
+      if (!(nth >= 0 && nth < count)) fail('창에 ' + what + ' 칸이 없습니다 — 저장하지 않았습니다', refused);
+      var el = els[nth];
+      if (el.localName !== 'input' || el.type === 'checkbox' || el.type === 'radio') fail('창의 ' + what + ' 칸이 글자 칸이 아닙니다 — 저장하지 않았습니다', refused);
+      return { el: el, value: edit[2], label: label + (count > 1 ? ' ' + (nth + 1) + '번째' : '') };
+    });
+    targets.forEach(function (t) {
+      window.calSet(t.el, t.value);
+      if (t.el.value !== t.value) fail(t.label + ' 칸에 값이 들어가지 않았습니다 — 저장하지 않았습니다', refused);
+    });
+    ctx.check();
+    var after = sent(root) || [];
+    if (opts.guard) opts.guard(after);
+    var seen = Object.create(null);
+    var expected = form.map(function (x) {
+      var n = seen[x[0]] = seen[x[0]] === undefined ? 0 : seen[x[0]] + 1;
+      var hit = edits.filter(function (e) { return e[0] === x[0] && e[1] === n; })[0];
+      return [x[0], hit ? hit[2] : x[1]];
+    });
+    var off2 = differs(after, expected);
+    if (off2.length) fail('친 뒤의 창이 바꾼 칸 말고도 다릅니다(' + off2.join(', ') + ') — 저장하지 않았습니다', { refused: true, differ: off2 });
+    return after;
+  }
+  // 편집 창의 저장 한 번 — 저장 단추를 press 로 한 번 누르고 결과를 본다. opts 는 {root: 창 뿌리, panel: 저장 응답이 다시 그리는 목록의
+  // id, window: 창 이름, what: 답의 what}. 저장됨: 창이 사라지고 저장 표지(`#stay_save_result` 의 저장 시각이 바뀌었거나 새로 온 ·
+  // 바뀐 목록의 저장 배너)가 왔다. 거절: 창이 오류와 함께 다시 그려졌다. 둘 다 아니면 "unknown" — 다시 누르지 않는다
+  async function saveOnce(ctx, opts) {
+    var root = opts.root, rootId = root.id, screen = root.getAttribute('data-stay-screen');
+    var windowRoot = function () { return document.querySelector('#stay_drawer_body [data-stay-screen="' + screen + '"]'); };
+    var signs = function () {
+      var mark = document.getElementById('stay_save_result'), list = document.getElementById(opts.panel);
+      return {
+        stamp: mark && mark.getAttribute('data-stay-result') === 'saved' ? mark.getAttribute('data-stay-saved-at') : null,
+        panel: list, banner: list ? list.querySelector('[data-stay-result="saved"]') : null
+      };
+    };
+    var was = signs();
+    await press(ctx, opts.window + ' [저장]', function () { return windowRoot() === root ? saveButton(root) : null; });
+    var pressed = !!ctx.saves && ctx.wall.pressed(ctx.saves);
+    var outcome = function () {
+      var now = signs(), r = windowRoot();
+      var stamped = !!now.stamp && now.stamp !== was.stamp;
+      var fresh = !!now.banner && (now.panel !== was.panel || now.banner !== was.banner);
+      var redrawn = !!r && (r !== root || r.id !== rootId) && windowErrors(r).length > 0;
+      return { saved: !r && (stamped || fresh), refused: redrawn, errors: redrawn ? windowErrors(r) : [] };
+    };
+    await ctx.wait(function () { var o = outcome(); return quiet() && (o.saved || o.refused); }, 10000);
+    var done = outcome();
+    var saved = !pressed ? false : done.saved ? true : done.refused ? false : 'unknown';
+    var out = { ok: saved === true, what: opts.what, saved: saved, pressed: pressed };
+    if (saved === true) out.note = '저장했습니다';
+    else if (pressed && done.refused) {
+      out.error = opts.window + '이 저장을 거절했습니다 — ' + done.errors.join(' / ');
+      out.errors = done.errors.slice(0, 3).map(function (e) { return clip(e, 60); });
+    } else if (pressed) out.error = '[저장] 은 눌렸고 저장됐는지 알 수 없습니다 — 다시 읽어 확인합니다(다시 누르지 않았습니다)';
+    else out.error = '저장 단추를 누르지 못했습니다';
+    return out;
+  }
+
   // 시험·점검용: 작업 하나의 벽을 그 모듈의 표로 세운 채 fn 을 돌린다(막기만 하고 풀어 주는 것은 없다)
   async function guard(spec, op, fn, pins) {
     if (!spec.allow[op]) throw new Error('모르는 작업: ' + op);
@@ -1148,13 +1269,14 @@
     return { clicks: wall.log.clicks.slice(), blocked: wall.log.blocked.slice() };
   }
 
-  // 다른 페이지 모듈(부가옵션 가격 도우미 `stay_addon_price.js`)이 이 파일을 베끼지 않고 쓰는 부품 — 벽 · 작업 틀 · 누르기 ·
-  // 답 거르기 · 조각 · 바쁨 표지가 하나라 두 모듈을 통틀어 작업은 한 번에 하나다. 이 파일을 다시 올리면 새로 선다
+  // 다른 페이지 모듈(부가옵션 가격 `stay_addon_price.js` · 부과금 `stay_charge.js`)이 이 파일을 베끼지 않고 쓰는 부품 — 벽 · 작업 틀 ·
+  // 누르기 · 답 거르기 · 조각 · 바쁨 표지 · 편집 창 부품이 하나라 모듈을 통틀어 작업은 한 번에 하나다. 이 파일을 다시 올리면 새로 선다
   window.stayPageKit = Object.freeze({
     run: run, press: press, settle: settle, fail: fail, Stop: Stop,
     scrub: function (value) { return scrub(value); }, fit: fit, take: take, last: last, idle: idleState,
     C: C, all: all, clip: clip, quiet: quiet,
-    drawerOpen: drawerOpen, closeDrawer: closeDrawer, atRest: atRest, pageHotel: pageHotel, guard: guard
+    drawerOpen: drawerOpen, closeDrawer: closeDrawer, atRest: atRest, pageHotel: pageHotel, guard: guard,
+    sent: sent, differs: differs, pairs: pairs, errors: windowErrors, fill: fill, saveOnce: saveOnce
   });
 
   window.stayPrice = {
