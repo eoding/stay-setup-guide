@@ -168,6 +168,21 @@ class RollbackKeepsTest(Flow):
         self.assertIn("도우미 밖에서 바뀜", page)
         self.assertIn("ERP 손입력", page, "되돌려도 출처 표시는 돌아오지 않는다고 말한다")
 
+    def test_the_rollback_answer_carries_the_scope_line_that_list_shows_and_the_confirmation_reads(self):
+        change, plan = self.preview(self.request())
+        self.apply(change, plan)
+        snapshot = self.read(record=change)
+        loose = self.cli("rollback", "--change", change, "--snapshot", snapshot, "--line", "304", "--out", self.work / "rollback-0.json")
+        short = self.cli("rollback", "--change", change, "--snapshot", snapshot, "--line", "304", "--record",
+                         "--out", self.work / "rollback-1.json")
+        entry, = [item for item in self.cli("list")["changes"] if item["id"] == short["change_id"]]
+        self.assertEqual(short["scope"], entry["scope"])
+        self.assertEqual(loose["scope"], entry["scope"], "장부에 적지 않아도 같은 줄이다")
+        self.assertEqual(short["scope"], f"부가옵션 가격 줄 1개 (데모 오퍼 2027 · 엑스트라베드 · 엑스트라베드 1개 · 전체) · "
+                                         f"{change}번 되돌리기 (가격 줄 304번만)")
+        page = self.cli("render", "rollback", "--plan", self.work / "rollback-1.json", "--text", "--out", self.work / "되돌리기.html")
+        self.assertIn(f"되돌리는 범위: {short['scope']}", page["text"])
+
     def test_a_later_change_by_the_helper_is_named_as_the_cause(self):
         first, plan = self.preview(self.request())
         self.apply(first, plan)

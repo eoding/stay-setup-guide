@@ -322,32 +322,43 @@ def cmd_rollback(args):
     fresh_record(args, "rollback")
     ledger = open_ledger()
     now = decode_snapshot(load(args.snapshot))
-    select, scope = line_filter(args.line or ())
+    select, picked = line_filter(args.line or ())
     plan = plan_line_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept, select)
-    steps = rollback_steps(plan, now)
+    steps, rows = rollback_steps(plan, now), rollback_rows(plan, now)
+    request = dict(kind="rollback", scope=picked) if picked else None      # 고른 줄 — 장부 목록의 범위 한 줄이 말한다
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
-                                      sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan, now),
-                                      reverses=args.change, reading=encode_snapshot(now),
-                                      replaces=args.replaces) if args.record else None
+                                      sentence=args.sentence, read_at=plan.read_at, rows=rows, reverses=args.change,
+                                      request=request, reading=encode_snapshot(now), replaces=args.replaces) if args.record else None
+    # 되돌리기 확인이 읽는 범위 한 줄 — 장부에 적었으면 `list` 의 그 번호 줄, 아니면 같은 셈
+    scope = (listed(ledger, change_id)[0]["scope"] if change_id is not None else
+             scope_line([row.label for row in rows if row.field == FIELDS[0]], record_what(request, args.change)))
     return dict(change_id=change_id, replaces=args.replaces, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in steps])
 
 
-def record_scope(entry: dict, labels: list[str]) -> str:
-    """장부 한 줄의 범위 — 몇 줄인지와 처음 줄 이름, 한 일, 멈췄으면 어디까지."""
+def record_what(request: dict | None, reverses: int | None) -> str:
+    """장부의 번호가 한 일 — "판매가 +10%" · "3번 되돌리기" · "3번 되돌리기 (가격 줄 301번만)"."""
+    if reverses:
+        return f"{reverses}번 되돌리기" + (f" ({request['scope']}만)" if request and request.get("scope") else "")
+    if request and request.get("kind") == "addon_change":
+        try:
+            return decode_request(request).describe()
+        except (ModelError, KeyError, TypeError, ValueError):
+            return ""
+    return ""
+
+
+def scope_line(labels: list[str], did: str, stopped: str = "") -> str:
+    """범위 한 줄 — 몇 줄인지와 처음 줄 이름, 한 일, 멈췄으면 어디까지."""
     names = list(dict.fromkeys(labels))
     head = f"부가옵션 가격 줄 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
-    request = entry.get("request") or {}
-    did = ""
-    if request.get("kind") == "addon_change":
-        try:
-            did = " · " + decode_request(request).describe()
-        except (ModelError, KeyError, TypeError, ValueError):
-            did = ""
-    elif entry.get("reverses"):
-        did = f" · {entry['reverses']}번 되돌리기"
-    stopped = f" · {entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped" else ""
-    return head + did + stopped
+    return " · ".join(part for part in (head, did, stopped) if part)
+
+
+def record_scope(entry: dict, labels: list[str]) -> str:
+    """장부 한 줄의 범위(scope_line)."""
+    stopped = f"{entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped" else ""
+    return scope_line(labels, record_what(entry.get("request"), entry.get("reverses")), stopped)
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
