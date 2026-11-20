@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import scene  # noqa: E402
 import trial_scene  # noqa: E402
-from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
 from change_core.rollback import LaterWrite, RecordedChange, RecordedItem  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
@@ -175,14 +175,14 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
 class ResultPageTest(SelfContainedMixin, unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
+        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME, now=scene.clock)
         self.before = scene.snapshot()
         plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
         self.steps = plan_steps(plan)
         self.id = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
                                              read_at=plan.read_at, rows=preview_rows(plan),
                                              request=encode_request(plan.request))
-        self.ledger.begin(self.id, step_plans(self.steps), read_at=now_text())
+        self.ledger.begin(self.id, step_plans(self.steps), read_at=scene.NOW_TEXT)
 
     def tearDown(self):
         self.tmp.cleanup()

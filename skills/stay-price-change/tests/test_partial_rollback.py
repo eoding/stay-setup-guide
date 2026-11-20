@@ -5,7 +5,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -17,7 +16,7 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
-from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_change import listed  # noqa: E402
 from price_model import encode_request, encode_snapshot, key_of_item, snapshot_reading  # noqa: E402
@@ -32,13 +31,13 @@ from test_pages import visible  # noqa: E402
 class PartialRollbackTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
+        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME, now=scene.clock)
         plan = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
         steps = plan_steps(plan)
         self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
                                                  request=encode_request(plan.request))
-        self.ledger.begin(self.change, step_plans(steps), read_at=now_text())
+        self.ledger.begin(self.change, step_plans(steps), read_at=scene.NOW_TEXT)
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(self.change, index, saved=True)
         self.now = scene.applied(scene.snapshot(), steps, "2026-11-25T09:00:00+09:00")
@@ -56,7 +55,7 @@ class PartialRollbackTest(unittest.TestCase):
                                          sentence="일부 되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback),
                                          reverses=self.change)
         steps = save_steps(rollback_writes(rollback))
-        self.ledger.begin(rid, step_plans(steps), read_at=now_text())
+        self.ledger.begin(rid, step_plans(steps), read_at=scene.NOW_TEXT)
         for index in range(1, (len(steps) if saved is None else saved) + 1):
             self.ledger.record_step(rid, index, saved=True)
         self.now = scene.applied(self.now, steps[:saved] if saved is not None else steps)
@@ -114,7 +113,7 @@ class PartialRollbackTest(unittest.TestCase):
         # 나머지 되돌리기의 미리보기 — 이미 되돌린 부분과 그 번호를 말한다(명령으로)
         folder = Path(self.tmp.name)
         (folder / "now.json").write_text(json.dumps(encode_snapshot(self.now), ensure_ascii=False), encoding="utf-8")
-        env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder)}
+        env = scene.env(str(folder))
         script = str(HERE.parent / "scripts" / "price_change.py")
         done = subprocess.run([sys.executable, script, "rollback", "--change", str(self.change), "--snapshot", str(folder / "now.json"),
                                "--out", str(folder / "rollback-1.json")], capture_output=True, text=True, env=env)
@@ -182,7 +181,7 @@ class PartialRollbackTest(unittest.TestCase):
         done = subprocess.run([sys.executable, str(HERE.parent / "scripts" / "price_change.py"), "rollback",
                                "--change", str(self.change), "--snapshot", str(folder / "now.json"), "--room", "스위트",
                                "--rate-plan", "룸온리", "--from", "2027-01-01"],
-                              capture_output=True, text=True, env={**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder)})
+                              capture_output=True, text=True, env=scene.env(str(folder)))
         self.assertEqual(done.returncode, 0, done.stderr)
         result = json.loads(done.stdout)
         self.assertEqual((result["scope"], len(result["rollback"]["restored"]), len(result["steps"])),

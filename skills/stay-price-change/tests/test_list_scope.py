@@ -7,13 +7,12 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -30,7 +29,7 @@ from price_model import CellKey, Target, TargetTable, encode_request, encode_sna
 from price_pages import cells_scope  # noqa: E402
 from price_plan import plan_change, plan_steps, plan_targets, preview_rows, resolve, snapshot_rows, step_plans  # noqa: E402
 
-REAL = datetime.now().astimezone()
+REAL = scene.NOW
 TRIAL = "스탠다드(조식 포함), 스탠다드 바다 전망(조식 포함) · 12/7 월 ~ 12/8 화 · 12/10 목 · 12/14 월 (4일, 2026년)"
 
 
@@ -91,10 +90,10 @@ class ListScopeTest(unittest.TestCase):
         self.assertTrue(self.scope(2, number).endswith("· 새 요금표 2칸"), "적용한 뒤에도 넣은 칸 수 — 되돌리기 확인이 읽어 준다")
 
     def test_check_gives_the_same_line(self):
-        env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir)}
+        env = scene.env(str(self.dir))
         self.ledger(0).begin(self.change, step_plans(self.steps), read_at=self.snapshot.read_at)
         self.ledger(1).record_step(self.change, 1, saved=True)
-        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        now = scene.NOW_TEXT
         reading = self.dir / "again.json"   # 첫 저장이 들어간 지금 값을 방금 읽었다
         reading.write_text(json.dumps(encode_snapshot(scene.applied(self.snapshot, self.steps[:1], now)), ensure_ascii=False),
                            encoding="utf-8")
@@ -112,8 +111,8 @@ class NarrowedScopeTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir)}
-        self.snapshot = trial_scene.snapshot(read_at=datetime.now().astimezone().isoformat(timespec="seconds"))
+        self.env = scene.env(str(self.dir))
+        self.snapshot = trial_scene.snapshot(read_at=scene.NOW_TEXT)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -135,11 +134,11 @@ class NarrowedScopeTest(unittest.TestCase):
                          "--out", self.dir / f"{name}-plan.json")
         self.assertEqual(short["counts"]["red"], 0)
         steps = plan_steps(plan_change(self.snapshot, request))
-        ledger = Ledger(self.dir / DB_NAME)
+        ledger = Ledger(self.dir / DB_NAME, now=scene.clock)
         ledger.begin(short["change_id"], step_plans(steps), read_at=self.snapshot.read_at)
         for index in range(1, len(steps) + 1):
             ledger.record_step(short["change_id"], index, saved=True)
-        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        now = scene.NOW_TEXT
         return short["change_id"], self.write(f"{name}-after.json", encode_snapshot(scene.applied(self.snapshot, steps, now)))
 
     def line(self, number: int) -> str:

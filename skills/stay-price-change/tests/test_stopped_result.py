@@ -14,12 +14,13 @@ import re
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
+import scene  # noqa: E402
 import trial_scene  # noqa: E402
 from change_core.chrome import page_text  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger  # noqa: E402
@@ -29,7 +30,7 @@ from price_pages import render_result  # noqa: E402
 from price_plan import plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
 from test_preview_truth import above_list_cells, place, read_grid, shown_moves, step_writes  # noqa: E402
 
-REAL = datetime.now().astimezone()
+REAL = scene.NOW
 SECTION = "칸마다 넣은 값과 아직 넣지 않은 값"
 
 

@@ -6,12 +6,11 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -20,7 +19,6 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 from browser_replies import done_at, reply  # noqa: E402
-from change_core.ledger import now_text  # noqa: E402
 from change_core.answers import ask_sum  # noqa: E402
 from price_model import decode_snapshot, encode_request, encode_snapshot  # noqa: E402
 
@@ -33,7 +31,7 @@ class BrowserCommandTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.env = scene.env(str(self.dir / "기록"))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -46,7 +44,7 @@ class BrowserCommandTest(unittest.TestCase):
     def fresh(self, snapshot):
         """적용 직전에 방금 읽은 값 — 미리보기 때와 같은 칸, 읽은 시각만 지금(15분 안)"""
         data = json.loads(Path(snapshot).read_text(encoding="utf-8")) if isinstance(snapshot, str) else snapshot
-        return self.write("fresh.json", dict(data, read_at=now_text()))
+        return self.write("fresh.json", dict(data, read_at=scene.NOW_TEXT))
 
     def run_cli(self, *args, code=0):
         done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)
@@ -100,13 +98,13 @@ class BrowserCommandTest(unittest.TestCase):
         probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
                  "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
         calls = self.write("calls.json", {"pairs": [asked], "reserved": [probe]})
-        now = datetime.now(timezone.utc).replace(microsecond=0)
+        now = scene.NOW
         # 시운전처럼 — 페이지 작업은 3분 전과 2분 전에 끝났고, 명령은 지금 부른다
         pair = reply("readPair", asked, {"fragment": PRICE}, doneAt=done_at(now - timedelta(minutes=3)))
         resv = reply("readReserved", probe, {"fragment": REJECTED}, doneAt=done_at(now - timedelta(minutes=2)))
         read = self.run_cli("read", "--calls", calls, "--answers", self.write("answers.json", pair + resv))
         self.assertEqual(datetime.fromisoformat(read["read_at"]), now - timedelta(minutes=3), "가장 이른 작업이 끝난 시각")
-        self.assertEqual(datetime.fromisoformat(read["read_at"]).utcoffset(), datetime.now().astimezone().utcoffset(), "지금 시각대로")
+        self.assertEqual(datetime.fromisoformat(read["read_at"]).utcoffset(), scene.NOW.astimezone().utcoffset(), "지금 시각대로")
         self.assertIn("--read-at", self.run_cli("read", "--calls", calls, "--answers", self.dir / "answers.json", "--read-at",
                                                 "2026-11-20T18:00:00+09:00", code=2)["error"], "답의 시각을 덮어쓰지 않는다")
         timeless = [dict(pair[0], doneAt=None), *pair[1:]] + resv
@@ -118,7 +116,7 @@ class BrowserCommandTest(unittest.TestCase):
                  "to": "2026-12-31", "weekdays": list("월화수목금토일")}
         probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
                  "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
-        now = datetime.now(timezone.utc).replace(microsecond=0)
+        now = scene.NOW
         resv = reply("readReserved", probe, {"fragment": REJECTED}, doneAt=done_at(now - timedelta(minutes=1)))
         first = reply("readPair", asked, {"fragment": PRICE}, body_id="p1", doneAt=done_at(now - timedelta(minutes=4)))
         cut = json.dumps(first[0], ensure_ascii=False)[:120] + "[TRUNCATED]"   # 도구가 보인 그대로 저장한 잘린 답

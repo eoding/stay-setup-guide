@@ -6,7 +6,6 @@ calls 가 남은 단계를 낸다.
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -29,7 +28,7 @@ class CheckTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.env = scene.env(str(self.dir / "기록"))
         self.before = scene.snapshot()
         snapshot = self.write("snapshot.json", encode_snapshot(self.before))
         request = self.write("request.json", encode_request(scene.request()))
@@ -74,7 +73,7 @@ class CheckTest(unittest.TestCase):
         self.assertEqual((report["can_continue"], report["remaining"], report["why"], report["status"]),
                          (True, list(range(3, 9)), [], "applying"))
         self.assertEqual([call["no"] for call in self.cli("calls", "--change", self.change)["calls"]], list(range(3, 9)))
-        step = Ledger(self.dir / "기록" / DB_NAME).change(self.change).steps[1]
+        step = Ledger(self.dir / "기록" / DB_NAME, now=scene.clock).change(self.change).steps[1]
         self.assertEqual((step.status, step.unknown, step.note), ("saved", False, "다시 읽어 저장된 것을 확인했습니다"), "장부에 적었다")
 
     def test_an_unknown_save_the_reading_does_not_show_is_settled_as_not_saved_and_called_again(self):

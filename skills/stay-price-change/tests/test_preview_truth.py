@@ -12,7 +12,6 @@
 """
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -28,7 +27,6 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 import trial_scene  # noqa: E402
-from change_core.ledger import now_text  # noqa: E402
 from change_core.answers import ask_sum  # noqa: E402
 from price_model import (  # noqa: E402
     FIELD_LABELS, CellKey, day_label, decode_step, encode_key, encode_request, encode_snapshot, line_label,
@@ -149,7 +147,7 @@ class CommandCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.env = scene.env(str(self.dir / "기록"))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -193,7 +191,7 @@ class PreviewTruthTest(CommandCase):
         for spot, field, value in shown:
             self.assertEqual(by_cell.get((spot, field)), [value], f"{name}: 페이지에서 바뀐다는 {spot} · {field} = {value} 는 "
                                                                   "꼭 한 저장 단계에 같은 값으로 있어야 한다")
-        fresh = self.write(f"{name}/fresh.json", dict(encode_snapshot(snapshot), read_at=now_text()))
+        fresh = self.write(f"{name}/fresh.json", dict(encode_snapshot(snapshot), read_at=scene.NOW_TEXT))
         begun = self.run_cli("begin", "--change", planned["change_id"], "--plan", folder / "plan.json", "--snapshot", fresh)
         self.assertEqual((begun["status"], begun["steps"]), ("applying", len(planned["steps"])), f"{name}: 장부의 줄 = 저장 단계")
         return planned, page.read_text(encoding="utf-8")
@@ -277,7 +275,7 @@ class NothingToSaveTest(CommandCase):
             self.assertNotIn(said, text, "저장할 것이 없는 미리보기는 저장한다고도, 적용하라고도 말하지 않는다")
         self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "칸마다도 저장하지 않는다고 말한다")
 
-        fresh = self.write("fresh.json", dict(encode_snapshot(snapshot), read_at=now_text()))
+        fresh = self.write("fresh.json", dict(encode_snapshot(snapshot), read_at=scene.NOW_TEXT))
         done = subprocess.run([sys.executable, str(SCRIPT), "begin", "--change", str(short["change_id"]), "--plan",
                                str(self.dir / "plan.json"), "--snapshot", fresh], capture_output=True, text=True, env=self.env)
         self.assertEqual(done.returncode, 2, done.stdout)
@@ -298,7 +296,7 @@ class ChosenListThroughLedgerTest(CommandCase):
 
     def apply(self, name, snapshot, plan_file, change_id):
         """begin → calls → 저장마다 record-result(페이지가 저장했다고 답함) → 그 저장이 들어간 지금 값(scene.applied)."""
-        fresh = self.write(f"{name}-fresh.json", dict(encode_snapshot(snapshot), read_at=now_text()))
+        fresh = self.write(f"{name}-fresh.json", dict(encode_snapshot(snapshot), read_at=scene.NOW_TEXT))
         self.run_cli("begin", "--change", change_id, "--plan", plan_file, "--snapshot", fresh)
         for call in self.run_cli("calls", "--change", change_id)["calls"]:
             reply = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True,
@@ -306,7 +304,7 @@ class ChosenListThroughLedgerTest(CommandCase):
             last = self.run_cli("record-result", "--change", change_id, "--result", self.write(f"{name}-r{call['no']}.json", reply))
         self.assertEqual(last["status"], "applied")
         steps = json.loads(Path(plan_file).read_text(encoding="utf-8"))["steps"]
-        return scene.applied(snapshot, map(decode_step, steps), now_text())
+        return scene.applied(snapshot, map(decode_step, steps), scene.NOW_TEXT)
 
     def round_trip(self, choice):
         before, over = scene.snapshot(), CellKey("스위트", "조식 포함", "2027-01-01", "A2", 1)

@@ -12,10 +12,15 @@ from datetime import datetime, timezone
 
 from change_core.answers import ask_sum, fnv1a, page_sum
 
+# 시험의 지금 — 시험은 이 컴퓨터의 시계를 읽지 않는다. 페이지 답의 끝난 시각과 장부의 시계(명령은 STAY_PRICE_TEST_NOW,
+# 장부를 바로 부르면 Ledger(now=…))가 따로 주지 않으면 이 시각이다.
+NOW_TEXT = "2026-11-21T10:00:00+09:00"
+NOW = datetime.fromisoformat(NOW_TEXT)
+
 
 def done_at(moment: datetime | None = None) -> str:
-    """페이지가 답에 적는 끝난 시각의 모양 — `new Date().toISOString()`(UTC, 천분의 1초, Z)."""
-    moment = (moment or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    """페이지가 답에 적는 끝난 시각의 모양 — `new Date().toISOString()`(UTC, 천분의 1초, Z). 주지 않으면 시험의 지금(NOW)."""
+    moment = (moment or NOW).astimezone(timezone.utc)
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
@@ -37,7 +42,7 @@ def pack(value) -> str:
 
 def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, body_id: str | None = None, **fields) -> list[dict]:
     """작은 답 하나 + 조각을 `pieces` 쪽으로 나눈 take 답들. 페이지는 읽을 때마다 새 조각 id 를 붙인다 — 같은 글자를 다시 읽은
-    답을 만들려면 `body_id` 를 달리 준다. 끝난 시각(`doneAt`)은 따로 주지 않으면 지금이다."""
+    답을 만들려면 `body_id` 를 달리 준다. 끝난 시각(`doneAt`)은 따로 주지 않으면 시험의 지금(NOW)이다."""
     result = {"ok": True, "op": op, "ask": ask_sum(asked), "doneAt": done_at(), **fields}
     if keep is None:
         return [result]

@@ -5,7 +5,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -20,7 +19,6 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 import sheet_scene as S  # noqa: E402
-from change_core.ledger import now_text  # noqa: E402
 from price_model import CellKey, Target, TargetTable, encode_snapshot, guest_counts, matching_rows  # noqa: E402
 from price_plan import ChooseRows, plan_change, plan_targets  # noqa: E402
 
@@ -65,7 +63,7 @@ class SheetCommandTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.env = scene.env(str(self.dir / "기록"))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -87,7 +85,7 @@ class SheetCommandTest(unittest.TestCase):
                             "--request", self.dir / "sheet-check-1.json", "--record", "--out", self.dir / "plan-1.json", code=code)
 
     def test_one_child_band_is_the_row_meant_and_nothing_is_unseen(self):
-        planned = self.plan(S.reading(read_at=now_text()))
+        planned = self.plan(S.reading(read_at=scene.NOW_TEXT))
         self.assertEqual(planned["coverage"]["unseen"], 0)
         self.assertEqual(planned["coverage"]["untouched"], 13, "요금표에 없는 칸은 스위트 성인 1 줄뿐 — 아동 줄은 같은 칸이다")
         self.assertEqual(len(self.run_cli("list")["changes"]), 1, "장부에는 한 번만 적힌다")
@@ -98,7 +96,7 @@ class SheetCommandTest(unittest.TestCase):
         self.assertEqual(changed[("디럭스", "2027-01-15", "A2C1_CHD")], "330.00")
 
     def test_two_child_bands_are_listed_by_their_erp_names_and_nothing_is_recorded(self):
-        refused = self.plan(two_bands(S.reading(read_at=now_text())), code=2)
+        refused = self.plan(two_bands(S.reading(read_at=scene.NOW_TEXT)), code=2)
         self.assertIn("A2C1_CHD · 소아 1 / A2C1_TEEN · 청소년 1", refused["error"])
         self.assertEqual({(item["room"], item["occupancy"]) for item in refused["choose"]}, {("디럭스", "A2C1"), ("스위트", "A2C1")})
         self.assertEqual(refused["choose"][0]["choices"], [{"occupancy": "A2C1_CHD", "label": "A2C1_CHD · 소아 1"},

@@ -7,7 +7,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -19,8 +18,8 @@ HERE = Path(__file__).resolve().parent
 SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
+import scene  # noqa: E402
 import sheet_scene as S  # noqa: E402
-from change_core.ledger import now_text  # noqa: E402
 from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import encode_snapshot  # noqa: E402
 from price_pages import SEASON_REFILL_NOTE  # noqa: E402
@@ -32,7 +31,7 @@ class SheetCommandTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.env = scene.env(str(self.dir / "기록"))
         self.look = self.write("look.json", S.look_data())
         self.sheet = self.write("sheet.json", S.sheet_data())
 
@@ -65,7 +64,7 @@ class SheetCommandTest(unittest.TestCase):
                          [("디럭스", "2027-01-04", "2027-01-17"), ("스위트", "2027-01-04", "2027-01-17")])
         self.assertEqual(len(calls["reserved"]), 1)
 
-        snapshot = self.write("snapshot.json", encode_snapshot(S.reading(read_at=now_text())))
+        snapshot = self.write("snapshot.json", encode_snapshot(S.reading(read_at=scene.NOW_TEXT)))
         planned = self.run_cli("plan", "--snapshot", snapshot, "--request", self.dir / "sheet-check.json", "--record",
                                "--out", self.dir / "plan.json")
         self.assertEqual((planned["counts"]["will_change"], planned["counts"]["red"], planned["counts"]["new"]), (80, 0, 0))
@@ -108,7 +107,7 @@ class SheetCommandTest(unittest.TestCase):
         self.assertIn("sheet-check-2.json", refused)
         self.assertEqual(out.read_text(encoding="utf-8"), first, "거절하면 앞 파일은 그대로다")
 
-        snapshot = self.write("snapshot.json", encode_snapshot(S.reading(read_at=now_text())))
+        snapshot = self.write("snapshot.json", encode_snapshot(S.reading(read_at=scene.NOW_TEXT)))
         old = self.run_cli("plan", "--snapshot", snapshot, "--request", out, "--record", "--out", self.dir / "plan-1.json")["change_id"]
         again = self.run_cli("sheet", "--sheet", fixed_path, "--look", self.look, "--out", self.dir / "sheet-check-2.json")
         self.assertEqual(again["range"], checked["range"], "범위가 같으면 읽은 값을 그대로 쓴다")

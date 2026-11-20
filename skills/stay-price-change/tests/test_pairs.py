@@ -4,7 +4,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -93,13 +92,13 @@ class PairsTest(unittest.TestCase):
             (folder / "r.json").write_text(json.dumps(encode_request(scene.request()), ensure_ascii=False), encoding="utf-8")
             done = subprocess.run([sys.executable, str(HERE.parent / "scripts" / "price_change.py"), "plan", "--snapshot",
                                    str(folder / "s.json"), "--request", str(folder / "r.json"), "--record"],
-                                  capture_output=True, text=True, env={**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder)})
+                                  capture_output=True, text=True, env=scene.env(str(folder)))
             self.assertEqual(done.returncode, 0, done.stderr)
             result = json.loads(done.stdout)
             self.assertEqual(len(result["plan"]["request"]["pairs"]), 3)
             self.assertEqual(result["plan"]["absent_pairs"], [{"room": "스위트", "rate_plan": "룸온리"}])
             listed = subprocess.run([sys.executable, str(HERE.parent / "scripts" / "price_change.py"), "list"],
-                                    capture_output=True, text=True, env={**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder)})
+                                    capture_output=True, text=True, env=scene.env(str(folder)))
             self.assertEqual(json.loads(listed.stdout)["changes"][0]["id"], result["change_id"])
 
 

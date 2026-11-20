@@ -8,7 +8,6 @@
 
 import html
 import json
-import os
 import re
 import subprocess
 import sys
@@ -23,7 +22,7 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
-from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot, encode_snapshot  # noqa: E402
 from price_pages import ONE_COLUMN_PER_DATE_UP_TO, render_preview, render_prices, render_result, render_rollback  # noqa: E402
@@ -97,12 +96,12 @@ class GroupedColumnsTest(unittest.TestCase):
                       "묶인 열에도 바뀌는 값이 그대로 있다")
 
         with tempfile.TemporaryDirectory() as folder:
-            ledger = Ledger(Path(folder) / DB_NAME)
+            ledger = Ledger(Path(folder) / DB_NAME, now=scene.clock)
             plan = resolve(plan, [Resolution("OVER_30", "include")])
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                            sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan))
             steps = plan_steps(plan)
-            ledger.begin(change, step_plans(steps), read_at=now_text())
+            ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)
             result, = heads(render_result(ledger.change(change)))
@@ -146,7 +145,7 @@ class GroupedColumnsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             (folder / "s.json").write_text(json.dumps(encode_snapshot(self.snapshot), ensure_ascii=False), encoding="utf-8")
-            env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder)}
+            env = scene.env(str(folder))
             for flags, count in (((), 4), (("--by-date",), 31)):
                 done = subprocess.run([sys.executable, str(SCRIPT), "render", "prices", "--snapshot", str(folder / "s.json"),
                                        "--out", str(folder / "p.html"), *flags], capture_output=True, text=True, env=env)

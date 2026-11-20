@@ -5,10 +5,12 @@
 예약 있는 날은 디럭스 12/25 · 스위트 1/1, 스위트 조식 포함 1/1 · 1/2 의 성인 2 · 1박 이상 칸만 정가 500.
 """
 
+import os
 from dataclasses import replace
 from decimal import Decimal
 
-from change_core.ledger import now_text
+from browser_replies import NOW, NOW_TEXT
+from change_core.ledger import CLOCK_ENV, LEDGER_ENV
 from change_core.money import round_money
 from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot
 
@@ -73,8 +75,18 @@ def applied(snapshot: Snapshot, steps, read_at="2026-11-20T14:06:00+09:00") -> S
 
 
 def fresh(snapshot: Snapshot) -> Snapshot:
-    """방금 읽은 것처럼 읽은 시각만 지금으로 — 적용 직전 · 이어서의 읽은 값은 15분 안의 것이어야 한다."""
-    return replace(snapshot, read_at=now_text())
+    """방금 읽은 것처럼 읽은 시각만 시험의 지금으로 — 적용 직전 · 이어서의 읽은 값은 15분 안의 것이어야 한다."""
+    return replace(snapshot, read_at=NOW_TEXT)
+
+
+def clock():
+    """장부를 바로 부르는 시험의 시계(`Ledger(path, now=scene.clock)`) — 시험의 지금에 서 있다."""
+    return NOW
+
+
+def env(folder) -> dict:
+    """명령을 부르는 시험의 환경 — 장부 자리와, 시험의 지금에 서 있는 장부의 시계."""
+    return {**os.environ, LEDGER_ENV: str(folder), CLOCK_ENV: NOW_TEXT}
 
 
 def with_cells(snapshot: Snapshot, changes: dict, read_at=None) -> Snapshot:

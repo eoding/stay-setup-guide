@@ -6,7 +6,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -36,7 +35,7 @@ class CommandTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.env = scene.env(str(self.dir / "기록"))
         self.snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         self.request = self.write("request.json", encode_request(scene.request()))
         self.choice = self.write("resolutions.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])

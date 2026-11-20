@@ -8,14 +8,12 @@ begin 은 적용 직전에 읽은 값을 받아 미리보기 때 값과 견주�
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -31,7 +29,7 @@ from price_pages import render_result  # noqa: E402
 from price_plan import plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
 from test_pages import visible  # noqa: E402
 
-REAL = datetime.now().astimezone()
+REAL = scene.NOW
 
 
 def at(minutes: float) -> str:
@@ -132,12 +130,13 @@ class ResumeLedgerTest(unittest.TestCase):
 
 
 class ResumeCommandTest(unittest.TestCase):
-    """명령으로 — begin 의 읽은 값, 그리고 실제로 시간이 지나 끊긴 변경(15분 끝자락에서 시작해 몇 초 기다린다)."""
+    """명령으로 — begin 의 읽은 값, 그리고 시간이 지나 끊긴 변경(15분 끝자락에서 시작해 장부의 시계를 몇 초 옮긴다).
+    명령의 장부 시계는 `self.clock` 에 서 있다(STAY_PRICE_TEST_NOW) — 이 컴퓨터의 시계 · 부하와 상관없다."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.dir / "기록")}
+        self.clock = scene.NOW
         self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         self.write("request.json", encode_request(scene.request()))
         self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
@@ -152,13 +151,18 @@ class ResumeCommandTest(unittest.TestCase):
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return path
 
+    @property
+    def env(self) -> dict:
+        return dict(scene.env(self.dir / "기록"), STAY_PRICE_TEST_NOW=self.clock.isoformat())
+
     def cli(self, *args, code=0):
         done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)
         self.assertEqual(done.returncode, code, done.stderr or done.stdout)
         return json.loads(done.stdout) if code != 2 else json.loads(done.stderr)
 
     def reading(self, name, snapshot, read_at=None):
-        return self.write(name, dict(encode_snapshot(snapshot), read_at=read_at or datetime.now().astimezone().isoformat(timespec="seconds")))
+        """`read_at` 을 주지 않으면 방금(장부의 시계) 읽은 값."""
+        return self.write(name, dict(encode_snapshot(snapshot), read_at=read_at or self.clock.isoformat(timespec="seconds")))
 
     def test_begin_needs_the_reading_made_just_before_and_starts_nothing_if_a_cell_differs(self):
         done = subprocess.run([sys.executable, str(SCRIPT), "begin", "--change", str(self.change), "--plan", str(self.dir / "plan.json")],
@@ -173,16 +177,16 @@ class ResumeCommandTest(unittest.TestCase):
         self.assertEqual((refused["same"], refused["status"], [item["key"]["date"] for item in refused["differences"]]),
                          (False, "previewed", [key.date]), "stale 과 같은 모양으로 다른 칸을 댄다")
         self.assertIn("begin", self.cli("calls", "--change", self.change, code=2)["error"], "아무것도 시작하지 않았다")
-        old = self.reading("old.json", scene.snapshot(), (datetime.now().astimezone() - timedelta(minutes=20)).isoformat(timespec="seconds"))
+        old = self.reading("old.json", scene.snapshot(), (self.clock - timedelta(minutes=20)).isoformat(timespec="seconds"))
         self.assertIn("20분 전", self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json", "--snapshot", old, code=2)["error"])
         started = self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json", "--snapshot", self.reading("now.json", scene.snapshot()))
         self.assertEqual(started["status"], "applying")
 
     def test_a_run_cut_off_between_saves_is_stopped_until_a_fresh_check(self):
-        edge = (datetime.now().astimezone() - IDLE + timedelta(seconds=3)).isoformat(timespec="seconds")
+        edge = (self.clock - IDLE + timedelta(seconds=3)).isoformat(timespec="seconds")
         self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json", "--snapshot", self.reading("edge.json", scene.snapshot(), edge))
         self.assertEqual(len(self.cli("calls", "--change", self.change)["calls"]), 8, "15분 안 — 남은 저장을 낸다")
-        time.sleep(4.5)                                   # 세션이 끊겼다 — 받아들인 읽은 값에서 15분이 지났다
+        self.clock += timedelta(seconds=4.5)              # 세션이 끊겼다 — 받아들인 읽은 값에서 15분이 지났다
         self.assertEqual(self.cli("list")["changes"][0]["status"], "stopped")
         self.assertIn("멈춰 있습니다", self.cli("calls", "--change", self.change, code=2)["error"])
         page = Path(self.cli("render", "result", "--change", self.change, "--out", self.dir / "result.html")["page"]).read_text(encoding="utf-8")

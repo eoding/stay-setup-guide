@@ -7,7 +7,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -42,7 +41,7 @@ class Cli(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
         self.records = self.dir / "기록"
-        self.env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(self.records)}
+        self.env = scene.env(str(self.records))
 
     def tearDown(self):
         self.tmp.cleanup()

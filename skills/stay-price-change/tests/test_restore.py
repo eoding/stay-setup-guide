@@ -5,7 +5,6 @@
 """
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -18,7 +17,7 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
-from change_core.ledger import DB_NAME, Ledger, LedgerError, now_text  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger, LedgerError  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, Snapshot, Target, TargetTable, cell_item_key, encode_request, encode_snapshot, snapshot_reading,
@@ -37,7 +36,7 @@ CREATED = CellKey("스위트", "룸온리", "2027-01-02", "A2", 1)
 class RestoreTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
+        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME, now=scene.clock)
         self.saved_state = scene.snapshot()
         self.saved = self.ledger.record_snapshot(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence="연말 가격 바꾸기 전에 저장", read_at=self.saved_state.read_at,
@@ -56,7 +55,7 @@ class RestoreTest(unittest.TestCase):
                                             sentence=plan.request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                             request=encode_request(plan.request))
         steps = plan_steps(plan)
-        self.ledger.begin(change, step_plans(steps), read_at=now_text())
+        self.ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
         return scene.applied(current, steps, "2026-11-26T09:00:00+09:00")
@@ -78,7 +77,7 @@ class RestoreTest(unittest.TestCase):
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
                                              request=dict(kind="restore_snapshot", snapshot=self.saved))
         steps = save_steps(rollback_writes(plan))
-        self.ledger.begin(restore, step_plans(steps), read_at=now_text())
+        self.ledger.begin(restore, step_plans(steps), read_at=scene.NOW_TEXT)
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(restore, index, saved=True)
         restored = scene.applied(self.now, steps, "2026-11-27T09:00:00+09:00")
@@ -118,7 +117,7 @@ class RestoreTest(unittest.TestCase):
         self.assertIn("528.00 → 480.00 정가 550.00 → 500.00", text)
         folder = Path(self.tmp.name)
         (folder / "now.json").write_text(json.dumps(encode_snapshot(self.now), ensure_ascii=False), encoding="utf-8")
-        env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder / "cli")}
+        env = scene.env(str(folder / "cli"))
         script = str(HERE.parent / "scripts" / "price_change.py")
 
         def run(*args, code=0):
@@ -143,7 +142,7 @@ class UnremovableTest(unittest.TestCase):
 
     def test_rolling_back_a_target_table_lists_the_new_cell_as_unremovable(self):
         with tempfile.TemporaryDirectory() as folder:
-            ledger = Ledger(Path(folder) / DB_NAME)
+            ledger = Ledger(Path(folder) / DB_NAME, now=scene.clock)
             before = scene.snapshot()
             plan = plan_targets(before, TargetTable(scene.HOTEL, scene.OFFER, (
                 Target(CREATED, (("sell", D("450.00")),)),
@@ -154,7 +153,7 @@ class UnremovableTest(unittest.TestCase):
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표",
                                            read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(plan.request))
             steps = plan_steps(plan)
-            ledger.begin(change, step_plans(steps), read_at=now_text())
+            ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)
             now = scene.applied(before, steps)
