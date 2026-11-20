@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping, Sequence
+from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
 from .items import Difference, Reading, stale_items
 from .money import money, money_text
@@ -53,7 +53,7 @@ DB_NAME = "가격장부.sqlite3"
 SCHEMA_VERSION = 2
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
-KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장)
+KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -574,17 +574,19 @@ class Ledger:
             db.execute("UPDATE changes SET verified_at = ?, updated_at = ? WHERE id = ?", (stamp, stamp, change_id))
         return mismatches
 
-    def untouched(self, change_id: int, reading: Reading) -> list[Mismatch]:
+    def untouched(self, change_id: int, reading: Reading, unit: Callable[[str], str] | None = None) -> list[Mismatch]:
         """저장한 항목의 넣지 않은 필드 가운데 방금 읽은 값이 미리보기 때 값과 다른 것(`after` 는 그대로여야 할 값). 기록 하나를
-        통째로 다시 저장하는 화면(부가옵션 가격 줄 · 부과금 …)에서 저장이 다른 필드를 건드리지 않았는지 본다. 장부에는 적지 않는다."""
+        통째로 다시 저장하는 화면(부가옵션 가격 줄 · 부과금 …)에서 저장이 다른 필드를 건드리지 않았는지 본다. 장부에는 적지 않는다.
+        `unit(항목 키)` 는 저장 한 번이 다시 쓰는 단위다(부과금은 시간대 · 연령별 단가까지 부과금 하나) — 주지 않으면 항목 하나다."""
+        unit = unit or (lambda key: key)
         with self._db() as db:
             self._header(db, change_id)
-            saved = {(row["item_kind"], row["item_key"]) for row in self._written(db, change_id)}
+            saved = {(row["item_kind"], unit(row["item_key"])) for row in self._written(db, change_id)}
             rows = db.execute("SELECT * FROM item_values WHERE change_id = ? AND action IS NULL AND state != 'missing'"
                               " ORDER BY rowid", (change_id,)).fetchall()
         moved = []
         for row in rows:
-            if (row["item_kind"], row["item_key"]) not in saved:
+            if (row["item_kind"], unit(row["item_key"])) not in saved:
                 continue
             item = reading.get((row["item_kind"], row["item_key"]))
             seen, before = None if item is None else item.fields.get(row["field"]), money(row["before"])
@@ -593,15 +595,18 @@ class Ledger:
                                       None if item is None else item.state))
         return moved
 
-    def check(self, change_id: int, now: Reading, then: Reading, read_at: str) -> CheckReport:
+    def check(self, change_id: int, now: Reading, then: Reading, read_at: str,
+              unit: Callable[[str], str] | None = None) -> CheckReport:
         """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
         해도 되는지, 어디까지 됐고 왜 멈췄는지.
 
         「모름」(눌렸고 저장됐는지 모르는 단계)은 읽은 값이 넣은 값 그대로면 저장됨으로, 전 값 그대로면 저장 안 됨으로 가려 적는다.
         남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
         바탕으로 삼은 읽은 값(`then`)과 모두 같고, 읽은 값이 IDLE 안의 것일 때뿐이다. 그러면 변경을 적용 중으로 두고 그 읽은
-        값의 시각을 활동으로 적는다(IDLE 안이면 calls 가 남은 단계를 낸다). 아니면 멈춘 변경으로 둔다.
+        값의 시각을 활동으로 적는다(IDLE 안이면 calls 가 남은 단계를 낸다). 아니면 멈춘 변경으로 둔다. `unit` 은 untouched 와 같다 —
+        남은 저장의 칸은 그 저장이 다시 쓰는 단위 전부를 본다.
         """
+        unit = unit or (lambda key: key)
         with self._db() as db:
             header = self._header(db, change_id)
             steps = db.execute("SELECT * FROM steps WHERE change_id = ? ORDER BY idx", (change_id,)).fetchall()
@@ -623,7 +628,9 @@ class Ledger:
             if settled:
                 settle.append((step["idx"], settled))
             done = state == "saved" or settled == "saved"
-            items = {(row["item_kind"], row["item_key"]) for row in rows[step["idx"]]}
+            units = {(row["item_kind"], unit(row["item_key"])) for row in rows[step["idx"]]}
+            items = {(kind, key) for kind, key in set(then) | set(now) if (kind, unit(key)) in units}
+            items |= {(row["item_kind"], row["item_key"]) for row in rows[step["idx"]]}
             moved = 0 if done else sum(not _same_item(then.get(item), now.get(item)) for item in items)
             seen_steps.append(StepSeen(step["idx"], step["label"], state, seen, settled, moved))
         why, remaining = [], []

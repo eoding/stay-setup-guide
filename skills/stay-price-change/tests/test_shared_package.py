@@ -12,11 +12,11 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 CORE = SCRIPTS / "change_core"
 CELL_MODULES = {"price_model", "price_plan", "price_pages", "price_change", "price_browser", "erp_read"}
-SHARED = {"ledger", "rules", "items", "rollback", "chrome", "money", "answers", "files"}
+SHARED = {"ledger", "rules", "items", "rollback", "chrome", "money", "answers", "files", "window"}
 
 
 class SharedPackageTest(unittest.TestCase):
-    def test_the_package_holds_ledger_rules_stale_check_rollback_page_chrome_page_answers_and_record_files(self):
+    def test_the_package_holds_ledger_rules_stale_check_rollback_page_chrome_page_answers_record_files_and_window_step(self):
         self.assertEqual({path.stem for path in CORE.glob("*.py")} - {"__init__"}, SHARED)
 
     def test_no_module_of_the_package_imports_cell_code(self):
@@ -30,7 +30,7 @@ class SharedPackageTest(unittest.TestCase):
     def test_a_sibling_skill_can_import_it_by_path_without_loading_cell_code(self):
         code = ("import sys; sys.path.insert(0, sys.argv[1]); "
                 "import change_core.ledger, change_core.rules, change_core.items, change_core.rollback, change_core.chrome, "
-                "change_core.answers, change_core.files; "
+                "change_core.answers, change_core.files, change_core.window; "
                 "print(sorted(m for m in sys.modules if m.split('.')[0] in %r))" % sorted(CELL_MODULES))
         done = subprocess.run([sys.executable, "-c", code, str(SCRIPTS)], capture_output=True, text=True, cwd="/")
         self.assertEqual((done.returncode, done.stdout.strip()), (0, "[]"), done.stderr)
