@@ -1,0 +1,40 @@
+[
+  {
+    "no": 1,
+    "op": "applyBulk",
+    "payload": {
+      "no": 1,
+      "offer": "〈오퍼 관리용 이름〉",
+      "room": "디럭스",
+      "ratePlan": "조식 포함",
+      "dates": [
+        "2026-07-01"
+      ],
+      "rows": [
+        {
+          "occupancy": "",
+          "nights": 1,
+          "sell": "125000.00",
+          "list": null,
+          "supply": null
+        }
+      ]
+    }
+  },
+  {
+    "no": 2,
+    "op": "applyCell",
+    "payload": {
+      "no": 2,
+      "offer": "〈오퍼 관리용 이름〉",
+      "room": "디럭스",
+      "ratePlan": "조식 포함",
+      "date": "2026-07-01",
+      "occupancy": "",
+      "nights": 1,
+      "clear": [
+        "list"
+      ]
+    }
+  }
+]

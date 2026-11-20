@@ -1,0 +1,186 @@
+"""price_browser.py — 브라우저 쪽 `window.stayPrice`(`scripts/page/stay_price.js`)와 주고받는 모양.
+
+    read_calls(offer, pairs, dates)       readPair 부를 값 — 객실 × 요금제마다, 고른 날만 덮는 기간·요일로(550일씩)
+    reserved_probes(offer, pairs, dates)  readReserved 첫 물음 — 같은 기간마다 객실·요금제 전부
+    reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
+    price_pages(results)                  readPair 답 → 가격 수정 확인 단계(물은 오퍼·요금제와 화면이 다르면 거절)
+    step_call(no, offer, kind, body)      장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
+    step_outcome(call, result)            브라우저 답 → (저장됨, 메모). 그 단계를 물은 답이 아니면 거절
+
+가감 확인 단계는 건너뛰는 칸을 300줄까지만 보이고 나머지는 숨긴 줄 수로 말한다. 숨긴 줄이 있는 답은 쓰지 않고,
+그 물음을 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 다시 묻는다. 쪼갠 물음들은 원래 물음의 칸을 나눠 가지므로, 숨긴 줄이
+없는 답들을 합치면 원래 물음이 다 보였을 때와 같다. 계산은 답 목록만 보고 매번 처음부터 다시 한다(답을 덧붙여 다시 부르면 된다).
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from typing import Iterable, Mapping
+
+from change_core.money import money_text
+from erp_read import AdjustPage, PricePage, parse_adjust_page, parse_price_page
+from price_model import FIELDS, WEEKDAYS, decode_step, iso_day
+
+MAX_SPAN = 550                       # ERP 가 한 번에 받는 기간(일)
+PROBE_FIELDS = ("offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
+OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
+
+
+class BrowserError(ValueError):
+    """브라우저의 답이 물은 것과 맞지 않거나, 더 물어도 답을 얻을 수 없다."""
+
+
+def selected(first: str, last: str, weekdays: Iterable[str]) -> list[str]:
+    """first ~ last 가운데 고른 요일의 날 — 화면의 「기간 ∩ 요일」 과 같다."""
+    wanted = {WEEKDAYS.index(day) for day in weekdays}
+    start, end = date.fromisoformat(first), date.fromisoformat(last)
+    return [(start + timedelta(days=offset)).isoformat() for offset in range((end - start).days + 1)
+            if (start + timedelta(days=offset)).weekday() in wanted]
+
+
+def periods(dates: Iterable[str]) -> list[tuple[str, str, list[str]]]:
+    """고른 날만 덮는 (시작일, 종료일, 요일) 목록. 「기간 ∩ 요일」 하나로 꼭 그 날들이 되면 하나, 아니면 이어진 날마다 하나.
+
+    가격 수정 창은 판매일이 없는 날이 하루라도 끼면 기간을 통째로 거절하므로, 고르지 않은 날을 덮지 않는다.
+    """
+    days = sorted({iso_day(day) for day in dates})
+    if not days:
+        raise ValueError("날짜가 없습니다")
+    windows: list[list[str]] = []
+    for day in days:
+        if windows and (date.fromisoformat(day) - date.fromisoformat(windows[-1][0])).days < MAX_SPAN:
+            windows[-1].append(day)
+        else:
+            windows.append([day])
+    out = []
+    for window in windows:
+        weekdays = [WEEKDAYS[index] for index in sorted({date.fromisoformat(day).weekday() for day in window})]
+        if selected(window[0], window[-1], weekdays) == window:
+            out.append((window[0], window[-1], weekdays))
+            continue
+        runs: list[list[str]] = []
+        for day in window:
+            if runs and (date.fromisoformat(day) - date.fromisoformat(runs[-1][-1])).days == 1:
+                runs[-1].append(day)
+            else:
+                runs.append([day])
+        out += [(run[0], run[-1], list(WEEKDAYS)) for run in runs]
+    return out
+
+
+def read_calls(offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
+    spans = periods(dates)
+    return [{"offer": offer, "room": room, "ratePlan": plan, "from": first, "to": last, "weekdays": weekdays}
+            for room, plan in dict.fromkeys(pairs) for first, last, weekdays in spans]
+
+
+def reserved_probes(offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
+    pairs = list(dict.fromkeys(pairs))
+    rooms, plans = list(dict.fromkeys(room for room, _ in pairs)), list(dict.fromkeys(plan for _, plan in pairs))
+    return [{"offer": offer, "rooms": rooms, "ratePlans": plans, "from": first, "to": last, "weekdays": weekdays,
+             "occupancy": "*", "nights": "all"} for first, last, weekdays in periods(dates)]
+
+
+def probe_key(probe: Mapping) -> str:
+    missing = [name for name in PROBE_FIELDS if name not in probe]
+    if missing:
+        raise BrowserError(f"readReserved 물음에 칸이 없습니다: {', '.join(missing)}")
+    return json.dumps({name: probe[name] for name in PROBE_FIELDS}, ensure_ascii=False, sort_keys=True)
+
+
+def split(probe: Mapping) -> list[dict]:
+    """숨긴 줄이 있던 물음을 둘 이상으로 — 객실 하나씩, 그다음 요금제 하나씩, 그다음 고른 날의 반쪽씩."""
+    if len(probe["rooms"]) > 1:
+        return [dict(probe, rooms=[room]) for room in probe["rooms"]]
+    if len(probe["ratePlans"]) > 1:
+        return [dict(probe, ratePlans=[plan]) for plan in probe["ratePlans"]]
+    days = selected(probe["from"], probe["to"], probe["weekdays"])
+    if len(days) > 1:
+        half = len(days) // 2
+        return [dict(probe, **{"from": days[0], "to": days[half - 1]}), dict(probe, **{"from": days[half], "to": days[-1]})]
+    raise BrowserError(f"{probe['rooms'][0]} · {probe['ratePlans'][0]} · {probe['from']} 하루로 좁혀도 가감 확인 단계가 줄을 숨깁니다")
+
+
+@dataclass
+class Round:
+    """`ask` 는 아직 답이 없는 물음(그대로 readReserved 에 넘긴다), `pages` 는 쓸 답, `failed` 는 실패한 답의 까닭."""
+    ask: list[dict]
+    pages: list[AdjustPage]
+    failed: list[dict] = field(default_factory=list)
+
+    @property
+    def done(self) -> bool:
+        return not self.ask
+
+
+def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Round:
+    answers: dict[str, AdjustPage] = {}
+    failures: dict[str, dict] = {}
+    for result in results:
+        if result.get("op") != "readReserved":
+            raise BrowserError(f"readReserved 의 답이 아닙니다: {result.get('op')}")
+        key = probe_key(result.get("asked") or {})
+        if result.get("ok"):
+            answers[key] = parse_adjust_page(result["fragment"])
+            failures.pop(key, None)
+        elif key not in answers:
+            failures[key] = {"asked": result["asked"], "error": result.get("error") or "실패"}
+    ask, pages, queue = [], [], [dict(probe) for probe in probes]
+    while queue:
+        probe = queue.pop(0)
+        page = answers.get(probe_key(probe))
+        if page is None:
+            ask.append(probe)
+        elif page.hidden:
+            queue[0:0] = split(probe)
+        else:
+            pages.append(page)
+    asked = {probe_key(probe) for probe in ask}
+    return Round(ask, pages, [failure for key, failure in failures.items() if key in asked])
+
+
+def price_pages(results: Iterable[Mapping]) -> list[PricePage]:
+    pages = []
+    for result in results:
+        if result.get("op") != "readPair":
+            raise BrowserError(f"readPair 의 답이 아닙니다: {result.get('op')}")
+        asked = result.get("asked") or {}
+        if not result.get("ok"):
+            raise BrowserError(f"{asked.get('room')} · {asked.get('ratePlan')} 를 읽지 못했습니다: {result.get('error')}")
+        page = parse_price_page(result["fragment"])
+        if (page.offer, page.rate_plan) != (asked.get("offer"), asked.get("ratePlan")):
+            raise BrowserError(f"읽은 화면({page.offer} · {page.rate_plan})이 물은 것({asked.get('offer')} · {asked.get('ratePlan')})과 다릅니다")
+        pages.append(page)
+    return pages
+
+
+def step_call(no: int, offer: str, kind: str, body: Mapping) -> dict:
+    """장부의 저장 단계(번호 · 종류 · `encode_step` 모양) → `{no, op, payload}`. payload 는 stayPrice 의 그 작업에 그대로 넘긴다."""
+    step = decode_step(dict(body, kind=kind))
+    if step.kind == "cell_edit":
+        key = step.key
+        payload = {"no": no, "offer": offer, "room": key.room, "ratePlan": key.rate_plan, "date": key.date,
+                   "occupancy": key.occupancy, "nights": key.nights, "clear": list(step.clear)}
+    else:
+        payload = {"no": no, "offer": offer, "room": step.room, "ratePlan": step.rate_plan, "dates": list(step.dates),
+                   "rows": [{"occupancy": row.occupancy, "nights": row.nights,
+                             **{name: money_text(getattr(row, name)) for name in FIELDS}} for row in step.rows]}
+    return {"no": no, "op": OPS[step.kind], "payload": payload}
+
+
+def step_outcome(call: Mapping, result: Mapping) -> tuple[bool, str]:
+    """(저장됨, 장부 메모). 다른 작업·다른 번호·다른 값을 물은 답이면 BrowserError — 엉뚱한 단계에 적지 않는다."""
+    if result.get("op") != call["op"] or result.get("no") != call["no"]:
+        raise BrowserError(f"{call['no']}번 저장({call['op']})의 답이 아닙니다: {result.get('op')} {result.get('no')}번")
+    asked, wanted = result.get("asked") or {}, {name: value for name, value in call["payload"].items() if name != "no"}
+    if {name: asked.get(name) for name in wanted} != wanted:
+        raise BrowserError(f"{call['no']}번 저장의 답이 장부의 그 단계와 다른 값을 물었습니다")
+    if result.get("saved") is True:
+        note = result.get("note") or "저장했습니다"
+        return True, note if result.get("ok") else f"{note} · {result.get('error')}"
+    reason = result.get("error") or "저장하지 못했습니다"
+    if result.get("pressed"):
+        return False, f"저장 단추는 눌렸습니다 — 다시 읽어 값을 확인해야 합니다: {reason}"
+    return False, reason
