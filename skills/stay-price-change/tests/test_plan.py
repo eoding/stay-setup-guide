@@ -83,22 +83,26 @@ class OperationTest(unittest.TestCase):
         self.assertEqual(after_of(plan), {(DAY, "A2", 1): D("95000"), (DAY, "A3", 1): D("125000"),
                                           (DAY, "A2C1_CHD", 3): D("105000")})
 
-    def test_set_gives_the_base_the_value_and_keeps_each_difference_per_date_and_tier(self):
+    def test_set_moves_every_cell_of_the_day_by_the_base_one_night_difference_so_tiers_keep_their_gap(self):
         snapshot = snap({(DAY, "A2", 1): open_("300.00"), (DAY, "A3", 1): open_("360.00"),
                          (DAY, "A2", 3): open_("270.00"), (DAY, "A3", 3): open_("320.00"),
                          (NEXT, "A2", 1): open_("310.00"), (NEXT, "A3", 1): open_("380.00")})
         plan = plan_change(snapshot, ask("set", "350", dates=(DAY, NEXT), base_occupancy="A2"))
-        self.assertEqual(after_of(plan), {
+        after = after_of(plan)
+        self.assertEqual(after, {
             (DAY, "A2", 1): D("350.00"), (DAY, "A3", 1): D("410.00"),
-            (DAY, "A2", 3): D("350.00"), (DAY, "A3", 3): D("400.00"),
+            (DAY, "A2", 3): D("320.00"), (DAY, "A3", 3): D("370.00"),
             (NEXT, "A2", 1): D("350.00"), (NEXT, "A3", 1): D("420.00"),
         })
+        self.assertEqual(after[(DAY, "A2", 1)] - after[(DAY, "A2", 3)], D("30.00"))
 
-    def test_set_without_a_base_price_that_day_cannot_be_applied(self):
-        snapshot = snap({(DAY, "A2", 1): MISSING, (DAY, "A3", 1): open_("360.00")})
-        plan = plan_change(snapshot, ask("set", "350", base_occupancy="A2"))
-        self.assertEqual(verdicts(plan), {(DAY, "A3", 1): "NO_BASE_CELL"})
-        self.assertIsNone(plan.changes[0].after)
+    def test_set_skips_a_day_without_a_base_one_night_price_and_says_why(self):
+        snapshot = snap({(DAY, "A2", 1): MISSING, (DAY, "A3", 1): open_("360.00"), (DAY, "A2", 3): open_("270.00"),
+                         (NEXT, "A2", 1): open_("300.00")})
+        plan = plan_change(snapshot, ask("set", "350", dates=(DAY, NEXT), base_occupancy="A2"))
+        self.assertEqual(after_of(plan), {(NEXT, "A2", 1): D("350.00")})
+        self.assertEqual(sorted((item.key.occupancy, item.key.nights, item.reason) for item in plan.skipped),
+                         [("A2", 1, "no_price"), ("A2", 3, "no_base"), ("A3", 1, "no_base")])
 
     def test_percent_multiplies_adults_only_cells(self):
         plan = plan_change(snap({(DAY, "A2", 1): open_("200.00"), (DAY, "", 1): open_("150.00")}), ask("percent", "-10"))
@@ -163,7 +167,7 @@ class MarksTest(unittest.TestCase):
         snapshot = snap({(DAY, "A2", 1): open_("100.00"), (NEXT, "A2", 1): CellValue(D("100.00"), None, None, "closed"),
                          (LATER, "A2", 1): MISSING}, reserved={("R", DAY)})
         plan = plan_change(snapshot, ask("amount", "10", dates=(DAY, NEXT, LATER)))
-        self.assertEqual([k.date for k in plan.skipped], [LATER])
+        self.assertEqual([(item.key.date, item.reason) for item in plan.skipped], [(LATER, "no_price")])
         by_day = {c.key.date: c for c in plan.changes}
         self.assertEqual((by_day[DAY].marks, by_day[DAY].after.sell), (("reserved",), D("110.00")))
         self.assertEqual((by_day[NEXT].marks, by_day[NEXT].after.state, by_day[NEXT].after.sell),

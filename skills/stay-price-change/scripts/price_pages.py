@@ -25,7 +25,7 @@ from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 
 from price_model import (
-    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellValue, ChangeRequest, Plan,
+    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, RESERVED, SKIP_LABELS, CellKey, CellValue, ChangeRequest, Plan,
     Snapshot, cell_name, day_label, key_of_item, nights_label, occupancy_label, occupancy_order, value_of,
 )
 from price_plan import counts, days_summary
@@ -115,10 +115,12 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: int | None =
     closed = {change.key for change in plan.changes if CLOSED in change.marks}
     reserved = {(change.key.room, change.key.date) for change in plan.changes if RESERVED in change.marks}
 
+    skipped = {item.key: item.reason for item in plan.skipped}
+
     def cell(key: CellKey) -> tuple[str, str]:
         change = by_key.get(key)
         if change is None:
-            return "none", "가격 없음"
+            return "none", esc(SKIP_LABELS[skipped[key]])
         severity = CELL_RULES.severity(change.verdict)
         if severity == BLOCKED:
             return "blocked", (f'<span class="was">{fmt_money(change.before.sell, currency)}</span>'
@@ -136,10 +138,10 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: int | None =
             stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄"),
                    (tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
                    (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
-                   (tally["skipped"], "가격이 없어 건너뛰는 칸")])]
+                   (tally["skipped"], "건너뛰는 칸")]), _skip_line(plan)]
     if steps:
         body.append(f'<p class="sub">적용하면 ERP 에 {steps}번 나눠 저장합니다(객실 · 요금제 · 값이 같은 이어진 날마다 한 번).</p>')
-    body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(plan.skipped), cell, reserved, closed),
+    body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed),
              _flagged_section(plan, currency)]
     lines = [_rounding_note(currency),
              "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
@@ -152,6 +154,16 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: int | None =
     body += [notes(lines),
              '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
     return page(title, "\n".join(body), MAKER)
+
+
+def _skip_line(plan: Plan) -> str:
+    reasons: dict[str, int] = {}
+    for item in plan.skipped:
+        reasons[item.reason] = reasons.get(item.reason, 0) + 1
+    if not reasons:
+        return ""
+    return ('<p class="sub">건너뛰는 칸의 까닭: '
+            + esc(" · ".join(f"{SKIP_LABELS[reason]} {count:,}칸" for reason, count in reasons.items())) + "</p>")
 
 
 def _request_box(request: ChangeRequest, currency: str) -> str:

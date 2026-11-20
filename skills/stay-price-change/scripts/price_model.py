@@ -4,6 +4,7 @@
     CellKey      칸 하나의 자리 — 객실 · 요금제 · 날짜 · 인원 조합 · 박수 층
     CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
     Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜)
+    Skipped      건너뛰는 칸과 까닭(가격 없음 · 기준 인원 1박 가격 없음)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 방법 · 원래 문장
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
     CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
@@ -155,15 +156,13 @@ CHOICE_LABELS = {
     "raise_list": "정가도 같은 만큼 올림",
 }
 
-# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산에 필요한데 없던 칸 이름 "adult"·"base" 또는 None) 을 받는다.
+# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산에 필요한데 없던 칸 이름 "adult" 또는 None) 을 받는다.
 # 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다.
 CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
          lambda before, after, lacking: after is not None and after.sell <= 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "adult"),
-    Rule("NO_BASE_CELL", "같은 날 기준 인원 가격이 없습니다", BLOCKED, (),
-         lambda before, after, lacking: lacking == "base"),
     Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "keep"),
          lambda before, after, lacking: after is not None and after.list is not None and after.sell > after.list),
     Rule("BELOW_COST", "공급 원가보다 싸집니다", RED, ("include", "keep"),
@@ -209,13 +208,23 @@ class BulkStep:
     kind = "bulk"
 
 
+SKIP_LABELS = {"no_price": "가격 없음", "no_base": "그날 기준 인원 1박 가격 없음"}
+
+
+@dataclass(frozen=True)
+class Skipped:
+    """바꾸지 않고 건너뛰는 칸과 그 까닭(SKIP_LABELS)."""
+    key: CellKey
+    reason: str
+
+
 @dataclass(frozen=True)
 class Plan:
     request: ChangeRequest
     currency: str
     read_at: str
     changes: tuple[CellChange, ...]
-    skipped: tuple[CellKey, ...]
+    skipped: tuple[Skipped, ...]
 
 
 # ─── 사람이 읽는 이름 ───
@@ -362,10 +371,10 @@ def decode_resolution_items(items) -> tuple[CellKey, ...] | None:
 def encode_plan(plan: Plan) -> dict:
     return dict(request=encode_request(plan.request), currency=plan.currency, read_at=plan.read_at,
                 changes=[encode_change(change) for change in plan.changes],
-                skipped=[encode_key(key) for key in plan.skipped])
+                skipped=[dict(key=encode_key(item.key), reason=item.reason) for item in plan.skipped])
 
 
 def decode_plan(data: Mapping) -> Plan:
     return Plan(decode_request(data["request"]), str(data["currency"]).upper(), str(data["read_at"]),
                 tuple(decode_change(item) for item in data["changes"]),
-                tuple(decode_key(item) for item in data.get("skipped") or ()))
+                tuple(Skipped(decode_key(item["key"]), str(item["reason"])) for item in data.get("skipped") or ()))

@@ -24,8 +24,8 @@ from change_core.rules import BLOCKED, RED, Resolution, decide
 
 from price_model import (
     CELL_RULES, CLOSED, FIELDS, ITEM_KIND, MISSING, RESERVED, BulkStep, CellChange, CellKey, CellValue, CellWrite,
-    ChangeRequest, Plan, RowWrite, Snapshot, cell_item_key, cell_name, cell_state, day_label, encode_step, key_of_item,
-    occupancy_order, snapshot_reading, split_occupancy,
+    ChangeRequest, Plan, RowWrite, Skipped, Snapshot, cell_item_key, cell_name, cell_state, day_label, encode_step,
+    key_of_item, occupancy_order, snapshot_reading, split_occupancy,
 )
 
 
@@ -53,19 +53,20 @@ def _check_scope(snapshot: Snapshot, request: ChangeRequest, keys: list[CellKey]
 
 
 def _after_sell(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue):
-    """`(새 판매가, 없는 칸)` — 계산에 필요한 칸이 없으면 새 판매가 대신 그 칸 이름("adult"·"base")."""
+    """`(새 판매가, 없는 칸)` — 계산에 필요한 성인만 있는 칸이 없으면 새 판매가 대신 "adult".
+
+    새 값 지정(set)은 그날 기준 인원 1박 칸이 그 값이 되는 만큼(차이)을 그 객실·요금제·날짜의 모든 인원·박수 칸에 더한다.
+    박수 층의 할인 차이가 그대로 남는다. 기준 1박 칸이 없는 날은 `plan_change` 가 미리 건너뛴다.
+    """
     currency = snapshot.currency
 
-    def sell_of(occupancy: str):
-        return snapshot.cells.get(replace(key, occupancy=occupancy), MISSING).sell
+    def sell_of(occupancy: str, nights: int | None = None):
+        return snapshot.cells.get(replace(key, occupancy=occupancy, nights=nights or key.nights), MISSING).sell
 
     if request.operation == "amount":
         return round_money(before.sell + request.value, currency), None
     if request.operation == "set":
-        base = sell_of(request.base_occupancy)
-        if base is None:
-            return None, "base"
-        return round_money(request.value, currency) + (before.sell - base), None
+        return before.sell + (round_money(request.value, currency) - sell_of(request.base_occupancy, 1)), None
     factor = (100 + request.value) / 100
     adult_key, has_children = (key.occupancy, False) if request.scale_child_surcharge else split_occupancy(key.occupancy)
     if has_children is None:
@@ -89,7 +90,11 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     for key in keys:
         before = snapshot.cells[key]
         if before.state == "missing":
-            skipped.append(key)
+            skipped.append(Skipped(key, "no_price"))
+            continue
+        if request.operation == "set" and snapshot.cells.get(
+                replace(key, occupancy=request.base_occupancy, nights=1), MISSING).sell is None:
+            skipped.append(Skipped(key, "no_base"))
             continue
         sell, lacking = _after_sell(snapshot, request, key, before)
         after = None if sell is None else replace(before, sell=sell)
