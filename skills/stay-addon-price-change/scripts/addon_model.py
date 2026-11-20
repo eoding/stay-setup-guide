@@ -109,6 +109,16 @@ class Listed:
     def currency(self) -> str:
         return amount_of(self.sell_text, f"{self.addon} · {self.name} 의 판매가")[1]
 
+    @property
+    def title(self) -> str:
+        """담당자에게 말하는 줄 이름 — 오퍼 · 부가옵션 · 가격 줄. 오퍼마다 이름이 같은 부가옵션 · 줄이 있어 오퍼부터 댄다."""
+        return " · ".join(part for part in (self.offer, self.addon, self.name) if part)
+
+    @property
+    def label(self) -> str:
+        """줄 이름에 적용 대상(시즌 · 날짜 · 요금제)까지 — 미리보기 · 장부 · 결과가 줄을 이것으로 부른다."""
+        return f"{self.title} · {self.target}" if self.target else self.title
+
     def points(self) -> dict[str, Decimal]:
         """통화별 금액 가운데 호텔 통화(판매가 칸의 통화)의 줄 — 머리(판매가 · 공급 원가 …) → 금액. 다른 통화의 줄은 뺀다."""
         found = {}
@@ -215,11 +225,11 @@ class Line:
 
     @property
     def name(self) -> str:
-        return f"{self.listed.addon} · {self.listed.name}"
+        return self.listed.title
 
     @property
     def label(self) -> str:
-        return f"{self.name} · {self.listed.target}" if self.listed.target else self.name
+        return self.listed.label
 
     @property
     def sell(self) -> Decimal:

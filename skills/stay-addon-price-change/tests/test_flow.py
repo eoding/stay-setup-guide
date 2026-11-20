@@ -245,6 +245,51 @@ class OneLedgerTest(Flow):
         self.assertEqual((kinds, fields), ({"addon_price"}, {"sell", "supply"}))
 
 
+class SameNameTest(Flow):
+    """F6 — 오퍼마다 이름 · 줄 이름 · 적용 대상이 같은 부가옵션이 있다(첫 실호텔 시험의 모양). 담당자에게 줄을 말하는 곳마다 오퍼로
+    가른다: 빨간 줄의 예, 미리보기, 결과, 장부 목록(범위 · 오퍼), 되돌리기 미리보기."""
+
+    SPRING, SUMMER = "데모 봄 오퍼", "데모 여름 오퍼"
+    TWINS = [{"addon": "204", "line": "680"}, {"addon": "205", "line": "681"}]
+
+    def setUp(self):
+        super().setUp()
+        self.erp = scene.Erp([scene.line("204", "성인 엑스트라베드", "680", "성인 엑스트라베드 1개", "30.00", "25.00", offer=self.SPRING),
+                              scene.line("205", "성인 엑스트라베드", "681", "성인 엑스트라베드 1개", "30.00", "25.00", offer=self.SUMMER)])
+
+    def page(self, kind, *flags, name):
+        return self.cli("render", kind, *flags, "--text", "--out", self.work / name)["text"]
+
+    def test_every_place_that_names_a_line_tells_two_same_named_add_ons_apart_by_their_offer(self):
+        spring = f"{self.SPRING} · 성인 엑스트라베드 · 성인 엑스트라베드 1개 · 전체"
+        _first, below = self.preview(self.request(lines=self.TWINS[:1], value="20.00"))
+        red, = json.loads(below.read_text(encoding="utf-8"))["red"]
+        self.assertEqual(red["examples"][0]["name"], spring, "빨간 줄의 예가 그 줄을 오퍼로 부른다")
+
+        change, plan = self.preview(self.request("request-2.json", lines=self.TWINS[:1], percent="10"), "plan-2.json")
+        preview = self.page("preview", "--plan", plan, name="미리보기.html")
+        self.assertIn(spring, preview)
+        self.assertNotIn(self.SUMMER, preview)
+        self.apply(change, plan)
+        result = self.page("result", "--change", change, name="결과.html")
+        self.assertIn(spring, result)
+        other, _ = self.preview(self.request("request-3.json", lines=self.TWINS[1:], percent="10"), "plan-3.json")
+
+        listed = {entry["id"]: entry for entry in self.cli("list")["changes"]}
+        self.assertEqual((listed[change]["offer"], listed[other]["offer"]), (self.SPRING, self.SUMMER))
+        self.assertIn(f"({spring})", listed[change]["scope"])
+        self.assertIn(f"({self.SUMMER} · 성인 엑스트라베드 · 성인 엑스트라베드 1개 · 전체)", listed[other]["scope"])
+
+        out = self.work / "rollback-1.json"
+        back = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--record", "--out", out)
+        self.assertIn(spring, self.page("rollback", "--plan", out, name="되돌리기.html"))
+        self.assertIn(f"({spring})", {e["id"]: e for e in self.cli("list")["changes"]}[back["change_id"]]["scope"],
+                      "되돌리기 확인이 읽는 줄도 오퍼로 가른다")
+
+        skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("오퍼 이름(`offer`)부터 댄다", skill, "안내문이 담당자에게 줄을 오퍼로 말하라고 한다")
+
+
 class PageObjectTest(Flow):
     def test_a_reading_with_pieces_still_to_take_tells_the_helper_to_call_this_helpers_take(self):
         scene.write_answers(self.work / "look", "look", [scene.look_answer(self.erp)[:1]])

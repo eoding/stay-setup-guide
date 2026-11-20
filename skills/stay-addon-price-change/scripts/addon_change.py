@@ -348,10 +348,15 @@ def record_scope(entry: dict, labels: list[str]) -> str:
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
+    """장부 목록의 줄마다 범위 한 줄(`scope`)과 그 변경의 줄이 든 오퍼(`offer` — 둘 이상이면 ` · ` 로 잇는다. 부가옵션 변경은 오퍼
+    하나에 묶이지 않아 장부의 오퍼 칸이 비어 있으므로, 그 번호의 읽은 값에서 줄마다의 오퍼를 모은다)."""
     out = []
     for entry in ledger.list_changes(change_id):
-        labels = [row.label for row in ledger.change(entry["id"]).rows if row.field == FIELDS[0]]
-        entry["scope"] = record_scope(entry, labels)
+        rows = [row for row in ledger.change(entry["id"]).rows if row.field == FIELDS[0]]
+        lines = recorded_snapshot(ledger, entry["id"]).lines
+        offers = dict.fromkeys(lines[key].listed.offer for key in map(key_of_item, (row.item_key for row in rows)) if key in lines)
+        entry["scope"] = record_scope(entry, [row.label for row in rows])
+        entry["offer"] = " · ".join(offer for offer in offers if offer)
         del entry["request"]
         out.append(entry)
     return out
