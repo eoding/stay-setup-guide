@@ -333,6 +333,16 @@ class CommandTest(unittest.TestCase):
         supply = self.write("supply.json", encode_request(scene.request(operation="percent", value=D("10"), field="supply")))
         self.assertEqual(self.run_cli("plan", "--snapshot", self.snapshot, "--request", supply)["counts"]["skipped"], 96)
 
+    def test_r6_a_currency_the_person_named_must_be_the_offers_or_nothing_is_planned(self):
+        """담당자가 금액에 통화를 말했으면("1,000엔") 요청의 `currency` 로 적는다. 오퍼의 통화와 다르면 plan 은 아무것도 적지 않고
+        거절한다 — 바꿔 셈하지 않는다(요금표의 통화와 같은 규칙). 같으면(대소문자는 상관없다) 그대로 계산한다."""
+        request = dict(encode_request(replace(scene.request(), operation="amount", value=D("1000"))), currency="JPY")
+        refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.write("yen.json", request), "--record", code=2)
+        self.assertIn("말씀하신 통화는 JPY 인데 ERP 의 이 오퍼는 USD 입니다", refused["error"])
+        self.assertEqual(self.run_cli("list")["changes"], [], "장부에 아무것도 적지 않았다")
+        same = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.write("usd.json", dict(request, currency="usd")))
+        self.assertGreater(same["counts"]["will_change"], 0)
+
     def test_mismatched_input_and_a_plan_for_another_request_are_refused(self):
         other = self.write("other.json", {**encode_request(scene.request()), "hotel": {"id": "2", "name": "데모 호텔"}})
         refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", other, code=2)["error"]

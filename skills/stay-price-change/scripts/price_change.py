@@ -208,6 +208,10 @@ def fresh_record(args, name: str) -> None:
 def cmd_plan(args):
     fresh_record(args, "plan")
     snapshot, data = decode_snapshot(load(args.snapshot)), load(args.request)
+    said = str(data.get("currency") or "").strip().upper()   # 담당자가 금액에 말한 통화 — 바꿔 셈하지 않는다(요금표는 아래 plan_sheet 가)
+    if data.get("kind") in ("change", "targets") and said and said != snapshot.currency:
+        raise PlanError(f"말씀하신 통화는 {said} 인데 ERP 의 이 오퍼는 {snapshot.currency} 입니다 — 바꿔 셈하지 않습니다. 어느 통화의 "
+                        "금액인지 담당자에게 여쭙니다")
     if data.get("kind") == "sheet_check":
         plan = plan_sheet(snapshot, decode_check(data))
     else:
