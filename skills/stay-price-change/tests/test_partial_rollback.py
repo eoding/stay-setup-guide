@@ -19,6 +19,7 @@ import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
+from price_change import listed  # noqa: E402
 from price_model import encode_request, encode_snapshot, key_of_item, snapshot_reading  # noqa: E402
 from price_pages import render_result, render_rollback  # noqa: E402
 from price_plan import (  # noqa: E402
@@ -94,6 +95,54 @@ class PartialRollbackTest(unittest.TestCase):
         with self.assertRaises(Refused):
             self.plan()
         self.assertEqual(self.now.cells, scene.snapshot().cells)
+
+    def test_z7_a_rolled_back_change_does_not_look_live_and_the_rest_says_what_was_rolled_back_by_which_record(self):
+        def entry(number):
+            return next(item for item in listed(self.ledger) if item["id"] == number)
+
+        self.assertEqual(entry(self.change)["status"], "applied")
+        first, _ = self.plan(rooms=["디럭스"])
+        rid, _ = self.apply(first)
+        partly = entry(self.change)
+        self.assertEqual((partly["status"], partly["written"], partly["rolled_back"], partly["undone_by"]),
+                         ("partly_rolled_back", 90, 48, [rid]))
+        self.assertTrue(partly["scope"].endswith(f"판매가 +10% · 일부 되돌림 48/90칸 (장부 {rid}번) · 나머지 42칸은 넣은 값 그대로"),
+                        partly["scope"])
+        self.assertEqual(entry(rid)["status"], "applied", "되돌리기 자체는 적용된 변경이다")
+        self.assertIn(f"{self.change}번 되돌리기", entry(rid)["scope"])
+
+        # 나머지 되돌리기의 미리보기 — 이미 되돌린 부분과 그 번호를 말한다(명령으로)
+        folder = Path(self.tmp.name)
+        (folder / "now.json").write_text(json.dumps(encode_snapshot(self.now), ensure_ascii=False), encoding="utf-8")
+        env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder)}
+        script = str(HERE.parent / "scripts" / "price_change.py")
+        done = subprocess.run([sys.executable, script, "rollback", "--change", str(self.change), "--snapshot", str(folder / "now.json"),
+                               "--out", str(folder / "rollback-1.json")], capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        short = json.loads(done.stdout)
+        self.assertEqual([(item["change_id"], item["sentence"], item["cells"]) for item in short["undone"]], [(rid, "일부 되돌려", 48)])
+        self.assertEqual(short["undone"][0]["scope"], "디럭스(룸온리 · 조식 포함) · 12/25 금 ~ 12/26 토 · 1/1 금 ~ 1/2 토 (4일, 2026·2027년)")
+        page = subprocess.run([sys.executable, script, "render", "rollback", "--plan", str(folder / "rollback-1.json"), "--out",
+                               str(folder / "rollback.html")], capture_output=True, text=True, env=env)
+        self.assertEqual(page.returncode, 0, page.stderr)
+        text = visible((folder / "rollback.html").read_text(encoding="utf-8"))
+        self.assertIn("이 변경 가운데 48칸은 이미 되돌렸습니다. 이번 되돌리기는 그 칸을 건드리지 않고 나머지만 봅니다.", text)
+        self.assertIn(f"장부 {rid}번 “일부 되돌려”", text)
+        self.assertIn("42 되돌리는 칸", text)
+
+        rest, _ = self.plan()
+        second, _ = self.apply(rest)
+        whole = entry(self.change)
+        self.assertEqual((whole["status"], whole["rolled_back"], whole["undone_by"]), ("rolled_back", 90, [rid, second]))
+        self.assertTrue(whole["scope"].endswith(f"모두 되돌림 90/90칸 (장부 {rid}번, {second}번)"), whole["scope"])
+
+    def test_z7_the_reserved_days_heading_appears_only_when_a_rolled_back_cell_is_on_one(self):
+        booked, _ = self.plan(rooms=["디럭스"], date_from="2026-12-25", date_to="2026-12-26")
+        free, _ = self.plan(rooms=["디럭스"], date_from="2027-01-01")
+        self.assertIn("되돌리는 칸 — 예약 있는 날도 포함합니다", visible(render_rollback(booked, self.now.reserved)))
+        text = visible(render_rollback(free, self.now.reserved))
+        self.assertIn("되돌리는 칸", text)
+        self.assertNotIn("예약 있는 날", text)
 
     def test_a_rollback_stopped_half_way_leaves_the_unsaved_cells_ours(self):
         whole, _ = self.plan()

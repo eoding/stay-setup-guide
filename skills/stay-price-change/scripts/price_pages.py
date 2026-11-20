@@ -31,8 +31,8 @@ from change_core.rules import BLOCKED, RED
 
 from price_model import (
     CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
-    CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label,
-    encode_key, occupancy_order, split_occupancy, value_of,
+    CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, decode_request, key_of_item, line_label, nights_label,
+    occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
 from price_plan import counts, day_runs, days_summary
 from price_sheet import SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
@@ -344,6 +344,60 @@ def _skip_line(plan: Plan) -> str:
     return "".join(lines)
 
 
+SCOPE_ROOMS = 3   # 장부 한 줄에 이름으로 적는 객실 수 — 넘으면 「외 N객실」
+
+
+def cells_scope(keys: Iterable[CellKey]) -> str:
+    """칸들이 덮는 것 — "스탠다드(조식 포함), 스탠다드 바다 전망(조식 포함) · 12/7 월 ~ 12/8 화 · 12/10 목 · 12/14 월 (4일, 2026년)".
+    장부 목록 · check 가 요청 문장에 날짜가 없어도 무엇을 바꾼 번호인지 말할 수 있게."""
+    keys = sorted(keys)
+    if not keys:
+        return "칸 없음"
+    pairs = list(dict.fromkeys((key.room, key.rate_plan) for key in keys))
+    rooms = list(dict.fromkeys(room for room, _plan in pairs))
+    shown = pairs_label(pair for pair in pairs if pair[0] in rooms[:SCOPE_ROOMS])
+    more = f" 외 {len(rooms) - SCOPE_ROOMS}객실" if len(rooms) > SCOPE_ROOMS else ""
+    return f"{shown}{more} · {days_summary({key.date for key in keys})}"
+
+
+def record_what(kind: str, request: Mapping | None, reverses: int | None, currency: str) -> str:
+    """장부의 번호가 한 일 — "판매가 +12%" · "목표 값 6칸" · "새 요금표 120칸" · "3번 되돌리기" · "5번 저장 상태로 되돌리기" · "지금 상태 저장"."""
+    if kind == "snapshot":
+        return "지금 상태 저장"
+    if kind == "rollback":
+        return f"{reverses}번 되돌리기"
+    if request is None:
+        return "가격 바꾸기"
+    if request.get("kind") == "restore_snapshot":
+        return f"{request.get('snapshot')}번 저장 상태로 되돌리기"
+    parsed = decode_request(request)
+    if isinstance(parsed, TargetTable):
+        return f"{'새 요금표' if parsed.from_sheet else '목표 값'} {len(parsed.targets):,}칸"
+    return operation_label(parsed, currency)
+
+
+def record_progress(entry: Mapping) -> str:
+    """장부 목록의 한 줄(`Ledger.list_changes`)이 어디까지 갔는지 — 멈췄거나 적용 중이면 저장 몇 번 중 몇 번, 되돌렸으면 몇 칸을
+    어느 번호가. 그 밖(미리보기 · 다 적용 · 저장해 둔 상태)은 상태(`status`)가 말한다."""
+    status, steps, saved = entry["status"], entry["steps"], entry["saved_steps"]
+    by = ", ".join(f"{number}번" for number in entry["undone_by"])
+    if status == "stopped":
+        return f"저장 {steps}번 중 {saved}번 하고 멈춤"
+    if status == "applying":
+        return f"저장 {steps}번 중 {saved}번 함 · 적용 중"
+    if status == "rolled_back":
+        return f"모두 되돌림 {entry['rolled_back']:,}/{entry['written']:,}칸 (장부 {by})"
+    if status == "partly_rolled_back":
+        return f"일부 되돌림 {entry['rolled_back']:,}/{entry['written']:,}칸 (장부 {by}) · 나머지 {entry['written'] - entry['rolled_back']:,}칸은 넣은 값 그대로"
+    return ""
+
+
+def record_scope(entry: Mapping, keys: Iterable[CellKey]) -> str:
+    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지."""
+    return " · ".join(part for part in (cells_scope(keys), record_what(entry["kind"], entry["request"], entry["reverses"],
+                                                                      entry["currency"]), record_progress(entry)) if part)
+
+
 def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:
     """(객실, 요금제) 쌍 → "디럭스(조식 포함 · 룸온리), 스위트(조식 포함)"."""
     by_room: dict[str, list[str]] = {}
@@ -642,7 +696,21 @@ def _step_sizes(record: ChangeRecord) -> dict[int, int]:
     return {index: len(keys) for index, keys in cells.items()}
 
 
-def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "", by_date: bool = False) -> str:
+def _undone_banner(undone: Sequence[Mapping]) -> str:
+    """「나머지 되돌리기」 — 이 변경에서 이미 되돌린 부분과 그 번호. 이번 되돌리기는 그 칸을 건드리지 않는다."""
+    if not undone:
+        return ""
+    parts = []
+    for item in undone:
+        when = f" ({fmt_time(item['applied_at'])} 적용)" if item.get("applied_at") else ""
+        parts.append(f"<li>장부 {item['change_id']}번 “{esc(item['sentence'])}”{esc(when)} — {item['cells']:,}칸 · "
+                     f"{esc(item['scope'])}</li>")
+    return (f'<div class="banner amber"><b>이 변경 가운데 {sum(item["cells"] for item in undone):,}칸은 이미 되돌렸습니다.</b> '
+            f'이번 되돌리기는 그 칸을 건드리지 않고 나머지만 봅니다.<ul class="notes">{"".join(parts)}</ul></div>')
+
+
+def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "", by_date: bool = False,
+                    undone: Sequence[Mapping] = ()) -> str:
     currency = plan.currency
     what = "저장해 둔 상태로 되돌리기" if plan.mode == "restore" else "되돌리기"
     title = f"{what} 미리보기 · {plan.hotel} · {plan.offer}"
@@ -662,11 +730,12 @@ def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = ()
                            f'<small class="more">{"지울 수 없음" if key in gone else "그대로 둠"}</small>')
         return "", _move(befores[key], _with(befores[key], restored[key].targets), currency)
 
-    body = [f"<h1>{esc(title)}</h1>", rollback_head(plan, scope),
-            stats([(len(restored), "되돌리는 칸"), (len(kept), "그대로 두는 칸"), (len(gone), "지울 수 없는 칸"),
-                   (sum((key.room, key.date) in reserved for key in restored), "되돌리는 칸 중 예약 있는 날")]),
+    booked = sum((key.room, key.date) in reserved for key in restored)
+    body = [f"<h1>{esc(title)}</h1>", rollback_head(plan, scope), _undone_banner(undone),
+            stats([(len(restored), "되돌리는 칸"), (len(kept), "그대로 두는 칸"), (len(gone), "지울 수 없는 칸")]
+                  + ([(booked, "되돌리는 칸 중 예약 있는 날")] if booked else [])),
             kept_table(plan, FIELD_LABELS), unremovable_table(plan, FIELD_LABELS),
-            '<h2>되돌리는 칸 <span class="sub">— 예약 있는 날도 포함합니다</span></h2>',
+            '<h2>되돌리는 칸' + (' <span class="sub">— 예약 있는 날도 포함합니다</span>' if booked else "") + "</h2>",
             grid([*restored, *held], cell, reserved, closed, by_date) if restored or held else
             '<p class="sub">되돌릴 칸이 없습니다.</p>',
             rollback_ask(plan)]

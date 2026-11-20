@@ -65,11 +65,14 @@ from price_browser import (
 )
 from change_core.rules import BLOCKED
 from price_model import (
-    CELL_RULES, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
+    CELL_RULES, ITEM_KIND, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
     encode_change, encode_hotel, encode_key, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, iso_day,
     key_of_item, line_label, request_range, same_hotel, snapshot_reading,
 )
-from price_pages import EXAMPLES, chosen_lines, red_lines, render_prices, render_preview, render_result, render_rollback, render_sheet
+from price_pages import (
+    EXAMPLES, cells_scope, chosen_lines, record_scope, red_lines, render_prices, render_preview, render_result, render_rollback,
+    render_sheet,
+)
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
     PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows,
@@ -310,7 +313,7 @@ def cmd_render(args):
         data = load(args.plan)
         plan = decode_rollback(data["rollback"])
         html = render_rollback(plan, [(item["room"], item["date"]) for item in data.get("reserved") or ()],
-                               data.get("scope") or "", args.by_date)
+                               data.get("scope") or "", args.by_date, data.get("undone") or ())
         hotel = plan.hotel
     elif args.kind == "prices":
         snapshot = decode_snapshot(load(args.snapshot))
@@ -394,7 +397,8 @@ def cmd_check(args):
                         f"{hotel_label(record.hotel, record.hotel_id)} · {record.offer} 입니다")
     report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at)
     step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
-    return dict(change_id=report.change_id, status=report.status, cause=report.cause, note=report.note,
+    return dict(change_id=report.change_id, scope=listed(ledger, args.change)[0]["scope"], status=report.status, cause=report.cause,
+                note=report.note,
                 last_saved=step_ref(report.last_saved), next=step_ref(report.next), remaining=list(report.remaining),
                 can_continue=report.can_continue, why=list(report.why),
                 steps=[dict(no=step.index, label=step.label, ledger=step.ledger, seen=step.seen, settled=step.settled,
@@ -413,10 +417,17 @@ def cmd_stale(args):
     return dict(same=not differences, differences=differences)
 
 
-def rollback_answer(change_id, args, scope, plan, snapshot) -> dict:
+def rollback_answer(change_id, args, scope, plan, snapshot, undone=()) -> dict:
     return dict(change_id=change_id, replaces=args.replaces, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
-                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
+                reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)], undone=list(undone))
+
+
+def undone_before(ledger: Ledger, change_id: int) -> list[dict]:
+    """이 변경에서 이미 되돌린 부분 — 되돌린 번호마다 요청 문장 · 시각 · 칸 수 · 범위(cells_scope). 「나머지 되돌리기」 미리보기가 말한다."""
+    return [dict(change_id=entry["change_id"], sentence=entry["sentence"], applied_at=entry["applied_at"],
+                 cells=len(entry["items"]), scope=cells_scope(key_of_item(key) for kind, key in entry["items"] if kind == ITEM_KIND))
+            for entry in ledger.undone(change_id)]
 
 
 def cmd_rollback(args):
@@ -426,11 +437,12 @@ def cmd_rollback(args):
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
                               args.include_kept, select)
+    undone = undone_before(ledger, args.change)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan),
                                       reverses=args.change, reading=encode_snapshot(snapshot),
                                       replaces=args.replaces) if args.record else None
-    return rollback_answer(change_id, args, scope, plan, snapshot)
+    return rollback_answer(change_id, args, scope, plan, snapshot, undone)
 
 
 def cmd_restore(args):
@@ -454,9 +466,21 @@ def cmd_save_snapshot(args):
                                                    rows=snapshot_rows(snapshot), reading=encode_snapshot(snapshot)))
 
 
+def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
+    """장부 목록의 줄마다(`change_id` 를 주면 그 번호만) 범위 한 줄(`scope`)을 단다 — 장부가 가진 칸에서 객실 · 요금제, 날짜 구간,
+    한 일(알면 "판매가 +12%" 처럼), 멈췄으면 어디까지 갔는지, 되돌렸으면 몇 칸을. 요청 원문은 싣지 않는다."""
+    keys = ledger.item_keys(ITEM_KIND, change_id)
+    out = []
+    for entry in ledger.list_changes(change_id):
+        entry["scope"] = record_scope(entry, map(key_of_item, keys.get(entry["id"], ())))
+        del entry["request"]
+        out.append(entry)
+    return out
+
+
 def cmd_list(args):
     ledger = Ledger()
-    return dict(ledger=str(ledger.path), changes=ledger.list_changes())
+    return dict(ledger=str(ledger.path), changes=listed(ledger))
 
 
 def short_read_calls(result: dict) -> dict:
@@ -513,7 +537,8 @@ def short_rollback(result: dict) -> dict:
                 restore_to=plan.restore_to, restored=len(restored), kept=len(plan.kept), unremovable=len(plan.unremovable),
                 kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, cells=count)
                           for (change_id, at, sentence), count in causes.items()],
-                saves=len(result["steps"]), reserved=sum((key.room, key.date) in reserved for key in restored))
+                saves=len(result["steps"]), reserved=sum((key.room, key.date) in reserved for key in restored),
+                undone=result["undone"])
 
 
 SHORT = {"read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,

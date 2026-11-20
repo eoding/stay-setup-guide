@@ -688,18 +688,58 @@ class Ledger:
             raise LedgerError(f"{change_id}번에는 적어 둔 읽은 값이 없습니다 — 범위를 다시 정해 읽어야 합니다")
         return json.loads(header["reading"])
 
-    def list_changes(self) -> list[dict]:
+    def list_changes(self, change_id: int | None = None) -> list[dict]:
+        """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
+        `partly_rolled_back` 이다(`written` · `rolled_back` 이 그 수, `undone_by` 가 되돌린 번호들) — 되돌린 변경이 살아 있는
+        것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None)."""
         item = "item_values.item_kind || '|' || item_values.item_key"
         with self._db() as db:
             rows = db.execute(
                 f"SELECT changes.*, COUNT(DISTINCT {item}) AS items,"
                 f" COUNT(DISTINCT CASE WHEN steps.status = 'saved' THEN {item} END) AS written,"
-                f" COUNT(DISTINCT CASE WHEN item_values.rolled_back_by IS NOT NULL THEN {item} END) AS rolled_back"
+                f" COUNT(DISTINCT CASE WHEN item_values.rolled_back_by IS NOT NULL THEN {item} END) AS rolled_back,"
+                " GROUP_CONCAT(DISTINCT item_values.rolled_back_by) AS undone_by,"
+                " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id) AS step_count,"
+                " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id AND s.status = 'saved') AS saved_steps"
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
                 " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
-                " GROUP BY changes.id ORDER BY changes.id DESC").fetchall()
-        return [dict(id=row["id"], kind=row["kind"], status=self._status(row), hotel=row["hotel"], hotel_id=row["hotel_id"],
-                     offer=row["offer"],
+                + ("" if change_id is None else " WHERE changes.id = ?") + " GROUP BY changes.id ORDER BY changes.id DESC",
+                () if change_id is None else (change_id,)).fetchall()
+        return [dict(id=row["id"], kind=row["kind"], status=self._listed_status(row), hotel=row["hotel"], hotel_id=row["hotel_id"],
+                     offer=row["offer"], currency=row["currency"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
-                     replaces=row["replaces"], items=row["items"], written=row["written"], rolled_back=row["rolled_back"]) for row in rows]
+                     replaces=row["replaces"], items=row["items"], written=row["written"], rolled_back=row["rolled_back"],
+                     undone_by=sorted(int(number) for number in (row["undone_by"] or "").split(",") if number),
+                     steps=row["step_count"], saved_steps=row["saved_steps"],
+                     request=None if row["request"] is None else json.loads(row["request"])) for row in rows]
+
+    def _listed_status(self, row) -> str:
+        """목록의 상태 — 저장한 항목이 모두 되돌아갔으면 rolled_back, 일부면 partly_rolled_back, 아니면 장부의 상태."""
+        if row["written"] and row["rolled_back"]:
+            return "rolled_back" if row["rolled_back"] >= row["written"] else "partly_rolled_back"
+        return self._status(row)
+
+    def item_keys(self, item_kind: str, change_id: int | None = None) -> dict[int, list[str]]:
+        """번호마다(`change_id` 를 주면 그 번호만) 그 번호에 적힌 그 종류의 항목 키들 — 목록 · check 가 무엇을 덮는 변경인지 말할 때 쓴다."""
+        found: dict[int, list[str]] = {}
+        with self._db() as db:
+            for row in db.execute("SELECT DISTINCT change_id, item_key FROM item_values WHERE item_kind = ?"
+                                  + ("" if change_id is None else " AND change_id = ?"),
+                                  (item_kind,) if change_id is None else (item_kind, change_id)):
+                found.setdefault(row["change_id"], []).append(row["item_key"])
+        return found
+
+    def undone(self, change_id: int) -> list[dict]:
+        """이 변경의 저장한 값을 이미 되돌린 되돌리기마다 — 번호 · 요청 문장 · 적용 시각 · 되돌린 항목들(종류, 키)."""
+        grouped: dict[int, dict] = {}
+        with self._db() as db:
+            self._header(db, change_id)
+            for row in db.execute(
+                    "SELECT item_values.rolled_back_by AS by, item_values.item_kind, item_values.item_key, changes.sentence,"
+                    " changes.applied_at FROM item_values JOIN changes ON changes.id = item_values.rolled_back_by"
+                    " WHERE item_values.change_id = ? ORDER BY item_values.rolled_back_by, item_values.rowid", (change_id,)):
+                entry = grouped.setdefault(row["by"], dict(change_id=row["by"], sentence=row["sentence"], applied_at=row["applied_at"],
+                                                           items={}))
+                entry["items"][(row["item_kind"], row["item_key"])] = None
+        return [dict(entry, items=list(entry["items"])) for entry in grouped.values()]
