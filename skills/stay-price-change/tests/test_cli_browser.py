@@ -265,6 +265,36 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in self.run_cli("read", "--calls", calls5, "--answers", fifth, "--earlier", first, code=2)["refetch"]],
                          ["b3"])
 
+    def test_v2_a_reading_from_another_job_of_the_same_hotel_lends_its_pieces(self):
+        """「지금 상태 저장」(작업 A) 뒤의 가격 바꾸기(작업 B) — 두 작업 폴더. B 의 읽기는 A 의 읽기 폴더를 --earlier 로 받아 같은
+        조각을 다시 받지 않는다. 명령은 그 폴더가 어느 작업의 것인지 보지 않는다."""
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+
+        def reading(job, answers):
+            folder = self.dir / "기록" / "작업" / job / "읽기-1"
+            folder.mkdir(parents=True)
+            calls = self.write(f"기록/작업/{job}/읽기-1/calls.json", {"pairs": [asked], "reserved": [probe]})
+            for name, items in answers.items():
+                for index, item in enumerate(items):
+                    self.write(f"기록/작업/{job}/읽기-1/{name}{'' if index == 0 else '-' + str(index)}.json", item)
+            return calls, folder
+
+        calls_a, saved = reading("2026-11-20 232930", {"pair-1": reply("readPair", asked, {"fragment": PRICE}, body_id="a1"),
+                                                       "resv-1": reply("readReserved", probe, {"fragment": REJECTED}, body_id="a2")})
+        state = self.run_cli("read", "--calls", calls_a, "--answers", saved, "--out", saved / "snapshot.json")
+        self.assertIsInstance(self.run_cli("save-snapshot", "--snapshot", saved / "snapshot.json")["change_id"], int)
+        # 작업 B — 페이지는 같은 화면을 새 조각 id 로 내놓았고, 짧은 답만 저장했다
+        calls_b, change = reading("2026-11-20 233243", {"pair-1": reply("readPair", asked, {"fragment": PRICE}, body_id="b1")[:1],
+                                                        "resv-1": reply("readReserved", probe, {"fragment": REJECTED}, body_id="b2")[:1]})
+        self.assertEqual(sorted(item["id"] for item in self.run_cli("read", "--calls", calls_b, "--answers", change, code=2)["refetch"]),
+                         ["b1", "b2"], "빌릴 폴더가 없으면 둘 다 받아야 한다")
+        self.assertTrue(self.run_cli("reserved", "--calls", calls_b, "--answers", change, "--earlier", saved)["done"])
+        lent = self.run_cli("read", "--calls", calls_b, "--answers", change, "--earlier", saved)
+        self.assertEqual(lent["cells"], state["cells"], "다른 작업의 읽기에서 빌린 조각으로 같은 지금 값")
+
 
 if __name__ == "__main__":
     unittest.main()

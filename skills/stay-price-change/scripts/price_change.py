@@ -92,7 +92,7 @@ def page_path(hotel: str, kind: str) -> Path:
 
 
 ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
-EARLIER_HELP = ("같은 일의 앞선 읽기 폴더 (여러 번) — 그 안의 다 받은 조각만 빌린다. 이번 읽기의 답으로 치지 않는다. "
+EARLIER_HELP = ("같은 호텔의 앞선 읽기 폴더 (여러 번, 어느 작업 폴더의 것이든) — 그 안의 다 받은 조각만 빌린다. 이번 읽기의 답으로 치지 않는다. "
                 "알아볼 값(글자 수 · 바이트 수 · CRC-32 · FNV-1a)이 같은 조각은 다시 받지 않아도 된다")
 
 
