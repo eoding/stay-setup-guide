@@ -74,10 +74,18 @@ def page_path(hotel: str, kind: str) -> Path:
 
 
 def load_results(paths) -> list:
-    """브라우저 답 파일들 — 파일 하나에 답 하나(객체) 또는 여럿(목록)."""
+    """브라우저 답 파일들 — 파일 하나에 답 하나(객체) 또는 여럿(목록). 목록의 글자 항목, 그리고 JSON 이 아닌 파일은 도구가 보인
+    그대로의 답이다(잘린 답일 수 있다 — price_browser.answers 가 알아본다)."""
     results = []
     for path in paths or ():
-        data = load(path)
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise ValueError(f"파일이 없습니다: {path}") from None
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            data = text
         results += data if isinstance(data, list) else [data]
     return results
 
@@ -355,7 +363,10 @@ def main(argv=None) -> int:
         result = args.handler(args)
     except (ParseError, PlanError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:
         message = str(error) if not isinstance(error, (KeyError, TypeError)) else f"입력 JSON 에 필요한 칸이 없습니다: {error}"
-        print(json.dumps(dict(error=message), ensure_ascii=False), file=sys.stderr)
+        payload = dict(error=message)
+        if getattr(error, "refetch", None):
+            payload["refetch"] = error.refetch
+        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
         return 2
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out and args.command != "render":

@@ -4,7 +4,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, runFixture, bytesOf, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, charsOf, OFFER } from './page_harness.mjs';
 
 const BULK = { no: 1, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] };
 const CELL = { no: 2, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] };
@@ -23,7 +23,7 @@ test('B7 · applyBulk — 러너의 가격 수정 단계로 넣을 값만 친 �
   assert.equal(r.pressed, true);
   assert.equal(r.no, 1);
   assert.equal(r.clicks.bulkSave, 1);
-  assert.ok(bytesOf(r) <= 1500, `답이 1,500바이트 안: ${bytesOf(r)}`);
+  assert.ok(charsOf(r) <= 800, `답이 JSON 으로 800자 안: ${charsOf(r)}`);
   assert.equal(page.log.posts.length, 1);
   const post = page.log.posts[0];
   assert.equal(post['prices-0-price'], '125000.00');

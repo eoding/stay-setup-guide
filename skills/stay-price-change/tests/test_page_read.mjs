@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, runFixture, ownFixture, takeAll, bytesOf, HERE, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, ownFixture, takeAll, charsOf, HERE, OFFER } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
 const PAIR = { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
@@ -28,7 +28,7 @@ function pythonRead(kind, html) {
 const noSave = (page, r) => {
   assert.deepEqual(page.log.posts, [], '저장 요청이 하나도 나가지 않았다');
   assert.ok(!Object.keys(r.clicks).some((name) => /Save$/.test(name)), '저장 단추를 누르지 않았다');
-  assert.ok(bytesOf(r) <= 1500, `답이 1,500바이트 안: ${bytesOf(r)}`);
+  assert.ok(charsOf(r) <= 800, `답이 JSON 으로 800자 안: ${charsOf(r)}`);
   assert.equal(page.drawerOpen(), false, '드로어가 닫혀 있다');
 };
 
@@ -49,7 +49,7 @@ test('B5 · readPair — 객실 × 요금제 칩을 고르고 ② 를 줄여 돌
   assert.deepEqual(read.days, { asked: 1, open: 1, noSale: 0 });
   assert.deepEqual(body.noSale, []);
   assert.deepEqual([read.clicks.bulkOpen, read.clicks.bulkNext], [1, 1]);
-  assert.ok(takes.every((t) => t.ok && bytesOf(t) <= 1500));
+  assert.ok(takes.every((t) => t.ok && charsOf(t) <= 800));
   assert.deepEqual(read.blocked, []);
   noSave(ok, read);
   const parsed = pythonRead('price', body.fragment);

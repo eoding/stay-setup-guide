@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, takeAll, bytesOf, runFixture, loadJsdom, JSDOM_MISSING, OWN_FIXTURES, HERE, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, charsOf, runFixture, loadJsdom, JSDOM_MISSING, OWN_FIXTURES, HERE, OFFER } from './page_harness.mjs';
 import { crc32 } from 'node:zlib';
 
 const CSRF = 'q8Zr3VbN0aWkT5yLmP2xC7dJ9eFh4gUs6iO1nRtYvBwXzAcQ'; // 지어낸 64자 꼴 토큰
@@ -122,21 +122,31 @@ test('B9 · 줄인 조각에는 들여쓰기가 남지 않는다(파이썬 읽�
   }
 });
 
-test('B9 · 큰 조각은 페이지에 남고 1,500바이트 안의 쪽으로 나뉘며, 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
-  const long = '아주 긴 객실 이름 칸 '.repeat(400);
+test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 쪽으로 나뉘며(따옴표 이스케이프 포함), 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
+  const long = '아주 긴 "객실" 이름 칸 '.repeat(400);
   const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('인원 무관 단일가 · 1박 이상', long) });
   const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK })));
   assert.equal(r.ok, true, r.error);
-  assert.ok(bytesOf(r) <= 1500, `읽기 답: ${bytesOf(r)}바이트`);
+  assert.ok(charsOf(r) <= 800, `읽기 답: ${charsOf(r)}자`);
   assert.equal(r.fragment, undefined, '답에는 조각을 싣지 않는다');
   const { takes, text, body } = takeAll(page.w, r);
-  assert.ok(takes.length >= 10, `쪽 ${takes.length}개`);
-  for (const t of takes) assert.ok(bytesOf(t) <= 1500 && t.count === takes.length && t.bytes === r.body.bytes && t.crc32 === r.body.crc32, `쪽 ${t.index}: ${bytesOf(t)}바이트`);
+  assert.equal(takes.length, r.body.pieces, '답이 말한 쪽 수');
+  assert.ok(takes.length >= 15, `쪽 ${takes.length}개`);
+  for (const t of takes) assert.ok(charsOf(t) <= 800 && t.end === r.body.chars && t.bytes === r.body.bytes && t.crc32 === r.body.crc32, `쪽 ${t.at}: ${charsOf(t)}자`);
+  assert.ok(takes.some((t) => t.text.includes('"')), '따옴표가 든 쪽이 있다(도구는 \\" 로 보인다)');
+  assert.equal(text.length, r.body.chars);
   assert.equal(Buffer.byteLength(text), r.body.bytes);
   assert.equal(crc32(Buffer.from(text, 'utf8')).toString(16).padStart(8, '0'), r.body.crc32);
   assert.ok(body.fragment.includes(long.trim()), '이은 조각에 긴 글자가 그대로 있다');
-  assert.equal(plain(page.w.stayPrice.take(r.body.id, takes.length)).ok, false, '없는 쪽 번호');
+  const small = takeAll(page.w, r, 300);
+  assert.ok(small.takes.every((t) => charsOf(t) <= 300 && t.size === 300), '부르는 쪽이 더 작은 크기를 고를 수 있다');
+  assert.equal(small.text, text, '어떤 크기로 받아도 이으면 같은 글자');
+  assert.match(plain(page.w.stayPrice.take(r.body.id, 0, 100)).error, /크기\(size\)는 200 부터 800 까지/);
+  assert.match(plain(page.w.stayPrice.take(r.body.id, 0, 900)).error, /크기\(size\)는 200 부터 800 까지/);
+  assert.match(plain(page.w.stayPrice.take(r.body.id, r.body.chars)).error, /자리\(at\)는/);
   assert.match(plain(page.w.stayPrice.take('없는-id', 0)).error, /페이지에 없습니다/);
+  const huge = plain(page.w.stayPrice.take('가'.repeat(2000), 0));
+  assert.ok(charsOf(huge) <= 800 && huge.cut === true && /페이지에 없습니다/.test(huge.error), '어떤 값이 길게 들어와도 답은 줄여서 800자 안');
   page.w.close();
 });

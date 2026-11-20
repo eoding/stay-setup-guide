@@ -104,5 +104,22 @@ class BrowserCommandTest(unittest.TestCase):
                          "멈춘 단계는 이어서 할 목록에 남는다")
 
 
+    def test_a_cut_piece_makes_read_say_which_piece_to_fetch_again_and_at_what_size(self):
+        asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31",
+                 "weekdays": list("월화수목금토일")}
+        result, *takes = reply("readPair", asked, {"fragment": PRICE}, pieces=3)
+        cut = json.dumps(takes[1], ensure_ascii=False)[:990] + "[TRUNCATED]"
+        error = self.run_cli("read", "--hotel", "H", "--pair-result", self.write("pair.json", [result, takes[0], cut, takes[2]]), code=2)
+        self.assertEqual(error["refetch"], [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
+        self.assertIn("stayPrice.take(", error["error"])
+        raw = self.dir / "cut.txt"
+        raw.write_text(cut, encoding="utf-8")
+        again = self.run_cli("read", "--hotel", "H", "--pair-result", self.write("rest.json", [result, takes[0], takes[2]]),
+                             "--pair-result", raw, code=2)
+        self.assertEqual(again["refetch"][0]["size"], 600, "JSON 이 아닌 파일은 도구가 보인 그대로의 답으로 읽는다")
+        whole = self.run_cli("read", "--hotel", "H", "--pair-result", self.write("whole.json", [result, *takes]))
+        self.assertEqual(whole["offer"], "샘플 오퍼")
+
+
 if __name__ == "__main__":
     unittest.main()

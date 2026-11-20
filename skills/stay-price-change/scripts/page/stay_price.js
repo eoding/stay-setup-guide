@@ -10,7 +10,7 @@
  *   stayPrice.applyBulk({no, offer, room, ratePlan, dates, rows})              [선택 날짜 가격 수정] 저장 한 번
  *   stayPrice.applyCell({no, offer, room, ratePlan, date, occupancy, nights,
  *                        clear, set})                                          셀 창 저장 한 번(정가·공급 원가 비우기·넣기)
- *   stayPrice.take(id, index)                                                  읽은 조각의 한 쪽 — 읽기 답의 body.pieces 만큼 받는다
+ *   stayPrice.take(id, at, size)                                               읽은 조각의 한 쪽 — at=0 부터 next 를 따라 end 까지
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
  *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
  *
@@ -24,7 +24,7 @@
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않는다.
  *    러너 함수의 결과는 그대로 넘기지 않는다.
  *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
- *    페이지에 두고 답에는 `body`(id · 바이트 수 · CRC-32 · 쪽 수)만 싣는다. 답 하나·쪽 하나는 1,500바이트 안이다.
+ *    페이지에 두고 답에는 `body`(id · 글자 수 · 바이트 수 · CRC-32 · 쪽 수)만 싣는다. 답 하나·쪽 하나는 JSON 으로 800자 안이다.
  *  - localStorage 는 `stayPrice` 로 시작하는 키만 쓴다(`stayPriceLast`). 러너의 `staySteps`·`stayRunCursor` 는 쓰지 않는다.
  */
 (function () {
@@ -116,13 +116,16 @@
     return out.join('');
   }
 
-  /* ───────────── 2b. 답의 크기 — 브라우저 도구는 답을 2,000바이트쯤에서 자른다 ───────────── */
+  /* ───────────── 2b. 답의 크기 — 브라우저 도구는 답을 1,000자쯤에서 자른다 ───────────── */
 
-  // 작업의 답은 1,500바이트 안이다. 화면 조각은 페이지에 두고(`keep`) 1,500바이트 안의 쪽으로 나눠 받는다(`take`).
-  // 쪽마다 전체의 바이트 수와 CRC-32 를 같이 싣는다 — 파이썬이 이어 붙인 뒤 둘 다 맞아야 쓴다(`price_browser.attach_bodies`).
-  var RESULT_BYTES = 1500;
-  var PIECE_BYTES = 1200;           // 쪽 하나의 글자(JSON 으로 적었을 때) — 나머지는 봉투(op · id · index · bytes · crc32)
+  // 작업의 답과 쪽 하나는 도구가 보이는 모양(JSON 으로 적은 글자)으로 800자 안이다 — 쪽 글자 안의 따옴표는 \" 로 두 자다.
+  // 화면 조각은 페이지에 두고(`keep`) `take(id, at, size)` 로 글자 자리 at 부터 size 자 안의 쪽을 받는다(size 는 200~800).
+  // 쪽마다 다음 자리(next) · 전체 길이(end) · 전체의 UTF-8 바이트 수와 CRC-32 를 싣는다 — 파이썬이 0 부터 end 까지 이어 붙이고
+  // 둘 다 맞을 때만 쓴다(`price_browser.attach_bodies`). 잘린 쪽은 같은 자리에서 더 작은 size 로 다시 받으면 된다.
+  var RESULT_CHARS = 800;
+  var PIECE_MIN = 200;
   var KEEP_BODIES = 40;
+  function shownLength(value) { return JSON.stringify(value).length; }
   function utf8(text) {
     var out = [];
     for (var i = 0; i < text.length; i++) {
@@ -166,51 +169,58 @@
   }
 
   var BODIES = window.__stayPriceBodies = window.__stayPriceBodies || { order: [], items: {} };
-  // 쪽 나누기 — 쪽마다 JSON 글자로 PIECE_BYTES 안. 되도록 `>`·`,` 바로 뒤에서 자른다(거르기가 쪽마다 같은 답을 내도록)
-  function pieceCut(text) {
-    var pieces = [], start = 0, cost = 0, cut = -1;
-    var costOf = function (part) { return byteLength(JSON.stringify(part)) - 2; };
-    for (var i = 0; i < text.length; i++) {
-      var size = text.codePointAt(i) > 0xffff ? 2 : 1;
-      var ch = text.substr(i, size), c = costOf(ch);
-      if (cost + c > PIECE_BYTES && i > start) {
-        var at = cut > start ? cut : i;
-        pieces.push(text.slice(start, at));
-        start = at; cut = -1; cost = costOf(text.slice(start, i));
-      }
+  // at 부터 size 자 안의 쪽 하나. 되도록 `>`·`,` 바로 뒤에서 자른다(거르기가 쪽마다 같은 답을 내도록). 한 글자도 못 담으면 null
+  function pieceAt(item, id, at, size) {
+    var text = item.text;
+    var piece = { op: 'take', ok: true, id: id, at: at, size: size, next: text.length, end: text.length, bytes: item.bytes, crc32: item.crc32, text: '' };
+    var room = size - shownLength(piece), cost = 0, stop = at, good = -1;
+    for (var i = at; i < text.length;) {
+      var step = text.codePointAt(i) > 0xffff ? 2 : 1, ch = text.substr(i, step), c = JSON.stringify(ch).length - 2;
+      if (cost + c > room) break;
       cost += c;
-      i += size - 1;
-      if (ch === '>' || ch === ',') cut = i + 1;
+      i += step;
+      stop = i;
+      if (ch === '>' || ch === ',') good = i;
     }
-    if (start < text.length || !pieces.length) pieces.push(text.slice(start));
-    return pieces;
+    if (stop < text.length && good > at) stop = good;
+    if (stop === at) return null;
+    piece.next = stop;
+    piece.text = text.slice(at, stop);
+    return piece;
   }
   function keep(body) {
     var text = JSON.stringify(scrub(body));
-    var pieces = pieceCut(text);
-    if (pieces.some(function (piece) { return scrubText(piece) !== piece; })) fail('읽은 조각을 안전하게 나누지 못했습니다 — 다시 읽어 주세요');
     var id = 'b' + Date.now().toString(36) + (BODIES.order.length + 1);
-    BODIES.items[id] = { pieces: pieces, bytes: byteLength(text), crc32: crc32(text) };
+    var item = BODIES.items[id] = { text: text, bytes: byteLength(text), crc32: crc32(text) };
     BODIES.order.push(id);
     while (BODIES.order.length > KEEP_BODIES) delete BODIES.items[BODIES.order.shift()];
-    return { id: id, bytes: BODIES.items[id].bytes, crc32: BODIES.items[id].crc32, pieces: pieces.length };
+    var count = 0;
+    for (var at = 0; at < text.length; count++) at = pieceAt(item, id, at, RESULT_CHARS).next;
+    return { id: id, chars: text.length, bytes: item.bytes, crc32: item.crc32, pieces: count };
   }
-  function take(id, index) {
+  function take(id, at, size) {
+    at = at === undefined ? 0 : at;
+    size = size === undefined ? RESULT_CHARS : size;
+    var whole = function (n) { return typeof n === 'number' && n === Math.floor(n); };
     var item = BODIES.items[id];
-    if (!item) return fit({ ok: false, op: 'take', id: String(id), error: '그 조각이 페이지에 없습니다 — 페이지가 바뀌었으면 다시 읽습니다' });
-    if (!(typeof index === 'number' && index >= 0 && index < item.pieces.length && index === Math.floor(index))) {
-      return fit({ ok: false, op: 'take', id: id, error: '쪽 번호는 0 부터 ' + (item.pieces.length - 1) + ' 까지입니다' });
-    }
-    return fit({ ok: true, op: 'take', id: id, index: index, count: item.pieces.length, bytes: item.bytes, crc32: item.crc32, text: item.pieces[index] });
+    if (!item) return fit({ op: 'take', ok: false, id: String(id), error: '그 조각이 페이지에 없습니다 — 페이지가 바뀌었으면 다시 읽습니다' });
+    if (!whole(at) || at < 0 || at >= item.text.length) return fit({ op: 'take', ok: false, id: id, error: '자리(at)는 0 부터 ' + (item.text.length - 1) + ' 까지입니다' });
+    if (!whole(size) || size < PIECE_MIN || size > RESULT_CHARS) return fit({ op: 'take', ok: false, id: id, error: '크기(size)는 ' + PIECE_MIN + ' 부터 ' + RESULT_CHARS + ' 까지입니다' });
+    var piece = pieceAt(item, id, at, size);
+    if (!piece) return fit({ op: 'take', ok: false, id: id, at: at, error: '이 크기로는 한 글자도 담지 못합니다 — 더 큰 size 로 받습니다' });
+    var out = scrub(piece);
+    if (out.text !== piece.text) return fit({ op: 'take', ok: false, id: id, at: at, error: '이 자리에서 자르면 글자가 바뀝니다 — 다른 size 로 받습니다' });
+    return out;
   }
-  // 거르기를 지나 1,500바이트 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
-  var ESSENTIAL = ['ok', 'op', 'no', 'ask', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'error'];
+  // 거르기를 지나 800자 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
+  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'error'];
   function fit(result) {
     var out = scrub(result);
-    if (byteLength(JSON.stringify(out)) <= RESULT_BYTES) return out;
-    var small = { cut: true };
+    if (shownLength(out) <= RESULT_CHARS) return out;
+    var small = {};
     ESSENTIAL.forEach(function (k) { if (out[k] !== undefined) small[k] = out[k]; });
-    if (typeof small.error === 'string') small.error = small.error.slice(0, 120) + '…';
+    small.cut = true;
+    if (typeof small.error === 'string') small.error = clip(small.error, 150);
     return small;
   }
   function clip(text, n) { text = String(text || ''); return text.length > n ? text.slice(0, n) + '…' : text; }
@@ -437,14 +447,13 @@
         blocked.slice(0, 2).map(function (b) { return b.control + ' (' + b.why + ')'; }).join(' / ') + (blocked.length > 2 ? ' 외 ' + (blocked.length - 2) + '건' : '');
     }
     if (drawerOpen()) { out.ok = false; out.error = (out.error ? out.error + ' · ' : '') + '드로어를 닫지 못했습니다'; }
-    out.op = op;
-    if (no !== undefined) out.no = no;
+    out = Object.assign({ op: op }, no !== undefined ? { no: no } : {}, { ok: out.ok }, out);
     out.ask = crc32(canon(askedOf(input)));
     out.clicks = {};
     wall.log.clicks.forEach(function (name) { out.clicks[name] = (out.clicks[name] || 0) + 1; });
-    out.blocked = blocked.slice(0, 3);
-    if (blocked.length > 3) out.blockedMore = blocked.length - 3;
-    if (out.error) out.error = clip(out.error, 250);
+    out.blocked = blocked.slice(0, 2);
+    if (blocked.length > 2) out.blockedMore = blocked.length - 2;
+    if (out.error) out.error = clip(out.error, 200);
     out.ms = Date.now() - started;
     return remember(fit(out));
   }
@@ -794,7 +803,7 @@
       if (reason && !pressed) out.refused = true;
       out.error = reason || (r && r.error) || '저장하지 못했습니다';
       if (saved === 'unknown') out.error += ' — 저장 단추는 눌렸고 저장됐는지 알 수 없습니다. 다시 읽어 확인합니다(다시 누르지 않았습니다)';
-      if (r && r.errors && r.errors.length) out.errors = r.errors.slice(0, 3).map(function (e) { return clip(e, 80); });
+      if (r && r.errors && r.errors.length) out.errors = r.errors.slice(0, 2).map(function (e) { return clip(e, 60); });
       return out;
     });
   }

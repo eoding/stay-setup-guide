@@ -12,14 +12,16 @@
 그 물음을 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 다시 묻는다. 쪼갠 물음들은 원래 물음의 칸을 나눠 가지므로, 숨긴 줄이
 없는 답들을 합치면 원래 물음이 다 보였을 때와 같다. 계산은 답 목록만 보고 매번 처음부터 다시 한다(답을 덧붙여 다시 부르면 된다).
 
-브라우저 도구는 답을 2,000바이트쯤에서 자른다. 그래서 페이지는 작업의 답(1,500바이트 안)에 `ask`(물은 값의 지문)와
-`body`(id · 바이트 수 · CRC-32 · 쪽 수)만 싣고, 조각은 `stayPrice.take(id, index)` 로 한 쪽씩 내준다. 이 모듈은 쪽을 이어
-바이트 수와 CRC-32 가 둘 다 맞을 때만 쓴다 — 잘리거나 잘못 옮겨 적은 쪽이 틀린 가격이 되지 않는다.
+브라우저 도구는 답을 1,000자쯤에서 자른다(`[TRUNCATED]`). 그래서 페이지는 작업의 답(JSON 으로 800자 안)에 `ask`(물은 값의
+지문)와 `body`(id · 글자 수 · 바이트 수 · CRC-32 · 쪽 수)만 싣고, 조각은 `stayPrice.take(id, at, size)` 로 한 쪽씩 내준다. 이
+모듈은 쪽을 자리로 이어 바이트 수와 CRC-32 가 둘 다 맞을 때만 쓴다 — 잘리거나 잘못 옮겨 적은 쪽이 틀린 가격이 되지 않는다.
+잘린 답(글자 그대로 넣는다)은 알아보고, 어느 쪽을 어떤 크기로 다시 받을지 말한다(CutAnswer.refetch).
 """
 
 from __future__ import annotations
 
 import json
+import re
 import zlib
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -46,38 +48,103 @@ def ask_sum(value: Mapping) -> str:
     return f"{zlib.crc32(text.encode('utf-8')):08x}"
 
 
-def attach_bodies(results: Iterable[Mapping]) -> list[dict]:
-    """답 목록(읽기 답과 take 답이 섞여 있다) → 읽기 답마다 조각을 푼 답. take 답은 빠진다.
+DEFAULT_SIZE = 800                   # stayPrice.take 의 기본 쪽 크기(도구가 보이는 글자 수) — 도구는 1,000자쯤에서 자른다
+MIN_SIZE = 200
 
-    쪽이 하나라도 없거나, 같은 쪽이 서로 다르거나, 이은 글자의 바이트 수·CRC-32 가 답의 body 와 다르면 BrowserError.
-    풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
+
+class CutAnswer(BrowserError):
+    """도구가 잘라 버린 답이 있다. `refetch` 는 다시 받을 쪽 — `stayPrice.take(id, at, size)` 에 그대로 넣는다."""
+
+    def __init__(self, message: str, refetch: list[dict]):
+        super().__init__(message)
+        self.refetch = refetch
+
+
+def _clue(text: str) -> dict:
+    """잘린 답의 앞부분에서 무엇의 답이었는지(op · id · at · size)를 줍는다 — 페이지는 이 칸들을 답의 앞에 둔다."""
+    def grab(name: str, pattern: str):
+        found = re.search(r'"%s"\s*:\s*%s' % (name, pattern), text)
+        return found.group(1) if found else None
+    at, size = grab("at", r"(\d+)"), grab("size", r"(\d+)")
+    return {"op": grab("op", r'"([^"]*)"'), "id": grab("id", r'"([^"]*)"'), "at": None if at is None else int(at),
+            "size": None if size is None else int(size)}
+
+
+def answers(results: Iterable) -> tuple[list[dict], list[dict]]:
+    """답 목록 → (온전한 답, 잘린 답의 단서). 글자로 들어온 답은 도구가 보인 그대로다 — `[TRUNCATED]` 가 붙었거나
+    JSON 이 닫히지 않았으면 잘린 것이다."""
+    whole, cut = [], []
+    for item in results:
+        if isinstance(item, Mapping):
+            whole.append(dict(item))
+            continue
+        text = str(item)
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and "[TRUNCATED]" not in text:
+            whole.append(data)
+        else:
+            cut.append(_clue(text))
+    return whole, cut
+
+
+def _smaller(size: int | None) -> int:
+    return max(MIN_SIZE, (size or DEFAULT_SIZE) * 3 // 4)
+
+
+def attach_bodies(results: Iterable) -> list[dict]:
+    """답 목록(읽기 답과 take 답, 잘린 답의 글자가 섞여 있다) → 읽기 답마다 조각을 푼 답. take 답은 빠진다.
+
+    쪽은 자리(at)로 잇는다: 0 부터 각 쪽의 next 를 따라 end 까지. 빈 자리가 있으면 CutAnswer 로 그 자리와 크기를 댄다(그
+    자리의 쪽이 잘려 왔으면 더 작은 크기). 같은 자리의 쪽이 서로 어긋나거나, 이은 글자의 바이트 수·CRC-32 가 답의 body 와
+    다르면 BrowserError. 풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
     """
-    results = [dict(result) for result in results]
+    whole, cuts = answers(results)
+    for clue in cuts:
+        if clue["op"] not in ("take", None) or (clue["op"] is None and clue["id"] is None):
+            raise BrowserError(f"{clue['op'] or '어떤 작업'} 의 답이 잘렸습니다(도구는 1,000자쯤에서 자릅니다) — "
+                               f"stayPrice.last() 로 다시 받거나 같은 작업을 다시 부릅니다")
     pieces: dict[str, dict[int, Mapping]] = {}
-    for result in results:
+    for result in whole:
         if result.get("op") != "take":
             continue
         if not result.get("ok"):
             raise BrowserError(f"조각 한 쪽을 받지 못했습니다: {result.get('error')}")
-        seen = pieces.setdefault(str(result["id"]), {}).setdefault(int(result["index"]), result)
-        if seen.get("text") != result.get("text"):
-            raise BrowserError(f"조각 {result['id']} 의 {result['index']}번째 쪽이 두 번 왔는데 서로 다릅니다")
-    out = []
-    for result in results:
+        at, text = int(result["at"]), str(result["text"])
+        if int(result["next"]) != at + len(text):
+            raise BrowserError(f"조각 {result['id']} 의 {at}번째 자리 쪽이 스스로 말하는 길이와 다릅니다")
+        seen = pieces.setdefault(str(result["id"]), {}).get(at)
+        if seen is not None:
+            short, long_ = sorted((str(seen["text"]), text), key=len)
+            if not long_.startswith(short):
+                raise BrowserError(f"조각 {result['id']} 의 {at}번째 자리 쪽이 두 번 왔는데 서로 다릅니다")
+            if len(text) <= len(str(seen["text"])):
+                continue
+        pieces[str(result["id"])][at] = result
+    out, refetch = [], []
+    for result in whole:
         if result.get("op") == "take":
             continue
         meta = result.get("body")
         if not result.get("ok") or meta is None:
             out.append(result)
             continue
-        got = pieces.get(str(meta["id"]), {})
-        missing = [index for index in range(int(meta["pieces"])) if index not in got]
-        if missing:
-            raise BrowserError(f"조각 {meta['id']} 의 쪽 {len(missing)}개를 받지 않았습니다(번호 {', '.join(map(str, missing[:5]))})")
-        if any((piece.get("count"), piece.get("bytes"), piece.get("crc32")) != (meta["pieces"], meta["bytes"], meta["crc32"])
-               for piece in got.values()):
-            raise BrowserError(f"조각 {meta['id']} 의 쪽들이 말하는 크기·검사값이 답과 다릅니다")
-        text = "".join(got[index]["text"] for index in range(int(meta["pieces"])))
+        got, parts, pos, end = pieces.get(str(meta["id"]), {}), [], 0, int(meta["chars"])
+        while pos < end:
+            piece = got.get(pos)
+            if piece is None:
+                cut = next((clue for clue in cuts if clue["id"] == str(meta["id"]) and clue["at"] == pos), None)
+                refetch.append({"id": str(meta["id"]), "at": pos, "size": _smaller(cut["size"]) if cut else DEFAULT_SIZE})
+                break
+            if (piece.get("end"), piece.get("bytes"), piece.get("crc32")) != (end, meta["bytes"], meta["crc32"]):
+                raise BrowserError(f"조각 {meta['id']} 의 쪽들이 말하는 크기·검사값이 답과 다릅니다")
+            parts.append(str(piece["text"]))
+            pos = int(piece["next"])
+        if pos < end:
+            continue
+        text = "".join(parts)
         data = text.encode("utf-8")
         if len(data) != meta["bytes"] or f"{zlib.crc32(data):08x}" != meta["crc32"]:
             raise BrowserError(f"조각 {meta['id']} 을 이어 보니 바이트 수나 CRC-32 가 맞지 않습니다 — 쪽을 다시 받아야 합니다")
@@ -85,6 +152,9 @@ def attach_bodies(results: Iterable[Mapping]) -> list[dict]:
         if body.get("op") != result.get("op") or ask_sum(body.get("asked") or {}) != result.get("ask"):
             raise BrowserError(f"조각 {meta['id']} 은 이 답의 물음에서 나온 것이 아닙니다")
         out.append({**result, **body})
+    if refetch:
+        raise CutAnswer("받지 못했거나 잘린 쪽이 있습니다 — " + " · ".join(
+            f"stayPrice.take('{item['id']}', {item['at']}, {item['size']})" for item in refetch) + " 로 받아 덧붙입니다", refetch)
     return out
 
 

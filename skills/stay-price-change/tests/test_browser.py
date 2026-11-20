@@ -15,10 +15,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
-from browser_replies import reply  # noqa: E402
+from browser_replies import reply, take as browser_take  # noqa: E402
 from erp_read import ParseError  # noqa: E402
 from price_browser import (  # noqa: E402
-    BrowserError, ask_sum, attach_bodies, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+    BrowserError, CutAnswer, ask_sum, attach_bodies, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
 
@@ -180,7 +180,8 @@ class StepCallTest(unittest.TestCase):
 
 
 class BodyTest(unittest.TestCase):
-    """B9 — 조각은 쪽으로 오고, 바이트 수와 CRC-32 가 둘 다 맞을 때만 쓴다."""
+    """B9 · B16 — 조각은 자리(at)로 이어지는 쪽으로 오고, 바이트 수와 CRC-32 가 둘 다 맞을 때만 쓴다. 잘린 답은 알아보고
+    어느 쪽을 어떤 크기로 다시 받을지 말한다."""
 
     ASKED = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31",
              "weekdays": list("월화수목금토일")}
@@ -189,15 +190,12 @@ class BodyTest(unittest.TestCase):
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=4)
         joined, = attach_bodies([takes[2], result, takes[0], takes[3], takes[1], takes[1]])
         self.assertEqual((joined["fragment"], joined["asked"]), (PRICE, self.ASKED))
-        self.assertTrue(all(len(json.dumps(take, ensure_ascii=False).encode()) < 2500 for take in takes))
 
     def test_a_missing_cut_or_mistyped_piece_is_refused_and_never_read(self):
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=4)
-        with self.assertRaisesRegex(BrowserError, "쪽 1개를 받지 않았습니다"):
+        with self.assertRaises(CutAnswer) as missing:
             attach_bodies([result, *takes[:3]])
-        cut = dict(takes[1], text=takes[1]["text"][:-5])
-        with self.assertRaisesRegex(BrowserError, "바이트 수나 CRC-32"):
-            attach_bodies([result, takes[0], cut, *takes[2:]])
+        self.assertEqual(missing.exception.refetch, [{"id": result["body"]["id"], "at": takes[3]["at"], "size": 800}])
         at = next(index for index, take in enumerate(takes) if "140.00" in take["text"])
         typo = dict(takes[at], text=takes[at]["text"].replace("140.00", "146.00", 1))
         self.assertEqual(len(typo["text"]), len(takes[at]["text"]), "글자 수가 같은 잘못 옮겨 적기")
@@ -209,6 +207,33 @@ class BodyTest(unittest.TestCase):
             attach_bodies([dict(result, body=dict(result["body"], crc32="00000000")), *takes])
         with self.assertRaisesRegex(BrowserError, "받지 못했습니다: 그 조각이 페이지에 없습니다"):
             attach_bodies([result, {"ok": False, "op": "take", "id": "x", "error": "그 조각이 페이지에 없습니다"}])
+        short = dict(takes[1], text=takes[1]["text"][:-5])
+        with self.assertRaisesRegex(BrowserError, "스스로 말하는 길이와 다릅니다"):
+            attach_bodies([result, takes[0], short, *takes[2:]])
+
+    def test_a_cut_answer_names_the_piece_to_fetch_again_and_a_smaller_size(self):
+        result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=3)
+        shown = json.dumps(takes[1], ensure_ascii=False)
+        cut = shown[:1000] + "[TRUNCATED]"
+        with self.assertRaises(CutAnswer) as caught:
+            attach_bodies([result, takes[0], cut, takes[2]])
+        self.assertEqual(caught.exception.refetch, [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
+        self.assertIn(f"stayPrice.take('{result['body']['id']}', {takes[1]['at']}, 600)", str(caught.exception))
+        unclosed = shown[:700]
+        with self.assertRaises(CutAnswer):
+            attach_bodies([result, takes[0], unclosed, takes[2]])
+        # 같은 자리에서 더 작게 다시 받은 쪽 둘이 빈 곳을 메우면 잘린 답은 그냥 지나간다
+        text = "".join(take["text"] for take in takes)
+        meta, mid = result["body"], takes[1]
+        half = (mid["next"] - mid["at"]) // 2
+        again = [browser_take(meta, text, mid["at"], half), browser_take(meta, text, mid["at"] + half, mid["next"] - mid["at"] - half)]
+        joined, = attach_bodies([result, takes[0], cut, *again, takes[2]])
+        self.assertEqual(joined["fragment"], PRICE)
+
+    def test_a_cut_operation_answer_is_named(self):
+        result, *_ = reply("readPair", self.ASKED, {"fragment": PRICE})
+        with self.assertRaisesRegex(BrowserError, "readPair 의 답이 잘렸습니다"):
+            attach_bodies([json.dumps(result, ensure_ascii=False)[:60] + "[TRUNCATED]"])
 
     def test_a_body_from_another_question_is_refused(self):
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE})

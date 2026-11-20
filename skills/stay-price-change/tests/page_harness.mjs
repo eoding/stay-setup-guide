@@ -244,12 +244,17 @@ export function erpPage(opts = {}) {
 export const inPage = (w, value) => w.JSON.parse(JSON.stringify(value));
 export const plain = (value) => JSON.parse(JSON.stringify(value));
 
-// B9 — 답과 쪽은 JSON 으로 1,500바이트 안이다. 읽기 답의 조각은 take 로 한 쪽씩 받는다
-export const bytesOf = (value) => Buffer.byteLength(JSON.stringify(value));
-export function takeAll(w, result) {
+// B9 · B16 — 답과 쪽은 도구가 보이는 모양(JSON 글자)으로 800자 안이다. 읽기 답의 조각은 take 로 자리(at)를 따라 받는다
+export const charsOf = (value) => JSON.stringify(value).length;
+export function takeAll(w, result, size) {
   const meta = result.body;
   const takes = [];
-  for (let index = 0; index < meta.pieces; index++) takes.push(plain(w.stayPrice.take(meta.id, index)));
+  for (let at = 0; at < meta.chars;) {
+    const piece = plain(size === undefined ? w.stayPrice.take(meta.id, at) : w.stayPrice.take(meta.id, at, size));
+    if (!piece.ok) throw new Error(piece.error);
+    takes.push(piece);
+    at = piece.next;
+  }
   const text = takes.map((t) => t.text).join('');
   return { takes, text, body: JSON.parse(text) };
 }
