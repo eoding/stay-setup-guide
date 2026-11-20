@@ -175,6 +175,9 @@ class ChangeRequest:
 
     범위는 (객실, 요금제) 쌍 `pairs` 다. 객실과 요금제를 따로 주면 "적은 객실마다 그 객실에 있는 적은 요금제"이고,
     계산(`plan_change`)이 읽은 쌍으로 풀어 `pairs` 를 채운다. 쌍만 주면 객실·요금제는 쌍에서 나온 차례로 채운다.
+
+    칸은 따로 말하지 않으면 모든 인원 조합 · 모든 박수 층이다(결정 14). `occupancies`(인원 조합 키) · `nights`(박수 층의 시작
+    박수)를 적으면 그 칸만 움직인다. 새 값 지정의 기준 칸(기준 인원 · 1박)은 적은 칸 안에 있어야 한다.
     """
     hotel: str
     offer: str
@@ -189,8 +192,20 @@ class ChangeRequest:
     field: str = "sell"
     pairs: tuple[tuple[str, str], ...] = ()
     hotel_id: str = ""
+    occupancies: tuple[str, ...] = ()
+    nights: tuple[int, ...] = ()
 
     def __post_init__(self):
+        object.__setattr__(self, "occupancies", tuple(str(key) for key in self.occupancies))
+        object.__setattr__(self, "nights", tuple(int(n) for n in self.nights))
+        if len(set(self.occupancies)) != len(self.occupancies) or len(set(self.nights)) != len(self.nights):
+            raise ValueError("고른 인원 조합 · 박수가 두 번 있습니다")
+        if any(n < 1 for n in self.nights):
+            raise ValueError("박수 층은 1 이상의 시작 박수로 적습니다(1, 3 …)")
+        if self.operation == "set" and ((self.occupancies and self.base_occupancy not in self.occupancies)
+                                        or (self.nights and 1 not in self.nights)):
+            raise ValueError(f"새 값 지정의 기준 칸({occupancy_label(self.base_occupancy or '')} · 1박)이 고른 칸에 없습니다 — "
+                             "기준 칸을 고른 칸에 넣거나, 고른 칸을 금액(amount)이나 퍼센트(percent)로 바꿉니다")
         pairs = tuple((str(room), str(plan)) for room, plan in self.pairs)
         if len(set(pairs)) != len(pairs):
             raise ValueError("같은 객실·요금제 쌍이 두 번 있습니다")
@@ -493,6 +508,7 @@ def encode_request(request: ChangeRequest | TargetTable) -> dict:
                 pairs=[dict(room=room, rate_plan=plan) for room, plan in request.pairs],
                 operation=dict(kind=request.operation, value=money_text(request.value),
                                base_occupancy=request.base_occupancy),
+                occupancies=list(request.occupancies), nights=list(request.nights),
                 scale_child_surcharge=request.scale_child_surcharge, sentence=request.sentence)
 
 
@@ -511,6 +527,8 @@ def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
         scale_child_surcharge=bool(data.get("scale_child_surcharge", False)), sentence=str(data.get("sentence") or ""),
         field=str(data.get("field") or "sell"),
         pairs=tuple((item["room"], item["rate_plan"]) for item in data.get("pairs") or ()),
+        occupancies=tuple(str(key) for key in data.get("occupancies") or ()),
+        nights=tuple(int(n) for n in data.get("nights") or ()),
     )
 
 

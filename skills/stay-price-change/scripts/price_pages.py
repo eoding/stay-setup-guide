@@ -208,6 +208,13 @@ def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:
     return ", ".join(f"{room}({' · '.join(plans)})" for room, plans in by_room.items())
 
 
+def cells_label(request: ChangeRequest) -> str:
+    """확인 상자 · 미리보기의 「칸」 — 고른 인원 조합 · 박수 층, 고르지 않았으면 전부."""
+    occupancies = " · ".join(occupancy_label(key) for key in request.occupancies) or "모든 인원 조합"
+    nights = " · ".join(nights_label(n) for n in sorted(request.nights)) or "모든 박수"
+    return f"{occupancies} / {nights}" if request.occupancies or request.nights else "모든 인원 조합 · 모든 박수"
+
+
 def _request_box(request: ChangeRequest | TargetTable, currency: str, absent: Iterable[tuple[str, str]] = ()) -> str:
     if isinstance(request, TargetTable):
         keys = [target.key for target in request.targets]
@@ -217,7 +224,7 @@ def _request_box(request: ChangeRequest | TargetTable, currency: str, absent: It
     else:
         rows = [("호텔", request.hotel), ("오퍼", request.offer), ("객실 · 요금제", pairs_label(request.pairs)),
                 ("날짜", days_summary(request.dates)), ("바꾸는 값", operation_label(request, currency)),
-                ("칸", "모든 인원 조합 · 모든 박수")]
+                ("칸", cells_label(request))]
     absent = list(absent)
     if absent:
         rows.append(("없는 요금제", ", ".join(f"{room}에는 {plan} 요금제가 없어 뺐습니다" for room, plan in absent)))

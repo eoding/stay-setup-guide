@@ -121,7 +121,21 @@ def requested_pairs(snapshot: Snapshot, request: ChangeRequest) -> tuple[tuple[t
     return tuple(read), tuple(pair for pair in combos if pair not in snapshot.pairs)
 
 
+def _check_cells(request: ChangeRequest, keys: Iterable[CellKey]) -> None:
+    """고른 인원 조합 · 박수 층이 범위 안에서 읽혔는지 — 없는 것을 고르면 아무 칸도 움직이지 않으니 이름을 대고 멈춘다."""
+    keys = list(keys)
+    seen_occupancies, seen_nights = {key.occupancy for key in keys}, {key.nights for key in keys}
+    unknown = [occupancy_label(key) + (f"({key})" if key else "") for key in request.occupancies if key not in seen_occupancies]
+    if unknown:
+        raise PlanError(f"읽은 값에 없는 인원 조합: {', '.join(unknown)} (읽은 것: "
+                        f"{' · '.join(f'{occupancy_label(key)}({key})' for key in sorted(seen_occupancies, key=occupancy_order))})")
+    unknown_nights = [n for n in request.nights if n not in seen_nights]
+    if unknown_nights:
+        raise PlanError(f"읽은 값에 없는 박수 층: {', '.join(map(str, unknown_nights))} (읽은 것: {' · '.join(map(str, sorted(seen_nights)))})")
+
+
 def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
+    """칸마다 전 → 후. `request.occupancies`·`nights` 를 적었으면 그 칸만 — 규칙 · 표시 · 저장 단계는 다른 변경과 같다."""
     pairs, absent = requested_pairs(snapshot, request)
     request = replace(request, pairs=pairs)
     rooms = {room: rank for rank, room in enumerate(request.rooms)}
@@ -130,6 +144,9 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     keys = [key for key in snapshot.cells if (key.room, key.rate_plan) in wanted and key.date in dates]
     empty = _check_scope(snapshot, request, pairs,
                          [(room, plan, day) for room, plan in pairs for day in request.dates])
+    _check_cells(request, keys)
+    keys = [key for key in keys if (not request.occupancies or key.occupancy in request.occupancies)
+            and (not request.nights or key.nights in request.nights)]
     no_sale = tuple((room, plan, day) for room, plan in pairs for day in sorted(set(request.dates))
                     if (room, day) in snapshot.no_sale)
     empty = tuple(pair for pair in empty if not all((pair[0], day) in snapshot.no_sale for day in request.dates))
