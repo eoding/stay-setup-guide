@@ -44,8 +44,9 @@ metadata:
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 답이 `stayAddonPrice is not defined`)마다.
    1. JS 실행 도구로 가격 캘린더 도우미의 `../stay-price-change/scripts/page/stay_price_loader.js` 내용 전체 **뒤에 한 줄 `stayPriceLoader.again('addon')` 을 붙여** 한 번에 실행한다. 그래서 첫 답이 이 도우미의 묶음(네 파일)의 것이다. `ok: true` 와 `addon` 판 번호가 오면 됐다.
    2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 가 올릴 네 파일이다. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 네 파일 — `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js` — 을 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
-3. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장한다(`<작업>` 은 아래 4). `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾으면 "○○ 호텔의 Stay 화면을 열어 주세요". 답의 `body` 는 「읽기」 4 처럼 조각으로 받아 같은 폴더에 둔다. 그리고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"` — 짧은 답의 `hotel` 이 말한 호텔이 아니면 그 호텔 화면을 열어 달라고 한다.
-4. **장부 보기 · 작업 폴더.** `python3 scripts/addon_change.py list` 를 한 번 본다. 이 호텔의 `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `ledger` 가 든 폴더가 기록 폴더다. 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(`<작업>`)에, 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)에 둔다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
+3. **장부 보기 · 작업 폴더.** `python3 scripts/addon_change.py list` 를 한 번 본다. `ledger` 가 든 폴더가 기록 폴더다. 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(`<작업>`)에, 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)에 둔다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
+   - **일 하나에 작업 폴더 하나.** 담당자가 시킨 일(보기 · 바꾸기 · 되돌리기) 하나마다 새 `<작업>` 을 만들고 4 부터 한다 — 같은 대화의 두 번째 요청도 새 작업 폴더다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. 새 폴더의 look 은 앞선 폴더에서 받아 둔 같은 조각을 빌려 오므로 받을 쪽이 거의 없다. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다). 같은 대화에서 방금 멈춘 변경을 이어서 하면 그 일의 작업 폴더를 그대로 쓴다.
+4. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾으면 "○○ 호텔의 Stay 화면을 열어 주세요". 답의 `body` 는 「읽기」 4 처럼 조각으로 받아 같은 폴더에 둔다. 그리고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"` — 짧은 답의 `hotel` 이 말한 호텔이 아니면 그 호텔 화면을 열어 달라고 한다. 3 의 목록에 이 호텔(`hotel_id` 가 `hotel.id`)의 `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?"
 
 ## 읽기 — 바꾸기 · 되돌리기 · 적용이 모두 이것으로 읽는다
 
@@ -58,7 +59,7 @@ metadata:
 
 ## 1. 지금 부가옵션 가격 보기
 
-「준비」 3 을 하고 `python3 scripts/addon_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 부가옵션 가격입니다. 아무것도 바꾸지 않았습니다." 「알 수 없음」 줄이 있으면 덧붙인다: "이 줄은 ERP 화면에 금액 기록이 보이지 않아 도우미가 바꾸지 않습니다."
+「준비」 3 · 4 를 하고 `python3 scripts/addon_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 부가옵션 가격입니다. 아무것도 바꾸지 않았습니다." 「알 수 없음」 줄이 있으면 덧붙인다: "이 줄은 ERP 화면에 금액 기록이 보이지 않아 도우미가 바꾸지 않습니다."
 
 ## 2. 부가옵션 가격 바꾸기
 

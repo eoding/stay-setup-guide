@@ -180,6 +180,12 @@ class SkillShapeTest(unittest.TestCase):
         pointing = [line for line in self.skill.splitlines() if "](references/stopped.md)" in line]
         self.assertTrue(any("다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다" in line for line in pointing))
 
+    def test_every_preparation_step_uses_only_what_an_earlier_step_set_up(self):
+        prep = self.skill[self.skill.index("## 준비"):self.skill.index("## 읽기")]
+        self.assertLess(prep.index("(`<작업>`)"), prep.index("<작업>/"), "작업 폴더를 정한 뒤에 그 안에 저장한다")
+        self.assertLess(prep.index("python3 scripts/addon_change.py list"), prep.index("3 의 목록에"))
+        self.assertIn("같은 대화의 두 번째 요청도 새 작업 폴더다", prep)
+
     def test_it_says_what_it_refuses(self):
         rules = self.skill[self.skill.index("## 반드시 지킬 것"):self.skill.index("## 담당자에게 말할 때")]
         for refused in ("[삭제]", "만들기", "의무 규칙", "다른 탭", "두 번 누르지 않는다", "적용"):
