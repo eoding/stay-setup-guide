@@ -44,7 +44,7 @@
 | `started` · `wait` | `started: false` 면 지나가는 까닭(앞 작업이 아직 끝나는 중, 앞 화면이 아직 정리 중)으로 아무것도 누르기 전에 멈췄다. 실패가 아니다. `wait` 초 뒤 같은 값으로 다시 부른다 |
 | `saved` | 저장 작업만. `true` 저장됨 · `false` 저장 안 됨 · `"unknown"` 단추는 눌렸고 저장됐는지 모름 |
 | `pressed` · `refused` | 저장 단추를 눌렀는지 · 누르기 전에 스스로 거절했는지 |
-| `body` | 읽기 작업과 긴 `look()` 만. `{id, chars, bytes, crc32, pieces}`. 조각은 `take` 로 받는다. 조각 안에는 페이지가 알아본 `hotel` 이 든다 |
+| `body` | 읽기 작업과 긴 `look()` 만. `{id, chars, bytes, crc32, fnv}` — 조각 id 와 그 글자를 알아볼 값(글자 수 · UTF-8 바이트 수 · CRC-32 · FNV-1a). 명령이 `refetch` 로 댄 조각만 `take` 로 받는다. 조각 안에는 페이지가 알아본 `hotel` 이 든다 |
 | `hotel` | `look()` 은 이 탭의 호텔 `{id, name}`. 다른 호텔이라 거절한 작업의 답에도 이 탭의 호텔이 든다 |
 | `rest` · `warn` | 답할 때 화면(드로어 · 셀 창 · 요청)이 정리됐는지. 정리되지 않았으면 다음 작업이 `started: false` 로 기다릴 초를 알려 준다 |
 | `what` · `days` · `note` | 무엇을 했는지 · 읽은 날 수(`asked`·`open`·`noSale`) · 메모 |
@@ -53,7 +53,7 @@
 | `cut` | 800자를 넘어 꼭 필요한 칸만 남긴 답 |
 | `ms` | 걸린 시간 |
 
-`take` 의 답: `{op: "take", ok, id, at, size, next, end, bytes, crc32, text}`. `next` 가 다음 자리, `end` 가 전체 길이다. `next == end` 면 끝.
+`take` 의 답: `{op: "take", ok, id, at, size, next, end, bytes, crc32, text}`. `at`·`next`·`end` 는 쪽 번호가 아니라 글자 자리다. `next` 가 다음 자리, `end` 가 전체 길이다. `next == end` 면 끝.
 
 ## 오류와 할 일
 

@@ -52,20 +52,20 @@ metadata:
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.
    - `hotel.name` 이 말한 호텔이 아니면 "지금 탭에는 △△ 호텔이 열려 있습니다. ○○ 호텔 화면을 열어 주세요."
    - `offers` 는 오퍼, `offer` 는 고른 오퍼, `pairs` 는 그 오퍼의 객실 · 요금제다. 다른 오퍼는 `stayPrice.look({offer: "<이름>"})`.
-   - `pairs` 대신 `body` 가 오면(목록이 길다) 「읽기」 2 처럼 받아 `<작업>/look/` 에 `look-1.json`·`look-1-<at>.json` 으로 저장하고 `price_change.py look --answers <작업>/look`.
+   - `pairs` 대신 `body` 가 오면(목록이 길다) 답을 `<작업>/look/look-1.json` 에 저장하고 `price_change.py look --answers <작업>/look`. 종료 2 의 `refetch` 는 「읽기」 5 처럼 받아 `<작업>/look/` 에 저장하고 다시 한다.
 4. **작업 폴더.** `python3 scripts/price_change.py list` 의 `ledger` 가 든 폴더가 기록 폴더다(보통 `~/Documents/어딩 Stay 가격 변경 기록`). 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(아래 `<작업>`)에 둔다.
 
 ## 읽기 — 네 일이 모두 이것으로 읽는다
 
-브라우저 도구는 답을 1,000자쯤에서 자른다. 그래서 페이지는 읽은 화면을 페이지에 두고 답에는 짧은 머리만 싣는다. 화면은 `take` 로 한 쪽(800자 안)씩 받는다. 읽기 한 번에 폴더 하나(`<작업>/읽기-1`, `읽기-2` …, 아래 `<R>`)를 쓴다.
+브라우저 도구는 답을 1,000자쯤에서 자른다. 그래서 페이지는 읽은 화면(조각)을 페이지에 두고 답에는 짧은 머리만 싣는다. 머리의 `body` 는 그 조각을 알아볼 값이다. 명령은 앞선 읽기에서 이미 받은 같은 조각이면 그것을 쓰고, 어디에도 없는 조각만 받아 오라고(`refetch`) 한다. 읽기 한 번에 폴더 하나(`<작업>/읽기-1`, `읽기-2` …, 아래 `<R>`)를 쓴다. 아래 `<앞선>` 은 같은 작업 폴더의 앞선 읽기 폴더마다 `--earlier <폴더>` 를 붙인 것이다(그 작업의 첫 읽기면 없다).
 
 범위는 처음에는 요청 파일(바꾸기 요청, 바꾸지 않으면 `kind: range` — commands.md 「요청 파일」)로, 장부 번호가 있는 일(적용 직전·뒤, 되돌리기, 이어서)은 `--record <번호>` 로 준다. 번호를 주면 장부가 그 번호를 계산할 때 읽은 범위를 그대로 다시 읽는다.
 
 1. `python3 scripts/price_change.py read-calls --request <요청 파일> --out <R>/calls.json`(또는 `--record <번호>`).
-2. **가격.** `calls.json` 의 `pairs` 값마다(i = 1, 2 …) `await stayPrice.readPair(<값 그대로>)` → `<R>/pair-<i>.json`. 답에 `body` 가 있으면 `stayPrice.take("<body.id>", 0)` → `<R>/pair-<i>-<at>.json`, 답의 `next` 가 `end` 가 될 때까지 `stayPrice.take("<id>", <next>)` 를 한 쪽씩 이어 받는다. 잘려서 `next` 가 안 보이면 4 에 맡긴다.
-3. **예약 있는 날.** `price_change.py reserved --calls <R>/calls.json --answers <R>` 의 `ask` 값마다(n 은 이어서 1, 2 …) `await stayPrice.readReserved(<값 그대로>)` → `<R>/resv-<n>.json`, 조각은 `<R>/resv-<n>-<at>.json`. `done: true` 까지 되풀이한다. `failed` 가 있으면 멈추고 그 `error` 를 page.md 에서 찾는다.
-4. **지금 값으로 묶기.** `price_change.py read --calls <R>/calls.json --answers <R> --out <R>/snapshot.json`.
-   - 종료 2 에 `refetch` 가 있으면 그 `{id, at, size}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/take-<id>-<at>.json`, `end` 까지 2 처럼 이어 받고 4 를 다시 한다.
+2. **가격.** `calls.json` 의 `pairs` 값마다(i = 1, 2 …) `await stayPrice.readPair(<값 그대로>)` 의 답을 `<R>/pair-<i>.json` 에 저장한다. 조각은 아직 받지 않는다.
+3. **예약 있는 날.** `price_change.py reserved --calls <R>/calls.json --answers <R> <앞선>` 의 `ask` 값마다(n 은 이어서 1, 2 …) `await stayPrice.readReserved(<값 그대로>)` 의 답을 `<R>/resv-<n>.json` 에 저장한다. `done: true` 까지 되풀이한다. `failed` 가 있으면 멈추고 그 `error` 를 page.md 에서 찾는다.
+4. **지금 값으로 묶기.** `price_change.py read --calls <R>/calls.json --answers <R> <앞선> --out <R>/snapshot.json`.
+5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/take-<id>-<at>.json`, 답의 `next` 가 `end` 가 될 때까지 `stayPrice.take("<id>", <next>)` 를 한 쪽씩 이어 받고, 그 명령을 다시 한다. 가격 조각도 예약 있는 날의 조각도 이렇게 받는다. 잘려서 `next` 가 안 보이면 그대로 저장하고 명령을 다시 한다(명령이 더 작은 크기를 댄다).
    - `그 조각이 페이지에 없습니다` 면 새 폴더로 처음부터 다시 읽는다. 그 밖의 오류는 commands.md.
 
 답이 `started: false` 면 아무것도 하지 않은 것이다. 저장하지 않고 `wait` 초 뒤 같은 값으로 다시 부른다.

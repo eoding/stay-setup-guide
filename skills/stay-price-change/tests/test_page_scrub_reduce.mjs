@@ -19,6 +19,13 @@ const FIXTURES = [
   ['adjust', 'adjust-rejected.html']
 ];
 
+// FNV-1a 32비트 — 파이썬 `price_browser.fnv1a` 와 같은 셈(시험이 따로 셈한다)
+function fnv1a(bytes) {
+  let h = 0x811c9dc5;
+  for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+
 function readPages(pairs) {
   const done = spawnSync('python3', ['-I', join(HERE, 'reduced_reader.py'), ...pairs.flat()], { encoding: 'utf8' });
   assert.equal(done.status, 0, done.stderr);
@@ -131,13 +138,15 @@ test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 �
   assert.ok(charsOf(r) <= 800, `읽기 답: ${charsOf(r)}자`);
   assert.equal(r.fragment, undefined, '답에는 조각을 싣지 않는다');
   const { takes, text, body } = takeAll(page.w, r);
-  assert.equal(takes.length, r.body.pieces, '답이 말한 쪽 수');
+  assert.deepEqual(Object.keys(r.body).sort(), ['bytes', 'chars', 'crc32', 'fnv', 'id'], '머리에는 쪽 수가 없다(take 는 글자 자리를 받는다) — 알아볼 값만');
   assert.ok(takes.length >= 15, `쪽 ${takes.length}개`);
   for (const t of takes) assert.ok(charsOf(t) <= 800 && t.end === r.body.chars && t.bytes === r.body.bytes && t.crc32 === r.body.crc32, `쪽 ${t.at}: ${charsOf(t)}자`);
   assert.ok(takes.some((t) => t.text.includes('"')), '따옴표가 든 쪽이 있다(도구는 \\" 로 보인다)');
   assert.equal(text.length, r.body.chars);
   assert.equal(Buffer.byteLength(text), r.body.bytes);
   assert.equal(crc32(Buffer.from(text, 'utf8')).toString(16).padStart(8, '0'), r.body.crc32);
+  assert.deepEqual(['foobar', '디럭스 · 조식 포함'].map((x) => fnv1a(Buffer.from(x, 'utf8'))), ['bf9cf968', '7da60b99'], '시험의 셈은 표준 FNV-1a(파이썬 시험과 같은 값)');
+  assert.equal(fnv1a(Buffer.from(text, 'utf8')), r.body.fnv, '두 번째 알아볼 값 FNV-1a(32비트)도 이은 글자와 맞는다');
   assert.ok(body.fragment.includes(long.trim()), '이은 조각에 긴 글자가 그대로 있다');
   const small = takeAll(page.w, r, 300);
   assert.ok(small.takes.every((t) => charsOf(t) <= 300 && t.size === 300), '부르는 쪽이 더 작은 크기를 고를 수 있다');

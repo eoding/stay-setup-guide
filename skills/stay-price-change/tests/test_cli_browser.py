@@ -105,9 +105,8 @@ class BrowserCommandTest(unittest.TestCase):
         whole = self.run_cli("read-calls", "--request", self.write("request.json", encode_request(scene.request())))
         change = self.run_cli("plan", "--snapshot", snapshot, "--request", self.dir / "request.json", "--record")["change_id"]
         saved = self.run_cli("save-snapshot", "--snapshot", snapshot)["change_id"]
-        def same_range(calls):   # 같은 범위면 차례만 다를 수 있다
-            return sorted(json.dumps({k: sorted(v) if k in ("rooms", "ratePlans") else v for k, v in call.items()}, ensure_ascii=False,
-                                     sort_keys=True) for call in calls["pairs"] + calls["reserved"])
+        def same_range(calls):   # 같은 범위면 부를 값의 차례만 다를 수 있고, 물음(지문)은 같다 — 앞선 읽기의 조각을 빌릴 수 있다(T3)
+            return sorted(ask_sum(call) for call in calls["pairs"] + calls["reserved"])
         for number in (change, saved):
             self.assertEqual(same_range(self.run_cli("read-calls", "--record", number)), same_range(whole), f"{number}번의 범위")
         self.assertTrue(self.run_cli("stale", "--change", change, "--snapshot", snapshot)["same"])
@@ -209,6 +208,56 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual(again["refetch"][0]["size"], 600, "JSON 이 아닌 파일은 도구가 보인 그대로의 답으로 읽는다")
         whole = self.run_cli("read", "--calls", calls, "--answers", self.write("whole.json", [result, *takes]))
         self.assertEqual(whole["offer"], "샘플 오퍼")
+
+    def test_t3_a_body_already_held_by_an_earlier_reading_is_not_fetched_again(self):
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+
+        def reading(name, pair=None, resv=None):
+            folder = self.dir / name
+            folder.mkdir()
+            calls = self.write(f"{name}/calls.json", {"pairs": [asked], "reserved": [probe]})
+            for prefix, items in (("pair", pair), ("resv", resv)):
+                for index, item in enumerate(items or ()):
+                    self.write(f"{name}/{prefix}-1{'' if index == 0 else '-' + str(index)}.json", item)
+            return calls, folder
+
+        # 미리보기 때 읽기 — 조각을 모두 받았다
+        calls1, first = reading("읽기-1", reply("readPair", asked, {"fragment": PRICE}, body_id="b1"),
+                                reply("readReserved", probe, {"fragment": REJECTED}, body_id="b2"))
+        before = self.run_cli("read", "--calls", calls1, "--answers", first)
+        # 적용 직전 — 페이지는 새 조각 id 로 같은 글자를 내놓았다. 짧은 답만 저장했다
+        pair2, resv2 = reply("readPair", asked, {"fragment": PRICE}, body_id="b3")[0], reply("readReserved", probe, {"fragment": REJECTED}, body_id="b4")[0]
+        calls2, second = reading("읽기-2", [pair2], [resv2])
+        alone = self.run_cli("read", "--calls", calls2, "--answers", second, code=2)
+        self.assertEqual(sorted(item["id"] for item in alone["refetch"]), ["b3", "b4"], "앞선 읽기를 주지 않으면 둘 다 받아야 한다")
+        self.assertEqual([item["id"] for item in self.run_cli("reserved", "--calls", calls2, "--answers", second, code=2)["refetch"]], ["b4"],
+                         "reserved 는 예약 조각만 묻는다")
+        self.assertTrue(self.run_cli("reserved", "--calls", calls2, "--answers", second, "--earlier", first)["done"])
+        again = self.run_cli("read", "--calls", calls2, "--answers", second, "--earlier", first)
+        self.assertEqual(again["cells"], before["cells"], "앞선 읽기의 같은 글자로 같은 지금 값")
+
+        # 적용 뒤 — 값이 바뀐 가격 조각만 다시 받는다. 예약 조각은 그대로 같은 글자다
+        changed = PRICE.replace('stay-numeric">140.00<', 'stay-numeric">150.00<', 1)
+        pair3 = reply("readPair", asked, {"fragment": changed}, body_id="b5")
+        calls3, third = reading("읽기-3", pair3[:1], [reply("readReserved", probe, {"fragment": REJECTED}, body_id="b6")[0]])
+        named = self.run_cli("read", "--calls", calls3, "--answers", third, "--earlier", first, "--earlier", second, code=2)
+        self.assertEqual(named["refetch"], [{"id": "b5", "at": 0, "size": 800}], "어디에도 없는 조각만 이름이 나온다")
+        for index, item in enumerate(pair3[1:], 1):
+            self.write(f"읽기-3/take-b5-{index}.json", item)
+        after = self.run_cli("read", "--calls", calls3, "--answers", third, "--earlier", first, "--earlier", second)
+        self.assertNotEqual(after["cells"], before["cells"])
+
+        # 앞선 읽기의 답은 조각만 빌려 준다 — 이번 읽기에서 부르지 않은 작업을 메우지 않는다
+        calls4, fourth = reading("읽기-4", None, [resv2])
+        self.assertIn("readPair 답이 없는", self.run_cli("read", "--calls", calls4, "--answers", fourth, "--earlier", first, code=2)["error"])
+        # 알아볼 값 넷이 모두 같아야 같은 조각이다 — 두 번째 값(FNV-1a)만 달라도 빌리지 않는다
+        odd = dict(pair2, body=dict(pair2["body"], fnv="00000000"))
+        calls5, fifth = reading("읽기-5", [odd], [resv2])
+        self.assertEqual([item["id"] for item in self.run_cli("read", "--calls", calls5, "--answers", fifth, "--earlier", first, code=2)["refetch"]],
+                         ["b3"])
 
 
 if __name__ == "__main__":

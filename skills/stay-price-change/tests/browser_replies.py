@@ -7,10 +7,12 @@ unittest 가 찾지 않도록 이름이 test_ 로 시작하지 않는다.
 import json
 import zlib
 
-from price_browser import ask_sum
+from price_browser import ask_sum, fnv1a
 
 
-def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, **fields) -> list[dict]:
+def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, body_id: str | None = None, **fields) -> list[dict]:
+    """작은 답 하나 + 조각을 `pieces` 쪽으로 나눈 take 답들. 페이지는 읽을 때마다 새 조각 id 를 붙인다 — 같은 글자를 다시 읽은
+    답을 만들려면 `body_id` 를 달리 준다."""
     result = {"ok": True, "op": op, "ask": ask_sum(asked), **fields}
     if keep is None:
         return [result]
@@ -19,7 +21,8 @@ def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, **fie
     text = json.dumps(body, ensure_ascii=False)
     size = max(1, -(-len(text) // pieces))
     data = text.encode("utf-8")
-    meta = {"id": f"b{zlib.crc32(data):08x}", "chars": len(text), "bytes": len(data), "crc32": f"{zlib.crc32(data):08x}", "pieces": pieces}
+    meta = {"id": body_id or f"b{zlib.crc32(data):08x}", "chars": len(text), "bytes": len(data),
+            "crc32": f"{zlib.crc32(data):08x}", "fnv": fnv1a(data)}
     result["body"] = meta
     return [result] + [take(meta, text, at, size) for at in range(0, len(text), size)]
 

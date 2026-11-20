@@ -18,7 +18,7 @@ import scene  # noqa: E402
 from browser_replies import reply, take as browser_take  # noqa: E402
 from erp_read import ParseError  # noqa: E402
 from price_browser import (  # noqa: E402
-    BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, page_hotel, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call,
+    BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, fnv1a, page_hotel, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call,
     step_outcome,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
@@ -77,7 +77,7 @@ class ReadCallsTest(unittest.TestCase):
         pairs = [(room, plan) for room in request.rooms for plan in request.rate_plans]
         self.assertEqual(len(read_calls(HOTEL, request.offer, pairs, request.dates)), 4)
         self.assertEqual(reserved_probes(HOTEL, request.offer, pairs, request.dates), [
-            {"hotel": HOTEL, "offer": request.offer, "rooms": ["디럭스", "스위트"], "ratePlans": ["조식 포함", "룸온리"],
+            {"hotel": HOTEL, "offer": request.offer, "rooms": ["디럭스", "스위트"], "ratePlans": ["룸온리", "조식 포함"],
              "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"], "occupancy": "*", "nights": "all"}])
 
     def test_read_answers_must_be_what_was_asked(self):
@@ -129,8 +129,8 @@ class ReservedRoundTest(unittest.TestCase):
         self.assertEqual([item["rooms"] for item in rooms.ask], [["디럭스"], ["스위트"]])
         deluxe, suite = rooms.ask
         plans = reserved_round([probe], flat(answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8)))
-        self.assertEqual([(item["rooms"], item["ratePlans"]) for item in plans.ask], [(["스위트"], ["조식 포함"]), (["스위트"], ["룸온리"])])
-        suite_bb, suite_ro = plans.ask
+        self.assertEqual([(item["rooms"], item["ratePlans"]) for item in plans.ask], [(["스위트"], ["룸온리"]), (["스위트"], ["조식 포함"])])
+        suite_ro, suite_bb = plans.ask
         halves = reserved_round([probe], flat(answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8),
                                               answer(suite_bb), answer(suite_ro, hidden=1)))
         self.assertEqual([(item["from"], item["to"]) for item in halves.ask], [("2026-12-24", "2026-12-25"), ("2026-12-26", "2026-12-27")])
@@ -270,6 +270,11 @@ class BodyTest(unittest.TestCase):
 
     def test_the_digest_matches_the_page_rule_for_korean_and_key_order(self):
         self.assertEqual(ask_sum({"no": 3, "b": [1, None], "a": "디럭스 \"킹\""}), ask_sum({"a": "디럭스 \"킹\"", "b": [1, None]}))
+
+    def test_the_second_body_check_is_standard_fnv1a_over_utf8(self):
+        # 표준 FNV-1a 32비트 시험값 — 페이지(stay_price.js)도 같은 셈이다(화면 시험이 이은 글자로 맞춰 본다)
+        self.assertEqual([fnv1a(b""), fnv1a(b"a"), fnv1a(b"foobar")], ["811c9dc5", "e40c292c", "bf9cf968"])
+        self.assertEqual(fnv1a("디럭스 · 조식 포함".encode("utf-8")), "7da60b99")
 
 
 if __name__ == "__main__":

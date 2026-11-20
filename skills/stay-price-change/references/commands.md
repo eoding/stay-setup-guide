@@ -9,9 +9,10 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 ```
 
 - 결과는 표준 출력에 JSON 으로 쓴다. `--out` 을 주면 그 파일에도 쓴다(`render` 는 HTML 을 그 파일에 쓰고 표준 출력에는 `{page}` 만).
-- 종료 코드: 0 됨 · 1 다른 값이 있음(`stale`·`verify` 의 `same: false`) · 2 입력이나 순서가 맞지 않음. 2 일 때 표준 오류에 `{"error": "…"}`, 잘린 조각이 있으면 `"refetch": [{"id", "at", "size"}]` 도 온다.
+- 종료 코드: 0 됨 · 1 다른 값이 있음(`stale`·`verify` 의 `same: false`) · 2 입력이나 순서가 맞지 않음. 2 일 때 표준 오류에 `{"error": "…"}`, 받아야 할 조각이 있으면 `"refetch": [{"id", "at", "size"}]` 도 온다.
 - 장부: `~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3`. 환경 변수 `STAY_PRICE_LEDGER_DIR` 로 폴더를 바꿀 수 있다. 장부는 지우지 않는다. 번호마다(미리보기 · 지금 상태 저장 · 되돌리기) 호텔(페이지가 알아본 번호와 이름)과 그 계산이 바탕으로 삼은 읽은 값을 적는다. 그래서 같은 범위를 다시 읽거나 견줄 때는 번호만 준다.
 - 답 폴더(`--answers <폴더>`)에서는 이름이 `look-`·`pair-`·`resv-`·`take-` 로 시작하는 `.json`·`.txt` 파일을 답으로 읽는다.
+- 앞선 읽기 폴더(`--earlier <폴더>`, 여러 번): 그 안의 답은 이번 읽기의 답으로 치지 않고, 다 받아 맞춰 본 조각만 빌린다. 조각은 알아볼 값 넷(글자 수 · 바이트 수 · CRC-32 · FNV-1a)이 모두 같을 때만 같은 조각이다. 이번 답들과 앞선 폴더 어디에도 없는 조각만 `refetch` 에 나온다.
 - 각 명령의 플래그는 `--help` 가 정본이다.
 
 ## 하위 명령
@@ -20,8 +21,8 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 |---|---|---|
 | `look` | `--answers` (여러 번) | `stayPrice.look()` 의 답과 그 조각 → `{login, hotel, offer, offers, pairs}`. 목록이 길어 `body` 로 왔을 때만 쓴다. |
 | `read-calls` | `--request` 또는 `--record` | 읽을 범위 → `{pairs: [readPair 부를 값], reserved: [readReserved 첫 물음]}`. `--request` 는 범위 파일(`kind: range`)·바꾸기 요청·목표 값 표, `--record` 는 장부 번호(그 번호의 계산이 바탕으로 삼은 범위). 부를 값마다 `hotel` 이 든다. 기간은 고른 날만 덮게 끊는다(readPair 186일씩). |
-| `reserved` | `--calls` · `--answers` (여러 번) | `read-calls` 가 낸 파일과 readReserved 답들 → `{done, ask, answered, failed}`. 숨긴 줄이 있던 물음은 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 `ask` 에 다시 낸다. 답 폴더를 통째로 주면 된다. |
-| `read` | `--calls` · `--answers` (여러 번) · `--read-at` | 브라우저 답 → 지금 값 `{hotel, offer, currency, read_at, cells, reserved, pairs, room_names, no_sale, dates}`. 호텔은 페이지가 알아본 것이다. readPair 답이 없는 부를 값이나 남은 예약 물음이 있으면 거절한다. `--hotel`·`--hotel-id`·`--price-page`·`--adjust-page` 는 화면 조각 파일로 읽는 시험용이다. |
+| `reserved` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) | `read-calls` 가 낸 파일과 readReserved 답들 → `{done, ask, answered, failed}`. 숨긴 줄이 있던 물음은 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 `ask` 에 다시 낸다. 답 폴더를 통째로 주면 된다. 예약 조각이 어디에도 없으면 종료 2 와 `refetch`. |
+| `read` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) · `--read-at` | 브라우저 답 → 지금 값 `{hotel, offer, currency, read_at, cells, reserved, pairs, room_names, no_sale, dates}`. 호텔은 페이지가 알아본 것이다. readPair 답이 없는 부를 값이나 남은 예약 물음이 있으면 거절하고, 어디에도 없는 조각이 있으면 종료 2 와 `refetch`. `--hotel`·`--hotel-id`·`--price-page`·`--adjust-page` 는 화면 조각 파일로 읽는 시험용이다. |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` | 미리보기 계산 → `{change_id, counts, plan, unresolved, steps}`. `--record` 면 장부에 미리보기와 그 읽은 값을 적고 `change_id` 를 준다. 빨간 줄을 다 고르지 않았으면 `steps` 가 null. |
 | `render` | `preview`·`result`·`rollback`·`prices` 중 하나 + `--plan` (preview·rollback) · `--change` (result) · `--snapshot` (prices) | 페이지 HTML. `--out` 이 없으면 기록 폴더에 `<날짜 시각> · <호텔> · <페이지 이름>.html` 로 쓴다. 답 `{page}` 는 그 경로. |
 | `begin` | `--change` · `--plan` (`steps` 가 든 plan.json 또는 rollback.json) | 적용 시작. 저장 단계를 장부에 적는다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. → `{change_id, status, steps}` |
@@ -116,9 +117,9 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | `readPair 답이 없는 부를 값이 N개 있습니다` | 「읽기」 2 를 마저 한다. 그 값으로 readPair 를 부른다 |
 | `예약 있는 날 물음이 N개 남았습니다` | `reserved` 가 `done` 이 될 때까지 「읽기」 3 을 마저 한다 |
 | `… 를 읽지 못했습니다: …` | readPair 답이 실패였다. 뒤의 페이지 오류를 page.md 에서 찾는다. 범위를 고쳤으면 새 폴더로 다시 읽는다 |
-| `refetch` 가 있는 오류 · `받지 못했거나 잘린 쪽이 있습니다` | 「읽기」 4 의 refetch 처리 |
+| `refetch` 가 있는 오류 · `받지 못했거나 잘린 쪽이 있습니다` | 「읽기」 5 의 조각 받기 |
 | `… 의 답이 잘렸습니다` | 작업의 답이 잘렸다. `stayPrice.last()` 로 다시 받아 그 파일을 갈아 끼운다(읽기 작업이면 다시 불러도 된다) |
-| `조각 … 을 이어 보니 바이트 수나 CRC-32 가 맞지 않습니다` · `… 두 번 왔는데 서로 다릅니다` · `이 답의 물음에서 나온 것이 아닙니다` | 옮겨 적은 쪽이 틀렸거나 다른 읽기의 파일이 섞였다. 새 폴더로 읽기를 다시 한다 |
+| `조각 … 을 이어 보니 바이트 수나 CRC-32 · FNV-1a 가 맞지 않습니다` · `… 두 번 왔는데 서로 다릅니다` · `이 답의 물음에서 나온 것이 아닙니다` | 옮겨 적은 쪽이 틀렸거나 다른 읽기의 파일이 섞였다. 앞선 읽기의 조각은 `--earlier` 로만 준다(파일을 베껴 오지 않는다). 새 폴더로 읽기를 다시 한다 |
 | `… 의 답이 물은 호텔(…)이 아닌 … 호텔에서 읽은 것입니다` · `읽기 답에서 호텔을 하나로 정하지 못했습니다` | 다른 호텔의 탭에서 읽은 답이 섞였다. 새 폴더로 읽기를 다시 한다 |
 | `읽은 날과 판매일 없는 날을 합쳐도 물은 날과 맞지 않습니다` · `… 를 물었는데 화면은 …` | 화면이 물은 것과 다르다. 멈추고 보고한다 |
 | `판매일 있는 날을 하나도 읽지 못해 통화를 모릅니다` | 고른 날이 모두 판매일 없음이다. 담당자에게 그 날들은 판매일이 열려 있지 않다고 알린다 |

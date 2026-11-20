@@ -139,3 +139,19 @@ test('B6 · readReserved — 확인 단계가 고른 범위와 다르면(서버�
   noSave(page, r);
   page.w.close();
 });
+
+test('T3 · 예약 있는 날 조각에는 가격이 없어 저장 뒤에 다시 읽어도 같은 조각이다(앞선 읽기의 것을 그대로 쓴다)', async () => {
+  const bodies = [];
+  for (const [now, after] of [['140.00 ~ 160.00', '141.00 ~ 161.00'], ['154.00 ~ 176.00', '155.00 ~ 177.00']]) {
+    const page = erpPage({ adjustReview: ownFixture('adjust-rejected.html').replace('140.00 ~ 160.00', now).replace('141.00 ~ 161.00', after) });
+    const r = plain(await page.w.stayPrice.readReserved(inPage(page.w, RESERVED)));
+    assert.equal(r.ok, true, r.error);
+    const { body } = takeAll(page.w, r);
+    assert.ok(!body.fragment.includes('현재가') && !body.fragment.includes(now), '확인 머리의 「현재가 → 변경 후」 표는 조각에 없다');
+    assert.ok(body.fragment.includes('건너뛰는 칸') && body.fragment.includes('예약이 있는 날'), '예약 있는 날을 가리는 표는 그대로');
+    bodies.push([r.body.chars, r.body.bytes, r.body.crc32, r.body.fnv]);
+    page.w.close();
+  }
+  assert.deepEqual(bodies[0], bodies[1], '가격만 달라진 두 읽기의 조각은 알아볼 값 넷이 같다');
+});
+

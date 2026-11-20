@@ -86,6 +86,8 @@ def page_path(hotel: str, kind: str) -> Path:
 
 
 ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
+EARLIER_HELP = ("같은 일의 앞선 읽기 폴더 (여러 번) — 그 안의 다 받은 조각만 빌린다. 이번 읽기의 답으로 치지 않는다. "
+                "알아볼 값(글자 수 · 바이트 수 · CRC-32 · FNV-1a)이 같은 조각은 다시 받지 않아도 된다")
 
 
 def answer_files(paths) -> list[Path]:
@@ -153,6 +155,7 @@ def cmd_read(args):
         if missing:
             raise BrowserError(f"readPair 답이 없는 부를 값이 {len(missing)}개 있습니다 — 처음 것: {missing[0]['room']} · "
                                f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다")
+        results = attach_bodies(results, load_results(args.earlier))
         pair_answers, reserved_answers = answers_for(results, "readPair"), answers_for(results, "readReserved")
         done = reserved_round(calls["reserved"], reserved_answers)
         if not done.done:
@@ -181,7 +184,8 @@ def cmd_read_calls(args):
 
 
 def cmd_reserved(args):
-    done = reserved_round(load_calls(args.calls)["reserved"], answers_for(load_results(args.answers), "readReserved"))
+    asked = answers_for(load_results(args.answers), "readReserved")
+    done = reserved_round(load_calls(args.calls)["reserved"], attach_bodies(asked, load_results(args.earlier)))
     return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 
 
@@ -363,10 +367,12 @@ def parser() -> argparse.ArgumentParser:
     sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
     sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
     sub.add_argument("--answers", action="append", help="readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub.add_argument("--earlier", action="append", help=EARLIER_HELP)
 
     sub = command("read", cmd_read, "브라우저 답 → 지금 값")
     sub.add_argument("--calls", help="read-calls 가 낸 파일")
     sub.add_argument("--answers", action="append", help="readPair · readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub.add_argument("--earlier", action="append", help=EARLIER_HELP)
     sub.add_argument("--read-at", help="읽은 시각(ISO). 없으면 지금")
     sub.add_argument("--hotel", help="시험용: 화면 조각 파일로 읽을 때의 호텔 이름 — 브라우저 답은 페이지가 알아본 호텔을 쓴다")
     sub.add_argument("--hotel-id", help="시험용: 화면 조각 파일로 읽을 때의 호텔 번호")

@@ -26,7 +26,8 @@
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
  *    조각 셋 이상뿐인 글자(`0.15.0`)는 점을 `·` 로 바꾼다(도구가 토큰으로 보고 가린다). 러너 함수의 결과는 그대로 넘기지 않는다.
  *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
- *    페이지에 두고 답에는 `body`(id · 글자 수 · 바이트 수 · CRC-32 · 쪽 수)만 싣는다. 답 하나·쪽 하나는 JSON 으로 800자 안이다.
+ *    페이지에 두고 답에는 `body`(id 와 그 글자를 알아볼 값 — 글자 수 · 바이트 수 · CRC-32 · FNV-1a)만 싣는다. 파이썬은 앞선 읽기에서
+ *    이미 받은 같은 조각이면 다시 받지 않는다. 답 하나·쪽 하나는 JSON 으로 800자 안이다.
  *  - localStorage 는 `stayPrice` 로 시작하는 키만 쓴다(`stayPriceLast`). 러너의 `staySteps`·`stayRunCursor` 는 쓰지 않는다.
  */
 (function () {
@@ -158,6 +159,12 @@
     utf8(text).forEach(function (b) { c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8); });
     return ('0000000' + ((c ^ 0xffffffff) >>> 0).toString(16)).slice(-8);
   }
+  // 조각을 알아보는 두 번째 값 — CRC-32 와 셈법이 다른 FNV-1a(32비트, UTF-8 바이트). 파이썬 `price_browser.fnv1a` 와 같다
+  function fnv1a(text) {
+    var h = 0x811c9dc5;
+    utf8(text).forEach(function (b) { h = Math.imul(h ^ b, 0x01000193) >>> 0; });
+    return ('0000000' + h.toString(16)).slice(-8);
+  }
   // 물은 값의 지문 — `no` 를 뺀 입력을 키 정렬 JSON 으로 적은 것의 CRC-32. 파이썬 `ask_sum` 이 같은 값을 셈한다
   function canon(value) {
     if (Array.isArray(value)) return '[' + value.map(canon).join(',') + ']';
@@ -199,9 +206,7 @@
     var item = BODIES.items[id] = { text: text, bytes: byteLength(text), crc32: crc32(text) };
     BODIES.order.push(id);
     while (BODIES.order.length > KEEP_BODIES) delete BODIES.items[BODIES.order.shift()];
-    var count = 0;
-    for (var at = 0; at < text.length; count++) at = pieceAt(item, id, at, RESULT_CHARS).next;
-    return { id: id, chars: text.length, bytes: item.bytes, crc32: item.crc32, pieces: count };
+    return { id: id, chars: text.length, bytes: item.bytes, crc32: item.crc32, fnv: fnv1a(text) };
   }
   function take(id, at, size) {
     at = at === undefined ? 0 : at;
@@ -851,7 +856,11 @@
         hiddenValue(r2, 'los') === want.nights && hiddenValue(r2, 'adjust') === adjust && sameRanges(hiddenValue(r2, 'date_selection_0'), span.ranges);
       if (!same) fail('가감 확인 단계가 고른 것과 다른 범위를 보여 줍니다');
       if (facts(r2)['오퍼'] !== want.offer) fail('가감 확인 단계의 오퍼가 `' + (facts(r2)['오퍼'] || '?') + '` 입니다');
-      var fragment = reduce(r2);
+      // 확인 머리의 「현재가 → 변경 후」 표는 가격을 저장하면 같이 바뀐다. 예약 있는 날을 가리는 데는 쓰지 않으니 빼고 줄인다 —
+      // 그래야 적용 뒤에 다시 읽어도 같은 조각이라 앞선 읽기의 것을 그대로 쓴다
+      var kept = r2.cloneNode(true);
+      all('[data-stay-summary] table', kept).forEach(function (t) { (t.closest('.table1') || t).remove(); });
+      var fragment = reduce(kept);
       await closeDrawer(Date.now() + 3000);
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
       return { ok: true, what: clip(want.rooms.length + '객실 · ' + want.ratePlans.length + '요금제 · ' + want.from + ' ~ ' + want.to, 120),
