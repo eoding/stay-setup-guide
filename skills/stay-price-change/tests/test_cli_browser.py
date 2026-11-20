@@ -53,25 +53,63 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual(calls["pairs"][0]["weekdays"], ["금", "토"])
         self.assertEqual(len(calls["reserved"]), 1)
 
-        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24", "to": "2026-12-31",
-                 "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
-        probes = self.write("probes.json", [probe])
-        first = self.run_cli("reserved", "--probes", probes)
+        # 읽기 한 번 — 부를 값 파일 하나(calls.json)와 답 폴더 하나. 명령이 서로 그 파일을 넘겨받는다(G4)
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+        folder = self.dir / "읽기-1"
+        folder.mkdir()
+        calls = self.write("읽기-1/calls.json", {"pairs": [asked], "reserved": [probe]})
+        first = self.run_cli("reserved", "--calls", calls)
         self.assertEqual((first["done"], first["ask"], first["answered"]), (False, [probe], 0))
-        pair = self.write("pair.json", reply("readPair", {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
-        left = self.run_cli("read", "--pair-result", pair, "--reserved-probes", probes, code=2)
-        self.assertIn("물음이 1개 남았습니다", left["error"])
+        self.assertIn("readPair 답이 없는", self.run_cli("read", "--calls", calls, "--answers", folder, code=2)["error"])
+        for index, item in enumerate(reply("readPair", asked, {"fragment": PRICE})):
+            self.write(f"읽기-1/pair-1{'' if index == 0 else '-' + str(index)}.json", item)
+        self.assertIn("물음이 1개 남았습니다", self.run_cli("read", "--calls", calls, "--answers", folder, code=2)["error"])
 
-        answers = self.write("answers.json", reply("readReserved", probe, {"fragment": REJECTED}))
-        self.assertTrue(self.run_cli("reserved", "--probes", probes, "--result", answers)["done"])
-        self.run_cli("read", "--pair-result", pair, "--reserved-probes", probes, "--reserved-result", answers,
-                     "--read-at", "2026-11-20T18:00:00+09:00", "--out", self.dir / "snapshot.json")
-        snapshot = decode_snapshot(json.loads((self.dir / "snapshot.json").read_text(encoding="utf-8")))
+        for index, item in enumerate(reply("readReserved", probe, {"fragment": REJECTED})):
+            self.write(f"읽기-1/resv-1{'' if index == 0 else '-' + str(index)}.json", item)
+        self.assertTrue(self.run_cli("reserved", "--calls", calls, "--answers", folder)["done"])
+        self.run_cli("read", "--calls", calls, "--answers", folder, "--read-at", "2026-11-20T18:00:00+09:00",
+                     "--out", folder / "snapshot.json")
+        snapshot = decode_snapshot(json.loads((folder / "snapshot.json").read_text(encoding="utf-8")))
         self.assertEqual((snapshot.offer, snapshot.currency, len(snapshot.cells)), ("샘플 오퍼", "USD", 16))
+        self.assertEqual((snapshot.hotel_id, snapshot.hotel), (scene.HOTEL_ID, scene.HOTEL), "호텔은 페이지의 답에서")
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
+        self.assertEqual(snapshot.dates, tuple(f"2026-12-{day}" for day in range(24, 32)), "읽은 범위의 날짜가 지금 값에 남는다")
 
-        wrong = self.write("wrong.json", reply("readPair", {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
-        self.assertIn("물었는데 화면은", self.run_cli("read", "--pair-result", wrong, code=2)["error"])
+        wrong_asked = dict(asked, ratePlan="룸온리")
+        wrong = self.write("wrong.json", reply("readPair", wrong_asked, {"fragment": PRICE}))
+        wrong_calls = self.write("wrong-calls.json", {"pairs": [wrong_asked], "reserved": []})
+        self.assertIn("물었는데 화면은", self.run_cli("read", "--calls", wrong_calls, "--answers", wrong, code=2)["error"])
+
+    def test_g4_a_range_with_no_operation_gives_the_calls_and_g5_a_record_number_gives_them_again(self):
+        range_ = {"kind": "range", "hotel": scene.HOTEL_REF, "offer": scene.OFFER,
+                  "pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}, {"room": "스위트", "rate_plan": "룸온리"}],
+                  "dates": list(scene.DATES)}
+        calls = self.run_cli("read-calls", "--request", self.write("range.json", range_))
+        self.assertEqual([(call["room"], call["ratePlan"]) for call in calls["pairs"]], [("디럭스", "조식 포함"), ("스위트", "룸온리")])
+        self.assertEqual(calls["pairs"][0]["hotel"], scene.HOTEL_REF)
+        self.assertNotIn("operation", json.dumps(calls))
+        for bad, why in ((dict(range_, hotel="데모 호텔"), "호텔 번호 없이"), (dict(range_, dates=["2027-01-02", "2026-12-25"]), "오름차순"),
+                         (dict(range_, pairs=[]), "하나 이상")):
+            self.assertIn(why, self.run_cli("read-calls", "--request", self.write("bad.json", bad), code=2)["error"])
+
+        # 장부 번호마다 그 계산이 바탕으로 삼은 읽은 값이 남는다 — 같은 범위를 번호로 다시 읽고, 낡음 확인도 번호로 한다
+        snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
+        whole = self.run_cli("read-calls", "--request", self.write("request.json", encode_request(scene.request())))
+        change = self.run_cli("plan", "--snapshot", snapshot, "--request", self.dir / "request.json", "--record")["change_id"]
+        saved = self.run_cli("save-snapshot", "--snapshot", snapshot)["change_id"]
+        def same_range(calls):   # 같은 범위면 차례만 다를 수 있다
+            return sorted(json.dumps({k: sorted(v) if k in ("rooms", "ratePlans") else v for k, v in call.items()}, ensure_ascii=False,
+                                     sort_keys=True) for call in calls["pairs"] + calls["reserved"])
+        for number in (change, saved):
+            self.assertEqual(same_range(self.run_cli("read-calls", "--record", number)), same_range(whole), f"{number}번의 범위")
+        self.assertTrue(self.run_cli("stale", "--change", change, "--snapshot", snapshot)["same"])
+        elsewhere = dict(encode_snapshot(scene.snapshot()), hotel={"id": "2", "name": scene.HOTEL})
+        self.assertIn("호텔 2", self.run_cli("stale", "--change", change, "--snapshot", self.write("x.json", elsewhere), code=2)["error"])
+        self.assertIn("999번", self.run_cli("read-calls", "--record", 999, code=2)["error"])
 
     def test_calls_list_unsaved_steps_and_record_result_writes_only_the_step_it_answers(self):
         snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
@@ -156,15 +194,16 @@ class BrowserCommandTest(unittest.TestCase):
                  "weekdays": list("월화수목금토일")}
         result, *takes = reply("readPair", asked, {"fragment": PRICE}, pieces=3)
         cut = json.dumps(takes[1], ensure_ascii=False)[:990] + "[TRUNCATED]"
-        error = self.run_cli("read", "--pair-result", self.write("pair.json", [result, takes[0], cut, takes[2]]), code=2)
+        calls = self.write("calls.json", {"pairs": [asked], "reserved": []})
+        error = self.run_cli("read", "--calls", calls, "--answers", self.write("pair.json", [result, takes[0], cut, takes[2]]), code=2)
         self.assertEqual(error["refetch"], [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
         self.assertIn("stayPrice.take(", error["error"])
         raw = self.dir / "cut.txt"
         raw.write_text(cut, encoding="utf-8")
-        again = self.run_cli("read", "--pair-result", self.write("rest.json", [result, takes[0], takes[2]]),
-                             "--pair-result", raw, code=2)
+        again = self.run_cli("read", "--calls", calls, "--answers", self.write("rest.json", [result, takes[0], takes[2]]),
+                             "--answers", raw, code=2)
         self.assertEqual(again["refetch"][0]["size"], 600, "JSON 이 아닌 파일은 도구가 보인 그대로의 답으로 읽는다")
-        whole = self.run_cli("read", "--pair-result", self.write("whole.json", [result, *takes]))
+        whole = self.run_cli("read", "--calls", calls, "--answers", self.write("whole.json", [result, *takes]))
         self.assertEqual(whole["offer"], "샘플 오퍼")
 
 

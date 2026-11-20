@@ -86,8 +86,8 @@ test('B11 · 표시명이 있는 호텔 — 칩 이름으로 읽고 묻고, 스�
   try {
     const file = (name, data) => { const path = join(dir, name); writeFileSync(path, JSON.stringify(data)); return path; };
     const done = spawnSync('python3', [join(SKILL, 'scripts', 'price_change.py'), 'read',
-      '--pair-result', file('pair.json', [read, ...takeAll(page.w, read).takes]),
-      '--reserved-probes', file('probes.json', [probe]), '--reserved-result', file('reserved.json', [reserved, ...takeAll(page.w, reserved).takes])],
+      '--calls', file('calls.json', { pairs: [call], reserved: [probe] }),
+      '--answers', file('pair-1.json', [read, ...takeAll(page.w, read).takes]), '--answers', file('resv-1.json', [reserved, ...takeAll(page.w, reserved).takes])],
     { encoding: 'utf8', env: Object.assign({}, process.env, { STAY_PRICE_LEDGER_DIR: join(dir, 'ledger') }) });
     assert.equal(done.status, 0, done.stderr);
     const snapshot = JSON.parse(done.stdout);

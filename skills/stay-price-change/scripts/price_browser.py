@@ -227,6 +227,30 @@ def _same_hotel_as_asked(result: Mapping) -> None:
                            f"{(seen or {}).get('id') if isinstance(seen, Mapping) else '모르는'} 호텔에서 읽은 것입니다")
 
 
+def answers_for(results: Iterable, op: str) -> list:
+    """답 목록에서 그 작업(`readPair` · `readReserved` · `look`)의 답과 조각(take) 답만 — 한 폴더에 섞여 있어도 나눈다.
+    잘린 글자 답은 앞부분의 op 로 가른다."""
+    out = []
+    for item in results:
+        if isinstance(item, Mapping):
+            kind = item.get("op")
+        else:
+            try:
+                data = json.loads(str(item))
+            except ValueError:
+                data = None
+            kind = data.get("op") if isinstance(data, dict) else _clue(str(item))["op"]
+        if kind in (op, "take", None):
+            out.append(item)
+    return out
+
+
+def unanswered(calls: Iterable[Mapping], results: Iterable, op: str) -> list[dict]:
+    """부를 값 가운데 그 작업의 답이 하나도 없는 것(지문 `ask` 로 짝짓는다)."""
+    asked = {str(result.get("ask")) for result in answers(answers_for(results, op))[0] if result.get("op") == op}
+    return [call for call in calls if ask_sum(call) not in asked]
+
+
 def page_hotel(results: Iterable) -> dict:
     """읽기 답들이 말하는 호텔 {id, name} — 페이지가 알아본 그대로. 둘 이상이거나 없으면 거절한다."""
     seen = {(str(result["hotel"].get("id")), str(result["hotel"].get("name") or "")) for result in attach_bodies(results)

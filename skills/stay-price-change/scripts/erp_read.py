@@ -310,11 +310,13 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if len(currencies) != 1 or not re.fullmatch(r"[A-Z]{3}", next(iter(currencies))):
         raise ParseError(f"통화를 하나로 정하지 못했습니다: {' · '.join(sorted(currencies))}")
     offer = offers.pop()
-    cells, pairs, names, no_sale = {}, set(), {}, set()
+    cells, pairs, names, no_sale, dates = {}, set(), {}, set(), set()
     for read in reads:
         page, room = read.page, read.room
         pairs.add((room, read.rate_plan))
         no_sale.update((room, day) for day in read.no_sale)
+        dates.update(read.no_sale)
+        dates.update(page.days if page is not None else ())
         if page is None:
             continue
         if names.setdefault(room, page.room) != page.room:
@@ -355,4 +357,4 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if unknown:
         raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(sorted(unknown))}")
     return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names,
-                    frozenset(no_sale), hotel_id)
+                    frozenset(no_sale), hotel_id, tuple(sorted(dates)))

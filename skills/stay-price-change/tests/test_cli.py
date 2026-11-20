@@ -81,12 +81,11 @@ class CommandTest(unittest.TestCase):
         again = Path(self.run_cli("render", "preview", "--plan", self.dir / "plan.json")["page"])
         self.assertNotEqual(again, page)
 
-        self.assertTrue(self.run_cli("stale", "--before", self.snapshot, "--after", self.snapshot)["same"])
+        self.assertTrue(self.run_cli("stale", "--change", change, "--snapshot", self.snapshot)["same"])
         moved = scene.snapshot()
         key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
         moved = replace(moved, cells={**moved.cells, key: replace(moved.cells[key], sell=moved.cells[key].sell + 1)})
-        stale = self.run_cli("stale", "--before", self.snapshot, "--after", self.write("moved.json", encode_snapshot(moved)),
-                             code=1)
+        stale = self.run_cli("stale", "--change", change, "--snapshot", self.write("moved.json", encode_snapshot(moved)), code=1)
         self.assertEqual([item["key"]["date"] for item in stale["differences"]], ["2026-12-25"])
 
         self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")["status"], "applying")
@@ -110,6 +109,10 @@ class CommandTest(unittest.TestCase):
         page = Path(self.run_cli("render", "rollback", "--plan", self.dir / "rollback.json")["page"])
         self.assertIn("에 적어 둔 값으로 되돌립니다", page.read_text(encoding="utf-8"))
         self.assertEqual(self.run_cli("begin", "--change", rollback["change_id"], "--plan", self.dir / "rollback.json")["steps"], 8)
+        self.assertEqual(self.run_cli("read-calls", "--record", rollback["change_id"]), self.run_cli("read-calls", "--record", change),
+                         "G5 — 되돌리기 번호도 다시 읽을 범위를 안다")
+        self.assertTrue(self.run_cli("stale", "--change", rollback["change_id"], "--snapshot", after)["same"],
+                        "G5 — 되돌리기의 낡음 확인은 그 계산이 바탕으로 삼은 읽은 값(after)과 견준다")
 
         snapshot_id = self.run_cli("save-snapshot", "--snapshot", after)["change_id"]
         listed = self.run_cli("list")
@@ -138,7 +141,7 @@ class CommandTest(unittest.TestCase):
         self.run_cli("plan", "--snapshot", self.snapshot, "--request", fifteen, "--resolutions", self.choice,
                      "--out", self.dir / "plan15.json")
         self.assertIn("다른 계산", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan15.json", code=2)["error"])
-        self.assertIn("파일이 없습니다", self.run_cli("stale", "--before", "없는.json", "--after", self.snapshot, code=2)["error"])
+        self.assertIn("파일이 없습니다", self.run_cli("stale", "--change", change, "--snapshot", "없는.json", code=2)["error"])
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@
     CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
     Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜). 호텔은 페이지가 알아본 번호(hotel_id)와 이름
     Skipped      건너뛰는 칸과 까닭(가격 없음 · 바꿀 값 없음 · 이미 그 값)
+    ReadRange    읽을 범위 — 호텔 · 오퍼 · (객실, 요금제) 쌍 · 날짜. 바꾸는 방법 없이 읽기만 할 때의 요청(kind range)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
     TargetTable  칸마다 목표 값을 적은 표(새 요금표가 이 모양으로 들어온다) — 지금 값과 다른 칸만 바뀐다
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
@@ -116,6 +117,7 @@ class Snapshot:
 
     객실은 캘린더 칩에 보이는 이름으로 적는다. `room_names` 는 그 이름 → 가격 수정 드로어가 같은 객실을 부르는 이름이다.
     `no_sale` 은 (객실, 날짜) — 판매일이 없어 칸이 없는 날(「판매일 없음」, 「가격 없음」과 다르다). 읽은 날로 친다.
+    `dates` 는 읽은 날 전부 — `pairs` 와 함께 읽은 범위다(`range`). 주지 않으면 칸과 판매일 없는 날에서 모은다.
     """
     hotel: str
     offer: str
@@ -127,11 +129,19 @@ class Snapshot:
     room_names: Mapping[str, str] = field(default_factory=dict)
     no_sale: frozenset[tuple[str, str]] = frozenset()
     hotel_id: str = ""
+    dates: tuple[str, ...] = ()
 
     def __post_init__(self):
         stray = sorted({(key.room, key.rate_plan) for key in self.cells} - set(self.pairs))
         if stray:
             raise ValueError(f"읽었다고 적지 않은 객실·요금제의 칸이 있습니다: {' · '.join(f'{r}/{p}' for r, p in stray)}")
+        days = set(self.dates) or {key.date for key in self.cells} | {day for _room, day in self.no_sale}
+        object.__setattr__(self, "dates", tuple(sorted(days)))
+
+    @property
+    def range(self) -> "ReadRange":
+        """이 값을 읽은 범위 — 같은 범위를 다시 읽을 때(적용 직전 · 적용 뒤 · 되돌리기 · 이어서) 이것을 쓴다."""
+        return ReadRange(self.hotel, self.hotel_id, self.offer, tuple(sorted(self.pairs)), self.dates)
 
     @cached_property
     def days_read(self) -> frozenset[tuple[str, str, str]]:
@@ -139,6 +149,22 @@ class Snapshot:
 
     def covers(self, room: str, rate_plan: str, day: str) -> bool:
         return (room, rate_plan) in self.pairs and (room, rate_plan, day) in self.days_read
+
+
+@dataclass(frozen=True)
+class ReadRange:
+    """읽을 범위. 요청 파일의 `kind: range` 가 이 모양이고, 바꾸기 요청 · 목표 값 표도 범위를 하나씩 갖는다(`request_range`)."""
+    hotel: str
+    hotel_id: str
+    offer: str
+    pairs: tuple[tuple[str, str], ...]
+    dates: tuple[str, ...]
+
+    def __post_init__(self):
+        if not self.pairs or not self.dates:
+            raise ValueError("읽을 범위에는 객실 · 요금제와 날짜가 하나 이상 있어야 합니다")
+        if list(self.dates) != sorted({iso_day(day) for day in self.dates}):
+            raise ValueError("날짜는 겹치지 않게 오름차순 ISO 형식(2026-12-25)으로 적습니다")
 
 
 @dataclass(frozen=True)
@@ -435,6 +461,7 @@ def encode_snapshot(snapshot: Snapshot) -> dict:
         pairs=[dict(room=room, rate_plan=plan) for room, plan in sorted(snapshot.pairs)],
         room_names=[dict(room=room, drawer=drawer) for room, drawer in sorted(snapshot.room_names.items())],
         no_sale=[dict(room=room, date=day) for room, day in sorted(snapshot.no_sale)],
+        dates=list(snapshot.dates),
     )
 
 
@@ -450,7 +477,8 @@ def decode_snapshot(data: Mapping) -> Snapshot:
                     cells, frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("reserved") or []),
                     frozenset((str(item["room"]), str(item["rate_plan"])) for item in data["pairs"]),
                     {str(item["room"]): str(item["drawer"]) for item in data.get("room_names") or []},
-                    frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("no_sale") or []), hotel_id)
+                    frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("no_sale") or []), hotel_id,
+                    tuple(iso_day(day) for day in data.get("dates") or ()))
 
 
 def encode_request(request: ChangeRequest | TargetTable) -> dict:
@@ -484,6 +512,25 @@ def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
         field=str(data.get("field") or "sell"),
         pairs=tuple((item["room"], item["rate_plan"]) for item in data.get("pairs") or ()),
     )
+
+
+def request_range(data: Mapping) -> ReadRange:
+    """요청 파일(읽을 범위 `kind: range` · 바꾸기 요청 · 목표 값 표) → 읽을 범위. 객실과 요금제를 따로 주면 그 모든 짝이다."""
+    if data.get("kind") != "range":
+        request = decode_request(data)
+        if isinstance(request, TargetTable):
+            keys = [target.key for target in request.targets]
+            pairs, dates = dict.fromkeys((key.room, key.rate_plan) for key in keys), sorted({key.date for key in keys})
+        else:
+            pairs = request.pairs or tuple((room, plan) for room in request.rooms for plan in request.rate_plans)
+            dates = request.dates
+        return ReadRange(request.hotel, request.hotel_id, request.offer, tuple(pairs), tuple(dates))
+    hotel, hotel_id = decode_hotel(data["hotel"])
+    pairs = tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("pairs") or ())
+    pairs = pairs or tuple((str(room), str(plan)) for room in data.get("rooms") or () for plan in data.get("rate_plans") or ())
+    if len(set(pairs)) != len(pairs):
+        raise ValueError("같은 객실·요금제 쌍이 두 번 있습니다")
+    return ReadRange(hotel, hotel_id, str(data["offer"]), pairs, tuple(str(day) for day in data.get("dates") or ()))
 
 
 def encode_change(change: CellChange) -> dict:

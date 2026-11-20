@@ -2,9 +2,10 @@
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
     look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제(답이 길 때)
-    read          ERP 화면 조각(HTML) 또는 브라우저 답(readPair · readReserved 와 그 조각의 take 답들) → 지금 값(snapshot.json)
-    read-calls    요청 → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음
-    reserved      readReserved 물음과 답 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
+    read-calls    읽을 범위(요청 파일, 또는 장부 번호) → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음(calls.json)
+    reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
+    read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
+                  시험용으로 ERP 화면 조각(HTML) 파일도 받는다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다
     render        preview | result | rollback | prices 페이지(HTML) 만들기
     begin         적용 시작 — 저장 단계를 장부에 적는다
@@ -12,7 +13,7 @@
     calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell)
     record-result 브라우저 답(applyBulk · applyCell JSON) 하나 → 그 단계를 장부에 됨·멈춤으로 적는다
     verify        적용 뒤 다시 읽은 값과 견주기
-    stale         미리보기 때 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
+    stale         장부 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
     rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다
     restore       지금 상태 저장으로 적어 둔 상태로 되돌리는 계산(rollback.json 과 같은 모양). --record 면 변경으로 적는다
     save-snapshot 지금 값을 장부에만 적어 두기
@@ -21,9 +22,13 @@
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
+장부 번호마다(미리보기 · 지금 상태 저장 · 되돌리기) 그 계산이 바탕으로 삼은 읽은 값을 적어 둔다. 그래서 같은 범위를 다시 읽을 때는
+`read-calls --record N`, 적용 직전 낡음 확인은 `stale --change N` 처럼 번호만 준다.
+
 예:
-    python3 price_change.py read --hotel "데모 호텔" --price-page "디럭스=p1.html" --adjust-page a.html --out snapshot.json
-    python3 price_change.py plan --snapshot snapshot.json --request request.json --record --out plan.json
+    python3 price_change.py read-calls --request range.json --out R/calls.json
+    python3 price_change.py read --calls R/calls.json --answers R --out R/snapshot.json
+    python3 price_change.py plan --snapshot R/snapshot.json --request request.json --record --out plan.json
     python3 price_change.py render preview --plan plan.json
 """
 
@@ -43,11 +48,13 @@ from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    BrowserError, attach_bodies, page_hotel, pair_reads, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+    BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reserved_probes, reserved_round, step_call,
+    step_outcome, unanswered,
 )
 from price_model import (
-    decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_plan,
-    TargetTable, encode_request, encode_snapshot, encode_step, snapshot_reading,
+    ReadRange, TargetTable, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change,
+    encode_hotel, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, request_range, same_hotel,
+    snapshot_reading,
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback
 from price_plan import (
@@ -126,18 +133,30 @@ def cmd_look(args):
     return {name: look.get(name) for name in ("login", "hotel", "offer", "offers", "pairs")}
 
 
+def load_calls(path: str) -> dict:
+    calls = load(path)
+    if not isinstance(calls, dict) or not isinstance(calls.get("pairs"), list) or not isinstance(calls.get("reserved"), list):
+        raise ValueError(f"read-calls 가 낸 파일(pairs · reserved)이 아닙니다: {path}")
+    return calls
+
+
 def cmd_read(args):
-    if args.pair_result:
+    if args.calls or args.answers:
+        if not (args.calls and args.answers):
+            raise ValueError("브라우저 답으로 읽을 때는 --calls(read-calls 가 낸 파일)와 --answers(답 파일·폴더)를 함께 줍니다")
         if args.hotel or args.hotel_id or args.price_page or args.adjust_page:
             raise ValueError("브라우저 답으로 읽을 때 호텔은 페이지가 알아본 것을 씁니다 — --hotel · --hotel-id · 화면 조각 파일을 같이 주지 않습니다")
-        pair_answers, reserved_answers = load_results(args.pair_result), load_results(args.reserved_result)
+        calls, results = load_calls(args.calls), load_results(args.answers)
+        missing = unanswered(calls["pairs"], results, "readPair")
+        if missing:
+            raise BrowserError(f"readPair 답이 없는 부를 값이 {len(missing)}개 있습니다 — 처음 것: {missing[0]['room']} · "
+                               f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다")
+        pair_answers, reserved_answers = answers_for(results, "readPair"), answers_for(results, "readReserved")
+        done = reserved_round(calls["reserved"], reserved_answers)
+        if not done.done:
+            raise BrowserError(f"예약 있는 날 물음이 {len(done.ask)}개 남았습니다 — reserved 명령으로 남은 물음을 보세요")
         hotel = page_hotel(pair_answers + reserved_answers)
-        pages, adjusts = pair_reads(pair_answers), []
-        if args.reserved_probes:
-            done = reserved_round(load(args.reserved_probes), reserved_answers)
-            if not done.done:
-                raise BrowserError(f"예약 있는 날 물음이 {len(done.ask)}개 남았습니다 — reserved 명령으로 남은 물음을 보세요")
-            adjusts = done.pages
+        pages, adjusts = pair_reads(pair_answers), done.pages
     else:
         if not (args.hotel and args.hotel_id):
             raise ValueError("화면 조각 파일로 읽을 때는 --hotel 과 --hotel-id 를 함께 줍니다")
@@ -147,22 +166,20 @@ def cmd_read(args):
     return encode_snapshot(build_snapshot(hotel["name"], args.read_at or now_text(), pages, adjusts, hotel["id"]))
 
 
-def request_scope(request) -> tuple[dict, str, list[tuple[str, str]], list[str]]:
-    hotel = encode_hotel(request.hotel, request.hotel_id)
-    if isinstance(request, TargetTable):
-        keys = [target.key for target in request.targets]
-        return hotel, request.offer, [(key.room, key.rate_plan) for key in keys], [key.date for key in keys]
-    pairs = list(request.pairs) or [(room, plan) for room in request.rooms for plan in request.rate_plans]
-    return hotel, request.offer, pairs, list(request.dates)
+def recorded_reading(ledger: Ledger, change_id: int):
+    """장부 번호의 계산이 바탕으로 삼은 읽은 값(Snapshot) — 읽은 범위와 그때 값이 들어 있다."""
+    return decode_snapshot(ledger.reading(change_id))
 
 
 def cmd_read_calls(args):
-    hotel, offer, pairs, dates = request_scope(decode_request(load(args.request)))
-    return dict(pairs=read_calls(hotel, offer, pairs, dates), reserved=reserved_probes(hotel, offer, pairs, dates))
+    scope: ReadRange = recorded_reading(Ledger(), args.record).range if args.record else request_range(load(args.request))
+    hotel = encode_hotel(scope.hotel, scope.hotel_id)
+    return dict(pairs=read_calls(hotel, scope.offer, scope.pairs, scope.dates),
+                reserved=reserved_probes(hotel, scope.offer, scope.pairs, scope.dates))
 
 
 def cmd_reserved(args):
-    done = reserved_round(load(args.probes), load_results(args.result))
+    done = reserved_round(load_calls(args.calls)["reserved"], answers_for(load_results(args.answers), "readReserved"))
     return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 
 
@@ -176,7 +193,8 @@ def cmd_plan(args):
     change_id = Ledger().record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=request.offer,
                                         currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
-                                        request=encode_request(plan.request)) if args.record else None
+                                        request=encode_request(plan.request),
+                                        reading=encode_snapshot(snapshot)) if args.record else None
     return dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
                 unresolved=[encode_change(change) for change in unresolved],
                 steps=None if steps is None else [encode_step(step) for step in steps])
@@ -262,7 +280,11 @@ def cmd_verify(args):
 
 
 def cmd_stale(args):
-    differences = stale_cells(decode_snapshot(load(args.before)), decode_snapshot(load(args.after)))
+    then, now = recorded_reading(Ledger(), args.change), decode_snapshot(load(args.snapshot))
+    if not same_hotel(then.hotel, then.hotel_id, now.hotel, now.hotel_id) or then.offer != now.offer:
+        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {args.change}번은 "
+                        f"{hotel_label(then.hotel, then.hotel_id)} · {then.offer} 입니다")
+    differences = stale_cells(then, now)
     return dict(same=not differences, differences=[
         dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in differences])
 
@@ -275,7 +297,7 @@ def cmd_rollback(args):
                               args.include_kept, select)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan),
-                                      reverses=args.change) if args.record else None
+                                      reverses=args.change, reading=encode_snapshot(snapshot)) if args.record else None
     return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
                 reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
@@ -288,7 +310,7 @@ def cmd_restore(args):
     plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), snapshot, select)
     change_id = ledger.record_preview(
         hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
-        read_at=plan.read_at, rows=rollback_rows(plan),
+        read_at=plan.read_at, rows=rollback_rows(plan), reading=encode_snapshot(snapshot),
         request=dict(kind="restore_snapshot", snapshot=args.saved, scope=scope)) if args.record else None
     return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
@@ -300,7 +322,7 @@ def cmd_save_snapshot(args):
     return dict(change_id=Ledger().record_snapshot(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer,
                                                    currency=snapshot.currency,
                                                    sentence=args.sentence, read_at=snapshot.read_at,
-                                                   rows=snapshot_rows(snapshot)))
+                                                   rows=snapshot_rows(snapshot), reading=encode_snapshot(snapshot)))
 
 
 def cmd_list(args):
@@ -322,22 +344,23 @@ def parser() -> argparse.ArgumentParser:
     sub = command("look", cmd_look, "stayPrice.look() 의 답(과 그 조각) → 호텔 · 오퍼 · 객실 × 요금제")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
 
-    sub = command("read", cmd_read, "ERP 화면 조각 → 지금 값")
-    sub.add_argument("--hotel", help="화면 조각 파일(시험용)로 읽을 때의 호텔 이름 — 브라우저 답은 페이지가 알아본 호텔을 쓴다")
-    sub.add_argument("--hotel-id", help="화면 조각 파일(시험용)로 읽을 때의 호텔 번호")
-    sub.add_argument("--price-page", action="append", help="'캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")
-    sub.add_argument("--pair-result", action="append", help="stayPrice.readPair 답과 그 조각의 take 답들 JSON — 목록 (여러 번)")
-    sub.add_argument("--adjust-page", action="append", help="[선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
-    sub.add_argument("--reserved-probes", help="read-calls 가 낸 readReserved 첫 물음(reserved 목록) JSON")
-    sub.add_argument("--reserved-result", action="append", help="stayPrice.readReserved 답과 take 답들 JSON — 목록 (여러 번)")
-    sub.add_argument("--read-at", help="읽은 시각(ISO). 없으면 지금")
-
-    sub = command("read-calls", cmd_read_calls, "요청 → readPair · readReserved 부를 값")
-    sub.add_argument("--request", required=True)
+    sub = command("read-calls", cmd_read_calls, "읽을 범위 → readPair · readReserved 부를 값")
+    scope = sub.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--request", help="요청 파일 — 읽을 범위(kind range) · 바꾸기 요청 · 목표 값 표")
+    scope.add_argument("--record", type=int, help="장부 번호 — 그 번호의 계산이 바탕으로 삼은 범위를 다시 읽는다")
 
     sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
-    sub.add_argument("--probes", required=True, help="read-calls 가 낸 reserved 목록 JSON")
-    sub.add_argument("--result", action="append", help="stayPrice.readReserved 답과 take 답들 JSON — 목록 (여러 번)")
+    sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
+    sub.add_argument("--answers", action="append", help="readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+
+    sub = command("read", cmd_read, "브라우저 답 → 지금 값")
+    sub.add_argument("--calls", help="read-calls 가 낸 파일")
+    sub.add_argument("--answers", action="append", help="readPair · readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub.add_argument("--read-at", help="읽은 시각(ISO). 없으면 지금")
+    sub.add_argument("--hotel", help="시험용: 화면 조각 파일로 읽을 때의 호텔 이름 — 브라우저 답은 페이지가 알아본 호텔을 쓴다")
+    sub.add_argument("--hotel-id", help="시험용: 화면 조각 파일로 읽을 때의 호텔 번호")
+    sub.add_argument("--price-page", action="append", help="시험용: '캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")
+    sub.add_argument("--adjust-page", action="append", help="시험용: [선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
 
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)
@@ -374,9 +397,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--snapshot", required=True)
 
-    sub = command("stale", cmd_stale, "미리보기 때 값과 방금 읽은 값 견주기")
-    sub.add_argument("--before", required=True)
-    sub.add_argument("--after", required=True)
+    sub = command("stale", cmd_stale, "장부 번호의 읽은 값과 방금 읽은 값 견주기")
+    sub.add_argument("--change", type=int, required=True, help="미리보기 · 되돌리기의 장부 번호")
+    sub.add_argument("--snapshot", required=True, help="방금 같은 범위로 읽은 값")
 
     sub = command("rollback", cmd_rollback, "되돌리기 계산")
     sub.add_argument("--change", type=int, required=True)
