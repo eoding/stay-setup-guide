@@ -317,14 +317,20 @@ def save_steps(writes: Iterable[CellWrite]) -> tuple[BulkStep | CellEditStep, ..
     return tuple(steps)
 
 
-def days_summary(days: Iterable[str]) -> str:
-    days = sorted(days)
+def day_runs(days: Iterable[str]) -> list[list[str]]:
+    """날짜 → 이어진 날끼리 묶은 목록(날짜 차례)."""
     runs: list[list[str]] = []
-    for day in days:
+    for day in sorted(days):
         if runs and _next_day(runs[-1][-1]) == day:
             runs[-1].append(day)
         else:
             runs.append([day])
+    return runs
+
+
+def days_summary(days: Iterable[str]) -> str:
+    days = sorted(days)
+    runs = day_runs(days)
     parts = [day_label(run[0]) if len(run) == 1 else f"{day_label(run[0])} ~ {day_label(run[-1])}" for run in runs]
     if len(parts) > 8:
         parts = parts[:8] + ["…"]

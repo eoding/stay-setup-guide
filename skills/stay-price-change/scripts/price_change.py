@@ -211,21 +211,21 @@ def cmd_render(args):
     if args.kind == "preview":
         data = load(args.plan)
         plan = decode_plan(data["plan"])
-        html = render_preview(plan, data.get("change_id"), [decode_step(step) for step in data.get("steps") or ()])
+        html = render_preview(plan, data.get("change_id"), [decode_step(step) for step in data.get("steps") or ()], args.by_date)
         hotel = plan.request.hotel
     elif args.kind == "rollback":
         data = load(args.plan)
         plan = decode_rollback(data["rollback"])
         html = render_rollback(plan, [(item["room"], item["date"]) for item in data.get("reserved") or ()],
-                               data.get("scope") or "")
+                               data.get("scope") or "", args.by_date)
         hotel = plan.hotel
     elif args.kind == "prices":
         snapshot = decode_snapshot(load(args.snapshot))
-        html, hotel = render_prices(snapshot), snapshot.hotel
+        html, hotel = render_prices(snapshot, args.by_date), snapshot.hotel
     else:
         ledger = Ledger()
         record = ledger.change(args.change)
-        html, hotel = render_result(record, str(ledger.path)), record.hotel
+        html, hotel = render_result(record, str(ledger.path), args.by_date), record.hotel
     path = Path(args.out) if args.out else page_path(hotel, args.kind)
     path.write_text(html, encoding="utf-8")
     return dict(page=str(path.resolve()))
@@ -403,6 +403,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--plan", help="preview 는 plan.json, rollback 은 rollback.json")
     sub.add_argument("--snapshot", help="prices 의 지금 값")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
+    sub.add_argument("--by-date", action="store_true",
+                     help="날짜마다 열 하나 — 기본은 8일 넘는 표에서 칸이 모두 같은 날끼리 열 하나(\"날짜별로 펼쳐 줘\")")
 
     sub = command("begin", cmd_begin, "적용 시작 — 적용 직전에 읽은 값이 미리보기 때와 같을 때만")
     sub.add_argument("--change", type=int, required=True)

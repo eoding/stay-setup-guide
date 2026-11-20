@@ -43,6 +43,7 @@ dl.kv dt { color: var(--soft); } dl.kv dd { margin:0; font-weight:600; }
 table { border-collapse: collapse; width:100%; font-size: 14px; margin: 6px 0 14px; }
 th, td { border:1px solid var(--line); padding: 5px 8px; text-align: right; white-space: nowrap; vertical-align: top; }
 th { background: var(--cell); font-weight:600; text-align:center; }
+th.days { white-space: normal; min-width: 8em; max-width: 18em; }
 td:first-child, th:first-child, td.text { text-align:left; }
 td.text { white-space: normal; }
 .was { color: var(--soft); } .now { font-weight: 700; } .arrow { color: var(--soft); padding: 0 3px; }

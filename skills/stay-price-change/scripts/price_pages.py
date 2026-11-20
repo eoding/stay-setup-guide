@@ -6,6 +6,9 @@
     render_rollback(plan)      되돌리기 미리보기 — 되돌리는 날짜, 그대로 두는 칸의 세 값과 까닭, 되돌리는 칸
     render_prices(snapshot)    지금 가격 보기 — 바꾸지 않고 표로만
 
+날짜 열은 ONE_COLUMN_PER_DATE_UP_TO(7)일까지 날짜마다 하나다(승인된 그림). 그보다 길면 표의 모든 줄이 똑같이 보이는 날끼리 —
+떨어져 있어도 — 열 하나를 쓰고, 열 머리에 날 수와 날짜 구간을 모두 적는다. `by_date` 면 길이와 상관없이 날짜마다 열 하나다.
+
 글은 전부 쉬운 한국어이고, 도우미는 이 스킬을 부르는 이름이다.
 """
 
@@ -28,15 +31,34 @@ from price_model import (
     CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellKey, CellValue, ChangeRequest, Plan,
     Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label, occupancy_order, value_of,
 )
-from price_plan import counts, days_summary
+from price_plan import counts, day_runs, days_summary
 
 MAKER = "어딩 Stay 가격 변경 도우미"
+ONE_COLUMN_PER_DATE_UP_TO = 7        # 날짜가 이만큼까지는 날짜마다 열 하나. 넘으면 칸이 모두 같은 날끼리 열 하나(결정 33A)
 
 
-def grid(keys: Iterable[CellKey], cell: Callable[[CellKey], tuple[str, str]], reserved: set, closed: set) -> str:
+def _short_day(day: str) -> str:
+    return f"{int(day[5:7])}/{int(day[8:10])}"
+
+
+def _ranges(days: Sequence[str], weekdays: bool) -> str:
+    """날짜 → "12/4 금 ~ 12/5 토, 12/11 ~ 12/12" — 모든 날을 이어진 구간으로. 요일은 구간이 셋까지면 모두, 넘으면 첫 구간만."""
+    runs = day_runs(days)
+    parts = []
+    for index, run in enumerate(runs):
+        label = day_label if weekdays and (len(runs) <= 3 or index == 0) else _short_day
+        parts.append(label(run[0]) if len(run) == 1 else f"{label(run[0])} ~ {label(run[-1])}")
+    return ", ".join(parts)
+
+
+def grid(keys: Iterable[CellKey], cell: Callable[[CellKey], tuple[str, str]], reserved: set, closed: set,
+         by_date: bool = False) -> str:
     """객실·요금제마다 표 하나 — 줄은 인원·박수, 열은 날짜. `cell` 은 `(td 모양 이름, 안쪽 HTML)` 을 돌려준다.
 
-    예약 있는 날은 날짜 머리에 단다. 마감은 그 열이 모두 마감이면 날짜 머리에, 아니면 그 칸에 단다.
+    날짜가 ONE_COLUMN_PER_DATE_UP_TO 보다 많으면(그리고 `by_date` 가 아니면) 모든 줄의 칸이 똑같이 그려지는 날끼리 열 하나를
+    쓴다(값 · 마감 · 빨간 줄 · 새 칸 같은 표시까지 같아야 한다). 열은 첫 날 차례이고, 머리에 날 수와 그 열의 날짜 구간을 모두
+    적어 어느 날이든 꼭 한 열에서 찾힌다. 예약 있는 날은 열을 가르지 않는다 — 머리에 그 날들을 적는다. 마감은 그 열이 모두
+    마감이면 머리에, 아니면 그 칸에 단다.
     """
     groups: dict[tuple[str, str], list[CellKey]] = {}
     for key in keys:
@@ -46,23 +68,35 @@ def grid(keys: Iterable[CellKey], cell: Callable[[CellKey], tuple[str, str]], re
         present = set(members)
         days = sorted({key.date for key in members})
         lines = sorted({(key.occupancy, key.nights) for key in members}, key=lambda line: (occupancy_order(line[0]), line[1]))
-        heads, full = [], set()
-        for day in days:
-            tags = '<span class="tag res">예약 있는 날</span>' if (room, day) in reserved else ""
-            if all(key in closed for key in members if key.date == day):
-                full.add(day)
-                tags += '<span class="tag closed">판매 마감</span>'
-            heads.append(f"<th>{esc(day_label(day))}{tags}</th>")
-        rows = []
-        for occupancy, nights in lines:
-            tds = []
+        full = {day for day in days if all(key in closed for key in members if key.date == day)}
+
+        def td(key: CellKey) -> str:
+            kind, inner = cell(key) if key in present else ("none", "—")
+            if key in closed and key.date not in full:
+                inner += '<span class="tag closed">마감</span>'
+            return f'<td class="{kind}">{inner}</td>' if kind else f"<td>{inner}</td>"
+
+        tds = {day: [td(CellKey(room, plan, day, occupancy, nights)) for occupancy, nights in lines] for day in days}
+        grouped = not by_date and len(days) > ONE_COLUMN_PER_DATE_UP_TO
+        columns: list[list[str]] = [[day] for day in days]
+        if grouped:
+            same: dict[tuple, list[str]] = {}
             for day in days:
-                key = CellKey(room, plan, day, occupancy, nights)
-                kind, inner = cell(key) if key in present else ("none", "—")
-                if key in closed and day not in full:
-                    inner += '<span class="tag closed">마감</span>'
-                tds.append(f'<td class="{kind}">{inner}</td>' if kind else f"<td>{inner}</td>")
-            rows.append(f"<tr><td>{esc(occupancy_label(occupancy))} · {esc(nights_label(nights))}</td>{''.join(tds)}</tr>")
+                same.setdefault((day in full, tuple(tds[day])), []).append(day)
+            columns = sorted(same.values(), key=lambda column: column[0])
+        heads, opener = [], '<th class="days">' if grouped else "<th>"
+        for column in columns:
+            booked = [day for day in column if (room, day) in reserved]
+            if grouped:
+                label = f"{len(column)}일 · {_ranges(column, weekdays=True)}"
+                tags = f'<span class="tag res">예약 있는 날 {esc(_ranges(booked, weekdays=False))}</span>' if booked else ""
+            else:
+                label, tags = day_label(column[0]), '<span class="tag res">예약 있는 날</span>' if booked else ""
+            if column[0] in full:
+                tags += '<span class="tag closed">판매 마감</span>'
+            heads.append(f"{opener}{esc(label)}{tags}</th>")
+        rows = [f"<tr><td>{esc(occupancy_label(occupancy))} · {esc(nights_label(nights))}</td>"
+                f"{''.join(tds[column[0]][index] for column in columns)}</tr>" for index, (occupancy, nights) in enumerate(lines)]
         out.append(f'<h3>{esc(room)} · {esc(plan)}</h3>\n<div class="scroll"><table><tr><th>인원 · 박수</th>{"".join(heads)}</tr>'
                    f'{"".join(rows)}</table></div>')
     return "\n".join(out)
@@ -115,7 +149,7 @@ def _rounding_note(currency: str) -> str:
     return f"계산하고 남는 끝자리는 {currency} {unit}까지 반올림합니다(ERP 와 같은 방식)."
 
 
-def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | None = None) -> str:
+def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | None = None, by_date: bool = False) -> str:
     request, currency = plan.request, plan.currency
     tally = counts(plan.changes, len(plan.skipped))
     by_key = {change.key: change for change in plan.changes}
@@ -156,7 +190,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         edits = sum(step.kind == "cell_edit" for step in steps)
         body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번'
                     f'{f", 그중 정가·원가를 비우는 셀 창 저장 {edits}번" if edits else ""}).</p>')
-    body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed),
+    body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed, by_date),
              _flagged_section(plan, currency), _new_section(plan, currency)]
     if targets:
         lines = [_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).",
@@ -334,7 +368,7 @@ def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
     return views
 
 
-def render_result(record: ChangeRecord, ledger_path: str | None = None) -> str:
+def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False) -> str:
     currency = record.currency
     views = cell_views(record)
     written = [view for view in views.values() if view.written and not view.rolled_back_by]
@@ -367,7 +401,7 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None) -> str:
             return "red", f'{moved}<small class="more">다시 읽은 값 {seen}</small>'
         return "", moved + ('<span class="tag ok">확인</span>' if view.verified and record.verified_at else "")
 
-    body += ["<h2>칸마다 넣은 값</h2>", grid(views, cell, reserved, closed)]
+    body += ["<h2>칸마다 넣은 값</h2>", grid(views, cell, reserved, closed, by_date)]
     if record.status in ("applied", "stopped"):
         lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
                  "이미 받은 예약의 금액은 그대로입니다.",
@@ -379,7 +413,7 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None) -> str:
     return page(title, "\n".join(body), MAKER)
 
 
-def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "") -> str:
+def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "", by_date: bool = False) -> str:
     currency = plan.currency
     what = "저장해 둔 상태로 되돌리기" if plan.mode == "restore" else "되돌리기"
     title = f"{what} 미리보기 · {plan.hotel} · {plan.offer}"
@@ -404,7 +438,7 @@ def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = ()
                    (sum((key.room, key.date) in reserved for key in restored), "되돌리는 칸 중 예약 있는 날")]),
             kept_table(plan, FIELD_LABELS), unremovable_table(plan, FIELD_LABELS),
             '<h2>되돌리는 칸 <span class="sub">— 예약 있는 날도 포함합니다</span></h2>',
-            grid([*restored, *held], cell, reserved, closed) if restored or held else
+            grid([*restored, *held], cell, reserved, closed, by_date) if restored or held else
             '<p class="sub">되돌릴 칸이 없습니다.</p>',
             rollback_ask(plan)]
     return page(title, "\n".join(body), MAKER)
@@ -416,7 +450,7 @@ def _with(value: CellValue, fields: Mapping[str, Decimal | None]) -> CellValue:
     return CellValue(merged["sell"], merged["list"], merged["supply"], "open" if value.state == "missing" else value.state)
 
 
-def render_prices(snapshot: Snapshot) -> str:
+def render_prices(snapshot: Snapshot, by_date: bool = False) -> str:
     currency = snapshot.currency
     title = f"지금 가격 · {snapshot.hotel} · {snapshot.offer}"
     cells = snapshot.cells
@@ -437,7 +471,7 @@ def render_prices(snapshot: Snapshot) -> str:
             stats([(len(priced), "가격 있는 칸"), (len(closed), "판매 마감인 칸"), (len(cells) - len(priced), "가격 없는 칸"),
                    (len(snapshot.reserved), "예약 있는 날 (객실 · 날짜)")]
                   + ([(len(snapshot.no_sale), "판매일 없는 날 (객실 · 날짜)")] if snapshot.no_sale else [])),
-            grid(sorted(cells, key=lambda k: (k.room, k.rate_plan, k.date)), cell, set(snapshot.reserved), closed),
+            grid(sorted(cells, key=lambda k: (k.room, k.rate_plan, k.date)), cell, set(snapshot.reserved), closed, by_date),
             *([f'<p class="sub">판매일 없음(판매일이 열리지 않은 날 — 칸이 없어 읽지 않았습니다): '
                + esc(" / ".join(f"{room} · {days_summary(day for r, day in snapshot.no_sale if r == room)}"
                                 for room in sorted({r for r, _ in snapshot.no_sale}))) + "</p>"] if snapshot.no_sale else []),
