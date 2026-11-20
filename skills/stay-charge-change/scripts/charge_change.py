@@ -370,7 +370,7 @@ def short_rollback(result: dict) -> dict:
         cause = (item.cause.change_id, item.cause.at, item.cause.sentence)
         causes[cause] = causes.get(cause, 0) + 1
     return dict(change_id=result["change_id"], replaces=result["replaces"], scope=result["scope"], restore_to=plan.restore_to,
-                restored=sum(len(item.targets) for item in plan.restored), kept=len(plan.kept),
+                restored=len(plan.restored), kept=len(plan.kept),
                 kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, items=count)
                           for (change_id, at, sentence), count in causes.items()],
                 saves=len(result["steps"]))
