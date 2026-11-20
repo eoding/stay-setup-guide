@@ -410,7 +410,7 @@ def cmd_restore(args):
     ledger = open_ledger()
     snapshot = decode_snapshot(load(args.snapshot))
     select, picked = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
-    plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), snapshot, select)
+    plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), recorded_reading(ledger, args.saved).range, snapshot, select)
     request = dict(kind="restore_snapshot", snapshot=args.saved, scope=picked)
     change_id = ledger.record_preview(
         hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, sentence=args.sentence,

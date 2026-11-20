@@ -634,9 +634,11 @@ def plan_cell_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str],
                          None if select is None else lambda kind, key: kind == ITEM_KIND and select(key_of_item(key)))
 
 
-def plan_cell_restore(snapshot: RecordedChange, now: Snapshot,
+def plan_cell_restore(snapshot: RecordedChange, scope: ReadRange, now: Snapshot,
                       select: Callable[[CellKey], bool] | None = None) -> RollbackPlan:
-    """저장해 둔 상태(장부의 지금 상태 저장)로 돌리기 — 지금 값을 그 범위만큼 읽었는지 보고 공통 계산에 넘긴다."""
+    """저장해 둔 상태(장부의 지금 상태 저장)로 돌리기 — `scope` 는 그 저장이 읽은 범위다. 지금 값을 그 범위만큼 읽었는지 보고,
+    그 범위 안의 칸만(`select` 를 주면 그 가운데 고른 칸만) 공통 계산에 넘긴다. 그래서 저장 뒤에 생긴 칸 가운데 지울 수 없는 칸으로
+    대는 것도 저장한 범위 안의 칸뿐이다(지금 값을 더 넓게 읽었어도)."""
     if not same_hotel(now.hotel, now.hotel_id, snapshot.hotel, snapshot.hotel_id) or now.offer != snapshot.offer:
         raise PlanError(f"지금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, 저장해 둔 상태는 "
                         f"{hotel_label(snapshot.hotel, snapshot.hotel_id)} · {snapshot.offer} 입니다")
@@ -646,8 +648,14 @@ def plan_cell_restore(snapshot: RecordedChange, now: Snapshot,
                    if not now.covers(key.room, key.rate_plan, key.date)})
     if gaps:
         raise PlanError(f"지금 값을 읽지 않은 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
-    return plan_restore(snapshot, snapshot_reading(now), now.read_at,
-                        None if select is None else lambda kind, key: kind == ITEM_KIND and select(key_of_item(key)))
+    pairs, days = set(scope.pairs), set(scope.dates)
+
+    def inside(kind: str, key: str) -> bool:
+        cell = key_of_item(key) if kind == ITEM_KIND else None
+        return (cell is not None and (cell.room, cell.rate_plan) in pairs and cell.date in days
+                and (select is None or select(cell)))
+
+    return plan_restore(snapshot, snapshot_reading(now), now.read_at, inside)
 
 
 def _restores(plan: RollbackPlan) -> list[tuple[CellKey, CellValue, CellWrite]]:

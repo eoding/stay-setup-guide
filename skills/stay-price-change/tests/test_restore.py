@@ -20,7 +20,7 @@ from change_core.items import Refused  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger, LedgerError  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
-    CellKey, Snapshot, Target, TargetTable, cell_item_key, encode_request, encode_snapshot, snapshot_reading,
+    CellKey, CellValue, Snapshot, Target, TargetTable, cell_item_key, encode_request, encode_snapshot, snapshot_reading,
 )
 from price_pages import render_preview, render_result, render_rollback  # noqa: E402
 from price_plan import (  # noqa: E402
@@ -61,7 +61,7 @@ class RestoreTest(unittest.TestCase):
         return scene.applied(current, steps, "2026-11-26T09:00:00+09:00")
 
     def test_restore_brings_every_cell_of_the_range_back_and_leaves_cells_created_since(self):
-        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.now)
+        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, self.now)
         self.assertEqual((plan.mode, plan.reverses, plan.restore_to), ("restore", self.saved, self.saved_state.read_at))
         self.assertEqual(len(plan.restored), 90)
         self.assertEqual([item.key for item in plan.unremovable], [cell_item_key(CREATED)])
@@ -72,7 +72,7 @@ class RestoreTest(unittest.TestCase):
                          {k: v for k, v in self.saved_state.cells.items() if k != CREATED})
 
     def test_a_restore_is_recorded_as_a_change_and_can_itself_be_rolled_back(self):
-        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.now)
+        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, self.now)
         restore = self.ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
                                              request=dict(kind="restore_snapshot", snapshot=self.saved))
@@ -90,9 +90,18 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual((len(back.restored), len(back.kept), back.unremovable), (90, 0, ()))
         self.assertEqual(scene.applied(restored, save_steps(rollback_writes(back))).cells, self.now.cells)
 
+    def test_a_cell_the_saved_state_never_had_is_unremovable_and_a_cell_outside_its_range_is_not_named(self):
+        tier = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 5)        # 5박 이상 — 저장할 때는 없던 박수 층(시즌을 다시 채워 생김)
+        outside = CellKey("디럭스", "조식 포함", "2027-01-03", "A2", 1)    # 저장한 범위 밖의 날 — 지금 값을 더 넓게 읽었다
+        now = scene.with_cells(self.now, {tier: CellValue(D("150.00"), None, None, "open"),
+                                          outside: CellValue(D("210.00"), None, None, "open")})
+        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, now)
+        self.assertEqual(sorted(item.key for item in plan.unremovable), sorted([cell_item_key(CREATED), cell_item_key(tier)]))
+        self.assertEqual(len(plan.restored), 90, "되돌리는 칸은 그대로")
+
     def test_part_of_the_saved_range_can_be_restored(self):
         select, scope = cell_filter(rooms=["디럭스"], date_from="2027-01-01")
-        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.now, select)
+        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, self.now, select)
         self.assertEqual((len(plan.restored), plan.unremovable, scope), (24, (), "디럭스 / 1/1 금 ~ 끝"))
 
     def test_only_a_saved_state_can_be_restored_and_the_range_must_be_read_now(self):
@@ -104,10 +113,10 @@ class RestoreTest(unittest.TestCase):
                            {k: v for k, v in self.now.cells.items() if k.room == "디럭스"}, self.now.reserved,
                            frozenset(pair for pair in self.now.pairs if pair[0] == "디럭스"))
         with self.assertRaises(Refused):
-            plan_cell_restore(self.ledger.recorded_snapshot(self.saved), partial)
+            plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, partial)
 
     def test_the_restore_preview_and_the_command(self):
-        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.now)
+        plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, self.now)
         text = visible(render_rollback(plan, self.now.reserved))
         self.assertIn("저장해 둔 상태로 되돌리기 미리보기 · 데모 호텔 · 기본 오퍼", text)
         self.assertIn("2026-11-20 14:02 에 저장해 둔 상태로 되돌립니다. 저장할 때 하신 말: “연말 가격 바꾸기 전에 저장”", text)
