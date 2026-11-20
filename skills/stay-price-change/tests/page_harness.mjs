@@ -106,6 +106,7 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   onBulkSave   'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다) | 'hang'(요청이 끝나지 않는다)
  *   drawerStuck  true 면 드로어가 닫혀도 내용이 비지 않는다(쉬는 화면이 오지 않는다)
  *   cell         셀 창 그리기 값 {date, plan, rows} · cellSave 'ok'|'error'
+ *   panelEdit · adjustSelectEdit  캘린더 판 · 가감 ① 조각을 바꾸는 함수(객실 이름 변형 등)
  *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다 · bare 면 아무것도 올리지 않는다(올리개 시험)
  */
 export function erpPage(opts = {}) {
@@ -113,9 +114,10 @@ export function erpPage(opts = {}) {
     cell: {}, cellSave: 'ok', withScripts: true }, opts);
   // 캡처한 7월 판을 다른 달로 — 달 머리·칸 날짜·[이전 달]/[다음 달] 의 달을 옮긴다
   const shift = (month, by) => { const d = new Date(month + '-01T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + by); return d.toISOString().slice(0, 7); };
-  const panelOf = (start, month = '2026-07') => start === 'overview' ? runFixture('panel--calendar--1.html')
+  const edit = o.panelEdit || ((html) => html);
+  const panelOf = (start, month = '2026-07') => edit(start === 'overview' ? runFixture('panel--calendar--1.html')
     : runFixture('panel--calendar--2.html').replaceAll('2026-06', '@prev').replaceAll('2026-08', '@next').replaceAll('2026-07', month)
-      .replaceAll('@prev', shift(month, -1)).replaceAll('@next', shift(month, 1));
+      .replaceAll('@prev', shift(month, -1)).replaceAll('@next', shift(month, 1)));
   const html = `<ul class="tab_style1 tab-container">
     <li class="tab"><a href="#stay_tab_offers" data-stay-tab="offers"${o.tab === 'offers' ? ' class="active"' : ''}><span>오퍼</span></a></li>
     <li class="tab"><a href="#stay_tab_sale_days" data-stay-tab="sale_days"><span>판매일</span></a></li>
@@ -164,7 +166,7 @@ export function erpPage(opts = {}) {
     } else if (b.matches('[data-calendar-bulk-action]')) {
       render(runFixture('calendar-bulk--close-step1.html'));
     } else if (b.matches('[data-calendar-adjust-action="open"]')) {
-      render(runFixture('calendar-adjust--step1.html'));
+      render((o.adjustSelectEdit || ((html) => html))(runFixture('calendar-adjust--step1.html')));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="next"]')) {
       render(echoHidden(o.bulkReview, formValues(body, ['date_selection_0'])));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="save"]')) {

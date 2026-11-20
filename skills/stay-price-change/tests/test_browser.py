@@ -16,8 +16,9 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
 from browser_replies import reply  # noqa: E402
+from erp_read import ParseError  # noqa: E402
 from price_browser import (  # noqa: E402
-    BrowserError, ask_sum, attach_bodies, periods, price_pages, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+    BrowserError, ask_sum, attach_bodies, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
 
@@ -73,14 +74,15 @@ class ReadCallsTest(unittest.TestCase):
 
     def test_read_answers_must_be_what_was_asked(self):
         asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함"}
-        page, = price_pages(reply("readPair", asked, {"fragment": PRICE}))
-        self.assertEqual((page.offer, page.rate_plan, page.currency), ("샘플 오퍼", "조식 포함", "USD"))
-        with self.assertRaisesRegex(BrowserError, "물은 것"):
-            price_pages(reply("readPair", dict(asked, ratePlan="룸온리"), {"fragment": PRICE}))
+        read, = pair_reads(reply("readPair", asked, {"fragment": PRICE}))
+        self.assertEqual((read.offer, read.room, read.rate_plan, read.page.room, read.page.currency),
+                         ("샘플 오퍼", "디럭스", "조식 포함", "샘플 오퍼 · 디럭스", "USD"))
+        with self.assertRaisesRegex(ParseError, "룸온리 를 물었는데 화면은 샘플 오퍼 · 조식 포함"):
+            pair_reads(reply("readPair", dict(asked, ratePlan="룸온리"), {"fragment": PRICE}))
         with self.assertRaisesRegex(BrowserError, "읽지 못했습니다: 칩이 없습니다"):
-            price_pages(reply("readPair", asked, ok=False, error="칩이 없습니다"))
+            pair_reads(reply("readPair", asked, ok=False, error="칩이 없습니다"))
         with self.assertRaisesRegex(BrowserError, "readPair 의 답이 아닙니다"):
-            price_pages(reply("applyBulk", asked, {"fragment": PRICE}))
+            pair_reads(reply("applyBulk", asked, {"fragment": PRICE}))
 
 
 class ReservedRoundTest(unittest.TestCase):

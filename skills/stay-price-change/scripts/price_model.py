@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from functools import cached_property
@@ -91,7 +91,10 @@ MISSING = CellValue(None, None, None, "missing")
 
 @dataclass(frozen=True)
 class Snapshot:
-    """ERP 에서 한 번 읽은 값. `pairs` 는 읽은 (객실, 요금제) 전부 — 칸이 하나도 없어도 읽었으면 여기 있다."""
+    """ERP 에서 한 번 읽은 값. `pairs` 는 읽은 (객실, 요금제) 전부 — 칸이 하나도 없어도 읽었으면 여기 있다.
+
+    객실은 캘린더 칩에 보이는 이름으로 적는다. `room_names` 는 그 이름 → 가격 수정 드로어가 같은 객실을 부르는 이름이다.
+    """
     hotel: str
     offer: str
     currency: str
@@ -99,6 +102,7 @@ class Snapshot:
     cells: Mapping[CellKey, CellValue]
     reserved: frozenset[tuple[str, str]]
     pairs: frozenset[tuple[str, str]]
+    room_names: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         stray = sorted({(key.room, key.rate_plan) for key in self.cells} - set(self.pairs))
@@ -400,6 +404,7 @@ def encode_snapshot(snapshot: Snapshot) -> dict:
         cells=[dict(encode_key(key), **encode_value(value)) for key, value in sorted(snapshot.cells.items())],
         reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)],
         pairs=[dict(room=room, rate_plan=plan) for room, plan in sorted(snapshot.pairs)],
+        room_names=[dict(room=room, drawer=drawer) for room, drawer in sorted(snapshot.room_names.items())],
     )
 
 
@@ -412,7 +417,8 @@ def decode_snapshot(data: Mapping) -> Snapshot:
         cells[key] = decode_value(item)
     return Snapshot(str(data["hotel"]), str(data["offer"]), str(data["currency"]).upper(), str(data["read_at"]),
                     cells, frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("reserved") or []),
-                    frozenset((str(item["room"]), str(item["rate_plan"])) for item in data["pairs"]))
+                    frozenset((str(item["room"]), str(item["rate_plan"])) for item in data["pairs"]),
+                    {str(item["room"]): str(item["drawer"]) for item in data.get("room_names") or []})
 
 
 def encode_request(request: ChangeRequest | TargetTable) -> dict:

@@ -71,7 +71,7 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
 
         wrong = self.write("wrong.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리"}, {"fragment": PRICE}))
-        self.assertIn("물은 것", self.run_cli("read", "--hotel", "H", "--pair-result", wrong, code=2)["error"])
+        self.assertIn("물었는데 화면은", self.run_cli("read", "--hotel", "H", "--pair-result", wrong, code=2)["error"])
 
     def test_calls_list_unsaved_steps_and_record_result_writes_only_the_step_it_answers(self):
         snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))

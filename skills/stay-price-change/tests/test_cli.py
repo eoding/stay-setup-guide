@@ -53,14 +53,15 @@ class CommandTest(unittest.TestCase):
     def test_read_builds_a_snapshot_from_fragments(self):
         erp = HERE / "fixtures" / "erp"
         adjust = (erp / "adjust-rejected.html").read_text(encoding="utf-8").replace("<td>스위트</td>", "<td>디럭스</td>")
-        result = self.run_cli("read", "--hotel", "데모 호텔", "--price-page", erp / "price-runs-closed-absent-list.html",
+        result = self.run_cli("read", "--hotel", "데모 호텔", "--price-page", f"디럭스={erp / 'price-runs-closed-absent-list.html'}",
                               "--adjust-page", self.write_text("adjust.html", adjust), "--read-at", "2026-11-20T14:02:00+09:00",
                               "--out", self.dir / "read.json")
         snapshot = decode_snapshot(json.loads((self.dir / "read.json").read_text(encoding="utf-8")))
         self.assertEqual((result["offer"], len(snapshot.cells), snapshot.currency), ("샘플 오퍼", 16, "USD"))
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
-        error = self.run_cli("read", "--hotel", "H", "--price-page", erp / "calendar-adjust--step2.html", code=2)
+        error = self.run_cli("read", "--hotel", "H", "--price-page", f"디럭스={erp / 'calendar-adjust--step2.html'}", code=2)
         self.assertIn("가격 수정", error["error"])
+        self.assertIn("캘린더의 객실 이름=파일", self.run_cli("read", "--hotel", "H", "--price-page", erp / "calendar-adjust--step2.html", code=2)["error"])
 
     def test_preview_apply_verify_rollback_and_list(self):
         first = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",

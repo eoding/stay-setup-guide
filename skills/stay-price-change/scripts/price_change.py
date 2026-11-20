@@ -21,7 +21,7 @@
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
 예:
-    python3 price_change.py read --hotel "데모 호텔" --price-page p1.html --adjust-page a.html --out snapshot.json
+    python3 price_change.py read --hotel "데모 호텔" --price-page "디럭스=p1.html" --adjust-page a.html --out snapshot.json
     python3 price_change.py plan --snapshot snapshot.json --request request.json --record --out plan.json
     python3 price_change.py render preview --plan plan.json
 """
@@ -40,8 +40,8 @@ from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
 from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
-from erp_read import ParseError, build_snapshot, parse_adjust_page, parse_price_page
-from price_browser import BrowserError, price_pages, read_calls, reserved_probes, reserved_round, step_call, step_outcome
+from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
+from price_browser import BrowserError, pair_reads, read_calls, reserved_probes, reserved_round, step_call, step_outcome
 from price_model import (
     decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_plan,
     TargetTable, encode_request, encode_snapshot, encode_step, snapshot_reading,
@@ -82,9 +82,17 @@ def load_results(paths) -> list:
     return results
 
 
+def price_page_arg(text: str) -> PairRead:
+    """`--price-page 캘린더의 객실 이름=파일` — 화면 조각에는 드로어의 객실 이름만 있어 칩의 이름을 따로 받는다."""
+    room, sep, path = text.partition("=")
+    if not sep or not room.strip() or not path:
+        raise ValueError(f"--price-page 는 '캘린더의 객실 이름=파일' 로 적습니다: {text}")
+    return PairRead.of(room.strip(), parse_price_page(Path(path).read_text(encoding="utf-8")))
+
+
 def cmd_read(args):
-    pages = [parse_price_page(Path(path).read_text(encoding="utf-8")) for path in args.price_page or ()]
-    pages += price_pages(load_results(args.pair_result))
+    pages = [price_page_arg(text) for text in args.price_page or ()]
+    pages += pair_reads(load_results(args.pair_result))
     adjusts = [parse_adjust_page(Path(path).read_text(encoding="utf-8")) for path in args.adjust_page or ()]
     if args.reserved_probes:
         done = reserved_round(load(args.reserved_probes), load_results(args.reserved_result))
@@ -253,7 +261,7 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("read", cmd_read, "ERP 화면 조각 → 지금 값")
     sub.add_argument("--hotel", required=True)
-    sub.add_argument("--price-page", action="append", help="[선택 날짜 가격 수정] 확인 단계 HTML (여러 번)")
+    sub.add_argument("--price-page", action="append", help="'캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")
     sub.add_argument("--pair-result", action="append", help="stayPrice.readPair 답과 그 조각의 take 답들 JSON — 목록 (여러 번)")
     sub.add_argument("--adjust-page", action="append", help="[선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
     sub.add_argument("--reserved-probes", help="read-calls 가 낸 readReserved 첫 물음(reserved 목록) JSON")

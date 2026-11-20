@@ -14,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
 from erp_read import (  # noqa: E402
-    ParseError, build_snapshot, expand_days, parse_adjust_page, parse_price_page,
+    PairRead, ParseError, build_snapshot, expand_days, parse_adjust_page, parse_price_page,
 )
 from price_model import MISSING, CellKey, CellValue  # noqa: E402
 
@@ -118,7 +118,7 @@ class SnapshotTest(unittest.TestCase):
         price = parse_price_page(fixture("price-runs-closed-absent-list.html"))
         adjust = parse_adjust_page(fixture("adjust-rejected.html").replace("<td>스위트</td><td>룸온리</td><td>A3",
                                                                            "<td>디럭스</td><td>룸온리</td><td>A3"))
-        snapshot = build_snapshot("데모 호텔", "2026-11-20T14:02:00+09:00", [price], [adjust])
+        snapshot = build_snapshot("데모 호텔", "2026-11-20T14:02:00+09:00", [PairRead.of("디럭스", price)], [adjust])
         self.assertEqual((snapshot.hotel, snapshot.offer, snapshot.currency), ("데모 호텔", "샘플 오퍼", "USD"))
         key = lambda day, occ="A2", nights=1: CellKey("디럭스", "조식 포함", day, occ, nights)  # noqa: E731
         self.assertEqual(snapshot.cells[key("2026-12-24")], CellValue(D("140.00"), None, D("110.00"), "open"))
@@ -133,7 +133,7 @@ class SnapshotTest(unittest.TestCase):
         price = parse_price_page(fixture("price-runs-closed-absent-list.html"))
         adjust = parse_adjust_page(fixture("adjust-rejected.html"))
         with self.assertRaises(ParseError):
-            build_snapshot("H", "t", [price], [adjust])
+            build_snapshot("H", "t", [PairRead.of("디럭스", price)], [adjust])
         hidden = parse_adjust_page(fixture("adjust-rejected.html").replace(
             "<td>스위트</td>", "<td>디럭스</td>").replace(
             "</table>\n    </div>\n  </section>\n  <div class=\"stay-banner",
@@ -141,21 +141,21 @@ class SnapshotTest(unittest.TestCase):
             "  <div class=\"stay-banner"))
         self.assertEqual(hidden.hidden, 3)
         with self.assertRaises(ParseError):
-            build_snapshot("H", "t", [price], [hidden])
+            build_snapshot("H", "t", [PairRead.of("디럭스", price)], [hidden])
         with self.assertRaises(ParseError):
-            build_snapshot("H", "t", [price, parse_price_page(fixture("calendar-bulk--price-step2.html"))])
+            build_snapshot("H", "t", [PairRead.of("디럭스", price), PairRead.of("디럭스", parse_price_page(fixture("calendar-bulk--price-step2.html")))])
         with self.assertRaises(ParseError):
-            build_snapshot("H", "t", [parse_price_page(fixture("calendar-bulk--price-step2.html"))])
+            build_snapshot("H", "t", [PairRead.of("디럭스", parse_price_page(fixture("calendar-bulk--price-step2.html")))])
 
     def test_a_day_state_the_helper_does_not_know_is_refused(self):
         mixed = parse_price_page(fixture("price-runs-closed-absent-list.html").replace(
             "<td>2026-12-26</td><td>요금제 마감</td>", "<td>2026-12-26</td><td>인원·박수별 상태 다름</td>"))
         with self.assertRaises(ParseError):
-            build_snapshot("H", "t", [mixed])
+            build_snapshot("H", "t", [PairRead.of("디럭스", mixed)])
 
     def test_real_capture_with_a_currency_code(self):
         page = parse_price_page(fixture("calendar-bulk--price-link-step2.html").replace("(공급 통화)", "(KRW)"))
-        snapshot = build_snapshot("H", "t", [page])
+        snapshot = build_snapshot("H", "t", [PairRead.of("디럭스", page)])
         self.assertEqual(snapshot.currency, "KRW")
         self.assertEqual(snapshot.cells[CellKey("디럭스", "조식 포함", "2026-07-01", "A3", 1)],
                          CellValue(D("180000.00"), None, None, "open"))

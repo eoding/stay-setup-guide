@@ -2,7 +2,12 @@
 
     parse_price_page(html)   [선택 날짜 가격 수정] 확인 단계 → 객실·요금제, 날짜별 상태, 인원·박수 줄마다 날짜별 기존 값
     parse_adjust_page(html)  [선택 날짜 가격 가감] 확인 단계 → 건너뛰는 칸 줄(날짜·객실·요금제·인원·박수·사유)과 숨긴 줄 수
-    build_snapshot(...)      위 둘을 합쳐 Snapshot — 예약 있는 날은 가감의 사유 "예약이 있는 날" 로 안다
+    build_snapshot(...)      읽은 객실 × 요금제들(PairRead)과 가감 확인 단계를 합쳐 Snapshot — 예약 있는 날은 가감의 사유
+                             "예약이 있는 날" 로 안다
+
+객실 이름은 둘이다. 캘린더 칩은 객실의 표시 이름(오퍼별 표시명 → 객실 타입 이름 → 저장된 이름)을 보이고, 가격 수정
+드로어는 판매 연결의 저장된 이름(흔히 「오퍼 · 객실」)을 보인다. 담당자는 칩의 이름으로 말하므로 Snapshot 은 칸을 칩의
+이름으로 적고 드로어의 이름을 옆에 둔다(`room_names`). 가감 화면의 객실 이름은 이 짝으로 맞춘다 — 글자를 잘라 맞추지 않는다.
 
 값은 표의 **칸 위치**로 열에 붙인다(기존 · 판매가 · 정가 · 공급 원가). 글자를 순서대로 읽으면 정가가 빈 줄에서
 공급 원가가 정가 자리로 밀린다. 날짜 칸은 하루(`2026-07-01`) 또는 이어진 구간(`2026-07-01 ~ 2026-07-05 (5일)`)이다.
@@ -260,21 +265,43 @@ def parse_adjust_page(html: str) -> AdjustPage:
     return AdjustPage(facts.get("오퍼", ""), tuple(rejected), hidden)
 
 
-def build_snapshot(hotel: str, read_at: str, price_pages: Iterable[PricePage],
+@dataclass(frozen=True)
+class PairRead:
+    """객실 × 요금제 하나를 읽은 것. `room` 은 캘린더 칩에 보이는 이름(담당자가 말하는 이름)이고 칸의 키가 된다.
+    `page` 는 그 칩으로 연 [선택 날짜 가격 수정] 확인 단계 — 화면의 오퍼·요금제가 물은 것과 다르면 만들어지지 않는다."""
+    offer: str
+    room: str
+    rate_plan: str
+    page: PricePage
+
+    def __post_init__(self):
+        if (self.page.offer, self.page.rate_plan) != (self.offer, self.rate_plan):
+            raise ParseError(f"{self.offer} · {self.room} · {self.rate_plan} 를 물었는데 화면은 {self.page.offer} · "
+                             f"{self.page.rate_plan} 입니다")
+
+    @classmethod
+    def of(cls, room: str, page: PricePage) -> "PairRead":
+        """캘린더의 객실 이름을 따로 아는 화면 조각 — 오퍼·요금제는 화면의 것."""
+        return cls(page.offer, room, page.rate_plan, page)
+
+
+def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
                    adjust_pages: Iterable[AdjustPage] = ()) -> Snapshot:
-    price_pages, adjust_pages = list(price_pages), list(adjust_pages)
-    if not price_pages:
+    reads, adjust_pages = list(reads), list(adjust_pages)
+    if not reads:
         raise ParseError("가격 수정 확인 단계를 하나 이상 읽어야 합니다")
-    offers = {page.offer for page in price_pages} | {page.offer for page in adjust_pages}
-    currencies = {page.currency for page in price_pages}
+    offers = {read.offer for read in reads} | {page.offer for page in adjust_pages}
+    currencies = {read.page.currency for read in reads}
     if len(offers) != 1:
         raise ParseError(f"오퍼가 섞였습니다: {' · '.join(sorted(offers))}")
     if len(currencies) != 1 or not re.fullmatch(r"[A-Z]{3}", next(iter(currencies))):
         raise ParseError(f"통화를 하나로 정하지 못했습니다: {' · '.join(sorted(currencies))}")
     offer = offers.pop()
-    cells, pairs = {}, set()
-    for page in price_pages:
-        room = page.room[len(offer) + 3:] if page.room.startswith(f"{offer} · ") else page.room
+    cells, pairs, names = {}, set(), {}
+    for read in reads:
+        page, room = read.page, read.room
+        if names.setdefault(room, page.room) != page.room:
+            raise ParseError(f"캘린더의 객실 {room} 이 드로어에서 두 이름으로 보입니다: {names[room]} · {page.room}")
         pairs.add((room, page.rate_plan))
         for row in page.rows:
             for day, value in row.values.items():
@@ -288,13 +315,27 @@ def build_snapshot(hotel: str, read_at: str, price_pages: Iterable[PricePage],
                     raise ParseError(f"{room} · {page.rate_plan} · {day} 는 가격 없음인데 값이 있는 줄이 있습니다")
                 else:
                     cells[key] = CellValue(*value, state)
-    rooms = {room for room, _plan in pairs}
     for page in adjust_pages:
         if page.hidden:
             raise ParseError(f"가감 확인 단계가 {page.hidden}줄을 숨겼습니다. 범위를 좁혀 다시 읽어야 예약 있는 날을 모두 압니다")
-    reserved = {(row.room, day) for page in adjust_pages for row in page.rejected if row.reason == RESERVED_REASON
-                for day in row.days}
-    unknown = sorted({room for room, _day in reserved} - rooms)
+    by_drawer: dict[str, set[str]] = {}
+    for shown, drawer in names.items():
+        by_drawer.setdefault(drawer, set()).add(shown)
+
+    def shown_name(name: str) -> str | None:
+        """가감 화면의 객실 이름 → 칩의 이름. 칩의 이름이면 그대로, 드로어의 이름이면 그 짝(둘 이상이 같은 드로어 이름이면 모른다)."""
+        if name in names:
+            return name
+        hits = by_drawer.get(name, set())
+        return next(iter(hits)) if len(hits) == 1 else None
+
+    reserved, unknown = set(), set()
+    for row in (row for page in adjust_pages for row in page.rejected if row.reason == RESERVED_REASON):
+        room = shown_name(row.room)
+        if room is None:
+            unknown.add(row.room)
+        else:
+            reserved.update((room, day) for day in row.days)
     if unknown:
-        raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(unknown)}")
-    return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs))
+        raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(sorted(unknown))}")
+    return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names)

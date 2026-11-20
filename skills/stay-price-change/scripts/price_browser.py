@@ -4,7 +4,7 @@
     reserved_probes(offer, pairs, dates)  readReserved 첫 물음 — 같은 기간마다 객실·요금제 전부
     attach_bodies(results)                읽기 답에 페이지에 남겨 둔 조각을 붙인다 — 쪽(take 답)을 잇고 바이트 수·CRC-32 를 맞춰 본다
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
-    price_pages(results)                  readPair 답 → 가격 수정 확인 단계(물은 오퍼·요금제와 화면이 다르면 거절)
+    pair_reads(results)                   readPair 답 → PairRead — 객실은 물은(캘린더 칩의) 이름, 화면의 오퍼·요금제가 다르면 거절
     step_call(no, offer, kind, body)      장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
     step_outcome(call, result)            브라우저 답 → (저장됨, 메모). 그 단계를 물은 답이 아니면 거절. 「알 수 없음」은 저장됨이 아니다
 
@@ -26,7 +26,7 @@ from datetime import date, timedelta
 from typing import Iterable, Mapping
 
 from change_core.money import money_text
-from erp_read import AdjustPage, PricePage, parse_adjust_page, parse_price_page
+from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
 from price_model import FIELDS, WEEKDAYS, decode_step, iso_day
 
 MAX_SPAN = 550                       # ERP 가 한 번에 받는 기간(일)
@@ -196,20 +196,17 @@ def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Rou
     return Round(ask, pages, [{"asked": probe, "error": failures[probe_key(probe)]} for probe in ask if probe_key(probe) in failures])
 
 
-def price_pages(results: Iterable[Mapping]) -> list[PricePage]:
-    """`results` 는 readPair 답과 그 조각의 take 답들."""
-    pages = []
+def pair_reads(results: Iterable[Mapping]) -> list[PairRead]:
+    """`results` 는 readPair 답과 그 조각의 take 답들. 객실은 물은 이름(캘린더 칩의 이름)으로 적는다."""
+    reads = []
     for result in attach_bodies(results):
         if result.get("op") != "readPair":
             raise BrowserError(f"readPair 의 답이 아닙니다: {result.get('op')}")
-        asked = result.get("asked") or {}
         if not result.get("ok"):
-            raise BrowserError(f"{asked.get('room')} · {asked.get('ratePlan')} 를 읽지 못했습니다: {result.get('error')}")
-        page = parse_price_page(result["fragment"])
-        if (page.offer, page.rate_plan) != (asked.get("offer"), asked.get("ratePlan")):
-            raise BrowserError(f"읽은 화면({page.offer} · {page.rate_plan})이 물은 것({asked.get('offer')} · {asked.get('ratePlan')})과 다릅니다")
-        pages.append(page)
-    return pages
+            raise BrowserError(f"{result.get('what') or '객실 · 요금제'} 를 읽지 못했습니다: {result.get('error')}")
+        asked = result["asked"]
+        reads.append(PairRead(asked["offer"], asked["room"], asked["ratePlan"], parse_price_page(result["fragment"])))
+    return reads
 
 
 def step_call(no: int, offer: str, kind: str, body: Mapping) -> dict:
