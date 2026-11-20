@@ -161,10 +161,13 @@ class FourShapesTest(Flow):
         self.assertIsNone(short["steps"], "30% 넘게 바뀌면 고르기 전에는 저장 단계가 없다")
         self.assertEqual([item["rule"] for item in short["red"]], ["OVER_30"])
         self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change), code=2)
-        choose = self.file("고름.json", [{"rule": "OVER_30", "choice": "include", "amounts": ["704 onsite"]}])
+        choose = self.file("고름.json", [{"rule": "OVER_30", "choice": "include", "amounts": ["704 onsite"],
+                                         "said": "현장 결제는 20달러 맞아요, 그대로 바꿔 주세요"}])
         _change, _plan, posts = self.round_trip(request, dict(resolutions=choose, replaces=change, name="plan-2.json"))
         sent = dict(posts[0])
         self.assertEqual((sent["onsite_amount"], sent["amount"], sent["onsite_currency"]), ("20.00", "0.00", "2"))
+        self.assertIn("“현장 결제는 20달러 맞아요, 그대로 바꿔 주세요”",
+                      self.cli("render", "result", "--change", _change, "--text")["text"], "고르며 한 말이 결과에 보인다")
         listed = {entry["id"]: entry for entry in self.cli("list")["changes"]}
         self.assertEqual(listed[change]["status"], "replaced")
 
@@ -177,9 +180,31 @@ class FourShapesTest(Flow):
         self.assertEqual(listed[change]["status"], "rolled_back")
         self.assertIn("1인 단가 +10%", listed[change]["scope"])
 
+    def test_the_words_said_with_a_red_line_choice_are_required_kept_in_the_ledger_and_shown(self):
+        said = "갈라 디너는 무료로 하기로 했어요"
+        request = self.request(GALA, value="0", sentence="갈라 디너 무료로")
+        first, _plan = self.preview(request)
+        snapshot = self.read(request=request)
+        refused = self.cli("plan", "--snapshot", snapshot, "--request", request, "--record", "--replaces", first, "--resolutions",
+                           self.file("bare.json", [{"rule": "OVER_30", "choice": "include"}]), "--out", self.work / "plan-2.json", code=2)
+        self.assertIn("(said)", refused["error"], "담당자의 말이 없는 고름은 받지 않는다")
+        short = self.cli("plan", "--snapshot", snapshot, "--request", request, "--record", "--replaces", first, "--resolutions",
+                         self.file("choices.json", [{"rule": "OVER_30", "choice": "include", "said": said}]),
+                         "--out", self.work / "plan-2.json")
+        self.assertEqual([(item["label"], item["said"]) for item in short["chosen"]], [("이대로 바꿈", said)])
+        db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")
+        kept = set(db.execute("SELECT DISTINCT choice, said FROM item_values WHERE change_id = ? AND choice IS NOT NULL",
+                              (short["change_id"],)))
+        db.close()
+        self.assertEqual(kept, {("include", said)})
+        self.apply(short["change_id"], self.work / "plan-2.json")
+        page = self.cli("render", "result", "--change", short["change_id"], "--text")["text"]
+        self.assertIn("고르신 빨간 줄", page)
+        self.assertIn(f"“{said}”", page)
+
     def test_zero_is_allowed_and_said_out_loud(self):
         change, plan = self.preview(self.request(GALA, value="0", sentence="갈라 디너 무료로"),
-                                    resolutions=self.file("고름-0.json", [{"rule": "OVER_30", "choice": "include"}]))
+                                    resolutions=self.file("고름-0.json", [{"rule": "OVER_30", "choice": "include", "said": "네 그대로요"}]))
         data = json.loads(plan.read_text(encoding="utf-8"))
         self.assertEqual((data["counts"]["free"], len(data["steps"])), (1, 1))
         self.assertIn("무료가 됩니다", self.cli("render", "preview", "--plan", plan, "--text")["text"])
@@ -237,7 +262,7 @@ class FreshReadingTest(Flow):
 class RollbackKeepsTest(Flow):
     def test_amounts_changed_since_are_kept_with_the_three_values_and_the_cause(self):
         change, plan = self.preview(self.request(LATE_BAND, GALA, value="60", sentence="둘 다 60"),
-                                    resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include"}]))
+                                    resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include", "said": "네 그대로요"}]))
         self.apply(change, plan)
         self.erp.charge("703")["amount"] = "70.00"                  # 도우미 밖에서 고침
         out = self.work / "rollback-1.json"
@@ -273,7 +298,7 @@ class RollbackKeepsTest(Flow):
 class StoppedTest(Flow):
     def test_a_failed_save_stops_and_check_lets_the_rest_continue_after_a_fresh_reading(self):
         change, plan = self.preview(self.request(GALA, CHILD, value="95", sentence="둘 다 95"),
-                                    resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include"}]))
+                                    resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include", "said": "네 그대로요"}]))
         self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change))
         first, second = self.cli("calls", "--change", change)["calls"]
         done = self.cli("record-result", "--change", change, "--result", self.file("1.json", self.erp.apply(first["payload"])))

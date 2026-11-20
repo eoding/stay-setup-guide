@@ -124,7 +124,8 @@ def rounder(charge: Charge, place: Place, currency: str) -> Callable[[Decimal], 
 
 @dataclass(frozen=True)
 class AmountChange:
-    """짚은 금액 칸 하나의 계산. `after` 는 셈한 후 값(셈하지 못했으면 None), `choice` 는 빨간 줄에 고른 것."""
+    """짚은 금액 칸 하나의 계산. `after` 는 셈한 후 값(셈하지 못했으면 None), `choice` 는 빨간 줄에 고른 것, `said` 는 그렇게
+    고르며 담당자가 한 말."""
     offer: str
     place: Place
     label: str
@@ -132,6 +133,7 @@ class AmountChange:
     after: Decimal | None
     verdict: str | None
     choice: str | None = None
+    said: str | None = None
 
     @property
     def id(self) -> str:
@@ -232,18 +234,19 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     """빨간 줄 고름을 칸에 단다. 고름의 `items` 는 금액 칸의 짧은 글자(place_id)다 — 그 규칙의 칸이 아니면 거절한다."""
     by_id = {change.id: change.place for change in plan.changes}
     keyed = [Resolution(item.rule, item.choice, None if item.items is None else tuple(by_id.get(str(name), str(name))
-                                                                                    for name in item.items))
+                                                                                    for name in item.items), item.said)
              for item in resolutions]
     flagged = {change.place: change.verdict for change in plan.changes if change.verdict}
     chosen, _waiting = decide(RULES, flagged, keyed, lambda place: f"금액 칸 {place_id(place) if isinstance(place, Place) else place}")
     return replace(plan, changes=tuple(_choose(change, chosen.get(change.place)) for change in plan.changes))
 
 
-def _choose(change: AmountChange, choice: str | None) -> AmountChange:
-    """고른 것을 단다 — 「그 칸은 안 바꿈」이면 후 값이 전 값이 된다(다른 두 도우미와 같다)."""
-    if choice is None:
+def _choose(change: AmountChange, resolution: Resolution | None) -> AmountChange:
+    """고른 것과 그렇게 고르며 한 말을 단다 — 「그 칸은 안 바꿈」이면 후 값이 전 값이 된다(다른 두 도우미와 같다)."""
+    if resolution is None:
         return change
-    return replace(change, choice=choice, after=change.before if choice == "keep" else change.after)
+    keep = resolution.choice == "keep"
+    return replace(change, choice=resolution.choice, said=resolution.said or None, after=change.before if keep else change.after)
 
 
 def unresolved(plan: Plan) -> tuple[AmountChange, ...]:
@@ -366,19 +369,19 @@ def step_call(no: int, hotel: str, hotel_id: str, step: ChargeStep) -> dict:
 
 def _rows(charge: Charge, changes: Mapping[Place, AmountChange] | None = None,
           targets: Mapping[Place, Decimal] | None = None) -> list[ValueRow]:
-    """부과금 하나의 금액 칸 전부 — 칸마다 전 값 · 후 값 · 넣는지 · 판정 · 고른 것(미리보기) 또는 되돌릴 값(되돌리기)."""
+    """부과금 하나의 금액 칸 전부 — 칸마다 전 값 · 후 값 · 넣는지 · 판정 · 고른 것과 그 말(미리보기) 또는 되돌릴 값(되돌리기)."""
     rows = []
     for place in charge.places():
         before = charge.value(place)
         change = (changes or {}).get(place)
         if change is not None:
-            after, write, verdict, choice = change.after, change.writes, change.verdict, change.choice
+            after, write, verdict, choice, said = change.after, change.writes, change.verdict, change.choice, change.said
         else:
             after = (targets or {}).get(place)
-            write, verdict, choice = after is not None and after != before, None, None
+            write, verdict, choice, said = after is not None and after != before, None, None, None
         rows.append(ValueRow(ITEM_KIND, place.key, charge.part_label(place.part, place.at), place.field, PRESENT, before,
                              None if after is None or after == before else after, verdict, (),
-                             "set" if write else None, choice))
+                             "set" if write else None, choice, said))
     return rows
 
 
@@ -438,12 +441,13 @@ def rollback_rows(plan: RollbackPlan, now: Snapshot) -> list[ValueRow]:
 def encode_change(change: AmountChange) -> dict:
     return dict(offer=change.offer, charge=change.place.charge, part=change.place.part, at=change.place.at,
                 field=change.place.field, label=change.label, before=money_text(change.before), after=money_text(change.after),
-                verdict=change.verdict, choice=change.choice)
+                verdict=change.verdict, choice=change.choice, said=change.said)
 
 
 def decode_change(data: Mapping) -> AmountChange:
     return AmountChange(str(data["offer"]), Place(str(data["charge"]), str(data["part"]), str(data["at"]), str(data["field"])),
-                        str(data["label"]), money(data["before"]), money(data["after"]), data["verdict"], data["choice"])
+                        str(data["label"]), money(data["before"]), money(data["after"]), data["verdict"], data["choice"],
+                        data.get("said"))
 
 
 def encode_plan(plan: Plan, encode_request) -> dict:

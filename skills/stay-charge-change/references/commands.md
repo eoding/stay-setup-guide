@@ -61,13 +61,13 @@
 | `FORM_REFUSES` | 바꿀 수 없음 | ERP 편집 창이 그 값으로는 저장을 받지 않는다(현장 결제 부과금의 온라인 금액은 0 · 연령별 단가는 인당 · 정액 · 시간대 없음에서만 · 금액은 정수 10자리까지) | "ERP 가 그 값으로는 저장하지 않습니다 — <`why`>" |
 | `OVER_30` | 빨간 줄 | 지금보다 30% 넘게 오르거나 내린다(0 에서 움직이면 넘은 것) | 고름: `include` 이대로 바꿈 · `keep` 그 칸은 안 바꿈 |
 
-고름은 `--resolutions "<작업>/resolutions.json"` 의 목록으로 준다: `[{"rule": "OVER_30", "choice": "include"}]`(그 규칙의 칸 전부) 또는 `[{"rule": "OVER_30", "choice": "keep", "amounts": ["704 onsite"]}]`(그 칸만 — 짧은 답 `red` 의 `examples` 에 있는 `amount` 글자). 그 규칙의 칸이 아니거나 바꿀 수 없음 규칙이면 거절한다. 고른 뒤 `plan` 을 새 이름 · `--replaces <앞 번호>` 로 다시 한다.
+고름은 `--resolutions "<작업>/resolutions.json"` 의 목록으로 준다: `[{"rule": "OVER_30", "choice": "include", "said": "그대로 올려 주세요"}]`(그 규칙의 칸 전부) 또는 `[{"rule": "OVER_30", "choice": "keep", "amounts": ["704 onsite"], "said": "리조트피는 그냥 둬"}]`(그 칸만 — 짧은 답 `red` 의 `examples` 에 있는 `amount` 글자). `said` 는 그렇게 고르며 담당자가 한 말 그대로다 — 없으면 거절한다. 장부가 고른 칸마다 적고 결과 페이지의 「고르신 빨간 줄」이 고른 것 옆에 보인다. 그 규칙의 칸이 아니거나 바꿀 수 없음 규칙이면 거절한다. 고른 뒤 `plan` 을 새 이름 · `--replaces <앞 번호>` 로 다시 한다.
 
 ## 짧은 답
 
 - `look`: `hotel` · `read_at` · `offers`(수) · `charges`(수).
 - `read`: `hotel` · `currency` · `read_at`(ERP 에서 읽은 시각 — 15분 창도 여기서 잰다) · `asked` · `found` · `missing`(목록에 없는 부과금 번호).
-- `plan`: `change_id` · `replaces` · `counts`(`amounts` 짚은 칸 · `charges` 부과금 수 · `will_change` · `unchanged`(안 바꾸기로 고른 칸 포함) · `blocked` · `red` 고를 칸 · `chosen` · `free` 무료가 되는 칸 · `missing` · 판정 코드마다의 수 — `will_change` · `unchanged` · `blocked` · `red` 가 짚은 칸을 빠짐없이 나눈다) · `saves`(저장 횟수 = 바뀌는 부과금 수, 빨간 줄이 남았으면 null, 저장할 것이 없으면 0) · `red`(규칙마다 `amounts` · `choices` · `examples` 의 `amount` · `name` · `moves`) · `chosen`(고른 칸과 그 말 `said`) · `blocked`(칸마다 `rule` · `label` · `why`) · `free`(칸마다 `amount` · `name`) · `scope_card`(편집 창에 적용 범위 칸이 있는지).
+- `plan`: `change_id` · `replaces` · `counts`(`amounts` 짚은 칸 · `charges` 부과금 수 · `will_change` · `unchanged`(안 바꾸기로 고른 칸 포함) · `blocked` · `red` 고를 칸 · `chosen` · `free` 무료가 되는 칸 · `missing` · 판정 코드마다의 수 — `will_change` · `unchanged` · `blocked` · `red` 가 짚은 칸을 빠짐없이 나눈다) · `saves`(저장 횟수 = 바뀌는 부과금 수, 빨간 줄이 남았으면 null, 저장할 것이 없으면 0) · `red`(규칙마다 `amounts` · `choices` · `examples` 의 `amount` · `name` · `moves`) · `chosen`(고른 칸마다 고름의 이름 `label` 과 담당자의 말 `said`) · `blocked`(칸마다 `rule` · `label` · `why`) · `free`(칸마다 `amount` · `name`) · `scope_card`(편집 창에 적용 범위 칸이 있는지).
 - `rollback`: `change_id` · `replaces` · `scope` · `restore_to`(적어 둔 시각) · `restored`(되돌리는 칸 수) · `kept` · `kept_why`(까닭마다 — 이 장부의 나중 변경 `change_id` · `at` · `sentence`, 아니면 `outside: true` 도우미 밖) · `saves`.
 
 ## 장부

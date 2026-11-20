@@ -12,8 +12,8 @@ from typing import Sequence
 from charge_model import FIELD_LABELS, Charge, Listing, Place, part_of_key
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
-    esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list,
-    stopped_choices, unremovable_table,
+    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
+    stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -81,8 +81,9 @@ def _moves(plan: Plan, change: AmountChange) -> str:
 
 
 def chosen_amounts(plan: Plan) -> list[dict]:
+    """고른 칸마다 — 고른 것의 이름(`label`)과 그렇게 고르며 담당자가 한 말(`said`)."""
     return [dict(amount=change.id, name=change.label, rule=change.verdict, choice=change.choice,
-                 said=CHOICE_LABELS[change.choice]) for change in plan.changes if change.choice]
+                 label=CHOICE_LABELS[change.choice], said=change.said) for change in plan.changes if change.choice]
 
 
 def blocked_amounts(plan: Plan) -> list[dict]:
@@ -189,7 +190,9 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     if moved:
         body.append('<div class="banner red"><b>그대로여야 할 칸이 달라졌습니다.</b> '
                     + esc(" · ".join(f"{item['label']} {item['what']}" for item in moved)) + "</div>")
-    body += [steps_list(record.steps, None, UNIT), stopped_choices(record, len(waiting), UNIT)]
+    body += [steps_list(record.steps, None, UNIT), stopped_choices(record, len(waiting), UNIT),
+             chosen_table([(RULES.by_code[verdict].label if verdict in RULES.by_code else str(verdict), CHOICE_LABELS[choice],
+                            len(keys), said) for verdict, choice, said, keys in chosen_groups(record.rows)], UNIT)]
     rows = []
     for row in record.rows:
         charge, part, at = part_of_key(row.item_key)
