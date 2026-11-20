@@ -45,6 +45,7 @@ FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
 SCHEMA_VERSION = 2
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
+CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -360,9 +361,10 @@ class Ledger:
         if self._status(header) != "stopped":
             return None
         failed = [step for step in steps if step["status"] == "failed"]
+        missed, unknown, cut_off = CAUSES
         if header["status"] == "applying" or not failed:
-            return "cut_off"
-        return "unknown" if any(step["unknown"] for step in failed) else "failed"
+            return cut_off
+        return unknown if any(step["unknown"] for step in failed) else missed
 
     @staticmethod
     def _mark_saved(db, header, index: int, note: str | None, stamp: str) -> None:

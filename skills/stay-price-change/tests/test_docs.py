@@ -15,9 +15,16 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL / "scripts"))
 
+from change_core.ledger import CAUSES, IDLE  # noqa: E402
 from price_change import parser  # noqa: E402
 
 DOCS = [SKILL / "SKILL.md", SKILL / "references" / "commands.md", SKILL / "references" / "page.md"]
+
+
+def required() -> dict[str, set[str]]:
+    sub = next(action for action in parser()._actions if isinstance(action, argparse._SubParsersAction))
+    return {name: {action.option_strings[0] for action in command._actions if action.required and action.option_strings}
+            for name, command in sub.choices.items()}
 
 
 def commands() -> dict[str, set[str]]:
@@ -92,6 +99,36 @@ class DocNamesTest(unittest.TestCase):
                             owner = current or next((c for c, flags in self.commands.items() if word in flags), None)
                             self.assertIsNotNone(owner, f"{doc.name}: 없는 플래그 {word} ({line.strip()})")
                             self.assertIn(word, self.commands[owner], f"{doc.name}: {owner} {word} ({line.strip()})")
+
+    def test_where_the_instructions_call_a_command_with_flags_they_give_every_required_flag(self):
+        # begin 은 적용 직전에 읽은 값(--snapshot) 없이는 시작하지 않는다(T1) — 글이 그 플래그를 빠뜨리면 여기서 실패한다
+        needed = required()
+        self.assertIn("--snapshot", needed["begin"])
+        for doc in DOCS:
+            for bit in code_bits(doc.read_text(encoding="utf-8")):
+                for line in bit.splitlines():
+                    words = [token.strip('"\'(),.;') for token in re.split(r"[\s`]+", line)]
+                    called = next((word for word in words if word in self.commands), None)
+                    flags = {word for word in words if word.startswith("--")}
+                    if called and flags & self.commands[called]:
+                        self.assertLessEqual(needed[called], flags, f"{doc.name}: {line.strip()}")
+
+    def test_the_instructions_say_the_idle_window_and_every_stop_cause_the_code_uses(self):
+        minutes = f"{int(IDLE.total_seconds() // 60)}분"
+        for doc in DOCS[:2]:
+            text = doc.read_text(encoding="utf-8")
+            self.assertIn(minutes, text, f"{doc.name}: 멈춤으로 보는 시간")
+            for cause in CAUSES:
+                self.assertIn(f"`{cause}`", text, f"{doc.name}: check 의 cause {cause}")
+
+    def test_page_md_names_every_storage_key_the_page_and_loader_write_and_no_other(self):
+        scripts = SKILL / "scripts" / "page"
+        keys = {key for name in ("stay_price.js", "stay_price_loader.js")
+                for key in re.findall(r"'(stayPrice[A-Z]\w*)'", (scripts / name).read_text(encoding="utf-8"))}
+        self.assertEqual(len(keys), 4, keys)
+        text = (SKILL / "references" / "page.md").read_text(encoding="utf-8")
+        paragraph = text[text.index("**페이지에 남기는 것.**"):].split("\n\n", 1)[0]
+        self.assertEqual(set(re.findall(r"`(stayPrice[A-Z]\w*)`", paragraph)), keys)
 
     def test_every_page_call_in_the_instructions_exists_with_that_name(self):
         for doc in DOCS:

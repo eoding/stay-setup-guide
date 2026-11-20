@@ -33,8 +33,8 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | `stale` | `--change` · `--snapshot` | 그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 → `{same, differences: [{key, then, now}]}`. 알리기만 하고 장부는 바꾸지 않는다(적용 직전의 확인은 `begin` 이 한다). 한쪽에만 있는 칸도 다른 칸이다. 예약 표시는 견주지 않는다. 다른 호텔의 값이면 거절한다. |
 | `rollback` | `--change` · `--snapshot` · `--include-kept` · `--room`·`--rate-plan`·`--occupancy` (여러 번) · `--from`·`--to` · `--record` · `--sentence` | 변경 하나(또는 고른 일부)를 되돌리는 계산 → `{change_id, scope, rollback, steps, reserved}`. 저장된 단계의 칸만 되돌린다. `rollback` 안에 `restore_to`(적어 둔 값의 시각)·`restored`·`kept`(세 값과 `cause`)·`unremovable`. 다른 호텔의 값이면 거절한다. |
 | `restore` | `--saved` · `--snapshot` · 고르기 플래그 · `--record` · `--sentence` | 지금 상태 저장으로 적은 상태로 되돌리는 계산. 답은 `rollback` 과 같은 모양. 장부에는 변경으로 적혀 이것도 되돌릴 수 있다. |
-| `save-snapshot` | `--snapshot` · `--sentence` | 지금 값을 장부에만 적는다 → `{change_id}`. |
-| `list` | 없음 | `{ledger, changes: [{id, kind, status, hotel, hotel_id, offer, sentence, read_at, created_at, applied_at, verified_at, reverses, items, written, rolled_back}]}`. 새것부터. `kind`: change · snapshot · rollback. `status`: previewed → applying → stopped / applied. 적용 중인데 15분 동안 아무 일(받아들인 읽은 값 · 적힌 저장 결과 · 이어서 해도 된다고 한 check)이 없으면 `stopped` 다(세션이 끊겼다). |
+| `save-snapshot` | `--snapshot` · `--sentence` | 지금 값을 장부에만 적는다 → `{change_id}`. `--sentence` 는 담당자의 말 그대로, 무엇을 적었는지 알 수 없는 말이면 "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태". |
+| `list` | 없음 | `{ledger, changes: [{id, kind, status, hotel, hotel_id, offer, sentence, read_at, created_at, applied_at, verified_at, reverses, items, written, rolled_back}]}`. 새것부터. `items` 는 그 번호에 적힌 칸 수(미리보기 · 지금 상태 저장의 칸), `written` 은 그중 저장이 끝난 단계가 쓴 칸 수(ERP 에 실제로 넣은 칸), `rolled_back` 은 그중 뒤의 되돌리기가 되돌린 칸 수다. `kind`: change · snapshot · rollback. `status`: previewed → applying → stopped / applied. 적용 중인데 15분 동안 아무 일(받아들인 읽은 값 · 적힌 저장 결과 · 이어서 해도 된다고 한 check)이 없으면 `stopped` 다(세션이 끊겼다). |
 
 `counts` 의 칸: `cells`(계산한 칸) · `will_change`(그중 적용할 수 없는 칸을 뺀 수) · `blocked` · `red` · `reserved` · `closed` · `new` · `skipped`, 그리고 규칙 코드마다의 수(`ABOVE_LIST` 등).
 

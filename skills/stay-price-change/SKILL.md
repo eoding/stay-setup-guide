@@ -44,8 +44,8 @@ metadata:
 1. **브라우저 도구.** Claude in Chrome 이면 JS 실행 `javascript_tool`, 파일 올리기 `file_upload`, 스크린샷 `computer`, 탭 `tabs_context_mcp` 를 쓴다. 다른 도구면 JS 를 실행해 값을 받기, 페이지의 파일 칸에 파일 넣기, 스크린샷 셋이 되는지 먼저 본다.
 2. **도우미 올리기.** 탭마다 한 번.
    1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체를 실행한다. 답은 `{ok: true, label: "stay price file bridge", …}`.
-   2. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸(`input#stay_price_bridge`)에 세 파일을 올린다: 러너의 `../stay-setup-run/scripts/stay_helper.js`, `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 그 경로를 못 읽으면 세 파일을 Claude 를 연 폴더에 복사해 거기서 올린다.
-   3. `await stayPriceLoader.load()` 를 실행한다. `ok: true` 와 `helper`·`price` 판 번호가 오면 됐다. `올라온 파일에 없는 것` 이면 빠진 파일을 같은 칸에 올리고 다시 부른다.
+   2. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸(`input#stay_price_bridge`)에 세 파일을 올린다: 러너의 `../stay-setup-run/scripts/stay_helper.js`, `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 파일 올리기 도구는 Claude 를 연 폴더(처음 작업 폴더, `pwd`) 아래의 파일만 읽어서 스킬 폴더의 경로를 거절할 수 있다. 그러면 그 폴더에 `stay-price-upload/` 를 만들어 세 파일을 복사하고 거기서 올린다.
+   3. `await stayPriceLoader.load()` 를 실행한다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다. 복사본을 썼으면 이제 `stay-price-upload/` 폴더를 지운다(페이지가 원본을 적어 두어 다시 쓰지 않는다). `올라온 파일에 없는 것` 이면 빠진 파일을 같은 칸에 올리고 다시 부른다.
    4. **이동 뒤**(새로 고침·로그인·다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`): 1 을 다시 하고 `stayPriceLoader.again()`. `적어 둔 원본이 없습니다` 면 2·3.
 3. **어디인지 보기.** `await stayPrice.look()`.
    - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 의 「이동 뒤」와 3.
@@ -76,7 +76,7 @@ metadata:
 
 1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look()` 의 답에서 보여 준다. 범위가 크면(호텔 전체, 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
 2. `<작업>/range.json`(`kind: range`)을 쓰고 「읽기」 → `<R>/snapshot.json`.
-3. `save-snapshot --snapshot <R>/snapshot.json --sentence "<담당자 말>"` → 장부 번호 S.
+3. `save-snapshot --snapshot <R>/snapshot.json --sentence "<담당자 말>"` → 장부 번호 S. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
 4. `render prices --snapshot <R>/snapshot.json` → `page` 를 연다.
 5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다."
 
@@ -94,7 +94,7 @@ metadata:
 오퍼 기본 오퍼 (오퍼가 여럿이라 이것으로 골랐습니다)
 객실 · 요금제 디럭스(조식 포함 · 룸온리), 스위트(조식 포함 · 룸온리) (말씀이 없어 전부)
 날짜 2026-12-20 ~ 2027-01-05 의 금·토 → 12/25, 12/26, 1/1, 1/2 (4일)
-바꾸는 값 판매가 +10% (정가 · 공급 원가는 그대로)
+바꾸는 값 판매가 +10% (어느 값인지 말씀이 없어 판매가로 했습니다 · 정가 · 공급 원가는 그대로)
 칸 모든 인원 조합 · 모든 박수 (말씀이 없어 전부)
 "연말"을 12/20 ~ 1/5 로 읽었습니다. 다르면 알려 주세요.
 ```
@@ -133,7 +133,7 @@ metadata:
 
 ## 4. 되돌리기
 
-`python3 scripts/price_change.py list` 로 장부 목록(번호·종류·상태·호텔·요청 문장·적용 시각)을 본다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. "이것 맞나요? 장부 12번 · 11/19 14:05 적용 · '연말 금·토 디럭스·스위트 10% 올려줘'". 종류가 `change`·`rollback` 이면 변경 되돌리기, `snapshot` 이면 저장해 둔 상태로 되돌리기다.
+`python3 scripts/price_change.py list` 로 장부 목록(번호·종류·상태·호텔·요청 문장·적용 시각)을 본다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. 맞는 줄이 하나뿐이어도 묻는다. "이것 맞나요? 장부 12번 · 11/19 14:05 적용 · '연말 금·토 디럭스·스위트 10% 올려줘'". 담당자가 "응"·"맞아"처럼 분명히 답한 뒤에 읽는다. 종류가 `change`·`rollback` 이면 변경 되돌리기, `snapshot` 이면 저장해 둔 상태로 되돌리기다.
 
 1. `read-calls --record <번호>` 로 「읽기」 → `<R>/snapshot.json`.
 2. 되돌리기 계산. 일부만이면 고르기 플래그를 붙인다: `--room`·`--rate-plan`(여러 번)·`--from`·`--to`(날짜)·`--occupancy`(인원 조합 키를 읽은 값에서 골라서, 성인 2 는 `A2`).

@@ -12,6 +12,8 @@
 | `stayPriceLoader.again()` | 이동 뒤에 적어 둔 원본을 같은 차례로 다시 실행한다. 원본이 없으면 `적어 둔 원본이 없습니다` |
 | `stayPriceLoader.status()` | `{ok, label, helper, price, stored}`. 올라 있는지 볼 때 |
 
+**페이지에 남기는 것.** 이 탭의 출처(ERP 주소)의 localStorage 에 `stayPrice` 로 시작하는 키 넷만 쓴다. 올리개가 적어 두는 원본 셋 `stayPriceHelperSrc`(러너의 도우미) · `stayPriceBootSrc`(러너의 부트) · `stayPriceSrc`(가격 도우미) — `again()` 이 다시 실행한다. 그리고 가격 도우미가 적는 `stayPriceLast`(마지막 작업의 답 · 도는 중이면 `{running}`) — `last()` 가 읽는다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다.
+
 올리면 페이지에 벽이 선다. 작업이 도는 동안에는 그 작업의 허용 목록에 없는 클릭·폼 제출을 막고, 작업 밖에서는 스크립트가 만든 클릭을 막는다(사람이 직접 누른 클릭은 지난다). 같은 탭에서 러너(stay-setup-run)를 돌려야 하면 담당자에게 그 탭을 새로 고쳐 달라고 한다. 새로 고치면 도우미가 내려간다.
 
 ## 보기와 작업
