@@ -94,6 +94,8 @@ class CommandTest(unittest.TestCase):
         self.assertEqual((short["cells"], short["read_at"], short["dates"]["count"]),
                          (len(whole["cells"]), "2026-11-20T14:02:00+09:00", len(whole["dates"])))
         self.assertNotIn('"rate_plan"', text, "칸 목록을 싣지 않는다")
+        self.assertEqual(short["rooms"], [{"room": "디럭스", "drawer": "샘플 오퍼 · 디럭스"}],
+                         "F3 — 요금표의 객실을 맞출 때 ERP 가 그 객실을 부르는 이름 둘(캘린더 칩 · 가격 수정 창)")
 
         short, whole, text = self.brief("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",
                                         "--out", self.dir / "plan-1.json")

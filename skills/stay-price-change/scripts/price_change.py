@@ -448,9 +448,14 @@ def short_read_calls(result: dict) -> dict:
 
 
 def short_read(result: dict) -> dict:
+    """`rooms` 는 읽은 객실마다 ERP 가 그 객실을 부르는 이름 둘 — `room` 캘린더 칩(요청 · 요금표 파일에 적는 이름), `drawer` 가격
+    수정 창(판매일이 없어 창을 열지 않은 객실은 null). 요금표의 객실 이름을 맞출 때 쓴다(sheet.md 3)."""
     cells = result["cells"]
     dates = result["dates"]
+    drawers = {item["room"]: item["drawer"] for item in result["room_names"]}
+    rooms = list(dict.fromkeys(item["room"] for item in result["pairs"]))
     return dict(hotel=result["hotel"], offer=result["offer"], currency=result["currency"], read_at=result["read_at"],
+                rooms=[dict(room=room, drawer=drawers.get(room)) for room in rooms],
                 cells=len(cells), priced=sum(cell["state"] != "missing" for cell in cells),
                 closed=sum(cell["state"] == "closed" for cell in cells), missing=sum(cell["state"] == "missing" for cell in cells),
                 reserved=len(result["reserved"]), no_sale=len(result["no_sale"]), pairs=len(result["pairs"]),
