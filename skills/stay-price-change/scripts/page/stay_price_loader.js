@@ -1,4 +1,5 @@
-/* stay_price_loader.js — 가격 변경 도우미를 로그인된 ERP 탭에 올리는 작은 실행 묶음 (stay-price-change · stay-addon-price-change).
+/* stay_price_loader.js — 가격 변경 도우미를 로그인된 ERP 탭에 올리는 작은 실행 묶음 (stay-price-change · stay-addon-price-change ·
+ * stay-charge-change).
  *
  * 쓰는 법(브라우저 도구 셋):
  *   1. JS 실행 도구로 이 파일 전체를 실행한다 → 파일 칸 `input#stay_price_bridge`(접근성 이름 `stay price file bridge`)가 생기고
@@ -11,16 +12,16 @@
  *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()`(부가옵션은 `again('addon')`) — 적어 둔 원본을 같은 차례로 다시 실행한다.
  *   `again` 이 거절하면(원본이 없거나 예전 판) 그 묶음의 파일 이름(`want`)을 대어, 무엇을 올릴지 그 답 하나로 안다.
  *
- * 묶음은 둘이다 — 인자 없이(가격 캘린더) 세 파일, `'addon'`(부가옵션 가격) 네 파일. `bridge` · `load` · `again` · `status` 가 같은
- * 인자를 받는다. 파일 칸은 하나라 네 이름을 모두 모은다.
+ * 묶음은 셋이다 — 인자 없이(가격 캘린더) 세 파일, `'addon'`(부가옵션 가격) 네 파일, `'charge'`(부과금) 네 파일. `bridge` · `load` ·
+ * `again` · `status` 가 같은 인자를 받는다. 파일 칸은 하나라 다섯 이름을 모두 모은다.
  *
- * 이 파일은 설치된 네 파일의 알아볼 값(`INSTALLED`)을 안다. 도우미는 이 파일을 설치된 스킬에서 늘 새로 붙여 넣으므로, 그 값과 다른
+ * 이 파일은 설치된 다섯 파일의 알아볼 값(`INSTALLED`)을 안다. 도우미는 이 파일을 설치된 스킬에서 늘 새로 붙여 넣으므로, 그 값과 다른
  * 글자는 예전 판이다 — `load()` 는 올라온 파일이, `again()` 은 적어 둔 원본이 그 값과 다르면 아무것도 실행하지 않고 어느 파일인지
  * 말한다. 플러그인을 새로 깐 뒤 예전 탭이 예전 코드를 되살리지 않는다.
  *
- * localStorage 에는 `stayPrice` 로 시작하는 키 다섯만 생긴다. 이 올리개는 원본만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·
- * `stayPriceSrc`, 부가옵션 묶음은 `stayPriceAddonSrc` 까지). 올린 가격 도우미는 마지막 작업의 답을 `stayPriceLast` 에 적는다(부가옵션
- * 도우미의 작업도 같은 작업 틀을 지나 같은 키에). 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 —
+ * localStorage 에는 `stayPrice` 로 시작하는 키 여섯만 생긴다. 이 올리개는 원본만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·
+ * `stayPriceSrc`, 부가옵션 묶음은 `stayPriceAddonSrc`, 부과금 묶음은 `stayPriceChargeSrc` 까지). 올린 가격 도우미는 마지막 작업의 답을
+ * `stayPriceLast` 에 적는다(부가옵션 · 부과금 도우미의 작업도 같은 작업 틀을 지나 같은 키에). 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 —
  * 탭에 예전 러너 실행의 원본(다른 판일 수 있다)과 계획·이어 하기 자리가 남아 있을 수 있고, 덮으면 그 실행이 깨진다.
  * 돌려주는 값에는 주소가 없다(파일 이름 · 바이트 수 · 판 번호뿐). 판 번호는 점을 `·` 로 바꿔 보낸다(`0·15·0`).
  */
@@ -32,18 +33,21 @@
   var HELPER = { name: 'stay_helper.js', key: 'stayPriceHelperSrc' };
   var BOOT = { name: 'stay_boot.js', key: 'stayPriceBootSrc' };
   var PRICE = { name: 'stay_price.js', key: 'stayPriceSrc' };
-  var ADDON = { name: 'stay_addon_price.js', key: 'stayPriceAddonSrc' };
+  // 묶음의 마지막 파일은 제 도우미를 세운다 — 상태(status)는 그 도우미의 판을 `report` 이름으로 알린다(전역 `global`)
+  var ADDON = { name: 'stay_addon_price.js', key: 'stayPriceAddonSrc', report: 'addon', global: 'stayAddonPrice' };
+  var CHARGE = { name: 'stay_charge.js', key: 'stayPriceChargeSrc', report: 'charge', global: 'stayCharge' };
   // 묶음 → 실행 차례. 인자 없이 부르면 가격 캘린더 묶음이다
-  var SETS = { price: [HELPER, BOOT, PRICE], addon: [HELPER, BOOT, PRICE, ADDON] };
-  var KNOWN = SETS.addon;
+  var SETS = { price: [HELPER, BOOT, PRICE], addon: [HELPER, BOOT, PRICE, ADDON], charge: [HELPER, BOOT, PRICE, CHARGE] };
+  var KNOWN = [HELPER, BOOT, PRICE, ADDON, CHARGE];
   var COUNT = { 3: '세', 4: '네' };
-  // 설치된 네 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
-  // 네 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
+  // 설치된 다섯 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
+  // 다섯 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
     'stay_price.js': { bytes: 98583, crc32: '38bdbfa3', fnv: 'd47076f9' },
-    'stay_addon_price.js': { bytes: 16410, crc32: '455612e3', fnv: '044d5bf7' }
+    'stay_addon_price.js': { bytes: 16410, crc32: '455612e3', fnv: '044d5bf7' },
+    'stay_charge.js': { bytes: 19860, crc32: 'ce1d29b3', fnv: 'f38659fb' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
 
@@ -101,7 +105,7 @@
     return Object.prototype.hasOwnProperty.call(SETS, set) ? SETS[set] : null;
   }
   function unknownSet(set) {
-    return clean({ ok: false, label: LABEL, error: '모르는 묶음입니다: ' + String(set).slice(0, 40) + ' — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격입니다' });
+    return clean({ ok: false, label: LABEL, error: '모르는 묶음입니다: ' + String(set).slice(0, 40) + ' — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격, "charge" 면 부과금입니다' });
   }
 
   function bridge(set) {
@@ -140,14 +144,14 @@
   function status(set) {
     var files = filesOf(set);
     if (!files) return unknownSet(set);
-    var addon = files === SETS.addon;
+    var extra = files.filter(function (f) { return f.report; });
     var out = {
-      ok: !!(window.stayRun && window.stayPrice && (!addon || window.stayAddonPrice)),
+      ok: !!(window.stayRun && window.stayPrice && extra.every(function (f) { return window[f.global]; })),
       label: LABEL,
       helper: window.stayRun ? window.stayRun.version : null,
       price: window.stayPrice ? window.stayPrice.version : null
     };
-    if (addon) out.addon = window.stayAddonPrice ? window.stayAddonPrice.version : null;
+    extra.forEach(function (f) { out[f.report] = window[f.global] ? window[f.global].version : null; });
     out.stored = files.filter(function (f) { return !!localStorage.getItem(f.key); }).map(function (f) { return f.key; });
     return clean(out);
   }

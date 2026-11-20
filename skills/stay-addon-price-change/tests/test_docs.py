@@ -152,7 +152,11 @@ class DocNamesTest(unittest.TestCase):
     def test_page_md_names_every_storage_key_the_loader_writes_for_this_helper(self):
         loader = (PRICE / "scripts" / "page" / "stay_price_loader.js").read_text(encoding="utf-8")
         page = (PRICE / "scripts" / "page" / "stay_price.js").read_text(encoding="utf-8")
-        keys = set(re.findall(r"'(stayPrice[A-Z]\w*)'", loader + page))
+        # 이 도우미의 묶음(`SETS.addon`)이 적는 원본 키와 가격 도우미가 적는 키 — 다른 묶음의 키는 이 도우미의 글에 없다
+        files = re.search(r"\baddon: \[([\w, ]+)\]", loader).group(1).split(", ")
+        self.assertEqual(len(files), 4, files)
+        keys = {re.search(rf"var {name} = \{{ name: '[\w.]+', key: '(stayPrice\w+)'", loader).group(1) for name in files}
+        keys |= set(re.findall(r"'(stayPrice[A-Z]\w*)'", page))
         text = (SKILL / "references" / "page.md").read_text(encoding="utf-8")
         paragraph = text[text.index("**페이지에 남기는 것.**"):].split("\n\n", 1)[0]
         self.assertEqual(set(re.findall(r"`(stayPrice[A-Z]\w*)`", paragraph)), keys)
