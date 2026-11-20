@@ -37,7 +37,9 @@ class Flow(unittest.TestCase):
         self.folder.cleanup()
 
     def cli(self, *args, script=SCRIPT, code=0):
-        done = subprocess.run([sys.executable, str(script), *map(str, args)], capture_output=True, text=True, env=self.env)
+        """명령 하나 — 장부의 시계는 작은 ERP 의 시계(마지막 답의 끝난 시각)에 서 있다. 이 컴퓨터의 시계에 기대지 않는다."""
+        env = dict(self.env, STAY_PRICE_TEST_NOW=self.erp.clock.isoformat())
+        done = subprocess.run([sys.executable, str(script), *map(str, args)], capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, code, f"{args[0]}: {done.stderr or done.stdout}")
         return json.loads(done.stdout) if code in (0, 1) else json.loads(done.stderr)
 
