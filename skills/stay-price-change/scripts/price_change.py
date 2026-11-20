@@ -6,6 +6,7 @@
     reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
                   읽은 시각(read_at)은 그 작업들이 끝난 시각 가운데 가장 이른 것이다. 시험용으로 ERP 화면 조각(HTML) 파일도 받는다
+                  reserved · read 는 기록 폴더의 앞선 읽기 폴더(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     sheet         요금표 파일(kind sheet) + look 의 답 → 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위와
                   페이지 작업 수(sheet-check.json). read-calls · plan · render sheet 가 이 파일을 받는다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다.
@@ -98,8 +99,7 @@ def page_path(hotel: str, kind: str) -> Path:
 
 
 ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
-EARLIER_HELP = ("같은 호텔의 앞선 읽기 폴더 (여러 번, 어느 작업 폴더의 것이든) — 그 안의 다 받은 조각만 빌린다. 이번 읽기의 답으로 치지 않는다. "
-                "알아볼 값(글자 수 · 바이트 수 · CRC-32 · FNV-1a)이 같은 조각은 다시 받지 않아도 된다")
+WORK = "작업"   # 기록 폴더 안의 작업 폴더들 — 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`, 그 안의 읽기마다 `읽기-1/` …
 
 
 def answer_files(paths) -> list[Path]:
@@ -129,6 +129,38 @@ def load_results(paths) -> list:
             data = text
         results += data if isinstance(data, list) else [data]
     return results
+
+
+def calls_hotel(calls: dict) -> str:
+    """read-calls 가 낸 부를 값이 부르는 호텔 번호 — 부를 값마다 같은 `hotel` 이 든다."""
+    ids = {str((call.get("hotel") or {}).get("id")) for call in calls["pairs"] + calls["reserved"]}
+    if len(ids) != 1:
+        raise ValueError(f"부를 값의 호텔이 하나가 아닙니다: {' · '.join(sorted(ids))}")
+    return ids.pop()
+
+
+def earlier_readings(hotel_id: str, own: list[Path]) -> list[Path]:
+    """기록 폴더의 읽기 폴더(`작업/<작업>/<읽기>/`) 가운데 같은 호텔을 읽은 것 — 그 폴더의 calls.json 이 그 호텔 번호를 부른다.
+    이번 읽기의 폴더(`own` — 부를 값 파일과 답 파일 · 폴더가 있는 곳)는 뺀다. 읽지 못하는 calls.json 은 건너뛴다(빌려 줄 뿐이다).
+
+    read · reserved 는 이 폴더들에서 다 받아 맞춰 본 조각만 빌린다. 이번 읽기의 답으로 치지 않는다(price_browser.attach_bodies)."""
+    own_folders = {(path if path.is_dir() else path.parent).resolve() for path in own}
+    found = []
+    for calls in sorted((ledger_dir() / WORK).glob("*/*/calls.json")):
+        if calls.parent.resolve() in own_folders:
+            continue
+        try:
+            if calls_hotel(json.loads(calls.read_text(encoding="utf-8"))) == hotel_id:
+                found.append(calls.parent)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return found
+
+
+def lent_answers(args, calls: dict) -> list:
+    """이번 읽기에 조각을 빌려 줄 답들 — 기록 폴더에서 같은 호텔을 읽은 앞선 읽기 폴더마다의 답 파일(earlier_readings)."""
+    own = [Path(args.calls), *map(Path, args.answers or ())]
+    return load_results(earlier_readings(calls_hotel(calls), own))
 
 
 def price_page_arg(text: str) -> PairRead:
@@ -170,7 +202,7 @@ def cmd_read(args):
                                f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다"
                                " (불렀는데 답이 끊겼거나 잘렸으면 stayPrice.last() 의 답을 새 파일로 저장해도 됩니다)")
         read_at = reading_time(results)
-        results = attach_bodies(results, load_results(args.earlier))
+        results = attach_bodies(results, lent_answers(args, calls))
         pair_answers, reserved_answers = answers_for(results, "readPair"), answers_for(results, "readReserved")
         done = reserved_round(calls["reserved"], reserved_answers)
         if not done.done:
@@ -211,8 +243,9 @@ def cmd_read_calls(args):
 
 
 def cmd_reserved(args):
+    calls = load_calls(args.calls)
     asked = answers_for(load_results(args.answers), "readReserved")
-    done = reserved_round(load_calls(args.calls)["reserved"], attach_bodies(asked, load_results(args.earlier)))
+    done = reserved_round(calls["reserved"], attach_bodies(asked, lent_answers(args, calls)))
     return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 
 
@@ -509,12 +542,10 @@ def parser() -> argparse.ArgumentParser:
     sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
     sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
     sub.add_argument("--answers", action="append", help="readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
-    sub.add_argument("--earlier", action="append", help=EARLIER_HELP)
 
     sub = command("read", cmd_read, "브라우저 답 → 지금 값")
     sub.add_argument("--calls", help="read-calls 가 낸 파일")
     sub.add_argument("--answers", action="append", help="readPair · readReserved 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
-    sub.add_argument("--earlier", action="append", help=EARLIER_HELP)
     sub.add_argument("--read-at", help="시험용: 화면 조각 파일로 읽을 때의 읽은 시각(ISO), 없으면 지금 — 브라우저 답은 작업들의 끝난 "
                      "시각(doneAt) 가운데 가장 이른 것이 읽은 시각이다")
     sub.add_argument("--hotel", help="시험용: 화면 조각 파일로 읽을 때의 호텔 이름 — 브라우저 답은 페이지가 알아본 호텔을 쓴다")
