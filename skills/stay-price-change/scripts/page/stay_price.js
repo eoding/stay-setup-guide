@@ -23,8 +23,8 @@
  *    허용 목록(ALLOW)에 없는 것은 막고 적는다. 러너 코드가 직접 부르는 `.click()` 도 여기에 걸린다. 막힌 것이
  *    하나라도 있으면 그 작업은 실패다. 버튼은 글자가 아니라 화면 뿌리 + `data-stay-*`·`data-calendar-*` 표식으로 찾는다.
  *    작업 밖에서도 이 파일이 올라 있는 동안은 스크립트가 만든 클릭을 막는다(사람의 클릭은 지난다) — `standDown()` 으로 내린다.
- *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않는다.
- *    러너 함수의 결과는 그대로 넘기지 않는다.
+ *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
+ *    조각 셋 이상뿐인 글자(`0.15.0`)는 점을 `·` 로 바꾼다(도구가 토큰으로 보고 가린다). 러너 함수의 결과는 그대로 넘기지 않는다.
  *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
  *    페이지에 두고 답에는 `body`(id · 글자 수 · 바이트 수 · CRC-32 · 쪽 수)만 싣는다. 답 하나·쪽 하나는 JSON 으로 800자 안이다.
  *  - localStorage 는 `stayPrice` 로 시작하는 키만 쓴다(`stayPriceLast`). 러너의 `staySteps`·`stayRunCursor` 는 쓰지 않는다.
@@ -59,11 +59,14 @@
     '[A-Za-z0-9_-]{32,}'
   ].join('|');
   var GONE = '[주소 지움]';
+  // 브라우저 도구는 답이 객체일 때, 점으로 이은 조각(글자·숫자·_·-) 셋 이상만으로 된 글자를 토큰으로 보고 통째로 가린다
+  // (`0.15.0` → `[BLOCKED: JWT token]`). 그런 글자는 점을 `·` 로 바꿔 보낸다 — 판 번호도 이름도 읽을 수 있게 남는다
+  var DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2,}$/;
   function addressLike(text) { return new RegExp(ADDRESS_SOURCE, 'i').test(String(text)); }
   function scrubText(text) {
     var out = text.replace(new RegExp(ADDRESS_SOURCE, 'gi'), GONE);
     if (out !== text && !out.split(GONE).join('').trim()) return undefined;   // 글자 전체가 주소였다
-    return out;
+    return DOTTED.test(out) ? out.split('.').join('·') : out;
   }
   function scrub(value, depth) {
     depth = depth || 0;
@@ -378,7 +381,7 @@
     return result;
   }
   function last() {
-    try { return JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch (e) { return null; }
+    try { return scrub(JSON.parse(localStorage.getItem(LAST_KEY) || 'null')); } catch (e) { return null; }
   }
 
   var SAVES = { applyBulk: 'bulkSave', applyCell: 'cellSave' };
@@ -1030,5 +1033,5 @@
       return { clicks: wall.log.clicks.slice(), blocked: wall.log.blocked.slice() };
     }
   };
-  return { ok: true, version: VERSION };
+  return scrub({ ok: true, version: VERSION });
 })();

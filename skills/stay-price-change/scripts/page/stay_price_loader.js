@@ -12,7 +12,7 @@
  * localStorage 에는 원본 셋만, `stayPrice` 로 시작하는 제 키에만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·`stayPriceSrc`).
  * 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 — 탭에 예전 러너 실행의
  * 원본(다른 판일 수 있다)과 계획·이어 하기 자리가 남아 있을 수 있고, 덮으면 그 실행이 깨진다.
- * 돌려주는 값에는 주소가 없다(파일 이름 · 바이트 수 · 판 번호뿐).
+ * 돌려주는 값에는 주소가 없다(파일 이름 · 바이트 수 · 판 번호뿐). 판 번호는 점을 `·` 로 바꿔 보낸다(`0·15·0`).
  */
 (function () {
   'use strict';
@@ -56,9 +56,22 @@
     input.hidden = false;
     input.setAttribute('aria-label', LABEL);
     input.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;z-index:2147483647;';
-    return { ok: true, bridge: BRIDGE, label: LABEL, want: FILES.map(function (f) { return f.name; }) };
+    return clean({ ok: true, bridge: BRIDGE, label: LABEL, want: FILES.map(function (f) { return f.name; }) });
   }
-  function clean(result) { return window.stayPrice && typeof window.stayPrice.scrub === 'function' ? window.stayPrice.scrub(result) : result; }
+  // 브라우저 도구는 점으로 이은 조각 셋 이상뿐인 글자(판 번호 `0.15.0`)를 토큰으로 보고 가린다 — 점을 `·` 로 바꾼다.
+  // 가격 도우미가 올라오기 전의 답도 지나므로 `stayPrice.scrub` 과 따로 둔다(그 scrub 도 같은 규칙이다)
+  var DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2,}$/;
+  function dotless(value) {
+    if (typeof value === 'string') return DOTTED.test(value) ? value.split('.').join('·') : value;
+    if (Array.isArray(value)) return value.map(dotless);
+    if (value && typeof value === 'object') {
+      var out = {};
+      Object.keys(value).forEach(function (k) { out[k] = dotless(value[k]); });
+      return out;
+    }
+    return value;
+  }
+  function clean(result) { return dotless(window.stayPrice && typeof window.stayPrice.scrub === 'function' ? window.stayPrice.scrub(result) : result); }
   function status() {
     return clean({
       ok: !!(window.stayRun && window.stayPrice),

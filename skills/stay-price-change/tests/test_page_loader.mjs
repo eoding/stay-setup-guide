@@ -39,8 +39,8 @@ test('B10 · 올리개를 실행하면 숨은 파일 칸이 생기고, 세 파�
   upload(page, [['stay_boot.js', BOOT], ['stay_helper.js', HELPER]]);
   const r = plain(await page.w.stayPriceLoader.load());
   assert.equal(r.ok, true, r.error);
-  assert.equal(r.helper, page.w.stayRun.version);
-  assert.equal(r.price, page.w.stayPrice.version);
+  assert.equal(r.helper, page.w.stayRun.version.split('.').join('·'), '판 번호는 점을 · 로 바꿔 보낸다(도구가 0.15.0 을 가린다)');
+  assert.equal(r.price, page.w.stayPrice.version.split('.').join('·'));
   assert.deepEqual(r.loaded.map((f) => f.name), ['stay_helper.js', 'stay_boot.js', 'stay_price.js']);
   assert.deepEqual(r.stored, KEYS);
   assert.ok(!LEAK.test(JSON.stringify(r)), JSON.stringify(r));
@@ -110,7 +110,7 @@ test('B10 · 전체 페이지 이동 뒤에는 올리개를 다시 실행하고 
   const again = plain(next.w.stayPriceLoader.again());
   assert.equal(again.ok, true, again.error);
   assert.equal(typeof next.w.stayPrice.readPair, 'function');
-  assert.equal(next.w.stayRun.version, again.helper, 'again() 은 제 키의 원본을 실행했다(러너 키의 예전 원본이 아니다)');
+  assert.equal(next.w.stayRun.version.split('.').join('·'), again.helper, 'again() 은 제 키의 원본을 실행했다(러너 키의 예전 원본이 아니다)');
   runnerKeysUntouched(next);
   next.w.close();
 
