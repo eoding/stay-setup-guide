@@ -262,8 +262,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         lines = [_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).", *marked]
         if tally["new"]:   # 있던 칸에 넣은 정가·공급 원가는 새 칸이 아니다 — 되돌리면 다시 비워진다
             lines.append("새로 생기는 칸은 나중에 되돌리기로 지울 수 없습니다. 꼭 필요한 칸인지 확인해 주세요.")
-        body += [notes(lines),
-                 '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
+        body += [notes(lines), _ending(tally)]
         return page(title, "\n".join(body), MAKER)
     others = [FIELD_LABELS[name] for name in FIELDS if name != request.field]
     moved_list = sum(change.choice in ("raise_list", "clear_list") for change in plan.changes)
@@ -275,9 +274,22 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         lines.insert(0, "아동이 있는 칸은 아동 추가분도 같은 비율로 곱했습니다." if request.scale_child_surcharge else
                      "아동이 있는 칸은 ERP 와 똑같이 성인 몫에만 곱하고 아동 추가분은 그대로 둡니다. "
                      "아동 추가분도 같이 바꾸려면 그렇게 말씀해 주세요.")
-    body += [notes(lines),
-             '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
+    body += [notes(lines), _ending(tally)]
     return page(title, "\n".join(body), MAKER)
+
+
+APPLY_INVITE = '말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.'
+
+
+def _ending(tally: Mapping) -> str:
+    """미리보기의 끝 — 지금 담당자가 할 일. 고를 빨간 줄이 남았으면 그것이 먼저이고 "적용"을 청하지 않는다(Y3). 저장할 칸이 없으면
+    적용할 것이 없다고 한다."""
+    if tally["red"]:
+        return (f'<div class="banner red"><b>아직 적용할 수 없습니다.</b> 먼저 빨간 줄 {tally["red"]:,}칸을 어떻게 할지 대화창에서 '
+                "말씀해 주세요(고를 것은 위의 빨간 띠에 있습니다). 고르시면 미리보기를 다시 보여 드립니다.</div>")
+    if not tally["will_change"]:
+        return '<div class="banner blue">바꿀 칸이 없어 적용할 것이 없습니다. 아무것도 바뀌지 않았습니다.</div>'
+    return f'<div class="banner blue">{APPLY_INVITE}</div>'
 
 
 def _coverage_section(gaps: Sequence[Gap]) -> str:

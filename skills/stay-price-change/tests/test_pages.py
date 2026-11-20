@@ -23,7 +23,7 @@ from price_model import (  # noqa: E402
     ITEM_KIND, CellKey, CellValue, ChangeRequest, Snapshot, cell_item_key, cell_name, encode_request, snapshot_reading,
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback  # noqa: E402
-from price_plan import plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
+from price_plan import plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, step_plans, unresolved  # noqa: E402
 
 D = Decimal
 
@@ -94,6 +94,25 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("88 바뀌는 칸", text, "안 바꾸기로 고른 칸은 바뀌는 칸에서 빠진다")
         self.assertIn("480.00 그대로 그 칸은 안 바꿈", text)
         self.assertNotIn("480.00 → 528.00", text)
+
+    def test_y3_the_preview_ends_with_what_is_needed_first_and_never_invites_apply_while_a_choice_is_open(self):
+        def ending(plan):
+            return visible(render_preview(plan, steps=plan_steps(plan))).rsplit("아동이 있는 칸", 1)[-1]
+
+        fresh = plan_change(scene.snapshot(), scene.request())
+        self.assertTrue(unresolved(fresh))
+        text = visible(render_preview(fresh))
+        self.assertNotIn("이라고 하시면 바꿉니다", text, "고를 빨간 줄이 남은 미리보기는 적용을 청하지 않는다")
+        self.assertTrue(text.endswith("아직 적용할 수 없습니다. 먼저 빨간 줄 2칸을 어떻게 할지 대화창에서 말씀해 주세요"
+                                      "(고를 것은 위의 빨간 띠에 있습니다). 고르시면 미리보기를 다시 보여 드립니다. "
+                                      "어딩 Stay 가격 변경 도우미가 만든 페이지입니다."), text[-200:])
+        chosen = resolve(fresh, [Resolution("ABOVE_LIST", "raise_list")])
+        self.assertIn('대화창에서 "적용"이라고 하시면 바꿉니다.', ending(chosen), "다 고르면 그때 적용을 청한다")
+        nothing = resolve(plan_change(scene.snapshot(), scene.request(rooms=("스위트",), rate_plans=("조식 포함",),
+                                                                      dates=("2027-01-01",), occupancies=("A2",), nights=(1,))),
+                          [Resolution("ABOVE_LIST", "keep")])
+        self.assertIn("바꿀 칸이 없어 적용할 것이 없습니다.", ending(nothing))
+        self.assertNotIn("이라고 하시면 바꿉니다", ending(nothing))
 
     def test_v5_notes_about_reserved_and_closed_days_only_when_the_plan_has_such_cells(self):
         whole = visible(render_preview(plan_change(scene.snapshot(), scene.request())))
