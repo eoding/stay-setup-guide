@@ -38,11 +38,11 @@ from change_core.rules import Resolution
 from erp_read import ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_model import (
     decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_plan,
-    encode_request, encode_snapshot, encode_step, snapshot_reading,
+    TargetTable, encode_request, encode_snapshot, encode_step, snapshot_reading,
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback
 from price_plan import (
-    PlanError, counts, plan_cell_rollback, plan_change, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    PlanError, counts, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
     snapshot_rows, stale_cells, step_plans,
 )
 
@@ -75,7 +75,7 @@ def cmd_read(args):
 
 def cmd_plan(args):
     snapshot, request = decode_snapshot(load(args.snapshot)), decode_request(load(args.request))
-    plan = plan_change(snapshot, request)
+    plan = plan_targets(snapshot, request) if isinstance(request, TargetTable) else plan_change(snapshot, request)
     resolutions = [Resolution(str(item["rule"]), str(item["choice"]), decode_resolution_items(item.get("cells")))
                    for item in load(args.resolutions)] if args.resolutions else []
     writes, unresolved = resolve(plan, resolutions)
@@ -185,7 +185,7 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)
-    sub.add_argument("--request", required=True)
+    sub.add_argument("--request", required=True, help="요청 JSON — 바꾸는 방법(kind change) 또는 목표 값 표(kind targets)")
     sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "ABOVE_LIST", "choice": "raise_list"}]')
     sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
 

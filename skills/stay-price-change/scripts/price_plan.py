@@ -3,6 +3,7 @@
 브라우저·파일을 모르는 순수 함수만 둔다.
 
     plan_change(snapshot, request)      → Plan          칸마다 전 → 후, 표시, 판정
+    plan_targets(snapshot, table)       → Plan          목표 값 표 — 다른 칸만, 새로 생기는 칸 포함
     resolve(plan, resolutions)          → (writes, unresolved)   빨간 줄을 고른 뒤 넣을 값
     save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 이어진 날짜(줄마다 같은 값)
     stale_cells(then, now)              → 다른 항목들   (change_core.items.stale_items)
@@ -23,9 +24,9 @@ from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_
 from change_core.rules import BLOCKED, RED, Resolution, decide
 
 from price_model import (
-    CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
-    CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, cell_item_key, cell_name, cell_state,
-    day_label, encode_step, key_of_item, occupancy_order, snapshot_reading, split_occupancy,
+    CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
+    CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
+    cell_state, day_label, encode_step, key_of_item, occupancy_order, snapshot_reading, split_occupancy,
 )
 
 
@@ -35,7 +36,7 @@ class PlanError(Refused):
 
 def _marks(snapshot: Snapshot, key: CellKey, value: CellValue) -> tuple[str, ...]:
     return tuple(mark for mark, on in ((RESERVED, (key.room, key.date) in snapshot.reserved),
-                                       (CLOSED, value.state == "closed")) if on)
+                                       (CLOSED, value.state == "closed"), (NEW, value.state == "missing")) if on)
 
 
 def _check_scope(snapshot: Snapshot, request: ChangeRequest, keys: list[CellKey]) -> None:
@@ -112,9 +113,41 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped))
 
 
+def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
+    """목표 값 표 → 미리보기. 지금 값과 다른 칸만 남긴다. 가격 없던 칸의 목표는 새로 생기는 칸이다 — 판매가가 있어야 하고,
+    읽은 값에서 그 객실·요금제에 보인 적 없는 인원 조합·박수라면 만들지 않는다(적용할 수 없음)."""
+    if (snapshot.hotel, snapshot.offer) != (table.hotel, table.offer):
+        raise PlanError(f"읽은 값은 {snapshot.hotel} · {snapshot.offer} 것이고, 목표 값 표는 {table.hotel} · {table.offer} 입니다")
+    gaps = sorted({f"{t.key.room} · {t.key.rate_plan} · {t.key.date}" for t in table.targets
+                   if not snapshot.covers(t.key.room, t.key.rate_plan, t.key.date)})
+    if gaps:
+        raise PlanError(f"읽은 값에 없는 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
+    shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key in snapshot.cells}
+    rooms = {room: rank for rank, room in enumerate(dict.fromkeys(t.key.room for t in table.targets))}
+    plans = {plan: rank for rank, plan in enumerate(dict.fromkeys(t.key.rate_plan for t in table.targets))}
+    changes = []
+    for target in sorted(table.targets, key=lambda t: (rooms[t.key.room], plans[t.key.rate_plan],
+                                                      occupancy_order(t.key.occupancy), t.key.nights, t.key.date)):
+        key = target.key
+        before = snapshot.cells.get(key, MISSING)
+        wanted = {name: None if value is None else round_money(value, snapshot.currency) for name, value in target.values}
+        merged = {name: wanted[name] if name in wanted else getattr(before, name) for name in FIELDS}
+        lacking = None
+        if before.state == "missing" and (key.room, key.rate_plan, key.occupancy, key.nights) not in shown:
+            lacking = "row"
+        elif before.state == "missing" and merged["sell"] is None:
+            lacking = "sell"
+        after = None if lacking else CellValue(merged["sell"], merged["list"], merged["supply"],
+                                               "open" if before.state == "missing" else before.state)
+        if after == before:
+            continue
+        changes.append(CellChange(key, before, after, _marks(snapshot, key, before), CELL_RULES.verdict(before, after, lacking)))
+    return Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), ())
+
+
 def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
-    """미리보기 머리 숫자. `cells` 는 가격이 있어 계산한 칸, `will_change` 는 그중 적용할 수 없는 칸을 뺀 수."""
-    tally = dict(cells=len(changes), will_change=0, blocked=0, red=0, reserved=0, closed=0, skipped=skipped)
+    """미리보기 머리 숫자. `cells` 는 계산한 칸, `will_change` 는 그중 적용할 수 없는 칸을 뺀 수, `new` 는 새로 생기는 칸."""
+    tally = dict(cells=len(changes), will_change=0, blocked=0, red=0, reserved=0, closed=0, new=0, skipped=skipped)
     tally.update({rule.code: 0 for rule in CELL_RULES.rules})
     for change in changes:
         severity = CELL_RULES.severity(change.verdict)

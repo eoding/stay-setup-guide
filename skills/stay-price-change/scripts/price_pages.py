@@ -25,7 +25,7 @@ from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 
 from price_model import (
-    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, RESERVED, SKIP_LABELS, CellKey, CellValue, ChangeRequest, Plan,
+    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellKey, CellValue, ChangeRequest, Plan,
     Snapshot, cell_name, day_label, key_of_item, nights_label, occupancy_label, occupancy_order, value_of,
 )
 from price_plan import counts, days_summary
@@ -130,14 +130,19 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
             return "none", esc(SKIP_LABELS[skipped[key]])
         severity = CELL_RULES.severity(change.verdict)
         if severity == BLOCKED:
-            return "blocked", (f'<span class="was">{fmt_money(change.before.sell, currency)}</span>'
-                               '<span class="tag blocked">적용할 수 없음</span>')
+            was = "가격 없음" if change.before.sell is None else fmt_money(change.before.sell, currency)
+            return "blocked", f'<span class="was">{was}</span><span class="tag blocked">적용할 수 없음</span>'
+
         moved = _move(change.before, change.after, currency)
         if severity == RED:
             return "red", f'{moved}<span class="tag red">{esc(_flag(change.verdict, change.after, currency))}</span>'
+        if NEW in change.marks:
+            return "new", f'{moved}<span class="tag new">새 칸</span>'
         return "", moved
 
-    title = f"미리보기 · {request.hotel} · {request.offer} · {operation_label(request, currency)}"
+    targets = isinstance(request, TargetTable)
+    what = f"목표 값 {len(request.targets):,}칸" if targets else operation_label(request, currency)
+    title = f"미리보기 · {request.hotel} · {request.offer} · {what}"
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 것입니다'
             f'{f" (장부 {change_id}번에 적어 두었습니다)" if change_id else ""}. 통화 {esc(currency)}.</p>',
@@ -145,13 +150,21 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
             stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄"),
                    (tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
                    (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
-                   (tally["skipped"], "건너뛰는 칸")]), _skip_line(plan)]
+                   (tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
+            _skip_line(plan)]
     if steps:
         edits = sum(step.kind == "cell_edit" for step in steps)
         body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제 · 값이 같은 이어진 날마다 한 번'
                     f'{f", 그중 정가·원가를 비우는 셀 창 저장 {edits}번" if edits else ""}).</p>')
     body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed),
-             _flagged_section(plan, currency)]
+             _flagged_section(plan, currency), _new_section(plan, currency)]
+    if targets:
+        body += [notes([_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).",
+                        "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
+                        "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다.",
+                        "새로 생기는 칸은 나중에 되돌리기로 지울 수 없습니다. 꼭 필요한 칸인지 확인해 주세요."]),
+                 '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
+        return page(title, "\n".join(body), MAKER)
     others = [FIELD_LABELS[name] for name in FIELDS if name != request.field]
     lines = [_rounding_note(currency),
              "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
@@ -176,7 +189,16 @@ def _skip_line(plan: Plan) -> str:
             + esc(" · ".join(f"{SKIP_LABELS[reason]} {count:,}칸" for reason, count in reasons.items())) + "</p>")
 
 
-def _request_box(request: ChangeRequest, currency: str) -> str:
+def _request_box(request: ChangeRequest | TargetTable, currency: str) -> str:
+    if isinstance(request, TargetTable):
+        keys = [target.key for target in request.targets]
+        rows = [("호텔", request.hotel), ("오퍼", request.offer),
+                ("객실", " · ".join(dict.fromkeys(key.room for key in keys))),
+                ("요금제", " · ".join(dict.fromkeys(key.rate_plan for key in keys))),
+                ("날짜", days_summary({key.date for key in keys})), ("목표 값", f"{len(keys):,}칸")]
+        dl = "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in rows)
+        sentence = f'<p class="sub">요청: “{esc(request.sentence)}”</p>' if request.sentence else ""
+        return f'<div class="frame">{sentence}<dl class="kv">{dl}</dl></div>'
     rows = [("호텔", request.hotel), ("오퍼", request.offer), ("객실", " · ".join(request.rooms)),
             ("요금제", " · ".join(request.rate_plans)), ("날짜", days_summary(request.dates)),
             ("바꾸는 값", operation_label(request, currency)),
@@ -227,6 +249,22 @@ def _flagged_section(plan: Plan, currency: str) -> str:
     return ('<h2>따로 확인할 칸</h2><div class="scroll"><table><tr><th>칸</th><th>지금 판매가</th><th>바뀌는 값</th>'
             '<th>정가(바뀐 뒤)</th><th>공급 원가(바뀐 뒤)</th><th>왜</th><th>고를 수 있는 것</th></tr>'
             + "".join(rows) + "</table></div>")
+
+
+def _new_section(plan: Plan, currency: str) -> str:
+    fresh = [change for change in plan.changes if NEW in change.marks]
+    if not fresh:
+        return ""
+    rows = []
+    for change in fresh:
+        rule = CELL_RULES.by_code.get(change.verdict)
+        status = "만듭니다" if rule is None else f"{'적용할 수 없음' if rule.severity == BLOCKED else '빨간 줄'} · {rule.label}"
+        after = change.after or change.before
+        rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(after.sell, currency)}</td>'
+                    f'<td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'
+                    f'<td class="text">{esc(status)}</td></tr>')
+    return ('<h2>새로 생기는 칸 <span class="sub">— 지금은 가격이 없는 칸입니다</span></h2><div class="scroll"><table>'
+            '<tr><th>칸</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th></tr>' + "".join(rows) + "</table></div>")
 
 
 @dataclass

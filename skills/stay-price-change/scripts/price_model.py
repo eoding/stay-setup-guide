@@ -5,7 +5,8 @@
     CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
     Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜)
     Skipped      건너뛰는 칸과 까닭(가격 없음 · 기준 인원 1박 값 없음 · 바꿀 값 없음)
-    ChangeRequest  담당자의 요청 — 범위 · 바꾸는 방법 · 원래 문장
+    ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
+    TargetTable  칸마다 목표 값을 적은 표(새 요금표가 이 모양으로 들어온다) — 지금 값과 다른 칸만 바뀐다
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
     CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
     CellWrite    칸 하나에 넣을 값(필드마다 새 값 또는 비움)
@@ -32,7 +33,7 @@ FIELDS = ("sell", "list", "supply")
 FIELD_LABELS = {"sell": "판매가", "list": "정가", "supply": "공급 원가"}
 STATES = ("open", "closed", "missing")
 OPERATIONS = ("amount", "percent", "set", "clear")
-RESERVED, CLOSED = "reserved", "closed"
+RESERVED, CLOSED, NEW = "reserved", "closed", "new"
 RED_LINE_SHARE = Decimal("0.30")
 WEEKDAYS = "월화수목금토일"
 
@@ -141,6 +142,35 @@ class ChangeRequest:
 
 
 @dataclass(frozen=True)
+class Target:
+    """칸 하나의 목표 값. 적지 않은 필드는 그대로, None 으로 적은 필드(정가·공급 원가)는 비운다."""
+    key: CellKey
+    values: tuple[tuple[str, Decimal | None], ...]
+
+
+@dataclass(frozen=True)
+class TargetTable:
+    hotel: str
+    offer: str
+    targets: tuple[Target, ...]
+    sentence: str = ""
+
+    def __post_init__(self):
+        if not self.targets:
+            raise ValueError("목표 값이 하나도 없습니다")
+        seen = set()
+        for target in self.targets:
+            names = [name for name, _value in target.values]
+            if not names or len(names) != len(set(names)) or not set(names) <= set(FIELDS):
+                raise ValueError(f"목표 값의 칸 이름이 맞지 않습니다: {names} ({cell_name(target.key)})")
+            if dict(target.values).get("sell", 0) is None:
+                raise ValueError(f"판매가는 비울 수 없습니다: {cell_name(target.key)}")
+            if target.key in seen:
+                raise ValueError(f"같은 칸의 목표 값이 둘입니다: {cell_name(target.key)}")
+            seen.add(target.key)
+
+
+@dataclass(frozen=True)
 class CellChange:
     key: CellKey
     before: CellValue
@@ -170,7 +200,8 @@ CHOICE_LABELS = {
     "clear_list": "정가 지움",
 }
 
-# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산에 필요한데 없던 칸 이름 "adult" 또는 None) 을 받는다.
+# 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산하지 못한 까닭 또는 None) 을 받는다. 까닭은 "adult"(성인만 있는 칸이
+# 없음) · "sell"(새로 생기는 칸에 판매가가 없음) · "row"(읽은 값에 없는 인원 조합·박수라 칸을 새로 만들지 않음).
 # 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다.
 CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
@@ -179,6 +210,10 @@ CELL_RULES = RuleTable(
          lambda before, after, lacking: after is not None and after.supply is not None and after.supply < 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "adult"),
+    Rule("NEW_WITHOUT_SELL", "새로 생기는 칸에 판매가가 없습니다", BLOCKED, (),
+         lambda before, after, lacking: lacking == "sell"),
+    Rule("NEW_NOT_SHOWN", "이 객실·요금제에 없는 인원 조합·박수라 칸을 새로 만들지 않습니다", BLOCKED, (),
+         lambda before, after, lacking: lacking == "row"),
     Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "clear_list", "keep"),
          lambda before, after, lacking: after is not None and after.list is not None and after.sell > after.list),
     Rule("BELOW_COST", "공급 원가보다 싸집니다", RED, ("include", "keep"),
@@ -245,7 +280,7 @@ class Skipped:
 
 @dataclass(frozen=True)
 class Plan:
-    request: ChangeRequest
+    request: ChangeRequest | TargetTable
     currency: str
     read_at: str
     changes: tuple[CellChange, ...]
@@ -349,15 +384,24 @@ def decode_snapshot(data: Mapping) -> Snapshot:
                     cells, frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("reserved") or []))
 
 
-def encode_request(request: ChangeRequest) -> dict:
-    return dict(hotel=request.hotel, offer=request.offer, rooms=list(request.rooms),
+def encode_request(request: ChangeRequest | TargetTable) -> dict:
+    if isinstance(request, TargetTable):
+        return dict(kind="targets", hotel=request.hotel, offer=request.offer, sentence=request.sentence,
+                    targets=[dict(key=encode_key(target.key), values={name: money_text(value) for name, value in
+                                                                      target.values}) for target in request.targets])
+    return dict(kind="change", hotel=request.hotel, offer=request.offer, rooms=list(request.rooms),
                 rate_plans=list(request.rate_plans), dates=list(request.dates), field=request.field,
                 operation=dict(kind=request.operation, value=money_text(request.value),
                                base_occupancy=request.base_occupancy),
                 scale_child_surcharge=request.scale_child_surcharge, sentence=request.sentence)
 
 
-def decode_request(data: Mapping) -> ChangeRequest:
+def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
+    if data.get("kind") == "targets":
+        return TargetTable(str(data["hotel"]), str(data["offer"]),
+                           tuple(Target(decode_key(item["key"]), tuple((str(name), money(value)) for name, value in
+                                                                      item["values"].items())) for item in data["targets"]),
+                           str(data.get("sentence") or ""))
     operation = data["operation"]
     return ChangeRequest(
         hotel=str(data["hotel"]), offer=str(data["offer"]), rooms=tuple(data["rooms"]),
