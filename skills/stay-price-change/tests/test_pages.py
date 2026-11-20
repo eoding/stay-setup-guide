@@ -42,7 +42,8 @@ class SelfContainedMixin:
 class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
     def test_scene_preview_shows_counts_banners_marks_and_cells(self):
         plan = plan_change(scene.snapshot(), scene.request())
-        page = render_preview(plan, change_id=3, steps=8)
+        steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        page = render_preview(plan, change_id=3, steps=steps)
         text = visible(page)
         self.assert_self_contained(page)
         self.assertIn("미리보기 · 데모 호텔 · 기본 오퍼 · 판매가 +10%", text)
@@ -52,7 +53,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
                               (6, "판매 마감인 칸"), (6, "건너뛰는 칸")):
             self.assertIn(f"{number} {label}", text)
         self.assertIn("빨간 줄 · 2칸이 정가(줄 그은 값)를 넘습니다.", text)
-        self.assertIn("정가도 같은 만큼 올림 / 이 칸은 안 바꿈", text)
+        self.assertIn("정가도 같은 만큼 올림 / 정가 지움 / 이 칸은 안 바꿈", text)
         self.assertIn("건너뛰는 칸의 까닭: 가격 없음 6칸", text)
         self.assertIn("ERP 에 8번 나눠 저장합니다", text)
         for heading in ("디럭스 · 조식 포함", "디럭스 · 룸온리", "스위트 · 조식 포함", "스위트 · 룸온리"):

@@ -23,9 +23,9 @@ from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_
 from change_core.rules import BLOCKED, RED, Resolution, decide
 
 from price_model import (
-    CELL_RULES, CLOSED, FIELDS, ITEM_KIND, MISSING, RESERVED, BulkStep, CellChange, CellKey, CellValue, CellWrite,
-    ChangeRequest, Plan, RowWrite, Skipped, Snapshot, cell_item_key, cell_name, cell_state, day_label, encode_step,
-    key_of_item, occupancy_order, snapshot_reading, split_occupancy,
+    CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
+    CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, cell_item_key, cell_name, cell_state,
+    day_label, encode_step, key_of_item, occupancy_order, snapshot_reading, split_occupancy,
 )
 
 
@@ -52,31 +52,43 @@ def _check_scope(snapshot: Snapshot, request: ChangeRequest, keys: list[CellKey]
         raise PlanError(f"읽은 값에 없는 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
 
 
-def _after_sell(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue):
-    """`(새 판매가, 없는 칸)` — 계산에 필요한 성인만 있는 칸이 없으면 새 판매가 대신 "adult".
+def _after_value(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue):
+    """`(바꾸는 값의 새 값, 없는 칸)` — 계산에 필요한 성인만 있는 칸(그 값)이 없으면 새 값 대신 "adult".
 
     새 값 지정(set)은 그날 기준 인원 1박 칸이 그 값이 되는 만큼(차이)을 그 객실·요금제·날짜의 모든 인원·박수 칸에 더한다.
-    박수 층의 할인 차이가 그대로 남는다. 기준 1박 칸이 없는 날은 `plan_change` 가 미리 건너뛴다.
+    박수 층의 할인 차이가 그대로 남는다. 기준 1박 칸이 없는 날은 `plan_change` 가 미리 건너뛴다. 퍼센트는 ERP 가감과 같이
+    아동이 있는 칸이면 같은 성인 수의 성인만 있는 칸에만 곱하고 아동 추가분을 그대로 더한다(바꾸는 값마다 같은 규칙).
     """
-    currency = snapshot.currency
+    name, currency, current = request.field, snapshot.currency, getattr(before, request.field)
 
-    def sell_of(occupancy: str, nights: int | None = None):
-        return snapshot.cells.get(replace(key, occupancy=occupancy, nights=nights or key.nights), MISSING).sell
+    def value_at(occupancy: str, nights: int | None = None):
+        return getattr(snapshot.cells.get(replace(key, occupancy=occupancy, nights=nights or key.nights), MISSING), name)
 
     if request.operation == "amount":
-        return round_money(before.sell + request.value, currency), None
+        return round_money(current + request.value, currency), None
     if request.operation == "set":
-        return before.sell + (round_money(request.value, currency) - sell_of(request.base_occupancy, 1)), None
+        return current + (round_money(request.value, currency) - value_at(request.base_occupancy, 1)), None
     factor = (100 + request.value) / 100
     adult_key, has_children = (key.occupancy, False) if request.scale_child_surcharge else split_occupancy(key.occupancy)
     if has_children is None:
         return None, "adult"
     if not has_children:
-        return round_money(before.sell * factor, currency), None
-    adult = sell_of(adult_key)
+        return round_money(current * factor, currency), None
+    adult = value_at(adult_key)
     if adult is None:
         return None, "adult"
-    return round_money(adult * factor, currency) + (before.sell - adult), None
+    return round_money(adult * factor, currency) + (current - adult), None
+
+
+def _skip_reason(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue) -> str | None:
+    if before.state == "missing":
+        return "no_price"
+    if getattr(before, request.field) is None:
+        return f"no_{request.field}"
+    base = snapshot.cells.get(replace(key, occupancy=request.base_occupancy or "", nights=1), MISSING)
+    if request.operation == "set" and getattr(base, request.field) is None:
+        return "no_base"
+    return None
 
 
 def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
@@ -89,15 +101,12 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     changes, skipped = [], []
     for key in keys:
         before = snapshot.cells[key]
-        if before.state == "missing":
-            skipped.append(Skipped(key, "no_price"))
+        reason = _skip_reason(snapshot, request, key, before)
+        if reason:
+            skipped.append(Skipped(key, reason))
             continue
-        if request.operation == "set" and snapshot.cells.get(
-                replace(key, occupancy=request.base_occupancy, nights=1), MISSING).sell is None:
-            skipped.append(Skipped(key, "no_base"))
-            continue
-        sell, lacking = _after_sell(snapshot, request, key, before)
-        after = None if sell is None else replace(before, sell=sell)
+        value, lacking = (None, None) if request.operation == "clear" else _after_value(snapshot, request, key, before)
+        after = None if lacking else replace(before, **{request.field: value})
         changes.append(CellChange(key, before, after, _marks(snapshot, key, before),
                                   CELL_RULES.verdict(before, after, lacking)))
     return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped))
@@ -119,7 +128,10 @@ def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
 
 
 def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> tuple[tuple[CellWrite, ...], tuple[CellChange, ...]]:
-    """`(넣을 값, 아직 고르지 않은 빨간 줄 칸)`. 칸을 짚은 고름이 규칙 전체 고름보다 앞선다."""
+    """`(넣을 값, 아직 고르지 않은 빨간 줄 칸)`. 칸을 짚은 고름이 규칙 전체 고름보다 앞선다.
+
+    정가를 넘는 칸: raise_list 는 정가도 판매가와 같은 만큼 옮기고(정가 − 판매가 차이 유지), clear_list 는 정가를 비운다.
+    """
     flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
     chosen, waiting = decide(CELL_RULES, flagged, resolutions, cell_name)
     by_key = {change.key: change for change in plan.changes}
@@ -132,8 +144,13 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> tuple[tuple[CellWr
             continue
         fields = {name: getattr(change.after, name) for name in change.changed}
         if choice == "raise_list":
-            fields["list"] = change.before.list + (change.after.sell - change.before.sell)
-        writes.append(CellWrite(change.key, **fields))
+            if change.before.list is None or change.before.sell is None:
+                raise PlanError(f"정가를 같은 만큼 올릴 수 없는 칸입니다(전 정가가 없음): {cell_name(change.key)}")
+            fields["list"] = change.after.sell + (change.before.list - change.before.sell)
+        if choice == "clear_list":
+            fields["list"] = None
+        writes.append(CellWrite(change.key, **{name: value for name, value in fields.items() if value is not None},
+                                clear=tuple(name for name in FIELDS if name in fields and fields[name] is None)))
     return tuple(writes), tuple(by_key[key] for key in waiting)
 
 
@@ -141,17 +158,29 @@ def _next_day(day: str) -> str:
     return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
-def save_steps(writes: Iterable[CellWrite]) -> tuple[BulkStep, ...]:
-    """저장 한 번에 들어가는 날짜는 서로 이어지고, 그 날들에 쓰는 줄과 값이 모두 같다(값을 넣지 않는 줄도 같아야 한다)."""
+def save_steps(writes: Iterable[CellWrite]) -> tuple[BulkStep | CellEditStep, ...]:
+    """넣을 값 → 저장 단계. 새 값은 [선택 날짜 가격 수정] 묶음 저장, 비우기는 셀 창 저장(칸 하나씩)으로 간다.
+
+    묶음 저장 한 번에 들어가는 날짜는 서로 이어지고, 그 날들에 쓰는 줄과 값이 모두 같다(값을 넣지 않는 줄도 같아야 한다).
+    객실·요금제마다 셀 창 저장을 묶음 저장보다 먼저 둔다 — 묶음 저장은 남은 정가보다 비싼 판매가를 거절한다.
+    """
     grid: dict[tuple[str, str], dict[str, set[RowWrite]]] = {}
+    edits: dict[tuple[str, str], list[CellEditStep]] = {}
     for write in writes:
-        rows = grid.setdefault((write.key.room, write.key.rate_plan), {}).setdefault(write.key.date, set())
+        pair = (write.key.room, write.key.rate_plan)
+        if write.clear:
+            edits.setdefault(pair, []).append(CellEditStep(write.key, write.clear))
+            grid.setdefault(pair, {})
+        if write.sell is None and write.list is None and write.supply is None:
+            continue
+        rows = grid.setdefault(pair, {}).setdefault(write.key.date, set())
         row = RowWrite(write.key.occupancy, write.key.nights, write.sell, write.list, write.supply)
         if any((other.occupancy, other.nights) == (row.occupancy, row.nights) for other in rows):
             raise PlanError(f"같은 칸에 넣을 값이 둘입니다: {cell_name(write.key)}")
         rows.add(row)
-    steps = []
+    steps: list[BulkStep | CellEditStep] = []
     for (room, plan), by_day in grid.items():
+        steps += edits.get((room, plan), [])
         runs: list[list[str]] = []
         for day in sorted(by_day):
             if runs and _next_day(runs[-1][-1]) == day and by_day[day] == by_day[runs[-1][-1]]:
@@ -178,19 +207,23 @@ def days_summary(days: Iterable[str]) -> str:
     return f"{' · '.join(parts)} ({len(days)}일{', ' + '·'.join(years) + '년' if years else ''})"
 
 
-def step_label(step: BulkStep) -> str:
+def step_label(step: BulkStep | CellEditStep) -> str:
+    if step.kind == "cell_edit":
+        return f"{cell_name(step.key)} · {' · '.join(FIELD_LABELS[name] for name in step.clear)} 지움 (셀 창)"
     return f"{step.room} · {step.rate_plan} · {days_summary(step.dates)}"
 
 
-def step_plans(steps: Iterable[BulkStep]) -> list[StepPlan]:
-    """저장 단계 → 장부가 받는 공통 모양(단계가 쓰는 (항목, 필드) → 값)."""
-    plans = []
-    for step in steps:
-        writes = tuple(FieldWrite(ITEM_KIND, cell_item_key(CellKey(step.room, step.rate_plan, day, row.occupancy,
-                                                                    row.nights)), name, getattr(row, name))
-                       for day in step.dates for row in step.rows for name in FIELDS if getattr(row, name) is not None)
-        plans.append(StepPlan(step.kind, step_label(step), encode_step(step), writes))
-    return plans
+def step_writes(step: BulkStep | CellEditStep) -> tuple[FieldWrite, ...]:
+    if step.kind == "cell_edit":
+        return tuple(FieldWrite(ITEM_KIND, cell_item_key(step.key), name, None) for name in step.clear)
+    return tuple(FieldWrite(ITEM_KIND, cell_item_key(CellKey(step.room, step.rate_plan, day, row.occupancy, row.nights)),
+                            name, getattr(row, name))
+                 for day in step.dates for row in step.rows for name in FIELDS if getattr(row, name) is not None)
+
+
+def step_plans(steps: Iterable[BulkStep | CellEditStep]) -> list[StepPlan]:
+    """저장 단계 → 장부가 받는 공통 모양(단계가 쓰는 (항목, 필드) → 값, 비우기는 None)."""
+    return [StepPlan(step.kind, step_label(step), encode_step(step), step_writes(step)) for step in steps]
 
 
 def _rows(key: CellKey, before: CellValue, after: CellValue | None, verdict=None, marks=()) -> list[ValueRow]:

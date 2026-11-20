@@ -119,6 +119,20 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual([(m.label, m.field, m.after, m.seen) for m in mismatches],
                          [("12/25 금 · 디럭스 · 조식 포함 · 성인 2 · 1박", "sell", D("220.00"), D("1.00"))])
 
+    def test_clearing_is_recorded_as_its_own_action_and_verified_as_empty(self):
+        change = record_preview(self.ledger, self.plan)
+        steps = save_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "clear_list")])[0])
+        self.ledger.begin(change, step_plans(steps))
+        for index in range(1, len(steps) + 1):
+            self.ledger.record_step(change, index, saved=True)
+        cleared = [(row.label, row.after) for row in self.ledger.change(change).rows if row.action == "clear"]
+        self.assertEqual(cleared, [("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박", None),
+                                   ("1/2 토 · 스위트 · 조식 포함 · 성인 2 · 1박", None)])
+        self.assertEqual(self.ledger.verify(change, snapshot_reading(scene.applied(self.before, steps))), [])
+        unchanged = snapshot_reading(scene.applied(self.before, [s for s in steps if s.kind == "bulk"]))
+        self.assertEqual([(m.field, m.seen) for m in self.ledger.verify(change, unchanged)],
+                         [("list", D("500.00")), ("list", D("500.00"))])
+
     def test_begin_twice_with_the_same_steps_changes_nothing_and_other_steps_are_refused(self):
         self.ledger.begin(self.change_id, step_plans(self.steps))
         self.ledger.record_step(self.change_id, 1, saved=True)

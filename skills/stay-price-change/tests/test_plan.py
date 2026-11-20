@@ -185,6 +185,74 @@ class ScopeTest(unittest.TestCase):
             plan_change(snapshot, ChangeRequest("Other hotel", "O", ("R",), ("P",), (DAY,), "amount", D("1")))
 
 
+class FieldTest(unittest.TestCase):
+    """판매가뿐 아니라 정가·공급 원가도 바꾼다 — 같은 방법(금액·퍼센트·새 값·비우기), 같은 규칙 표."""
+
+    def changed(self, plan, name):
+        return {(c.key.occupancy, c.key.nights): getattr(c.after, name) for c in plan.changes}
+
+    def test_amount_on_list_price_and_percent_on_supply_cost(self):
+        cells = {(DAY, "A2", 1): open_("200.00", list_price="250.00", supply="150.00"),
+                 (DAY, "A2C1_CHD", 1): open_("230.00", list_price="280.00", supply="170.00")}
+        listed = plan_change(snap(cells), ask("amount", "20", field="list"))
+        self.assertEqual(self.changed(listed, "list"), {("A2", 1): D("270.00"), ("A2C1_CHD", 1): D("300.00")})
+        self.assertEqual({c.changed for c in listed.changes}, {("list",)})
+        supply = plan_change(snap(cells), ask("percent", "10", field="supply"))
+        self.assertEqual(self.changed(supply, "supply"), {("A2", 1): D("165.00"), ("A2C1_CHD", 1): D("185.00")})
+
+    def test_set_on_list_price_uses_the_base_one_night_list_price(self):
+        cells = {(DAY, "A2", 1): open_("200.00", list_price="250.00"), (DAY, "A2", 3): open_("180.00", list_price="230.00")}
+        plan = plan_change(snap(cells), ask("set", "300", field="list", base_occupancy="A2"))
+        self.assertEqual(self.changed(plan, "list"), {("A2", 1): D("300.00"), ("A2", 3): D("280.00")})
+
+    def test_clearing_supply_cost_goes_through_the_cell_window_and_cells_without_one_are_skipped(self):
+        cells = {(DAY, "A2", 1): open_("200.00", supply="150.00"), (DAY, "A3", 1): open_("260.00")}
+        plan = plan_change(snap(cells), ChangeRequest("H", "O", ("R",), ("P",), (DAY,), "clear", None, field="supply"))
+        self.assertEqual(self.changed(plan, "supply"), {("A2", 1): None})
+        self.assertEqual([(item.key.occupancy, item.reason) for item in plan.skipped], [("A3", "no_supply")])
+        writes, _ = resolve(plan, [])
+        self.assertEqual([(w.key.occupancy, w.sell, w.clear) for w in writes], [("A2", None, ("supply",))])
+        steps = save_steps(writes)
+        self.assertEqual([(step.kind, step.key.occupancy, step.clear) for step in steps], [("cell_edit", "A2", ("supply",))])
+
+    def test_a_negative_supply_cost_cannot_be_applied(self):
+        plan = plan_change(snap({(DAY, "A2", 1): open_("200.00", supply="150.00")}), ask("amount", "-200", field="supply"))
+        self.assertEqual(verdicts(plan), {(DAY, "A2", 1): "NEGATIVE_SUPPLY"})
+
+    def test_rules_look_at_the_resulting_cell_whichever_value_moved(self):
+        lower_list = plan_change(snap({(DAY, "A2", 1): open_("200.00", list_price="210.00")}), ask("amount", "-20", field="list"))
+        self.assertEqual(verdicts(lower_list), {(DAY, "A2", 1): "ABOVE_LIST"})
+        raise_cost = plan_change(snap({(DAY, "A2", 1): open_("200.00", supply="150.00")}), ask("amount", "60", field="supply"))
+        self.assertEqual(verdicts(raise_cost), {(DAY, "A2", 1): "BELOW_COST"})
+        big_list = plan_change(snap({(DAY, "A2", 1): open_("200.00", list_price="300.00")}), ask("percent", "40", field="list"))
+        self.assertEqual(verdicts(big_list), {(DAY, "A2", 1): "OVER_30"})
+
+
+class ListChoiceTest(unittest.TestCase):
+    """정가를 넘는 두 칸(그림 장면): 정가도 올림 · 정가 지움 · 안 바꿈."""
+
+    def setUp(self):
+        self.plan = plan_change(scene.snapshot(), scene.request())
+        self.over = CellKey("스위트", "조식 포함", "2027-01-01", "A2", 1)
+
+    def test_raise_list_puts_both_columns_on_the_bulk_row(self):
+        steps = save_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        step = next(s for s in steps if s.kind == "bulk" and s.room == "스위트" and s.rate_plan == "조식 포함"
+                    and "2027-01-01" in s.dates)
+        row = next(r for r in step.rows if (r.occupancy, r.nights) == ("A2", 1))
+        self.assertEqual((row.sell, row.list, row.supply), (D("528.00"), D("548.00"), None))
+
+    def test_clear_list_adds_a_cell_window_save_before_the_bulk_saves_of_that_room_and_plan(self):
+        steps = save_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "clear_list")])[0])
+        self.assertEqual((len(steps), sum(s.kind == "bulk" for s in steps)), (10, 8))
+        suite = [s for s in steps if s.kind == "cell_edit" or (s.room, s.rate_plan) == ("스위트", "조식 포함")]
+        self.assertEqual([s.kind for s in suite], ["cell_edit", "cell_edit", "bulk", "bulk"])
+        self.assertEqual([(s.key.date, s.clear) for s in suite[:2]], [("2027-01-01", ("list",)), ("2027-01-02", ("list",))])
+        self.assertLess(steps.index(suite[1]), steps.index(suite[2]))
+        row = next(r for r in suite[3].rows if (r.occupancy, r.nights) == ("A2", 1))
+        self.assertEqual((row.sell, row.list), (D("528.00"), None))
+
+
 class ResolveTest(unittest.TestCase):
     def setUp(self):
         self.plan = plan_change(snap({

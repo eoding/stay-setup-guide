@@ -92,7 +92,7 @@ def cmd_render(args):
     if args.kind == "preview":
         data = load(args.plan)
         plan = decode_plan(data["plan"])
-        html = render_preview(plan, data.get("change_id"), len(data["steps"]) if data.get("steps") else None)
+        html = render_preview(plan, data.get("change_id"), [decode_step(step) for step in data.get("steps") or ()])
         hotel = plan.request.hotel
     elif args.kind == "rollback":
         data = load(args.plan)

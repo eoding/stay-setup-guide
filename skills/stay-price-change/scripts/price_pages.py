@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Callable, Iterable, Mapping
+from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
     esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list,
@@ -69,12 +69,19 @@ def grid(keys: Iterable[CellKey], cell: Callable[[CellKey], tuple[str, str]], re
 
 
 def operation_label(request: ChangeRequest, currency: str) -> str:
+    """바꾸는 값과 방법 — "판매가 +10%" · "정가 -5,000 USD" · "공급 원가 지움" · "판매가 성인 2 1박 350.00 USD 으로"."""
+    return f"{FIELD_LABELS[request.field]} {_how(request, currency)}"
+
+
+def _how(request: ChangeRequest, currency: str) -> str:
     value = request.value
+    if request.operation == "clear":
+        return "지움"
     if request.operation == "percent":
         return f"{'+' if value >= 0 else '-'}{abs(value).normalize():f}%"
     if request.operation == "amount":
         return f"{'+' if value >= 0 else '-'}{fmt_money(abs(value), currency)} {currency}"
-    return f"{occupancy_label(request.base_occupancy)} {fmt_money(value, currency)} {currency} 으로"
+    return f"{occupancy_label(request.base_occupancy)} 1박 {fmt_money(value, currency)} {currency} 으로"
 
 
 def _flag(verdict: str, after: CellValue, currency: str) -> str:
@@ -108,7 +115,7 @@ def _rounding_note(currency: str) -> str:
     return f"계산하고 남는 끝자리는 {currency} {unit}까지 반올림합니다(ERP 와 같은 방식)."
 
 
-def render_preview(plan: Plan, change_id: int | None = None, steps: int | None = None) -> str:
+def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | None = None) -> str:
     request, currency = plan.request, plan.currency
     tally = counts(plan.changes, len(plan.skipped))
     by_key = {change.key: change for change in plan.changes}
@@ -130,7 +137,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: int | None =
             return "red", f'{moved}<span class="tag red">{esc(_flag(change.verdict, change.after, currency))}</span>'
         return "", moved
 
-    title = f"미리보기 · {request.hotel} · {request.offer} · 판매가 {operation_label(request, currency)}"
+    title = f"미리보기 · {request.hotel} · {request.offer} · {operation_label(request, currency)}"
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 것입니다'
             f'{f" (장부 {change_id}번에 적어 두었습니다)" if change_id else ""}. 통화 {esc(currency)}.</p>',
@@ -140,13 +147,16 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: int | None =
                    (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
                    (tally["skipped"], "건너뛰는 칸")]), _skip_line(plan)]
     if steps:
-        body.append(f'<p class="sub">적용하면 ERP 에 {steps}번 나눠 저장합니다(객실 · 요금제 · 값이 같은 이어진 날마다 한 번).</p>')
+        edits = sum(step.kind == "cell_edit" for step in steps)
+        body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제 · 값이 같은 이어진 날마다 한 번'
+                    f'{f", 그중 정가·원가를 비우는 셀 창 저장 {edits}번" if edits else ""}).</p>')
     body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed),
              _flagged_section(plan, currency)]
+    others = [FIELD_LABELS[name] for name in FIELDS if name != request.field]
     lines = [_rounding_note(currency),
              "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
              "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다.",
-             "정가와 공급 원가는 바꾸지 않습니다(정가를 넘는 칸에서 정가도 올리라고 고르신 경우만 정가가 같이 오릅니다)."]
+             f"{others[0]}와 {others[1]}는 바꾸지 않습니다(정가를 넘는 칸에서 정가를 올리거나 지우라고 고르신 경우만 정가가 같이 바뀝니다)."]
     if request.operation == "percent":
         lines.insert(0, "아동이 있는 칸은 아동 추가분도 같은 비율로 곱했습니다." if request.scale_child_surcharge else
                      "아동이 있는 칸은 ERP 와 똑같이 성인 몫에만 곱하고 아동 추가분은 그대로 둡니다. "
@@ -169,7 +179,7 @@ def _skip_line(plan: Plan) -> str:
 def _request_box(request: ChangeRequest, currency: str) -> str:
     rows = [("호텔", request.hotel), ("오퍼", request.offer), ("객실", " · ".join(request.rooms)),
             ("요금제", " · ".join(request.rate_plans)), ("날짜", days_summary(request.dates)),
-            ("바꾸는 값", f"판매가 {operation_label(request, currency)}"),
+            ("바꾸는 값", operation_label(request, currency)),
             ("칸", "모든 인원 조합 · 모든 박수")]
     dl = "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in rows)
     sentence = f'<p class="sub">요청: “{esc(request.sentence)}”</p>' if request.sentence else ""
@@ -207,15 +217,16 @@ def _flagged_section(plan: Plan, currency: str) -> str:
     for change in flagged:
         rule = CELL_RULES.by_code[change.verdict]
         after = change.after or change.before
-        new_sell = "—" if change.after is None else fmt_money(change.after.sell, currency)
+        moved = "—" if change.after is None else _move(change.before, change.after, currency)
         choices = " / ".join(CHOICE_LABELS[choice] for choice in rule.choices) if rule.choices else "바꾸지 않음"
         kind, word = ("blocked", "적용할 수 없음") if rule.severity == BLOCKED else ("red", "빨간 줄")
         rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(change.before.sell, currency)}</td>'
-                    f'<td>{new_sell}</td><td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'
+                    f'<td>{moved}</td><td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'
                     f'<td class="text"><span class="tag {kind}">{word}</span> {esc(rule.label)}</td>'
                     f'<td class="text">{esc(choices)}</td></tr>')
-    return ('<h2>따로 확인할 칸</h2><div class="scroll"><table><tr><th>칸</th><th>지금</th><th>바뀔 값</th><th>정가</th>'
-            '<th>공급 원가</th><th>왜</th><th>고를 수 있는 것</th></tr>' + "".join(rows) + "</table></div>")
+    return ('<h2>따로 확인할 칸</h2><div class="scroll"><table><tr><th>칸</th><th>지금 판매가</th><th>바뀌는 값</th>'
+            '<th>정가(바뀐 뒤)</th><th>공급 원가(바뀐 뒤)</th><th>왜</th><th>고를 수 있는 것</th></tr>'
+            + "".join(rows) + "</table></div>")
 
 
 @dataclass

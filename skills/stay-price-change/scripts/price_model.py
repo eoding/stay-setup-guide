@@ -4,11 +4,13 @@
     CellKey      칸 하나의 자리 — 객실 · 요금제 · 날짜 · 인원 조합 · 박수 층
     CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
     Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜)
-    Skipped      건너뛰는 칸과 까닭(가격 없음 · 기준 인원 1박 가격 없음)
+    Skipped      건너뛰는 칸과 까닭(가격 없음 · 기준 인원 1박 값 없음 · 바꿀 값 없음)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 방법 · 원래 문장
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
     CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
-    CellWrite / RowWrite / BulkStep   ERP 에 넣을 값과 저장 한 번
+    CellWrite    칸 하나에 넣을 값(필드마다 새 값 또는 비움)
+    BulkStep     [선택 날짜 가격 수정] 저장 한 번 — 객실 × 요금제 × 이어진 날짜, 줄(RowWrite)마다 바뀌는 칸의 새 값
+    CellEditStep 날짜 칸을 눌러 여는 셀 창 저장 한 번 — 칸 하나의 정가·공급 원가를 비운다
     Plan         미리보기 한 장의 내용
 """
 
@@ -29,7 +31,7 @@ ITEM_KIND = "price_cell"
 FIELDS = ("sell", "list", "supply")
 FIELD_LABELS = {"sell": "판매가", "list": "정가", "supply": "공급 원가"}
 STATES = ("open", "closed", "missing")
-OPERATIONS = ("amount", "percent", "set")
+OPERATIONS = ("amount", "percent", "set", "clear")
 RESERVED, CLOSED = "reserved", "closed"
 RED_LINE_SHARE = Decimal("0.30")
 WEEKDAYS = "월화수목금토일"
@@ -105,20 +107,31 @@ class Snapshot:
 
 @dataclass(frozen=True)
 class ChangeRequest:
+    """범위 안의 칸에서 값 하나(`field`: 판매가 sell · 정가 list · 공급 원가 supply)를 바꾸는 요청.
+
+    amount ±금액 · percent ±% · set 기준 인원 1박 칸을 그 값으로(나머지는 같은 만큼) · clear 비움(정가·공급 원가만).
+    """
     hotel: str
     offer: str
     rooms: tuple[str, ...]
     rate_plans: tuple[str, ...]
     dates: tuple[str, ...]
     operation: str
-    value: Decimal
+    value: Decimal | None
     base_occupancy: str | None = None
     scale_child_surcharge: bool = False
     sentence: str = ""
+    field: str = "sell"
 
     def __post_init__(self):
         if self.operation not in OPERATIONS:
             raise ValueError(f"바꾸는 방법을 모릅니다: {self.operation!r}")
+        if self.field not in FIELDS:
+            raise ValueError(f"바꾸는 값을 모릅니다: {self.field!r} (sell · list · supply)")
+        if self.operation == "clear" and self.field == "sell":
+            raise ValueError("판매가는 비울 수 없습니다")
+        if (self.operation == "clear") != (self.value is None):
+            raise ValueError("비우기(clear)에만 금액이 없습니다")
         if (self.operation == "set") != (self.base_occupancy is not None):
             raise ValueError("새 값 지정(set)에만, 그리고 반드시 기준 인원 조합을 적습니다")
         if not (self.rooms and self.rate_plans and self.dates):
@@ -154,6 +167,7 @@ CHOICE_LABELS = {
     "include": "이대로 바꿈",
     "keep": "이 칸은 안 바꿈",
     "raise_list": "정가도 같은 만큼 올림",
+    "clear_list": "정가 지움",
 }
 
 # 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산에 필요한데 없던 칸 이름 "adult" 또는 None) 을 받는다.
@@ -161,9 +175,11 @@ CHOICE_LABELS = {
 CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
          lambda before, after, lacking: after is not None and after.sell <= 0),
+    Rule("NEGATIVE_SUPPLY", "공급 원가가 0 아래가 됩니다", BLOCKED, (),
+         lambda before, after, lacking: after is not None and after.supply is not None and after.supply < 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "adult"),
-    Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "keep"),
+    Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "clear_list", "keep"),
          lambda before, after, lacking: after is not None and after.list is not None and after.sell > after.list),
     Rule("BELOW_COST", "공급 원가보다 싸집니다", RED, ("include", "keep"),
          lambda before, after, lacking: after is not None and after.supply is not None and after.sell < after.supply),
@@ -208,7 +224,16 @@ class BulkStep:
     kind = "bulk"
 
 
-SKIP_LABELS = {"no_price": "가격 없음", "no_base": "그날 기준 인원 1박 가격 없음"}
+@dataclass(frozen=True)
+class CellEditStep:
+    """셀 창 저장 한 번 — 칸 하나의 정가·공급 원가를 비운다(묶음 저장은 빈칸을 '그대로'로 읽어 비우지 못한다)."""
+    key: CellKey
+    clear: tuple[str, ...]
+    kind = "cell_edit"
+
+
+SKIP_LABELS = {"no_price": "가격 없음", "no_base": "그날 기준 인원 1박 값 없음", "no_list": "정가 없음",
+               "no_supply": "공급 원가 없음"}
 
 
 @dataclass(frozen=True)
@@ -326,8 +351,8 @@ def decode_snapshot(data: Mapping) -> Snapshot:
 
 def encode_request(request: ChangeRequest) -> dict:
     return dict(hotel=request.hotel, offer=request.offer, rooms=list(request.rooms),
-                rate_plans=list(request.rate_plans), dates=list(request.dates),
-                operation=dict(kind=request.operation, value=str(request.value),
+                rate_plans=list(request.rate_plans), dates=list(request.dates), field=request.field,
+                operation=dict(kind=request.operation, value=money_text(request.value),
                                base_occupancy=request.base_occupancy),
                 scale_child_surcharge=request.scale_child_surcharge, sentence=request.sentence)
 
@@ -337,8 +362,9 @@ def decode_request(data: Mapping) -> ChangeRequest:
     return ChangeRequest(
         hotel=str(data["hotel"]), offer=str(data["offer"]), rooms=tuple(data["rooms"]),
         rate_plans=tuple(data["rate_plans"]), dates=tuple(data["dates"]), operation=operation["kind"],
-        value=money(operation["value"]), base_occupancy=operation.get("base_occupancy"),
+        value=money(operation.get("value")), base_occupancy=operation.get("base_occupancy"),
         scale_child_surcharge=bool(data.get("scale_child_surcharge", False)), sentence=str(data.get("sentence") or ""),
+        field=str(data.get("field") or "sell"),
     )
 
 
@@ -352,13 +378,20 @@ def decode_change(data: Mapping) -> CellChange:
                       tuple(data.get("marks") or ()), data.get("verdict"))
 
 
-def encode_step(step: BulkStep) -> dict:
+def encode_step(step: BulkStep | CellEditStep) -> dict:
+    if step.kind == "cell_edit":
+        return dict(kind=step.kind, key=encode_key(step.key), clear=list(step.clear))
     return dict(kind=step.kind, room=step.room, rate_plan=step.rate_plan, dates=list(step.dates),
                 rows=[dict(occupancy=row.occupancy, nights=row.nights,
                            **{name: money_text(getattr(row, name)) for name in FIELDS}) for row in step.rows])
 
 
-def decode_step(data: Mapping) -> BulkStep:
+def decode_step(data: Mapping) -> BulkStep | CellEditStep:
+    if data.get("kind") == "cell_edit":
+        clear = tuple(str(name) for name in data["clear"])
+        if not clear or not set(clear) <= {"list", "supply"}:
+            raise ValueError(f"셀 창 단계는 정가·공급 원가만 비웁니다: {clear}")
+        return CellEditStep(decode_key(data["key"]), clear)
     return BulkStep(str(data["room"]), str(data["rate_plan"]), tuple(iso_day(day) for day in data["dates"]),
                     tuple(RowWrite(str(row.get("occupancy") or ""), int(row["nights"]),
                                    *(money(row.get(name)) for name in FIELDS)) for row in data["rows"]))

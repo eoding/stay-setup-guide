@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from change_core.money import round_money  # noqa: E402
 from price_model import (  # noqa: E402
-    CellKey, CellValue, ChangeRequest, Snapshot, decode_request, decode_snapshot, encode_request,
-    encode_snapshot, split_occupancy,
+    CellEditStep, CellKey, CellValue, ChangeRequest, Snapshot, decode_request, decode_snapshot, decode_step,
+    encode_request, encode_snapshot, encode_step, split_occupancy,
 )
 
 D = Decimal
@@ -63,6 +63,16 @@ class RequestTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.base(dates=("12/25",))
 
+    def test_field_and_clear_rules(self):
+        self.assertEqual(self.base(field="supply").field, "supply")
+        with self.assertRaises(ValueError):
+            self.base(field="tax")
+        with self.assertRaises(ValueError):
+            self.base(operation="clear", value=None)
+        with self.assertRaises(ValueError):
+            self.base(operation="clear", field="list")
+        self.assertIsNone(self.base(operation="clear", value=None, field="list").value)
+
     def test_unknown_operation(self):
         with self.assertRaises(ValueError):
             self.base(operation="multiply")
@@ -89,6 +99,12 @@ class JsonTest(unittest.TestCase):
         request = ChangeRequest("데모 호텔", "기본 오퍼", ("디럭스",), ("조식 포함",), ("2026-12-25",),
                                 "set", D("350.00"), base_occupancy="A2", sentence="350 으로")
         self.assertEqual(decode_request(encode_request(request)), request)
+
+    def test_cell_window_step_round_trip_and_only_list_or_supply_can_be_cleared(self):
+        step = CellEditStep(CellKey("R", "P", "2026-12-25", "A2", 1), ("list", "supply"))
+        self.assertEqual(decode_step(encode_step(step)), step)
+        with self.assertRaises(ValueError):
+            decode_step({**encode_step(step), "clear": ["sell"]})
 
     def test_duplicate_cell_in_snapshot_is_refused(self):
         cell = dict(room="R", rate_plan="P", date="2026-12-25", occupancy="A2", nights=1,
