@@ -203,7 +203,9 @@ class LifecycleTest(unittest.TestCase):
                                                   sentence="지금 상태만 저장", read_at=self.before.read_at,
                                                   rows=snapshot_rows(self.before))
         record = self.ledger.change(snapshot_id)
-        self.assertEqual((record.kind, record.status, len(self.items(record))), ("snapshot", "applied", 96))
+        self.assertEqual((record.kind, record.status, len(self.items(record))), ("snapshot", "saved", 96),
+                         "V5 — 지금 상태 저장은 적용한 것이 아니라 저장한 것이다")
+        self.assertEqual({row["id"]: row["status"] for row in self.ledger.list_changes()}[snapshot_id], "saved")
         with self.assertRaises(LedgerError):
             self.ledger.begin(snapshot_id, step_plans(self.steps), read_at=now_text())
         with self.assertRaises(LedgerError):

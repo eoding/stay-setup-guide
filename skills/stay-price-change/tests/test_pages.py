@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import scene  # noqa: E402
+import trial_scene  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
 from change_core.rollback import LaterWrite, RecordedChange, RecordedItem  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
@@ -90,6 +91,18 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("88 바뀌는 칸", text, "안 바꾸기로 고른 칸은 바뀌는 칸에서 빠진다")
         self.assertIn("480.00 그대로 이 칸은 안 바꿈", text)
         self.assertNotIn("480.00 → 528.00", text)
+
+    def test_v5_notes_about_reserved_and_closed_days_only_when_the_plan_has_such_cells(self):
+        whole = visible(render_preview(plan_change(scene.snapshot(), scene.request())))
+        for words in ("예약 있는 날도 똑같이 바꿉니다", "판매 마감인 날은 값만 바뀌고", "예약 있는 날의 칸", "판매 마감인 칸"):
+            self.assertIn(words, whole)
+        plain = visible(render_preview(plan_change(scene.snapshot(), scene.request(rooms=("스위트",), rate_plans=("룸온리",),
+                                                                                    dates=("2026-12-25",)))))
+        for words in ("예약 있는 날도 똑같이 바꿉니다", "판매 마감인 날은 값만 바뀌고", "예약 있는 날의 칸", "판매 마감인 칸"):
+            self.assertNotIn(words, plain)
+        trial = visible(render_preview(plan_change(trial_scene.snapshot(), trial_scene.request())))
+        self.assertIn("예약 있는 날도 똑같이 바꿉니다", trial)
+        self.assertNotIn("판매 마감", trial, "시운전의 모양에는 마감 칸이 없다")
 
     def test_a_hundred_percent_puts_red_banners_up_without_double_counting(self):
         text = visible(render_preview(plan_change(scene.snapshot(), scene.request("100"))))

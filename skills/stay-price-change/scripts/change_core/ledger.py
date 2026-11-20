@@ -6,7 +6,7 @@
 
     meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
     changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied,
-                 다시 계산해 새 번호로 바뀐 미리보기는 replaced — 새 번호의 `replaces` 가 그 번호다),
+                 다시 계산해 새 번호로 바뀐 미리보기는 replaced — 새 번호의 `replaces` 가 그 번호다, 지금 상태 저장은 saved),
                  호텔(페이지가 알아본 번호와 이름), 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON),
                  그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다), 마지막으로 이어 가도 된다고 본
                  때(`active_at` — begin 이 받아들인 읽은 값의 시각, 저장 결과를 적은 때, 이어서 해도 된다고 한 check 의
@@ -17,7 +17,7 @@
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
-snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 applied 다.
+snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 다(적용한 것이 아니다 — 목록에서 적용된 변경과 갈린다).
 
 적용 중인 변경이 `IDLE`(15분) 동안 아무 일이 없으면 멈춘 변경이다 — 목록 · calls · check · 결과 페이지 어디서나. 세션이
 저장 사이에서 끊겨도 장부는 적용 중으로 남는데, 그 사이 ERP 값이 바뀌었을 수 있어 다시 읽지 않고는 남은 저장을 내지 않는다.
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS changes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL CHECK (kind IN ('change', 'snapshot', 'rollback')),
-  status TEXT NOT NULL CHECK (status IN ('previewed', 'applying', 'stopped', 'applied', 'replaced')),
+  status TEXT NOT NULL CHECK (status IN ('previewed', 'applying', 'stopped', 'applied', 'replaced', 'saved')),
   hotel TEXT NOT NULL,
   hotel_id TEXT NOT NULL DEFAULT '',
   offer TEXT NOT NULL,
@@ -370,7 +370,7 @@ class Ledger:
     def record_snapshot(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
                         hotel_id: str, rows: Iterable[ValueRow], reading: Mapping | None = None) -> int:
         with self._db() as db:
-            return self._insert(db, "snapshot", "applied", hotel, hotel_id, offer, currency, sentence, read_at, rows,
+            return self._insert(db, "snapshot", "saved", hotel, hotel_id, offer, currency, sentence, read_at, rows,
                                 reading=reading)
 
     def _header(self, db, change_id):

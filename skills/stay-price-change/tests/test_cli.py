@@ -123,7 +123,7 @@ class CommandTest(unittest.TestCase):
         snapshot_id = self.run_cli("save-snapshot", "--snapshot", after)["change_id"]
         listed = self.run_cli("list")
         self.assertEqual([(row["id"], row["kind"], row["status"]) for row in listed["changes"]],
-                         [(snapshot_id, "snapshot", "applied"), (rollback["change_id"], "rollback", "applying"),
+                         [(snapshot_id, "snapshot", "saved"), (rollback["change_id"], "rollback", "applying"),
                           (change, "change", "applied"), (first["change_id"], "change", "replaced")])
         self.assertTrue(listed["ledger"].endswith("가격장부.sqlite3"))
 

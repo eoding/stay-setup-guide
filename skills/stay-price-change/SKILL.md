@@ -14,7 +14,7 @@ metadata:
 
 하는 일은 다섯이다. 1 지금 가격 보기 · 2 지금 상태만 저장 · 3 가격 바꾸기 · 4 되돌리기 · 5 새 요금표로 맞추기.
 
-- 명령: 이 스킬 폴더의 `scripts/price_change.py`. JSON 파일을 받고 JSON 을 낸다. 하위 명령·플래그·파일 모양·오류는 [references/commands.md](references/commands.md).
+- 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다(commands.md 「공통」). JSON 파일을 받고 JSON 을 낸다. 하위 명령·플래그·파일 모양·오류는 [references/commands.md](references/commands.md).
 - 페이지: 탭에 올린 `window.stayPrice`. 부르는 값·답·오류는 [references/page.md](references/page.md).
 
 ## 반드시 지킬 것
@@ -79,11 +79,11 @@ metadata:
 2. `<작업>/range.json`(`kind: range`)을 쓰고 「읽기」 → `<R>/snapshot.json`.
 3. `save-snapshot --snapshot <R>/snapshot.json --sentence "<담당자 말>"` → 장부 번호 S. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
 4. `render prices --snapshot <R>/snapshot.json` → `page` 를 연다.
-5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다."
+5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다." ○시 ○분은 지금 값의 `read_at`(ERP 에서 읽은 시각)이다.
 
 ## 2. 지금 상태만 저장
 
-말한 범위만 저장한다. "호텔 전체"면 시간이 걸린다고 먼저 말하고 한다. 1 의 1~3 을 하고 이렇게 말한다. "지금 값을 장부 S번(○시 ○분)으로 적어 두었습니다. 나중에 'S번 상태로 되돌려'라고 하시면 그 값으로 되돌리는 미리보기를 보여 드립니다."
+말한 범위만 저장한다. "호텔 전체"면 시간이 걸린다고 먼저 말하고 한다. 1 의 1~3 을 하고 이렇게 말한다(○시 ○분은 ERP 에서 읽은 시각 `read_at` — 장부 목록에서 이 번호의 상태는 `saved`). "지금 값을 장부 S번(○시 ○분)으로 적어 두었습니다. 나중에 'S번 상태로 되돌려'라고 하시면 그 값으로 되돌리는 미리보기를 보여 드립니다."
 
 ## 3. 가격 바꾸기
 

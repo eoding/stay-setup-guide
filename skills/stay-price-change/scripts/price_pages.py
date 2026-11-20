@@ -42,6 +42,9 @@ MAKER = "어딩 Stay 가격 변경 도우미"
 SEASON_REFILL_NOTE = ("여기서 날짜별로 바꾼 가격은 누가 ERP 시즌 화면에서 그 시즌의 [가격]을 '덮기'(이미 값이 있는 날도 덮기)로 "
                       "다시 채우면 옛 요금으로 돌아갑니다.")
 ONE_COLUMN_PER_DATE_UP_TO = 7        # 날짜가 이만큼까지는 날짜마다 열 하나. 넘으면 칸이 모두 같은 날끼리 열 하나(결정 33A)
+# 미리보기 안내 — 그런 칸이 있을 때만 단다
+RESERVED_NOTE = "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다."
+CLOSED_NOTE = "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다."
 
 
 def _short_day(day: str) -> str:
@@ -212,9 +215,10 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
             f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>' if sheet else "", _preview_banners(plan, tally),
             stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄 (고르기 전)")]
                   + ([(tally["chosen"], "고른 빨간 줄")] if tally["chosen"] else [])
-                  + [(tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
-                     (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
-                     (tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
+                  + [(tally["blocked"], "적용할 수 없는 칸")]
+                  + ([(tally["reserved"], "예약 있는 날의 칸 (바꿉니다)")] if tally["reserved"] else [])
+                  + ([(tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)")] if tally["closed"] else [])
+                  + [(tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
             _skip_line(plan), _coverage_section(plan.coverage) if sheet else ""]
     if tally["red"]:
         body.append(f'<p class="sub">빨간 줄 {tally["red"]:,}칸을 어떻게 할지 고르시면 ERP 에 몇 번 나눠 저장하는지 정해집니다. '
@@ -225,10 +229,9 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
                     f'{f", 그중 정가·원가를 비우는 셀 창 저장 {edits}번" if edits else ""}).</p>')
     body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed, by_date),
              _flagged_section(plan, currency), _new_section(plan, currency)]
+    marked = ([RESERVED_NOTE] if tally["reserved"] else []) + ([CLOSED_NOTE] if tally["closed"] else [])
     if targets:
-        lines = [_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).",
-                 "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
-                 "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다."]
+        lines = [_rounding_note(currency), "목표 값이 지금 값과 같은 칸은 바꾸지 않습니다(표에 나오지 않습니다).", *marked]
         if tally["new"]:   # 있던 칸에 넣은 정가·공급 원가는 새 칸이 아니다 — 되돌리면 다시 비워진다
             lines.append("새로 생기는 칸은 나중에 되돌리기로 지울 수 없습니다. 꼭 필요한 칸인지 확인해 주세요.")
         body += [notes(lines),
@@ -236,9 +239,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         return page(title, "\n".join(body), MAKER)
     others = [FIELD_LABELS[name] for name in FIELDS if name != request.field]
     moved_list = sum(change.choice in ("raise_list", "clear_list") for change in plan.changes)
-    lines = [_rounding_note(currency),
-             "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
-             "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다.",
+    lines = [_rounding_note(currency), *marked,
              f"{others[0]}와 {others[1]}는 바꾸지 않습니다" + (
                  f". 다만 정가를 넘는 {moved_list:,}칸은 고르신 대로 정가도 같이 바뀝니다(표의 「정가 … → …」 줄)." if moved_list else
                  "(정가를 넘는 칸에서 정가를 올리거나 지우라고 고르신 경우만 정가가 같이 바뀝니다).")]
