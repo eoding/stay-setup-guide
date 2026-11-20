@@ -226,3 +226,14 @@ export function takeAll(w, result) {
   const text = takes.map((t) => t.text).join('');
   return { takes, text, body: JSON.parse(text) };
 }
+
+// 사람이 누른 클릭 — jsdom 에서는 스크립트가 만든 사건이 늘 isTrusted=false 다. jsdom 안쪽 길로 사람의 클릭(isTrusted=true)을
+// 흉내 낸다(시험 전용, jsdom 22 의 generated/utils.js). 브라우저에서는 사람이 누르면 이렇게 된다.
+const jsdomUtils = require('jsdom/lib/jsdom/living/generated/utils.js');
+export function personClick(w, el) {
+  const event = new w.MouseEvent('click', { bubbles: true, cancelable: true, view: w });
+  const impl = jsdomUtils.implForWrapper(event);
+  impl.isTrusted = true;
+  jsdomUtils.implForWrapper(el)._dispatch(impl);
+  return event;
+}

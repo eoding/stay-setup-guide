@@ -147,9 +147,10 @@ test('B2 · 폼 제출도 허용된 단추가 보낸 것이 아니면 막고, �
   assert.equal(seen.blocked.length, 2);
   assert.equal(page.log.submits, 0, '제출이 화면에 닿지 않았다');
   form.requestSubmit();
+  assert.equal(page.log.submits, 1, '작업의 벽을 걷은 뒤에는 제출이 닿는다(브라우저가 낸 제출 사건)');
+  page.w.stayPrice.standDown();
   page.doc.querySelector('ul.tab-container a[data-stay-tab="offers"]').click();
-  assert.equal(page.log.submits, 1, '벽을 걷은 뒤에는 제출이 닿는다');
-  assert.deepEqual(page.log.reached.slice(-1), ['stay-tab=offers'], '벽을 걷은 뒤에는 클릭이 닿는다');
+  assert.deepEqual(page.log.reached.slice(-1), ['stay-tab=offers'], '작업의 벽을 걷고 쉬는 벽도 내리면 클릭이 닿는다');
   page.w.close();
 });
 

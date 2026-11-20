@@ -11,12 +11,14 @@
  *                        clear, set})                                          셀 창 저장 한 번(정가·공급 원가 비우기·넣기)
  *   stayPrice.take(id, index)                                                  읽은 조각의 한 쪽 — 읽기 답의 body.pieces 만큼 받는다
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
+ *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
  *
  * 지키는 것
  *  - 작업 하나 = 호출 하나. 30초 안에 끝내고 작은 평범한 객체를 돌려준다. 저장은 다시 누르지 않는다.
  *  - 작업이 도는 동안 페이지 맨 바깥(window, 캡처 단계)에서 모든 클릭과 폼 제출을 먼저 보고, 그 작업의
  *    허용 목록(ALLOW)에 없는 것은 막고 적는다. 러너 코드가 직접 부르는 `.click()` 도 여기에 걸린다. 막힌 것이
  *    하나라도 있으면 그 작업은 실패다. 버튼은 글자가 아니라 화면 뿌리 + `data-stay-*`·`data-calendar-*` 표식으로 찾는다.
+ *    작업 밖에서도 이 파일이 올라 있는 동안은 스크립트가 만든 클릭을 막는다(사람의 클릭은 지난다) — `standDown()` 으로 내린다.
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않는다.
  *    러너 함수의 결과는 그대로 넘기지 않는다.
  *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
@@ -294,24 +296,46 @@
       e.stopImmediatePropagation();
       log.blocked.push({ control: describe(verdict.ctl), why: verdict.why });
     };
-    var onClick = function (e) {
-      var verdict = judge(e.target, true);
-      if (!verdict.allow) return block(e, verdict);
-      counts[verdict.allow] = (counts[verdict.allow] || 0) + 1;
-      log.clicks.push(verdict.allow);
-    };
-    var onSubmit = function (e) {
-      var verdict = e.submitter ? judge(e.submitter, false) : { ctl: e.target, why: '누른 단추 없이 보낸 폼입니다' };
-      if (!verdict.allow) block(e, verdict);
-    };
-    window.addEventListener('click', onClick, true);
-    window.addEventListener('submit', onSubmit, true);
-    return {
+    var wall = {
       pins: pins, log: log,
+      handle: function (e) {
+        if (e.type === 'submit') {
+          var sent = e.submitter ? judge(e.submitter, false) : { ctl: e.target, why: '누른 단추 없이 보낸 폼입니다' };
+          if (!sent.allow) block(e, sent);
+          return;
+        }
+        var verdict = judge(e.target, true);
+        if (!verdict.allow) return block(e, verdict);
+        counts[verdict.allow] = (counts[verdict.allow] || 0) + 1;
+        log.clicks.push(verdict.allow);
+      },
       pressed: function (name) { return (counts[name] || 0) > 0; },
-      stop: function () { window.removeEventListener('click', onClick, true); window.removeEventListener('submit', onSubmit, true); }
+      stop: function () { if (GUARD.wall === wall) GUARD.wall = null; }
     };
+    GUARD.wall = wall;
+    return wall;
   }
+
+  /* ── 벽은 하나다: 작업이 돌면 그 작업의 허용 목록이, 작업 밖에서는 스크립트가 만든 클릭(isTrusted 아님)을 막는 쉬는 벽이 선다.
+     사람이 직접 누른 클릭은 쉬는 벽을 지난다. 러너 함수를 손으로 불러도 아무것도 누르지 못한다. `standDown()` 으로 내린다. */
+  var GUARD = window.__stayPriceGuard || { wall: null };
+  window.__stayPriceGuard = GUARD;
+  if (GUARD.listen) { window.removeEventListener('click', GUARD.listen, true); window.removeEventListener('submit', GUARD.listen, true); }
+  GUARD.idle = true;                 // 이 파일을 올릴 때마다 다시 선다
+  GUARD.idleBlocked = [];
+  GUARD.listen = function (e) {
+    if (GUARD.wall) return GUARD.wall.handle(e);
+    if (!GUARD.idle || e.isTrusted) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var target = e.type === 'submit' ? (e.submitter || e.target) : e.target;
+    var el = target && target.nodeType === 1 ? target : target && target.parentElement;
+    GUARD.idleBlocked.push(describe(el ? (el.closest(CONTROL) || el) : null));
+    if (GUARD.idleBlocked.length > 20) GUARD.idleBlocked.shift();
+  };
+  window.addEventListener('click', GUARD.listen, true);
+  window.addEventListener('submit', GUARD.listen, true);
+  function idleState() { return fit({ idle: GUARD.idle, blocked: GUARD.idleBlocked.slice(-5), count: GUARD.idleBlocked.length }); }
 
   /* ───────────── 4. 작업 틀 — 벽 세우기 · 시간 · 결과 남기기 ───────────── */
 
@@ -782,6 +806,10 @@
     applyCell: applyCell,
     last: last,
     take: take,
+    // 쉬는 벽 — 작업 밖에서 스크립트가 만든 클릭을 막는다. 러너를 그대로 쓰려면 standDown() 으로 내린다
+    idle: idleState,
+    standDown: function () { GUARD.idle = false; return idleState(); },
+    standUp: function () { GUARD.idle = true; return idleState(); },
     scrub: function (value) { return scrub(value); },
     reduce: reduce,
     ALLOW: ALLOW, CONTROLS: CONTROLS, NEVER: NEVER,
