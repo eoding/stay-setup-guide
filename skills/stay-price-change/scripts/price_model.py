@@ -7,7 +7,8 @@
     Skipped      건너뛰는 칸과 까닭(가격 없음 · 바꿀 값 없음 · 이미 그 값)
     ReadRange    읽을 범위 — 호텔 · 오퍼 · (객실, 요금제) 쌍 · 날짜. 바꾸는 방법 없이 읽기만 할 때의 요청(kind range)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
-    TargetTable  칸마다 목표 값을 적은 표(새 요금표가 이 모양으로 들어온다) — 지금 값과 다른 칸만 바뀐다
+    TargetTable  칸마다 목표 값을 적은 표 — 지금 값과 다른 칸만 바뀐다. 새 요금표(price_sheet)도 이 모양으로 펼쳐 들어온다
+    Gap          요금표로 맞출 때 넣지 않는 것 하나(요금표에 없는 칸 · 없는 인원 조합 · 판매일 없는 날 · 없는 객실) — Plan.coverage
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
     CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
     CellWrite    칸 하나에 넣을 값(필드마다 새 값 또는 비움)
@@ -258,11 +259,13 @@ class Target:
 
 @dataclass(frozen=True)
 class TargetTable:
+    """`from_sheet` 는 새 요금표를 펼친 표다(price_sheet.plan_sheet) — 미리보기 · 결과가 시즌 [가격] 덮기 한 문장을 단다."""
     hotel: str
     offer: str
     targets: tuple[Target, ...]
     sentence: str = ""
     hotel_id: str = ""
+    from_sheet: bool = False
 
     def __post_init__(self):
         if not self.targets:
@@ -382,6 +385,38 @@ class CellEditStep:
 
 SKIP_LABELS = {"no_price": "가격 없음", "no_list": "정가 없음", "no_supply": "공급 원가 없음", "same": "이미 그 값"}
 
+# 요금표로 맞출 때 넣지 않는 것의 종류 → 미리보기 머리. 차례가 곧 보이는 차례다.
+GAP_KINDS = {
+    "untouched": "요금표에 없는 칸 — 그대로 둡니다",
+    "unseen": "이 객실 · 요금제에 없는 인원 조합 · 박수 — 칸을 새로 만들지 않습니다",
+    "no_sale": "판매일 없는 날 — 이 길로는 넣을 수 없습니다",
+    "unknown": "호텔에 없는 객실 · 요금제 — 넣지 않습니다",
+    "unnamed": "요금표에 없는 객실 · 요금제 — 그대로 둡니다",
+}
+
+
+@dataclass(frozen=True)
+class Gap:
+    """요금표로 맞출 때 넣지 않는 것 하나. 종류마다 쓰는 칸:
+
+        untouched  호텔에 가격이 있는데 요금표가 말하지 않은 칸 — 객실 · 요금제 · 인원 · 박수 · 날짜들. 그대로 둔다
+        unseen     읽은 값에 그 객실 · 요금제의 줄로 나온 적 없는 인원 · 박수 — 줄 번호들 · 날짜들. 새 종류의 칸은 만들지 않는다(R6)
+        no_sale    판매일이 없어 칸이 없는 날 — 객실 · 요금제 · 날짜들
+        unknown    요금표에 있는데 호텔(이 오퍼)에 없는 객실 · 요금제 — 줄 번호들
+        unnamed    호텔에 있는데 요금표가 말하지 않은 객실 · 요금제 — 그대로 둔다
+    """
+    kind: str
+    room: str
+    rate_plan: str
+    occupancy: str | None = None
+    nights: int | None = None
+    dates: tuple[str, ...] = ()
+    lines: tuple[int, ...] = ()
+
+    def __post_init__(self):
+        if self.kind not in GAP_KINDS:
+            raise ValueError(f"넣지 않는 것의 종류를 모릅니다: {self.kind!r}")
+
 
 @dataclass(frozen=True)
 class Skipped:
@@ -396,6 +431,7 @@ class Plan:
 
     `absent_pairs` 는 객실·요금제를 따로 받았을 때 그 객실에 없어(읽은 쌍에 없어) 요청에서 뺀 조합 — 미리보기가 이름을 댄다.
     `no_sale` 은 요청한 (객실, 요금제, 날짜) 가운데 판매일이 없어 바꿀 수 없는 날 — 「판매일 없음」으로 건너뛴다.
+    `coverage` 는 새 요금표로 맞출 때 넣지 않는 것 전부(Gap) — 요금표에서 온 계획만 갖는다.
     """
     request: ChangeRequest | TargetTable
     currency: str
@@ -405,6 +441,7 @@ class Plan:
     empty_pairs: tuple[tuple[str, str], ...] = ()
     absent_pairs: tuple[tuple[str, str], ...] = ()
     no_sale: tuple[tuple[str, str, str], ...] = ()
+    coverage: tuple[Gap, ...] = ()
 
 
 # ─── 사람이 읽는 이름 ───
@@ -531,7 +568,7 @@ def decode_snapshot(data: Mapping) -> Snapshot:
 def encode_request(request: ChangeRequest | TargetTable) -> dict:
     if isinstance(request, TargetTable):
         return dict(kind="targets", hotel=encode_hotel(request.hotel, request.hotel_id), offer=request.offer,
-                    sentence=request.sentence,
+                    sentence=request.sentence, from_sheet=request.from_sheet,
                     targets=[dict(key=encode_key(target.key), values={name: money_text(value) for name, value in
                                                                       target.values}) for target in request.targets])
     return dict(kind="change", hotel=encode_hotel(request.hotel, request.hotel_id), offer=request.offer,
@@ -545,12 +582,14 @@ def encode_request(request: ChangeRequest | TargetTable) -> dict:
 
 
 def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
+    if data.get("kind") in ("sheet", "sheet_check"):
+        raise ValueError("요금표 파일(kind sheet)은 sheet 명령으로 확인하고, 그 명령이 낸 파일(kind sheet_check)을 --request 로 줍니다")
     hotel, hotel_id = decode_hotel(data["hotel"])
     if data.get("kind") == "targets":
         return TargetTable(hotel, str(data["offer"]),
                            tuple(Target(decode_target_key(item["key"]), tuple((str(name), money(value)) for name, value in
                                                                       item["values"].items())) for item in data["targets"]),
-                           str(data.get("sentence") or ""), hotel_id)
+                           str(data.get("sentence") or ""), hotel_id, bool(data.get("from_sheet")))
     operation = data["operation"]
     return ChangeRequest(
         hotel=hotel, hotel_id=hotel_id, offer=str(data["offer"]), rooms=tuple(data["rooms"]),
@@ -616,13 +655,26 @@ def decode_resolution_items(items) -> tuple[CellKey, ...] | None:
     return None if items is None else tuple(decode_key(item) for item in items)
 
 
+def encode_gap(gap: Gap) -> dict:
+    return dict(kind=gap.kind, room=gap.room, rate_plan=gap.rate_plan, occupancy=gap.occupancy, nights=gap.nights,
+                dates=list(gap.dates), lines=list(gap.lines))
+
+
+def decode_gap(data: Mapping) -> Gap:
+    return Gap(str(data["kind"]), str(data["room"]), str(data["rate_plan"]),
+               None if data.get("occupancy") is None else str(data["occupancy"]),
+               None if data.get("nights") is None else int(data["nights"]),
+               tuple(iso_day(day) for day in data.get("dates") or ()), tuple(int(no) for no in data.get("lines") or ()))
+
+
 def encode_plan(plan: Plan) -> dict:
     return dict(request=encode_request(plan.request), currency=plan.currency, read_at=plan.read_at,
                 changes=[encode_change(change) for change in plan.changes],
                 skipped=[dict(key=encode_key(item.key), reason=item.reason) for item in plan.skipped],
                 empty_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.empty_pairs],
                 absent_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.absent_pairs],
-                no_sale=[dict(room=room, rate_plan=plan_name, date=day) for room, plan_name, day in plan.no_sale])
+                no_sale=[dict(room=room, rate_plan=plan_name, date=day) for room, plan_name, day in plan.no_sale],
+                coverage=[encode_gap(gap) for gap in plan.coverage])
 
 
 def decode_plan(data: Mapping) -> Plan:
@@ -631,4 +683,5 @@ def decode_plan(data: Mapping) -> Plan:
                 tuple(Skipped(decode_key(item["key"]), str(item["reason"])) for item in data.get("skipped") or ()),
                 tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("empty_pairs") or ()),
                 tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("absent_pairs") or ()),
-                tuple((str(item["room"]), str(item["rate_plan"]), iso_day(item["date"])) for item in data.get("no_sale") or ()))
+                tuple((str(item["room"]), str(item["rate_plan"]), iso_day(item["date"])) for item in data.get("no_sale") or ()),
+                tuple(decode_gap(item) for item in data.get("coverage") or ()))

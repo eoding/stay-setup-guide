@@ -41,6 +41,9 @@ from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
 from price_model import ERP_MAX_DAYS, FIELDS, WEEKDAYS, day_windows, decode_step, iso_day
 
 READ_SPAN = 186                      # readPair 한 번의 기간 — 달마다 달력 칸을 보므로(판매일 확인) 여섯 달 남짓으로 끊어 45초 안에
+# 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES). 읽기는 readPair · readReserved 를 다 부른 뒤에 조각을 받으므로(take),
+# 한 번의 읽기가 이보다 많은 조각을 만들면 앞 조각이 밀려나 받을 수 없다 — 그것이 읽기 한 번이 덮을 수 있는 크기다.
+PAGE_KEEPS = 40
 PROBE_FIELDS = ("hotel", "offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
 OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
 
