@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 from price_model import (
-    CellKey, CellValue, CellWrite, LaterWrite, Plan, RecordedCell, RecordedChange, RollbackPlan, SaveStep, Snapshot,
+    CellKey, CellValue, CellWrite, ChangeRequest, LaterWrite, Plan, RecordedCell, RecordedChange, RollbackPlan, SaveStep,
+    Snapshot,
     decode_step, encode_request, encode_step, money, money_text,
 )
 
@@ -228,14 +229,20 @@ class Ledger:
             raise LedgerError(f"장부에 {change_id}번 변경이 없습니다")
         return row
 
-    def begin(self, change_id: int, steps: Iterable[SaveStep]) -> None:
-        """적용 시작 — 저장 단계를 적고 칸마다 넣을 값과 단계 번호를 단다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다."""
+    def begin(self, change_id: int, steps: Iterable[SaveStep], request: ChangeRequest | None = None) -> None:
+        """적용 시작 — 저장 단계를 적고 칸마다 넣을 값과 단계 번호를 단다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다.
+
+        `request` 를 주면 미리보기 때 적은 요청과 같은 계산인지 본다.
+        """
         steps = tuple(steps)
         encoded = [json.dumps(encode_step(step), ensure_ascii=False, sort_keys=True) for step in steps]
         with self._db() as db:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
                 raise LedgerError("지금 상태 저장은 적용할 것이 없습니다")
+            if request is not None and header["request"] is not None and \
+                    json.loads(header["request"]) != encode_request(request):
+                raise LedgerError(f"{change_id}번 변경의 요청과 다른 계산입니다. 미리보기를 다시 만들어 주세요")
             if header["status"] != "previewed":
                 stored = [json.dumps(encode_step(self._step(row)), ensure_ascii=False, sort_keys=True)
                           for row in db.execute("SELECT * FROM steps WHERE change_id = ? ORDER BY idx", (change_id,))]
