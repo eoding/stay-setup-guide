@@ -96,7 +96,7 @@ class BrowserCommandTest(unittest.TestCase):
         mixed = dict(result(calls[1]), no=3)
         self.assertIn("다른 값을 물었습니다", self.run_cli("record-result", "--change", change, "--result", self.write("mixed.json", mixed),
                                                      code=2)["error"])
-        unsure = result(calls[1], ok=False, saved=False, error="결과를 확인하지 못했습니다")
+        unsure = result(calls[1], ok=False, saved="unknown", error="결과를 확인하지 못했습니다")
         stopped = self.run_cli("record-result", "--change", change, "--result", self.write("r2.json", unsure))
         self.assertEqual((stopped["saved"], stopped["status"]), (False, "stopped"))
         self.assertIn("다시 읽어", stopped["note"])

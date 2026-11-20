@@ -69,7 +69,7 @@ test('B7 · applyBulk — 저장을 다시 누르지 않는다(러너의 CSRF �
   const page = erpPage({ onBulkSave: '403' });
   page.w.stayRun.config({ waitMs: 1000 });
   const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
-  assert.equal(r.saved, false);
+  assert.equal(r.saved, 'unknown', '눌렀지만 확인하지 못했으니 「알 수 없음」');
   assert.equal(r.pressed, true);
   assert.equal(page.log.posts.length, 1, '저장 요청은 한 번만 나갔다');
   assert.ok(r.blocked.some((b) => /다시 누르지 않습니다/.test(b.why)), JSON.stringify(r.blocked));

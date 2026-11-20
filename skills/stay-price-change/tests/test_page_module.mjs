@@ -57,7 +57,7 @@ test('B1 · 작업이 도는 동안에는 다음 작업을 받지 않고, 도는
   assert.equal(plain(page.w.stayPrice.last()).running.op, 'readPair');
   const second = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
   assert.equal(second.ok, false);
-  assert.match(second.error, /다른 작업\(readPair\)이 아직 돌고 있습니다/);
+  assert.match(second.error, /앞 작업\(readPair\)이 아직 끝나지 않았습니다/);
   assert.equal((plain(await first)).ok, true);
   assert.deepEqual(page.log.posts, [], '두 번째 작업은 아무것도 누르지 않았다');
   const third = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));

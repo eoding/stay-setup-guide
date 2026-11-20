@@ -102,7 +102,8 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   tab          'offers' 면 오퍼 탭이 켜진 채로 연다(가격 캘린더 탭을 눌러야 한다)
  *   bulkReview   가격 수정 ② 조각(기본: 캡처 price-step2)       bulkReviewManual  연동 방식을 「직접 입력」으로 바꾼 ②
  *   adjustReview 가감 ② 조각(기본: 손 조각 adjust-rejected)
- *   onBulkSave   (page) => 'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다)
+ *   onBulkSave   'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다) | 'hang'(요청이 끝나지 않는다)
+ *   drawerStuck  true 면 드로어가 닫혀도 내용이 비지 않는다(쉬는 화면이 오지 않는다)
  *   cell         셀 창 그리기 값 {date, plan, rows} · cellSave 'ok'|'error'
  *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다
  */
@@ -129,7 +130,13 @@ export function erpPage(opts = {}) {
   const drawer = doc.querySelector('.stay-drawer'), body = doc.getElementById('stay_drawer_body');
   const log = { reached: [], posts: [], submits: 0 };
   const render = (fragment) => { body.innerHTML = fragment; drawer.classList.add('is-open'); };
-  const closeDrawer = () => { drawer.classList.remove('is-open'); body.innerHTML = ''; };
+  // ERP 드로어처럼 닫는다 — `is-open` 은 바로 빠지고 내용은 0.35초 뒤에 비운다(`_drawer.html` hide()). drawerStuck 이면 안 비운다
+  const closeDrawer = () => {
+    drawer.classList.remove('is-open');
+    const stale = body.firstElementChild;
+    if (!stale || o.drawerStuck) return;
+    w.setTimeout(() => { if (!drawer.classList.contains('is-open') && body.firstElementChild === stale) body.replaceChildren(); }, 350);
+  };
   const slot = () => doc.getElementById('stay_cell_slot');
   const fire = (name, detail) => doc.dispatchEvent(new w.CustomEvent(name, { detail, bubbles: true }));
   const nameOf = (b) => {
@@ -165,6 +172,7 @@ export function erpPage(opts = {}) {
       root.querySelectorAll('input, select').forEach((i) => { if (i.name && !i.name.endsWith('_pick') && i.value !== '' && i.name !== 'weekdays') post[i.name] = i.value; });
       log.posts.push(post);
       fire('htmx:before:request', {});
+      if (o.onBulkSave === 'hang') return;   // 요청이 끝나지 않는다(서버가 답하지 않음)
       if (o.onBulkSave === '403') {
         fire('htmx:response:error', { ctx: { response: { status: 403 } } });
         fire('htmx:finally:request', {});

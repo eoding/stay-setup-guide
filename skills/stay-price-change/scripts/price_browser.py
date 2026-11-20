@@ -6,7 +6,7 @@
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
     price_pages(results)                  readPair 답 → 가격 수정 확인 단계(물은 오퍼·요금제와 화면이 다르면 거절)
     step_call(no, offer, kind, body)      장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
-    step_outcome(call, result)            브라우저 답 → (저장됨, 메모). 그 단계를 물은 답이 아니면 거절
+    step_outcome(call, result)            브라우저 답 → (저장됨, 메모). 그 단계를 물은 답이 아니면 거절. 「알 수 없음」은 저장됨이 아니다
 
 가감 확인 단계는 건너뛰는 칸을 300줄까지만 보이고 나머지는 숨긴 줄 수로 말한다. 숨긴 줄이 있는 답은 쓰지 않고,
 그 물음을 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 다시 묻는다. 쪼갠 물음들은 원래 물음의 칸을 나눠 가지므로, 숨긴 줄이
@@ -236,6 +236,6 @@ def step_outcome(call: Mapping, result: Mapping) -> tuple[bool, str]:
         note = result.get("note") or "저장했습니다"
         return True, note if result.get("ok") else f"{note} · {result.get('error')}"
     reason = result.get("error") or "저장하지 못했습니다"
-    if result.get("pressed"):
-        return False, f"저장 단추는 눌렸습니다 — 다시 읽어 값을 확인해야 합니다: {reason}"
+    if result.get("saved") == "unknown":
+        return False, f"저장됐는지 알 수 없습니다 — 다시 읽어 값을 확인해야 합니다: {reason}"
     return False, reason

@@ -14,7 +14,8 @@
  *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
  *
  * 지키는 것
- *  - 작업 하나 = 호출 하나. 30초 안에 끝내고 작은 평범한 객체를 돌려준다. 저장은 다시 누르지 않는다.
+ *  - 작업 하나 = 호출 하나. 34초에 답을 정하고 화면이 쉴 때(드로어가 다 닫힌 뒤) 돌려준다 — 45초 안이다. 저장은 다시 누르지
+ *    않는다. 저장 단추를 누르고도 저장됐는지 모르면 saved 는 "unknown"(다시 읽어 확인)이다.
  *  - 작업이 도는 동안 페이지 맨 바깥(window, 캡처 단계)에서 모든 클릭과 폼 제출을 먼저 보고, 그 작업의
  *    허용 목록(ALLOW)에 없는 것은 막고 적는다. 러너 코드가 직접 부르는 `.click()` 도 여기에 걸린다. 막힌 것이
  *    하나라도 있으면 그 작업은 실패다. 버튼은 글자가 아니라 화면 뿌리 + `data-stay-*`·`data-calendar-*` 표식으로 찾는다.
@@ -30,7 +31,11 @@
 
   var VERSION = '0.1.0';
   var LAST_KEY = 'stayPriceLast';
-  var BUDGET_MS = 30000;            // 한 작업의 천장 — 브라우저 도구가 45초에 자른다
+  // 브라우저 도구는 JS 호출 하나를 45초에 자른다. 작업은 hardMs 에 무조건 답을 정하고, 화면 정리(restMs)까지 마쳐도 45초 안이다.
+  // budgetMs 는 이 파일의 기다림 천장, hardMs 는 러너 함수까지 포함한 작업 전체의 천장이다. config() 로는 낮추기만 한다(시험).
+  var DEFAULTS = { budgetMs: 30000, hardMs: 34000, restMs: 4000 };
+  var LIMITS = Object.assign({}, DEFAULTS);
+  var CALL_MS = 45000;
   var WEEK = '월화수목금토일';
   var MANUAL = '조합마다 직접 입력';
   var C = function (t) { return String(t === undefined || t === null ? '' : t).normalize('NFC').replace(/\s+/g, ' ').trim(); };
@@ -296,9 +301,17 @@
       e.stopImmediatePropagation();
       log.blocked.push({ control: describe(verdict.ctl), why: verdict.why });
     };
+    var frozen = false;
     var wall = {
       pins: pins, log: log,
       handle: function (e) {
+        // 시간이 다 된 작업: 사람의 클릭과 셀 창 [닫기] 만 지나고, 뒤에 남은 러너 코드의 클릭은 모두 막는다
+        if (frozen) {
+          var at = e.target && e.target.nodeType === 1 ? e.target : e.target && e.target.parentElement;
+          var shut = at && at.closest(CONTROL);
+          if (e.isTrusted || (e.type === 'click' && shut && shut.matches(CONTROLS.cellClose.sel))) return;
+          return block(e, { ctl: shut || at, why: '시간이 다 된 작업의 클릭입니다' });
+        }
         if (e.type === 'submit') {
           var sent = e.submitter ? judge(e.submitter, false) : { ctl: e.target, why: '누른 단추 없이 보낸 폼입니다' };
           if (!sent.allow) block(e, sent);
@@ -310,6 +323,8 @@
         log.clicks.push(verdict.allow);
       },
       pressed: function (name) { return (counts[name] || 0) > 0; },
+      freeze: function () { frozen = true; },
+      frozen: function () { return frozen; },
       stop: function () { if (GUARD.wall === wall) GUARD.wall = null; }
     };
     GUARD.wall = wall;
@@ -352,35 +367,66 @@
     try { return JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch (e) { return null; }
   }
 
+  var SAVES = { applyBulk: 'bulkSave', applyCell: 'cellSave' };
+  function at(ms) { var wait = Math.max(1, ms - Date.now()); return window.stayRun.sleep ? window.stayRun.sleep(wait) : new Promise(function (r) { setTimeout(r, wait); }); }
+
   async function run(op, input, body) {
     var missing = NEEDS.filter(function (name) { return typeof window[name] !== 'function'; });
     if (!window.stayRun || typeof window.stayRun.waitFor !== 'function') missing.unshift('stayRun');
     if (missing.length) return remember(fit({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
-    if (window.__stayPriceBusy) return fit({ ok: false, op: op, error: '다른 작업(' + window.__stayPriceBusy + ')이 아직 돌고 있습니다 — 끝난 뒤 stayPrice.last() 로 결과를 봅니다' });
-    window.__stayPriceBusy = op;
-    var started = Date.now();
+    var busy = window.__stayPriceBusy;
+    if (busy) return fit({ ok: false, op: op, error: '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다 — 잠시 뒤 다시 부르거나 stayPrice.last() 로 결과를 봅니다' });
+    var token = window.__stayPriceBusy = { op: op };
+    var started = Date.now(), limits = Object.assign({}, LIMITS);
+    var hardAt = started + limits.hardMs, endAt = hardAt + limits.restMs;
     var no = input && typeof input.no === 'number' ? input.no : undefined;
     remember({ running: { op: op, no: no, at: new Date(started).toISOString() } });
     var wall = Wall(op), out;
     var ctx = {
       wall: wall, pins: wall.pins,
-      left: function () { return Math.max(0, started + BUDGET_MS - Date.now()); },
+      left: function () { return Math.max(0, Math.min(started + limits.budgetMs, hardAt) - Date.now()); },
       wait: function (cond, ms) { return window.stayRun.waitFor(cond, Math.max(1, Math.min(ms, ctx.left()))); },
       check: function () {
+        if (wall.frozen()) fail('시간이 다 돼 멈춘 작업입니다');
         if (wall.log.blocked.length) fail('허용 목록에 없는 클릭이 있어 멈췄습니다');
-        if (!ctx.left()) fail('시간(' + BUDGET_MS / 1000 + '초)이 다 돼 멈췄습니다');
-      }
+        if (!ctx.left()) fail('시간(' + Math.round(ctx.limit() / 1000) + '초)이 다 돼 멈췄습니다');
+      },
+      limit: function () { return Math.min(limits.budgetMs, limits.hardMs); }
     };
-    try {
-      out = await body(input || {}, ctx);
-      if (out.keep) { out.body = keep(Object.assign({ op: op, asked: askedOf(input) }, out.keep)); delete out.keep; }
-    } catch (e) {
+    var work = (async function () {
+      // 앞 화면이 쉬고 있을 때만 시작한다 — 닫히는 중인 드로어의 조각을 새 화면으로 읽지 않게
+      await closeDrawer(started + limits.restMs);
+      if (!await window.stayRun.waitFor(atRest, Math.max(1, Math.min(limits.restMs, ctx.left())))) {
+        fail(cellWindow() ? '셀 창이 열려 있습니다 — 사람이 닫은 뒤 다시 부릅니다' : '앞 화면(드로어·요청)이 아직 정리되지 않았습니다 — 잠시 뒤 다시 부릅니다');
+      }
+      var result = await body(input || {}, ctx);
+      if (result.keep) { result.body = keep(Object.assign({ op: op, asked: askedOf(input) }, result.keep)); delete result.keep; }
+      return result;
+    })().then(function (value) { return { value: value }; }, function (error) { return { error: error }; });
+    var first = await Promise.race([work, at(hardAt).then(function () { return { late: true }; })]);
+    var late = !!first.late;
+    if (late) {
+      // 뒤에 남은 코드(러너의 기다림)는 아무것도 더 누르지 못한다. 그 코드가 끝나면 벽을 걷고 다음 작업을 받는다
+      wall.freeze();
+      var pressed = SAVES[op] && wall.pressed(SAVES[op]);
+      out = { ok: false, error: '시간(' + Math.round(limits.hardMs / 1000) + '초) 안에 끝나지 않아 멈췄습니다 — 그 뒤로는 아무것도 누르지 않습니다' };
+      if (SAVES[op]) {
+        out.pressed = !!pressed;
+        out.saved = pressed ? 'unknown' : false;
+        if (pressed) out.error += ' · 저장 단추는 눌렸습니다. 저장됐는지 알 수 없으니 다시 읽어 확인합니다';
+      }
+      work.then(function () { wall.stop(); if (window.__stayPriceBusy === token) window.__stayPriceBusy = null; });
+    } else if (first.error) {
+      var e = first.error;
       out = e instanceof Stop ? Object.assign({ ok: false, error: e.message }, e.extra) : { ok: false, error: '페이지 쪽 코드가 멈췄습니다: ' + C(e && e.message) };
-    } finally {
-      try { await closeAll(op); } catch (e) { /* 닫기 실패는 아래 결과에 남는다 */ }
-      wall.stop();
-      window.__stayPriceBusy = null;
+    } else {
+      out = first.value;
     }
+    try { await closeAll(op, endAt); } catch (e) { /* 닫기 실패는 아래 결과에 남는다 */ }
+    // 화면이 쉴 때 돌려준다 — 드로어가 다 닫히고(내용까지 비고) 셀 창이 없고 도는 요청이 없을 때
+    out.rest = !!(await window.stayRun.waitFor(atRest, Math.max(1, endAt - Date.now())));
+    if (!out.rest) out.warn = '화면이 아직 정리되지 않았습니다(드로어·셀 창·요청) — 다음 작업은 정리된 뒤에 시작합니다';
+    if (!late) { wall.stop(); window.__stayPriceBusy = null; }
     var blocked = wall.log.blocked;
     if (blocked.length) {
       out.ok = false;
@@ -404,19 +450,25 @@
 
   function drawerOpen() { return !!document.querySelector('.stay-drawer.is-open'); }
   function cellWindow() { return document.getElementById('stay_cell_edit'); }
+  // 쉬는 화면 — 드로어가 닫혔고 내용도 비었고(ERP 는 닫고 0.35초 뒤에 비운다), 셀 창이 없고, 도는 htmx 요청이 없다
+  function atRest() {
+    var body = document.getElementById('stay_drawer_body');
+    var hx = window.stayRun && window.stayRun.hx;
+    return !drawerOpen() && !(body && body.firstElementChild) && !cellWindow() && !(hx && hx.pending > 0);
+  }
   // 드로어는 ERP 가 듣는 `stay-drawer-close` 로 닫는다(러너 `stayRun.close()` 와 같은 길) — 클릭이 아니다
-  async function closeDrawer() {
+  async function closeDrawer(untilMs) {
     if (!drawerOpen()) return;
     window.dispatchEvent(new CustomEvent('stay-drawer-close'));
-    await window.stayRun.waitFor(function () { return !drawerOpen(); }, 3000);
+    await window.stayRun.waitFor(function () { return !drawerOpen(); }, Math.max(1, Math.min(3000, (untilMs || Infinity) - Date.now())));
   }
-  async function closeAll(op) {
+  async function closeAll(op, untilMs) {
     var modal = cellWindow();
     if (modal && op === 'applyCell') {
       var x = modal.querySelector('.stay-modal__head [data-stay-action="close"]');
-      if (x) { x.click(); await window.stayRun.waitFor(function () { return !cellWindow(); }, 3000); }
+      if (x) { x.click(); await window.stayRun.waitFor(function () { return !cellWindow(); }, Math.max(1, Math.min(3000, untilMs - Date.now()))); }
     }
-    await closeDrawer();
+    await closeDrawer(untilMs);
   }
 
   function calendarReady() {
@@ -425,9 +477,6 @@
     return active && !!document.querySelector('#stay_calendar[data-cal-month]');
   }
   async function toCalendar(ctx) {
-    await closeDrawer();
-    if (cellWindow()) fail('셀 창이 열려 있습니다 — 사람이 닫은 뒤 다시 부릅니다');
-    if (drawerOpen()) fail('열려 있던 드로어를 닫지 못했습니다');
     if (!calendarReady()) {
       var link = document.querySelector('ul.tab-container a[data-stay-tab="calendar"]');
       if (!link) fail('[가격 캘린더] 탭을 찾지 못했습니다');
@@ -556,7 +605,7 @@
       await toPair(ctx, want.offer, want.room, want.ratePlan);
       var review = await openBulkReview(ctx, want, span);
       var fragment = reduce(review);
-      await closeDrawer();
+      await closeDrawer(Date.now() + 3000);
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
       return { ok: true, what: clip(ctx.pins.chip + ' · ' + span.ranges[0] + (span.ranges.length > 1 ? ' 외 ' + (span.ranges.length - 1) + '구간' : ''), 120),
         days: span.days.length, keep: { fragment: fragment } };
@@ -653,7 +702,7 @@
       if (!same) fail('가감 확인 단계가 고른 것과 다른 범위를 보여 줍니다');
       if (facts(r2)['오퍼'] !== want.offer) fail('가감 확인 단계의 오퍼가 `' + (facts(r2)['오퍼'] || '?') + '` 입니다');
       var fragment = reduce(r2);
-      await closeDrawer();
+      await closeDrawer(Date.now() + 3000);
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
       return { ok: true, what: clip(want.rooms.length + '객실 · ' + want.ratePlans.length + '요금제 · ' + want.from + ' ~ ' + want.to, 120),
         days: span.days.length, keep: { fragment: fragment } };
@@ -702,14 +751,17 @@
       ctx.pins.ranges = span.ranges;   // 저장 단추는 드로어가 이 날짜·이 칩일 때만 눌린다(WHEN.bulkTarget)
       var r = await window.runCalendarPriceStep(bulkStepFor(Object.assign({ no: p.no }, want)), {});
       var pressed = ctx.wall.pressed('bulkSave');
-      var saved = pressed && !!r && r.submitted === true && !r.error && !r.manualAction;
-      var out = { ok: saved, what: clip(want.room + ' · ' + want.ratePlan + ' · ' + span.ranges.join(', '), 120), saved: saved, pressed: pressed };
-      if (saved) { out.note = '저장했습니다'; return out; }
+      var confirmed = pressed && !!r && r.submitted === true && !r.error && !r.manualAction;
+      // 눌렀는데 드로어가 오류를 보이며 남았으면 서버가 거절한 것(저장 안 됨). 그 밖에 확인 못 한 것은 「알 수 없음」이다
+      var refusedByServer = pressed && !!r && r.submit === 'stayed' && (r.errors || []).length > 0;
+      var saved = confirmed ? true : (pressed && !refusedByServer ? 'unknown' : false);
+      var out = { ok: saved === true, what: clip(want.room + ' · ' + want.ratePlan + ' · ' + span.ranges.join(', '), 120), saved: saved, pressed: pressed };
+      if (saved === true) { out.note = '저장했습니다'; return out; }
       var reason = r && r.bad && r.bad.length ? '드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다 — ' + r.bad.join(' / ')
         : r && r.stoppedBy === 'mismatch' ? '넣은 값을 다시 읽으니 달라 저장하지 않았습니다 — ' + (r.mismatch || []).join(' / ') : null;
       if (reason && !pressed) out.refused = true;
       out.error = reason || (r && r.error) || '저장하지 못했습니다';
-      if (pressed) out.error += ' — 저장 단추는 눌렸습니다. 다시 읽어 값을 확인한 뒤 정합니다(다시 누르지 않았습니다)';
+      if (saved === 'unknown') out.error += ' — 저장 단추는 눌렸고 저장됐는지 알 수 없습니다. 다시 읽어 확인합니다(다시 누르지 않았습니다)';
       if (r && r.errors && r.errors.length) out.errors = r.errors.slice(0, 3).map(function (e) { return clip(e, 80); });
       return out;
     });
@@ -787,10 +839,11 @@
       var row2 = after && after !== modal ? after.querySelector('tr[data-stay-row="' + rowId + '"]') : null;
       var errors = after ? window.calErrors(after) : [];
       var landed = !!row2 && Object.keys(targets).every(function (name) { var el = row2.querySelector('input[name="' + CELL_FIELDS[name] + '"]'); return !!el && el.value === targets[name]; });
-      var saved = pressed && landed && !errors.length;
-      var out = { ok: saved, what: clip(cellName, 120), saved: saved, pressed: pressed };
-      if (saved) out.note = '저장했습니다';
-      else out.error = (errors.length ? '셀 창이 저장을 거절했습니다 — ' + errors.join(' / ') : '셀 창 저장을 확인하지 못했습니다') + (pressed ? ' — [저장] 은 눌렸습니다. 다시 읽어 값을 확인한 뒤 정합니다(다시 누르지 않았습니다)' : '');
+      var saved = pressed && landed && !errors.length ? true : (pressed && !errors.length ? 'unknown' : false);
+      var out = { ok: saved === true, what: clip(cellName, 120), saved: saved, pressed: pressed };
+      if (saved === true) out.note = '저장했습니다';
+      else if (errors.length) out.error = '셀 창이 저장을 거절했습니다 — ' + errors.join(' / ');
+      else out.error = '셀 창 저장을 확인하지 못했습니다' + (pressed ? ' — [저장] 은 눌렸고 저장됐는지 알 수 없습니다. 다시 읽어 확인합니다(다시 누르지 않았습니다)' : '');
       var x = after && after.querySelector('.stay-modal__head [data-stay-action="close"]');
       if (x) { x.click(); await ctx.wait(function () { return !cellWindow(); }, 5000); }
       if (cellWindow()) { out.ok = false; out.error = (out.error ? out.error + ' · ' : '') + '셀 창을 닫지 못했습니다'; }
@@ -810,6 +863,13 @@
     idle: idleState,
     standDown: function () { GUARD.idle = false; return idleState(); },
     standUp: function () { GUARD.idle = true; return idleState(); },
+    // 시간 천장 — 부르면 지금 값, 값을 주면 낮추기만 한다(시험용). 기본값은 hardMs + restMs 가 45초 안이다
+    config: function (patch) {
+      Object.keys(patch || {}).forEach(function (k) {
+        if (DEFAULTS[k] !== undefined && typeof patch[k] === 'number' && patch[k] > 0 && patch[k] <= DEFAULTS[k]) LIMITS[k] = patch[k];
+      });
+      return fit(Object.assign({ callMs: CALL_MS }, LIMITS));
+    },
     scrub: function (value) { return scrub(value); },
     reduce: reduce,
     ALLOW: ALLOW, CONTROLS: CONTROLS, NEVER: NEVER,
