@@ -30,13 +30,41 @@ from change_core.rules import BLOCKED, Resolution, decide
 from price_model import (
     CELL_RULES, CLOSED, ERP_MAX_DAYS, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, TIER_RULE, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
-    snapshot_reading, split_occupancy, value_of,
+    day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, matching_rows, occupancy_label, occupancy_order,
+    same_hotel, snapshot_reading, split_occupancy, value_of,
 )
 
 
 class PlanError(Refused):
     """요청과 읽은 값이 맞지 않아 계산할 수 없다 — 문장은 담당자에게 그대로 보여 줄 수 있다."""
+
+
+class ChooseRows(PlanError):
+    """밴드 코드 없이 성인 · 아동 수만 적은 인원 조합(`A2C1`)에 맞는 줄이 그 객실 · 요금제에 여럿이다(아동 밴드가 여럿). 아무것도
+    셈하거나 적지 않고, 고를 줄을 ERP 가 부르는 이름으로 댄다 — `choose` 는 `[{room, rate_plan, occupancy, choices: [{occupancy, label}]}]`."""
+
+    def __init__(self, message: str, choose: list[dict]):
+        super().__init__(message)
+        self.choose = choose
+
+
+def matched_rows(snapshot: Snapshot, wanted: Iterable[tuple[str, str, str]], fix: str) -> dict[tuple[str, str, str], tuple[str, ...]]:
+    """(객실, 요금제, 적은 인원 조합) → 그 객실 · 요금제의 읽은 줄 가운데 그 이름이 가리키는 줄(`matching_rows` — 같은 키, 또는 밴드
+    코드 없이 적은 이름이면 같은 성인 · 아동 수의 줄). 없으면 빈 묶음이다(부르는 쪽이 없는 줄로 알린다). 여럿인 이름이 하나라도 있으면
+    모두 모아 ChooseRows — `fix` 는 고른 키를 어디에 적어 다시 하는지다."""
+    found, choose = {}, []
+    for room, plan, name in dict.fromkeys(wanted):
+        rows = matching_rows(name, snapshot.rows.get((room, plan), ()))
+        found[(room, plan, name)] = rows
+        if len(rows) > 1:
+            choose.append(dict(room=room, rate_plan=plan, occupancy=name,
+                               choices=[dict(occupancy=key, label=snapshot.row_label(key)) for key in rows]))
+    if choose:
+        shown = "; ".join(f"{item['room']} · {item['rate_plan']} 의 {occupancy_label(item['occupancy'])}({item['occupancy']}) → "
+                          + " / ".join(choice["label"] for choice in item["choices"]) for item in choose)
+        raise ChooseRows(f"밴드 코드 없이 적은 인원 조합에 맞는 줄이 여럿입니다(아동 밴드가 여럿) — {shown}. 아무것도 적지 않았습니다. "
+                         f"담당자에게 이 ERP 이름으로 어느 줄인지 묻고, {fix}", choose)
+    return found
 
 
 def _marks(snapshot: Snapshot, key: CellKey, value: CellValue) -> tuple[str, ...]:
@@ -158,8 +186,24 @@ def _check_cells(request: ChangeRequest, keys: Iterable[CellKey]) -> None:
         raise PlanError(f"읽은 값에 없는 박수 층: {', '.join(map(str, unknown_nights))} (읽은 것: {' · '.join(map(str, sorted(seen_nights)))})")
 
 
+def _resolve_occupancies(snapshot: Snapshot, request: ChangeRequest) -> ChangeRequest:
+    """고른 인원 조합을 읽은 줄로 — 밴드 코드 없이 적은 이름(`A2C1`)은 객실 · 요금제마다 맞는 줄 하나(여럿이면 ChooseRows). 맞는 줄이
+    하나도 없는 이름은 그대로 둔다(`_check_cells` 가 읽은 것을 대며 멈춘다). 새 값 지정의 기준 인원도 같은 줄로 옮긴다."""
+    if not request.occupancies:
+        return request
+    found = matched_rows(snapshot, [(room, plan, name) for room, plan in request.pairs for name in request.occupancies],
+                         "요청의 occupancies 에 고른 키를 적어 plan 을 다시 합니다")
+    named = {name: tuple(dict.fromkeys(key for room, plan in request.pairs for key in found[(room, plan, name)])) or (name,)
+             for name in request.occupancies}
+    base = request.base_occupancy
+    if base in named and len(named[base]) == 1:
+        base = named[base][0]
+    return replace(request, occupancies=tuple(dict.fromkeys(key for keys in named.values() for key in keys)), base_occupancy=base)
+
+
 def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
-    """칸마다 전 → 후. `request.occupancies`·`nights` 를 적었으면 그 칸만 — 규칙 · 표시 · 저장 단계는 다른 변경과 같다."""
+    """칸마다 전 → 후. `request.occupancies`·`nights` 를 적었으면 그 칸만 — 규칙 · 표시 · 저장 단계는 다른 변경과 같다. 미리보기의
+    요청은 고른 인원 조합을 읽은 줄 키로 푼 것이다(밴드 코드 없이 적은 `A2C1` → `A2C1_CHD`)."""
     pairs, absent = requested_pairs(snapshot, request)
     request = replace(request, pairs=pairs)
     rooms = {room: rank for rank, room in enumerate(request.rooms)}
@@ -168,6 +212,7 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     keys = [key for key in snapshot.cells if (key.room, key.rate_plan) in wanted and key.date in dates]
     empty = _check_scope(snapshot, request, pairs,
                          [(room, plan, day) for room, plan in pairs for day in request.dates])
+    request = _resolve_occupancies(snapshot, request)
     _check_cells(request, keys)
     keys = [key for key in keys if (not request.occupancies or key.occupancy in request.occupancies)
             and (not request.nights or key.nights in request.nights)]
@@ -202,13 +247,20 @@ def _change(snapshot: Snapshot, request: ChangeRequest | TargetTable, key: CellK
 
 def fill_lines(snapshot: Snapshot, table: TargetTable) -> TargetTable:
     """인원 조합 · 박수를 적지 않은 목표 → 읽은 값에서 그 객실 · 요금제의 줄 가운데 적은 것과 맞는 줄이 꼭 하나면 그 줄.
-    없거나 여럿이면 고를 수 있는 줄을 대며 거절한다(담당자의 표는 보통 객실 · 요금제 · 날짜 · 값만 적는다)."""
+    없거나 여럿이면 고를 수 있는 줄을 대며 거절한다(담당자의 표는 보통 객실 · 요금제 · 날짜 · 값만 적는다). 밴드 코드 없이 성인 · 아동
+    수만 적은 인원 조합(`A2C1`)은 먼저 그 수의 줄로 푼다(`matched_rows` — 여럿이면 ChooseRows)."""
     lines: dict[tuple[str, str], set[tuple[str, int]]] = {}
     for key in snapshot.cells:
         lines.setdefault((key.room, key.rate_plan), set()).add((key.occupancy, key.nights))
+    found = matched_rows(snapshot, [(t.key.room, t.key.rate_plan, t.key.occupancy) for t in table.targets if t.key.occupancy],
+                         "그 목표의 occupancy 에 고른 키를 적어 plan 을 다시 합니다")
     targets = []
     for target in table.targets:
         key = target.key
+        rows = found.get((key.room, key.rate_plan, key.occupancy), ())
+        if len(rows) == 1:
+            key = replace(key, occupancy=rows[0])
+            target = replace(target, key=key)
         if key.occupancy is not None and key.nights is not None:
             targets.append(target)
             continue

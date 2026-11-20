@@ -100,6 +100,27 @@ def occupancy_order(key: str) -> tuple:
     return (bool(key), int(adults.group(1)) if adults else 0, bool(split_occupancy(key)[1]), key)
 
 
+def guest_counts(key: str) -> tuple[int, int] | None:
+    """(성인 수, 아동 수) — `A2` (2, 0) · `A2C1` · `A2C1_CHD` (2, 1) · `A2C1_CHD_C1_TEEN` (2, 2). 키는 ERP 의 꼴
+    (`A<성인>C<아동>_<밴드 코드>`, 아동 조각이 더 있으면 `_C<아동>_<밴드 코드>`)이다. 인원 무관 · 맨 숫자 · 읽지 못한 키는 None."""
+    head = re.fullmatch(r"A(\d+)(?:C(\d+)((?:_[A-Z0-9]+)*))?", key.strip().upper())
+    if head is None:
+        return None
+    adults, first, tail = head.groups()
+    return int(adults), int(first or 0) + sum(int(count) for count in re.findall(r"_C(\d+)(?=_|$)", tail or ""))
+
+
+def matching_rows(name: str, keys) -> tuple[str, ...]:
+    """읽은 인원 조합 키들 가운데 `name` 이 가리키는 줄. 같은 키가 있으면 그 줄 하나, 밴드 코드 없이 성인 · 아동 수만 적은 이름
+    (`A2C1` — 요금표의 "성인 2 + 아동 1")이면 그 수의 줄 전부(아동 밴드가 여럿이면 여럿), 그 밖은 없다."""
+    keys = tuple(dict.fromkeys(keys))
+    if name in keys:
+        return (name,)
+    if re.fullmatch(r"A\d+C\d+", name.strip().upper()) is None:
+        return ()
+    return tuple(sorted((key for key in keys if guest_counts(key) == guest_counts(name)), key=occupancy_order))
+
+
 @dataclass(frozen=True, order=True)
 class CellKey:
     room: str
@@ -133,6 +154,7 @@ class Snapshot:
     객실은 캘린더 칩에 보이는 이름으로 적는다. `room_names` 는 그 이름 → 가격 수정 드로어가 같은 객실을 부르는 이름이다.
     `no_sale` 은 (객실, 날짜) — 판매일이 없어 칸이 없는 날(「판매일 없음」, 「가격 없음」과 다르다). 읽은 날로 친다.
     `dates` 는 읽은 날 전부 — `pairs` 와 함께 읽은 범위다(`range`). 주지 않으면 칸과 판매일 없는 날에서 모은다.
+    `row_labels` 는 인원 조합 키 → 가격 수정 드로어가 그 줄을 부르는 이름(`A2C1_CHD · 소아 1`) — 담당자에게 줄을 고르게 할 때 쓴다.
     """
     hotel: str
     offer: str
@@ -145,6 +167,7 @@ class Snapshot:
     no_sale: frozenset[tuple[str, str]] = frozenset()
     hotel_id: str = ""
     dates: tuple[str, ...] = ()
+    row_labels: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         stray = sorted({(key.room, key.rate_plan) for key in self.cells} - set(self.pairs))
@@ -164,6 +187,18 @@ class Snapshot:
 
     def covers(self, room: str, rate_plan: str, day: str) -> bool:
         return (room, rate_plan) in self.pairs and (room, rate_plan, day) in self.days_read
+
+    @cached_property
+    def rows(self) -> Mapping[tuple[str, str], frozenset[str]]:
+        """(객실, 요금제) → 읽은 값에 나온 인원 조합 키들."""
+        found: dict[tuple[str, str], set[str]] = {}
+        for key in self.cells:
+            found.setdefault((key.room, key.rate_plan), set()).add(key.occupancy)
+        return {pair: frozenset(keys) for pair, keys in found.items()}
+
+    def row_label(self, key: str) -> str:
+        """ERP 가 그 줄을 부르는 이름 — 읽은 화면의 것, 없으면 키와 우리말 이름."""
+        return self.row_labels.get(key) or (f"{key} · {occupancy_label(key)}" if key else occupancy_label(key))
 
 
 @dataclass(frozen=True)
@@ -576,6 +611,7 @@ def encode_snapshot(snapshot: Snapshot) -> dict:
         room_names=[dict(room=room, drawer=drawer) for room, drawer in sorted(snapshot.room_names.items())],
         no_sale=[dict(room=room, date=day) for room, day in sorted(snapshot.no_sale)],
         dates=list(snapshot.dates),
+        row_labels=[dict(occupancy=key, label=label) for key, label in sorted(snapshot.row_labels.items())],
     )
 
 
@@ -592,7 +628,8 @@ def decode_snapshot(data: Mapping) -> Snapshot:
                     frozenset((str(item["room"]), str(item["rate_plan"])) for item in data["pairs"]),
                     {str(item["room"]): str(item["drawer"]) for item in data.get("room_names") or []},
                     frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("no_sale") or []), hotel_id,
-                    tuple(iso_day(day) for day in data.get("dates") or ()))
+                    tuple(iso_day(day) for day in data.get("dates") or ()),
+                    {str(item["occupancy"]): str(item["label"]) for item in data.get("row_labels") or []})
 
 
 def encode_request(request: ChangeRequest | TargetTable) -> dict:

@@ -231,6 +231,11 @@ class AdjustPage:
     hidden: int
 
 
+def row_name(head: str) -> str:
+    """가격 수정 ② 의 줄 머리(`A2C1_CHD · 소아 1 · 3박 이상 · 기준 조합`) → 그 인원 조합의 ERP 이름(`A2C1_CHD · 소아 1`)."""
+    return re.sub(r"( · \d+박 이상)?( · 기준 조합)?$", "", head.strip())
+
+
 def occupancy_from_label(label: str) -> str:
     return "" if label == ANY_PARTY else label.split(" · ")[0]
 
@@ -310,7 +315,7 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if len(currencies) != 1 or not re.fullmatch(r"[A-Z]{3}", next(iter(currencies))):
         raise ParseError(f"통화를 하나로 정하지 못했습니다: {' · '.join(sorted(currencies))}")
     offer = offers.pop()
-    cells, pairs, names, no_sale, dates = {}, set(), {}, set(), set()
+    cells, pairs, names, no_sale, dates, labels = {}, set(), {}, set(), set(), {}
     for read in reads:
         page, room = read.page, read.room
         pairs.add((room, read.rate_plan))
@@ -322,6 +327,8 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
         if names.setdefault(room, page.room) != page.room:
             raise ParseError(f"캘린더의 객실 {room} 이 드로어에서 두 이름으로 보입니다: {names[room]} · {page.room}")
         for row in page.rows:
+            if row.label:
+                labels.setdefault(row.occupancy, row_name(row.label))
             for day, value in row.values.items():
                 key = CellKey(room, page.rate_plan, day, row.occupancy, row.nights)
                 if key in cells:
@@ -357,4 +364,4 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if unknown:
         raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(sorted(unknown))}")
     return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names,
-                    frozenset(no_sale), hotel_id, tuple(sorted(dates)))
+                    frozenset(no_sale), hotel_id, tuple(sorted(dates)), labels)

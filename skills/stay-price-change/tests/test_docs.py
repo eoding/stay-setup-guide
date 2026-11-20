@@ -234,7 +234,8 @@ class SheetDocsTest(unittest.TestCase):
         sheet = decode_sheet(json.loads(re.search(r"```json\n(.*?)```", section, re.S).group(1)))
         check = SheetCheck(sheet, tuple(dict.fromkeys((line.room, line.rate_plan) for line in sheet.lines)))
         self.assertTrue(check.cells)
-        self.assertEqual({row.occupancy for line in sheet.lines for row in line.rows}, {"A2", "A3", "A2C1_CHD"})
+        self.assertEqual({row.occupancy for line in sheet.lines for row in line.rows}, {"A2", "A3", "A2C1"},
+                         "아동이 든 줄은 요금표의 말대로 성인 · 아동 수만 적는다(F1 — 밴드 코드는 명령이 맞춘다)")
 
     def test_the_instructions_say_the_season_refill_sentence_the_pages_say(self):
         self.assertGreaterEqual(self.sheet.count(SEASON_REFILL_NOTE), 2, "두 길을 말할 때와 미리보기를 말할 때")

@@ -28,9 +28,9 @@ from change_core.money import money, money_text, round_money
 from price_browser import PAGE_KEEPS, read_calls, reading_size, reserved_probes, too_big
 from price_model import (
     FIELD_LABELS, FIELDS, GAP_KINDS, WEEKDAYS, CellKey, Gap, Plan, ReadRange, Snapshot, Target, TargetTable,
-    decode_hotel, encode_gap, encode_hotel, hotel_label, iso_day, line_label, occupancy_order, same_hotel,
+    decode_hotel, encode_gap, encode_hotel, hotel_label, iso_day, line_label, occupancy_label, occupancy_order, same_hotel,
 )
-from price_plan import PlanError, day_runs, plan_targets
+from price_plan import PlanError, day_runs, matched_rows, plan_targets
 
 
 @dataclass(frozen=True)
@@ -449,6 +449,25 @@ def _order(item: tuple[str, str, str, int]) -> tuple:
     return item[0], item[1], occupancy_order(item[2]), item[3]
 
 
+def matched_cells(snapshot: Snapshot, check: SheetCheck) -> dict[CellKey, tuple[CellKey, SheetCell]]:
+    """요금표의 칸을 읽은 줄에 맞춘다 → 읽은 줄의 칸 키 → (요금표의 칸 키 그대로, 값). 요금표가 성인 · 아동 수만 적은 인원 조합
+    (`A2C1`, "성인 2 + 아동 1")은 그 객실 · 요금제의 그 수의 줄(`A2C1_CHD`)이다. 그 줄이 여럿(아동 밴드가 여럿)이면 아무것도 셈하지
+    않고 고를 줄을 대며 거절한다(ChooseRows). 맞는 줄이 없으면 적은 그대로 둔다(「읽은 값에 없는 인원 조합」). 두 요금표 칸이 같은
+    줄을 가리키는데 값이 다르면 두 줄을 대고 거절한다."""
+    found = matched_rows(snapshot, [(line.room, line.rate_plan, row.occupancy) for line in check.lines for row in line.rows],
+                         "요금표 파일의 그 인원 조합에 고른 키를 적어 sheet 와 plan 을 다시 합니다(sheet.md 「요금표를 고칠 때」)")
+    cells: dict[CellKey, tuple[CellKey, SheetCell]] = {}
+    for key, cell in check.cells.items():
+        rows = found[(key.room, key.rate_plan, key.occupancy)]
+        matched = replace(key, occupancy=rows[0]) if len(rows) == 1 else key
+        first, other = cells.setdefault(matched, (key, cell))
+        if other.values != cell.values:
+            raise PlanError(f"{other.line}번째 줄의 {occupancy_label(first.occupancy)}({first.occupancy})와 {cell.line}번째 줄의 "
+                            f"{occupancy_label(key.occupancy)}({key.occupancy})가 ERP 의 같은 줄 {snapshot.row_label(matched.occupancy)} 을 "
+                            f"가리키는데 {matched.date} 값이 다릅니다 — 요금표 파일에서 하나를 고칩니다")
+    return cells
+
+
 def plan_sheet(snapshot: Snapshot, check: SheetCheck) -> Plan:
     """요금표 → 미리보기. 펼친 칸 가운데 읽은 값에서 그 객실 · 요금제의 줄로 나온 인원 · 박수이고 판매일이 있는 날의 칸만 목표
     값 표로 기존 계산(`plan_targets`)에 넘긴다 — 지금 값과 다른 칸만 바뀌고, 규칙 · 빨간 줄 · 저장 단계는 다른 변경과 같다.
@@ -468,15 +487,17 @@ def plan_sheet(snapshot: Snapshot, check: SheetCheck) -> Plan:
         raise PlanError(f"읽은 값에 없는 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}. "
                         "read-calls --request 에 이 sheet 파일을 주어 읽습니다")
     shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key in snapshot.cells}
-    targets = [Target(key, cell.values) for key, cell in check.cells.items()
+    cells = matched_cells(snapshot, check)
+    targets = [Target(key, cell.values) for key, (_sheet_key, cell) in cells.items()
                if (key.room, key.rate_plan, key.occupancy, key.nights) in shown and (key.room, key.date) not in snapshot.no_sale]
     no_sale: dict[tuple[str, str], set] = {}
     for line in check.lines:
         no_sale.setdefault((line.room, line.rate_plan), set()).update(day for day in line.days if (line.room, day) in snapshot.no_sale)
+    named = {(key.room, key.rate_plan, sheet_key.occupancy): key.occupancy for key, (sheet_key, _cell) in cells.items()}
     unseen: dict[tuple[str, str, str, int], tuple[set, set]] = {}
     for line in check.lines:
         for row in line.rows:
-            at = (line.room, line.rate_plan, row.occupancy, row.nights)
+            at = (line.room, line.rate_plan, named.get((line.room, line.rate_plan, row.occupancy), row.occupancy), row.nights)
             if at not in shown:
                 days, nos = unseen.setdefault(at, (set(), set()))
                 days.update(line.days)
@@ -484,7 +505,7 @@ def plan_sheet(snapshot: Snapshot, check: SheetCheck) -> Plan:
     in_range, wanted = set(scope.dates), set(scope.pairs)
     untouched = _group(key for key, value in snapshot.cells.items()
                        if value.state != "missing" and (key.room, key.rate_plan) in wanted and key.date in in_range
-                       and key not in check.cells)
+                       and key not in cells)
     coverage = (tuple(Gap("untouched", *at[:2], at[2], at[3], tuple(sorted(days))) for at, days in sorted(untouched.items(), key=lambda i: _order(i[0])))
                 + tuple(Gap("unseen", *at[:2], at[2], at[3], tuple(sorted(days)), tuple(sorted(nos)))
                         for at, (days, nos) in sorted(unseen.items(), key=lambda i: _order(i[0])))

@@ -128,6 +128,8 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(len(snapshot.cells), 16)
         self.assertEqual(snapshot.reserved, {("디럭스", "2026-12-24"), ("디럭스", "2026-12-25"), ("디럭스", "2026-12-28")})
         self.assertEqual(snapshot.pairs, {("디럭스", "조식 포함")})
+        self.assertEqual(snapshot.row_labels, {"A2": "A2 · 성인 2", "A2C1_CHD": "A2C1_CHD · 소아 1"},
+                         "줄을 고르게 할 때 쓰는 ERP 의 이름 — 줄 머리에서 박수 층을 뺀 것")
 
     def test_hidden_rows_unknown_rooms_mixed_offers_and_placeholder_currency_are_refused(self):
         price = parse_price_page(fixture("price-runs-closed-absent-list.html"))
