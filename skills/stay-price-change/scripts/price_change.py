@@ -239,6 +239,8 @@ def cmd_plan(args):
 
 
 def cmd_render(args):
+    if args.text and args.out:
+        raise ValueError("--text 는 페이지의 글만 답하고 파일을 쓰지 않습니다 — --out 과 같이 주지 않습니다")
     name = PAGE_NAMES[args.kind]
     if args.kind == "preview":
         data = load(args.plan)
@@ -634,8 +636,6 @@ def main(argv=None) -> int:
         needed = {"preview": "plan", "rollback": "plan", "prices": "snapshot", "result": "change", "sheet": "plan"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
-        if args.text and args.out:
-            parser().error("--text 는 페이지의 글만 답하고 파일을 쓰지 않습니다 — --out 과 같이 주지 않습니다")
     try:
         result = args.handler(args)
     except (ParseError, PlanError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:

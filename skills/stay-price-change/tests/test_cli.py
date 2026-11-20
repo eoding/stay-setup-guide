@@ -134,6 +134,8 @@ class CommandTest(unittest.TestCase):
         shown = self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text")
         self.assertEqual(sorted(page.parent.iterdir()), before, "F9 — 글을 읽는 것은 「… (2).html」 같은 새 파일을 만들지 않는다")
         self.assertEqual(set(shown), {"text"})
+        self.assertIn("--out 과 같이 주지 않습니다", self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text",
+                                                         "--out", self.dir / "p.html", code=2)["error"])
         self.assertEqual(shown["text"], self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text")["text"])
         lines = shown["text"].splitlines()
         self.assertEqual(lines[0], "미리보기 · 데모 호텔 · 기본 오퍼 · 판매가 +10%")
