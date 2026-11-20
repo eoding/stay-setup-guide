@@ -24,6 +24,8 @@
  *    허용 목록(ALLOW)에 없는 것은 막고 적는다. 러너 코드가 직접 부르는 `.click()` 도 여기에 걸린다. 막힌 것이
  *    하나라도 있으면 그 작업은 실패다. 버튼은 글자가 아니라 화면 뿌리 + `data-stay-*`·`data-calendar-*` 표식으로 찾는다.
  *    작업 밖에서도 이 파일이 올라 있는 동안은 스크립트가 만든 클릭을 막는다(사람의 클릭은 지난다) — `standDown()` 으로 내린다.
+ *  - 누르기는 `press` 하나다. 단추가 화면에 있고 막히지 않았고 htmx 가 연결했고 도는 요청이 없을 때 한 번 누른다 — 다시 누르지
+ *    않는다. 화면을 바꾼 뒤(칩·오퍼·보기·탭·달·드로어 단계·셀 창)에는 바뀐 조각이 왔고 도는 요청이 없을 때(`settle`) 넘어간다.
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
  *    조각 셋 이상뿐인 글자(`0.15.0`)는 점을 `·` 로 바꾼다(도구가 토큰으로 보고 가린다). 러너 함수의 결과는 그대로 넘기지 않는다.
  *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
@@ -377,8 +379,7 @@
 
   /* ───────────── 4. 작업 틀 — 벽 세우기 · 시간 · 결과 남기기 ───────────── */
 
-  var NEEDS = ['calDayRanges', 'calSetPeriod', 'calSet', 'calCheck', 'calSelectOffer', 'calEnsureCoord', 'calSelectChip',
-    'calRedraw', 'calErrors'];
+  var NEEDS = ['calDayRanges', 'calSet', 'calRedraw', 'calErrors'];
   function Stop(message, extra) { this.message = message; this.extra = extra || {}; }
   function fail(message, extra) { throw new Stop(message, extra); }
 
@@ -550,14 +551,60 @@
     window.dispatchEvent(new CustomEvent('stay-drawer-close'));
     await window.stayRun.waitFor(function () { return !drawerOpen(); }, Math.max(1, Math.min(3000, (untilMs || Infinity) - Date.now())));
   }
+  // 작업이 끝난 뒤의 정리 — 셀 창 [닫기] 도 press 로 누른다. 못 눌러도 드로어는 닫는다(남은 것은 run 이 답에 적는다)
   async function closeAll(op, untilMs) {
-    var modal = cellWindow();
-    if (modal && op === 'applyCell') {
-      var x = modal.querySelector('.stay-modal__head [data-stay-action="close"]');
-      if (x) { x.click(); await window.stayRun.waitFor(function () { return !cellWindow(); }, Math.max(1, Math.min(3000, untilMs - Date.now()))); }
+    if (cellWindow() && op === 'applyCell') {
+      var until = function (ms) { return Math.max(1, Math.min(ms, untilMs - Date.now())); };
+      var tidy = { wait: function (cond, ms) { return window.stayRun.waitFor(cond, until(ms)); }, check: function () {} };
+      try {
+        await press(tidy, '셀 창 [닫기]', function () { return document.querySelector(CONTROLS.cellClose.sel); }, null, 3000);
+        await window.stayRun.waitFor(function () { return !cellWindow(); }, until(3000));
+      } catch (e) { if (!(e instanceof Stop)) throw e; }
     }
     await closeDrawer(untilMs);
   }
+
+  /* ───────────── 5a. 누르기 — 이 파일의 클릭은 모두 press 를 지난다 ───────────── */
+
+  // htmx 가 맡은 단추(hx-get 등, htmx 4 는 data-hx- 도 읽는다)는 htmx 가 듣개를 붙이기 전에 누르면 아무 일도 없다.
+  // 붙었는지는 `data-htmx-powered` 로 안다 — htmx 4 는 듣개를 붙이는 바로 그 동작 안에서 이 표식을 달고, 떼어 낼 때 같이 지운다
+  // (htmx.org 4.0.0-beta6 `#htmxProp` · `#initializeElement` · `#cleanup`). 새 조각은 끼운 뒤 정착(settle)을 지나서야 연결되므로
+  // 몇 ms 동안 표식 없이 먼저 보인다. 2차 실험의 첫 저장이 거기서 멈췄다 — 그 틈에 누른 [선택 날짜 가격 수정] 이 아무 일도 안 했다
+  var HTMX = ['action', 'get', 'post', 'put', 'patch', 'delete'].map(function (v) { return '[hx-' + v + '],[data-hx-' + v + ']'; }).join(',');
+  function wired(el) { return !el.matches(HTMX) || el.hasAttribute('data-htmx-powered'); }
+  // 도는 htmx 요청이 없다. htmx 4 는 끼우기 · 정착 · 연결을 다 마친 뒤에 요청을 끝낸다(finally:request) — 러너가 센다
+  function quiet() { var hx = window.stayRun.hx; return !(hx && hx.pending > 0); }
+  function unready(el) {
+    if (!el || !el.isConnected) return '화면에 없습니다';
+    if (el.disabled) return '막혀 있습니다';
+    if (!wired(el)) return 'htmx 가 아직 연결하지 않았습니다';
+    if (!quiet()) return '앞 요청이 아직 끝나지 않았습니다';
+    return '';
+  }
+  // 단추 하나를 누를 수 있을 때까지 기다렸다가 한 번 누른다. 저장 단추도 읽기 단추도 다시 누르지 않는다 — 기다림이 까닭을 없앴으니
+  // 다시 누르기는 틀린 준비 표지를 가릴 뿐이다. 시간 안에 안 되면 어느 단추인지와 까닭을 말하고 멈춘다.
+  // find 는 지금 화면에서 그 단추를 찾는다(기다리는 사이에 갈려도 새 것을 본다). act 를 주면 클릭 대신 act(단추)를 부른다 —
+  // act 는 기다림 없이 그 자리에서 그 단추를 누르거나 바꿔야 한다(러너 submit · calRedraw 가 그렇다)
+  async function press(ctx, label, find, act, ms) {
+    var el = null;
+    await ctx.wait(function () { el = find(); return !unready(el); }, ms || 8000);
+    var why = unready(el);
+    if (why) fail(label + ' 이 준비되지 않았습니다(' + why + ') — 누르지 않았습니다');
+    ctx.check();
+    return act ? act(el) : el.click();
+  }
+  // 화면을 바꾼 뒤(칩 · 오퍼 · 보기 · 탭 · 달 · 드로어 단계 · 셀 창) — 바뀐 조각이 왔고(arrived) 도는 요청이 없을 때 넘어간다.
+  // 속성 하나가 바뀐 것만으로는 끝나지 않는다. 다음에 누를 단추는 press 가 다시 본다
+  async function settle(ctx, root, arrived, what, ms) {
+    var came = function () { var r = root(); return !!r && !!arrived(r); };
+    await ctx.wait(function () { return came() && quiet(); }, ms || 8000);
+    ctx.check();
+    if (!came()) fail(what);
+    if (!quiet()) fail(what + ' — 요청이 아직 끝나지 않았습니다');
+    return root();
+  }
+  function primary(el) { return /\bstay-btn--primary\b/.test(el.className); }
+  function calendar() { return document.getElementById('stay_calendar'); }
 
   function calendarReady() {
     var link = document.querySelector('ul.tab-container a[data-stay-tab="calendar"]');
@@ -565,42 +612,48 @@
     return active && !!document.querySelector('#stay_calendar[data-cal-month]');
   }
   async function toCalendar(ctx) {
+    var tab = function () { return document.querySelector(CONTROLS.tab.sel); };
     if (!calendarReady()) {
-      var link = document.querySelector('ul.tab-container a[data-stay-tab="calendar"]');
-      if (!link) fail('[가격 캘린더] 탭을 찾지 못했습니다');
-      link.click();
-      await ctx.wait(calendarReady, 8000);
+      if (!tab()) fail('[가격 캘린더] 탭을 찾지 못했습니다');
+      await press(ctx, '[가격 캘린더] 탭', tab);
     }
-    ctx.check();
-    if (!calendarReady()) fail('가격 캘린더가 열리지 않았습니다');
+    await settle(ctx, calendar, calendarReady, '가격 캘린더가 열리지 않았습니다');
   }
   // 오퍼 칩은 오퍼가 둘 이상일 때만 선다. 이름이 **꼭 같은** 칩 하나만 고른다(러너의 느슨한 맞춤으로 넘어가지 않게)
   async function pickOffer(ctx, offer) {
-    var chips = all('#stay_calendar [data-stay-entity="offer"][data-stay-action="goto"]');
+    var chips = all(CONTROLS.offer.sel);
     if (!chips.length) return;
-    var hits = chips.filter(function (c) { return C(c.getAttribute('data-stay-name')) === offer; });
+    var mine = function (c) { return C(c.getAttribute('data-stay-name')) === offer; };
+    var hits = chips.filter(mine);
     if (hits.length !== 1) fail('캘린더의 오퍼 칩에서 `' + offer + '` 을 ' + (hits.length ? '하나로 못 골랐습니다' : '찾지 못했습니다') + ' (보이는 오퍼: ' + chips.map(function (c) { return C(c.getAttribute('data-stay-name')); }).join(' / ') + ')');
     ctx.pins.offer = offer;
-    var picked = await window.calSelectOffer(offer);
-    ctx.check();
-    if (picked.error) fail(picked.error);
+    if (primary(hits[0])) return;
+    await press(ctx, '오퍼 칩 `' + offer + '`', function () { return all(CONTROLS.offer.sel).filter(mine)[0]; });
+    await settle(ctx, calendar, function (r) { return all(CONTROLS.offer.sel, r).some(function (c) { return mine(c) && primary(c); }); },
+      '오퍼 `' + offer + '` 로 이동하지 못했습니다');
   }
+  // [룸별 입력] 보기 — 일괄 버튼과 객실·요금제 칩은 그 보기에만 선다
   async function coordView(ctx) {
-    var ok = await window.calEnsureCoord();
-    ctx.check();
-    if (!ok) fail('[룸별 입력] 화면으로 바꾸지 못했습니다');
+    var coord = function (r) { return !!r.querySelector('[data-calendar-bulk-action],[data-calendar-adjust-action="open"]'); };
+    if (calendar() && coord(calendar())) return;
+    var button = function () { return all(CONTROLS.view.sel).filter(function (b) { return !primary(b); })[0]; };
+    if (!button()) fail('[룸별 입력] 화면으로 바꾸지 못했습니다');
+    await press(ctx, '[룸별 입력]', button);
+    await settle(ctx, calendar, coord, '[룸별 입력] 화면으로 바꾸지 못했습니다');
   }
   // 객실·요금제는 캘린더가 보여 주는 칩 이름(`객실 · 요금제`)과 꼭 같은 하나만 — 지시서의 다른 이름은 보지 않는다
   async function pickChip(ctx, room, ratePlan) {
     var name = C(room) + ' · ' + C(ratePlan);
-    var chips = all('#stay_calendar [data-stay-entity="rate_plan"][data-stay-action="goto"]');
-    var hits = chips.filter(function (c) { return C(c.getAttribute('data-stay-name')) === name; });
+    var mine = function (c) { return C(c.getAttribute('data-stay-name')) === name; };
+    var chips = all(CONTROLS.chip.sel);
+    var hits = chips.filter(mine);
     if (hits.length !== 1) fail('캘린더에 `' + name + '` 칩이 ' + (hits.length ? hits.length + '개라 하나로 못 골랐습니다' : '없습니다') + ' (보이는 칩: ' + chips.map(function (c) { return C(c.getAttribute('data-stay-name')); }).join(' / ') + ')');
     ctx.pins.chip = name;
     ctx.pins.ratePlanId = hits[0].getAttribute('data-stay-entity-id') || '';
-    var picked = await window.calSelectChip(hits[0], name);
-    ctx.check();
-    if (picked.error) fail(picked.error);
+    if (primary(hits[0])) return;
+    await press(ctx, '객실·요금제 칩 `' + name + '`', function () { return all(CONTROLS.chip.sel).filter(mine)[0]; });
+    await settle(ctx, calendar, function (r) { return all(CONTROLS.chip.sel, r).some(function (c) { return mine(c) && primary(c); }); },
+      '객실·요금제 `' + name + '` 로 이동하지 못했습니다');
   }
   async function toPair(ctx, offer, room, ratePlan) {
     await toCalendar(ctx);
@@ -644,30 +697,39 @@
     return value.map(function (item) { return text(item, name); });
   }
 
+  // 체크 칸 하나를 켜거나 끈다 — 다르면 press 로 한 번 누르고, 바뀌었는지 본다
+  async function check(ctx, label, box, on) {
+    if (box.checked === on) return;
+    await press(ctx, label, function () { return box; });
+    if (box.checked !== on) fail(label + ' 을 ' + (on ? '켜지' : '끄지') + ' 못했습니다');
+  }
+  // 드로어 ① 의 기간 · 요일(러너 calSetPeriod 와 같은 차례). 날은 숨은 `date_selection_0` 의 구간 줄이 정한다
+  async function setPeriod(ctx, root, from, to, weekdays, ranges) {
+    var pf = root.querySelector('[name="period_from"]'), pt = root.querySelector('[name="period_to"]');
+    if (!pf || !pt) fail('드로어에 `시작일`·`종료일` 칸이 없습니다');
+    window.calSet(pf, from);
+    window.calSet(pt, to);
+    var want = weekdays.map(function (w) { return String(window.CAL_WEEKDAYS[w]); });
+    var boxes = all('input[type=checkbox][name="weekdays"]', root);
+    for (var i = 0; i < boxes.length; i++) await check(ctx, '요일 칸', boxes[i], want.indexOf(boxes[i].value) >= 0);
+    var hidden = root.querySelector('input[type=hidden][name="date_selection_0"]');
+    if (hidden) window.calSet(hidden, ranges.join('\n'));
+  }
+
   // [선택 날짜 가격 수정] ① 기간 → [다음] → ② 확인. ② 가 그 객실·요금제·기간인지 본 뒤 뿌리를 돌려준다(저장하지 않는다)
   async function openBulkReview(ctx, want, span) {
     var root = function () { return document.querySelector('[data-stay-screen="calendar-bulk"]'); };
-    var opener = document.querySelector('#stay_calendar [data-calendar-bulk-action="price"]');
-    if (!opener) fail('[선택 날짜 가격 수정] 버튼이 없습니다');
-    opener.click();
-    await ctx.wait(function () { var r = root(); return !!(r && r.hasAttribute('data-calendar-selection') && r.querySelector('[name="period_from"]')); }, 8000);
-    ctx.check();
-    var r1 = root();
-    if (!r1 || !r1.hasAttribute('data-calendar-selection')) fail('[선택 날짜 가격 수정] 드로어 ① 이 열리지 않았습니다');
-    var set = window.calSetPeriod(r1, want.from, want.to, want.weekdays, span.ranges);
-    if (set.error) fail(set.error);
-    var next = r1.querySelector('[data-stay-action="next"]');
-    await ctx.wait(function () { return !!next && !next.disabled; }, 3000);
-    if (!next || next.disabled) fail('[다음] 이 눌리지 않습니다 — 화면이 기간을 받지 않았습니다');
-    next.click();
-    await ctx.wait(function () {
-      var r = root();
-      return !!r && ((!r.hasAttribute('data-calendar-selection') && !!r.querySelector('[data-stay-rows="prices"]')) || window.calErrors(r).length > 0);
-    }, 8000);
-    ctx.check();
-    var r2 = root();
-    if (r2 && window.calErrors(r2).length) fail('[선택 날짜 가격 수정] 이 기간을 거절했습니다 — ' + window.calErrors(r2).join(' / '));
-    if (!r2 || r2.hasAttribute('data-calendar-selection') || !r2.querySelector('[data-stay-rows="prices"]')) fail('[선택 날짜 가격 수정] ② 가 뜨지 않았습니다');
+    var opener = function () { return document.querySelector(CONTROLS.bulkOpen.sel); };
+    if (!opener()) fail('[선택 날짜 가격 수정] 버튼이 없습니다');
+    await press(ctx, '[선택 날짜 가격 수정]', opener);
+    var r1 = await settle(ctx, root, function (r) { return r.hasAttribute('data-calendar-selection') && !!r.querySelector('[name="period_from"]'); },
+      '[선택 날짜 가격 수정] 드로어 ① 이 열리지 않았습니다');
+    await setPeriod(ctx, r1, want.from, want.to, want.weekdays, span.ranges);
+    await press(ctx, '[다음]', function () { return r1.querySelector('[data-stay-action="next"]'); }, null, 3000);
+    var r2 = await settle(ctx, root, function (r) {
+      return (!r.hasAttribute('data-calendar-selection') && !!r.querySelector('[data-stay-rows="prices"]')) || window.calErrors(r).length > 0;
+    }, '[선택 날짜 가격 수정] ② 가 뜨지 않았습니다');
+    if (window.calErrors(r2).length) fail('[선택 날짜 가격 수정] 이 기간을 거절했습니다 — ' + window.calErrors(r2).join(' / '));
     // 화면이 물은 것과 다른 것을 보여 주면 읽지 않는다
     var seen = facts(r2);
     if (hiddenValue(r2, 'operation') !== 'price') fail('드로어가 가격 수정 창이 아닙니다');
@@ -794,29 +856,29 @@
       await coordView(ctx);
       var root = function () { return document.querySelector('[data-stay-screen="calendar-adjust"]'); };
       var stepOf = function () { var r = root(); return r ? r.getAttribute('data-calendar-adjust') : ''; };
-      var opener = document.querySelector('#stay_calendar [data-calendar-adjust-action="open"]');
-      if (!opener) fail('이 화면에는 [선택 날짜 가격 가감] 창이 없습니다');
-      opener.click();
-      await ctx.wait(function () { return stepOf() === 'select' && !!root().querySelector('select[name="offer"]'); }, 8000);
-      ctx.check();
-      if (stepOf() !== 'select') fail('[선택 날짜 가격 가감] ① 이 열리지 않았습니다');
+      var opener = function () { return document.querySelector(CONTROLS.adjustOpen.sel); };
+      if (!opener()) fail('이 화면에는 [선택 날짜 가격 가감] 창이 없습니다');
+      await press(ctx, '[선택 날짜 가격 가감]', opener);
+      await settle(ctx, root, function (r) { return r.getAttribute('data-calendar-adjust') === 'select' && !!r.querySelector('select[name="offer"]'); },
+        '[선택 날짜 가격 가감] ① 이 열리지 않았습니다');
 
       var offerSelect = root().querySelector('select[name="offer"]');
       var offerHits = [].slice.call(offerSelect.options).filter(function (o) { return C(o.textContent) === want.offer; });
       if (offerHits.length !== 1) fail('`오퍼` 목록에서 `' + want.offer + '` 을 ' + (offerHits.length ? '하나로 못 골랐습니다' : '찾지 못했습니다'));
       var offerValue = offerHits[0].value;
       if (offerSelect.value !== offerValue) {
-        var redrawn = await window.calRedraw(offerSelect, offerValue, root, function (r) {
-          var s = r.querySelector('select[name="offer"]');
-          return r.getAttribute('data-calendar-adjust') === 'select' && !!s && s !== offerSelect && s.value === offerValue;
-        });
+        // 셀렉트를 바꾸면 htmx 가 ① 을 다시 그린다(hx-trigger="change") — 연결되기 전에 바꾸면 아무 일도 없어 press 를 지난다
+        var redrawn = await press(ctx, '`오퍼` 목록', function () { return offerSelect; }, function (s) { return window.calRedraw(s, offerValue, root, function (r) {
+          var s2 = r.querySelector('select[name="offer"]');
+          return r.getAttribute('data-calendar-adjust') === 'select' && !!s2 && s2 !== offerSelect && s2.value === offerValue && quiet();
+        }); });
         ctx.check();
         if (!redrawn) fail('`오퍼` 를 `' + want.offer + '` 로 바꾸지 못했습니다');
       }
 
       var r1 = root();
       var labelOf = function (box) { var label = box.closest('label'); return C(label ? label.textContent : ''); };
-      var pickBoxes = function (name, wants, keyOf, what) {
+      var pickBoxes = async function (name, wants, keyOf, what) {
         var boxes = all('input[type="checkbox"][name="' + name + '"]', r1);
         if (!boxes.length) fail('`' + what + '` 에 고를 항목이 없습니다');
         var on = wants === '*' ? boxes.slice() : wants.map(function (w) {
@@ -824,36 +886,31 @@
           if (hits.length !== 1) fail('`' + what + '` 에서 `' + (w || '인원 무관 단일가') + '` 을 ' + (hits.length ? '하나로 못 골랐습니다' : '찾지 못했습니다') + ' (보이는 것: ' + boxes.map(labelOf).join(' / ') + ')');
           return hits[0];
         });
-        boxes.forEach(function (b) { window.calCheck(b, on.indexOf(b) >= 0); });
+        for (var i = 0; i < boxes.length; i++) await check(ctx, '`' + what + '` 칸', boxes[i], on.indexOf(boxes[i]) >= 0);
         return on.map(function (b) { return b.value; }).sort();
       };
-      var picked = {
-        rooms: pickBoxes('rooms', want.rooms, labelOf, '객실'),
-        plans: pickBoxes('plans', want.ratePlans, labelOf, '요금제'),
-        occupancy: pickBoxes('occupancy', want.occupancy, function (b) { return b.value; }, '인원 조합')
-      };
+      var picked = {};
+      picked.rooms = await pickBoxes('rooms', want.rooms, labelOf, '객실');
+      picked.plans = await pickBoxes('plans', want.ratePlans, labelOf, '요금제');
+      picked.occupancy = await pickBoxes('occupancy', want.occupancy, function (b) { return b.value; }, '인원 조합');
       var los = r1.querySelector('input[type="radio"][name="los"][value="' + want.nights + '"]');
       if (!los) fail('`박수 층` 라디오가 없습니다');
-      if (!los.checked) los.click();
-      var set = window.calSetPeriod(r1, want.from, want.to, want.weekdays, span.ranges);
-      if (set.error) fail(set.error);
+      await check(ctx, '`박수 층` 라디오', los, true);
+      await setPeriod(ctx, r1, want.from, want.to, want.weekdays, span.ranges);
       var adjustInput = r1.querySelector('input[name="adjust"]');
       if (!adjustInput) fail('`가감` 칸이 없습니다');
       window.calSet(adjustInput, adjust);
       var flags = { adjust_original: false, include_manual: true, include_extra: false };
-      Object.keys(flags).forEach(function (name) {
-        var box = r1.querySelector('input[type="checkbox"][name="' + name + '"]');
-        if (!box) fail('체크 칸 `' + name + '` 이 없습니다');
-        window.calCheck(box, flags[name]);
-      });
+      var flagNames = Object.keys(flags);
+      for (var f = 0; f < flagNames.length; f++) {
+        var box = r1.querySelector('input[type="checkbox"][name="' + flagNames[f] + '"]');
+        if (!box) fail('체크 칸 `' + flagNames[f] + '` 이 없습니다');
+        await check(ctx, '체크 칸 `' + flagNames[f] + '`', box, flags[flagNames[f]]);
+      }
       ctx.check();
-      var next = r1.querySelector('[data-stay-action="next"]');
-      await ctx.wait(function () { return !!next && !next.disabled; }, 3000);
-      if (!next || next.disabled) fail('[다음] 이 눌리지 않습니다 — 화면이 기간을 받지 않았습니다');
-      next.click();
-      await ctx.wait(function () { var r = root(); return !!r && (stepOf() === 'confirm' || (r !== r1 && window.calErrors(r).length > 0)); }, 8000);
-      ctx.check();
-      var r2 = root();
+      await press(ctx, '[다음]', function () { return r1.querySelector('[data-stay-action="next"]'); }, null, 3000);
+      var r2 = await settle(ctx, root, function (r) { return stepOf() === 'confirm' || (r !== r1 && window.calErrors(r).length > 0); },
+        '[선택 날짜 가격 가감] ① 을 화면이 받지 않았습니다');
       if (stepOf() !== 'confirm') fail('[선택 날짜 가격 가감] ① 을 화면이 받지 않았습니다' + (r2 && window.calErrors(r2).length ? ' — ' + window.calErrors(r2).join(' / ') : ''));
       // 확인 단계가 고른 그대로인지 — 숨은 칸(서버가 받은 값)으로 본다
       var hiddenAll = function (name) { return all('input[type="hidden"][name="' + name + '"]', r2).map(function (i) { return i.value; }).sort(); };
@@ -895,7 +952,10 @@
     var modeOf = function (r) { var h = r.querySelector('input[type="hidden"][name="link_mode"]'); return h ? h.value : ''; };
     var pick = review.querySelector('select[name="link_mode_pick"]');
     if (pick && modeOf(review) !== 'manual') {
-      var redrawn = await window.calRedraw(pick, 'manual', root, function (r) { return modeOf(r) === 'manual' && !!r.querySelector('[data-stay-action="save"]'); });
+      // 셀렉트를 바꾸면 htmx 가 ② 를 다시 그린다(hx-trigger="change") — ② 가 막 들어와 연결되기 전이면 아무 일도 없어 press 를 지난다
+      var redrawn = await press(ctx, '`연동 방식`', function () { return pick; }, function (s) { return window.calRedraw(s, 'manual', root, function (r) {
+        return modeOf(r) === 'manual' && !!r.querySelector('[data-stay-action="save"]') && quiet();
+      }); });
       ctx.check();
       if (!redrawn) fail('`연동 방식` 을 「' + MANUAL + '」 으로 바꾸지 못했습니다 — 저장하지 않았습니다', { refused: true, saved: false, pressed: false });
     }
@@ -912,7 +972,8 @@
     if (bad.length) fail('드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다 — ' + bad.join(' / '), { refused: true, saved: false, pressed: false });
     var back = window.stayRun.readback(fields);
     if (back.mismatch.length) fail('넣은 값을 다시 읽으니 달라 저장하지 않았습니다 — ' + back.mismatch.join(' / '), { refused: true, saved: false, pressed: false });
-    return window.stayRun.submit('입력한 가격 적용', { action: 'save' });
+    // 러너 submit 은 부르는 그 자리에서(기다림 전에) 이 단추를 한 번 누르고 결과를 기다린다(stay_helper.js `submit` 의 btn.click())
+    return press(ctx, '[입력한 가격 적용]', function () { return document.querySelector(CONTROLS.bulkSave.sel); }, function () { return window.stayRun.submit('입력한 가격 적용', { action: 'save' }); });
   }
 
   function applyBulk(input) {
@@ -959,9 +1020,9 @@
       var goes = all(CONTROLS.month.sel).map(function (b) { var m = /[?&]month=(\d{4}-\d{2})/.exec(b.getAttribute('hx-get') || ''); return { b: b, month: m && m[1] }; })
         .filter(function (x) { return x.month && (want > month ? x.month > month : x.month < month); });
       if (goes.length !== 1) fail('달력을 ' + want + ' 로 넘길 단추를 찾지 못했습니다');
-      goes[0].b.click();
-      await ctx.wait(function () { var c = document.querySelector('#stay_calendar[data-cal-month]'); return !!c && c.getAttribute('data-cal-month') !== month; }, 6000);
-      ctx.check();
+      var to = goes[0].month;
+      await press(ctx, '[' + to + '] 달 단추', function () { return all(CONTROLS.month.sel).filter(function (b) { return (b.getAttribute('hx-get') || '').indexOf('month=' + to) >= 0; })[0]; });
+      await settle(ctx, calendar, function (r) { return !!r.getAttribute('data-cal-month') && r.getAttribute('data-cal-month') !== month; }, '달력을 ' + want + ' 로 넘기지 못했습니다', 6000);
     }
     fail('달력을 ' + want + ' 로 넘기지 못했습니다');
   }
@@ -983,15 +1044,14 @@
 
       await toPair(ctx, want.offer, want.room, want.ratePlan);
       await toMonth(ctx, want.date);
-      var td = document.querySelector('#stay_calendar td[data-stay-date="' + want.date + '"]');
-      var opener = td && [].slice.call(td.children).filter(function (el) { return el.matches('[data-stay-action="open_cell"]'); })[0];
-      if (!opener) fail(want.date + ' 칸을 누를 수 없습니다(판매일이 없거나 이 달에 없는 날) — 저장하지 않았습니다');
+      var opener = function () {
+        var td = document.querySelector('#stay_calendar td[data-stay-date="' + want.date + '"]');
+        return td && [].slice.call(td.children).filter(function (el) { return el.matches('[data-stay-action="open_cell"]'); })[0];
+      };
+      if (!opener()) fail(want.date + ' 칸을 누를 수 없습니다(판매일이 없거나 이 달에 없는 날) — 저장하지 않았습니다');
       ctx.pins.date = want.date;
-      opener.click();
-      await ctx.wait(function () { var m = cellWindow(); return !!m && m.getAttribute('data-stay-screen') === 'price-cell'; }, 8000);
-      ctx.check();
-      var modal = cellWindow();
-      if (!modal) fail('셀 창이 열리지 않았습니다');
+      await press(ctx, want.date + ' 칸', opener);
+      var modal = await settle(ctx, cellWindow, function (m) { return m.getAttribute('data-stay-screen') === 'price-cell'; }, '셀 창이 열리지 않았습니다');
       // 아무것도 만지기 전에 연 창이 그 날짜·요금제인지 본다 — 러너의 셀 단계는 달 머리와 일 숫자만 본다
       var title = C((modal.querySelector('.stay-modal__title') || {}).textContent);
       var shownDay = (/(\d{4}-\d{2}-\d{2})$/.exec(title) || [])[1] || '?';
@@ -1011,10 +1071,10 @@
         window.calSet(el, targets[name]);
         if (el.value !== targets[name]) fail('셀 창 칸에 값이 들어가지 않았습니다(' + name + ')');
       });
-      var save = row.querySelector('[data-stay-action="save_cell"]');
-      if (!save) fail('셀 창 줄에 [저장] 이 없습니다');
+      var save = function () { return row.querySelector('[data-stay-action="save_cell"]'); };
+      if (!save()) fail('셀 창 줄에 [저장] 이 없습니다');
       ctx.pins.row = rowId;
-      save.click();
+      await press(ctx, '셀 창 [저장]', save);
       var pressed = ctx.wall.pressed('cellSave');
       await ctx.wait(function () { var m = cellWindow(); return !m || m !== modal || window.calErrors(modal).length > 0; }, 10000);
       var after = cellWindow();
@@ -1026,8 +1086,13 @@
       if (saved === true) out.note = '저장했습니다';
       else if (errors.length) out.error = '셀 창이 저장을 거절했습니다 — ' + errors.join(' / ');
       else out.error = '셀 창 저장을 확인하지 못했습니다' + (pressed ? ' — [저장] 은 눌렸고 저장됐는지 알 수 없습니다. 다시 읽어 확인합니다(다시 누르지 않았습니다)' : '');
-      var x = after && after.querySelector('.stay-modal__head [data-stay-action="close"]');
-      if (x) { x.click(); await ctx.wait(function () { return !cellWindow(); }, 5000); }
+      // 저장한 뒤에는 멈추지 않는다 — [닫기] 를 못 눌러도 저장 결과는 그대로 돌려주고 닫지 못한 것만 덧붙인다
+      if (after) {
+        try {
+          await press(ctx, '셀 창 [닫기]', function () { return document.querySelector(CONTROLS.cellClose.sel); });
+          await ctx.wait(function () { return !cellWindow(); }, 5000);
+        } catch (e) { if (!(e instanceof Stop)) throw e; out.error = (out.error ? out.error + ' · ' : '') + e.message; }
+      }
       if (cellWindow()) { out.ok = false; out.error = (out.error ? out.error + ' · ' : '') + '셀 창을 닫지 못했습니다'; }
       return out;
     });
