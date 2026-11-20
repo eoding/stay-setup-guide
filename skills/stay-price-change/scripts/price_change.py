@@ -281,8 +281,10 @@ def differences_since(ledger: Ledger, change_id: int, now) -> list[dict]:
 def cmd_begin(args):
     """적용 직전에 읽은 값(`--snapshot`)이 미리보기 때 값과 한 칸이라도 다르면 아무것도 시작하지 않는다(종료 1, stale 과 같은 답)."""
     data = load(args.plan)
-    if not data.get("steps"):
+    if data.get("steps") is None:
         raise PlanError("저장 단계가 없습니다. 빨간 줄 칸을 먼저 골라 주세요")
+    if not data["steps"]:
+        raise PlanError(f"{args.change}번 미리보기는 바꿀 칸이 없어 적용할 것이 없습니다 — 아무것도 시작하지 않았습니다")
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     then = reading_since(ledger, args.change, now) if ledger.change(args.change).status == "previewed" else now
     differences = ledger.begin_fresh(args.change, step_plans(decode_step(step) for step in data["steps"]), snapshot_reading(then),

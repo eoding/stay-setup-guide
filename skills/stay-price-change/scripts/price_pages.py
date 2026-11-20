@@ -471,7 +471,7 @@ def red_lines(plan: Plan) -> list[dict]:
 
 
 def chosen_lines(plan: Plan) -> list[dict]:
-    """고른 빨간 줄 — 규칙 · 고름마다 칸 수, 그 고름의 이름, 저장이 하는 일, 첫 칸의 예(바뀌는 값)."""
+    """고른 빨간 줄 — 규칙 · 고름마다 칸 수, 그 고름의 이름, 저장이 하는 일, 첫 칸의 예(바뀌는 값, 안 바꾸면 그대로인 값)."""
     out = []
     for rule in CELL_RULES.rules:
         for choice in rule.choices:
@@ -484,7 +484,8 @@ def chosen_lines(plan: Plan) -> list[dict]:
             does = RAISE_WITHOUT_ERP if choice == "raise_list" and not follows_erp(plan.request) else CHOSEN_WORDS[choice]
             out.append(dict(rule=rule.code, choice=choice, cells=len(picked), does=does,
                             words=choice_words(plan.request, choice, plan.currency, [c.key for c in picked]),
-                            example=f"{cell_name(example.key)} —{shown}" if shown else ""))
+                            example=f"{cell_name(example.key)} —"
+                                    + (shown or f" 판매가 {fmt_money(example.before.sell, plan.currency)} 그대로")))
     return out
 
 
@@ -521,8 +522,9 @@ def _preview_banners(plan: Plan, tally: Mapping) -> str:
         out.append(f'<div class="banner amber"><b>고르신 빨간 줄 · {sum(line["cells"] for line in lines):,}칸 '
                    f'({esc(CHOSEN_GROUPS[code])})</b><ul class="notes">{"".join(parts)}</ul></div>')
     if not tally["red"] and not tally["blocked"]:
-        out.append('<div class="banner ok">' + ("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다." if tally["chosen"] else
-                                               "빨간 줄이 없습니다.") + "</div>")
+        chosen = ("고르신 대로 저장합니다." if tally["will_change"] else "고르신 대로면 바꿀 칸이 없어 아무것도 저장하지 않습니다.")
+        out.append('<div class="banner ok">' + (f"남은 빨간 줄이 없습니다. {chosen}" if tally["chosen"] else "빨간 줄이 없습니다.")
+                   + "</div>")
     return "\n".join(out)
 
 
@@ -541,7 +543,7 @@ def _flagged_section(plan: Plan, currency: str) -> str:
         if change.choice:   # 고른 뒤에는 고른 것과 그 결과(앞 칸들의 값)만 — 걸렸던 까닭은 쓰지 않는다
             why = (f'<span class="tag chosen">고름</span> '
                    f'{esc(choice_words(plan.request, change.choice, currency, [change.key]))}')
-            choices = "고르신 대로 저장합니다"
+            choices = "고르신 대로 그대로 둡니다(저장하지 않습니다)" if change.choice == "keep" else "고르신 대로 저장합니다"
         else:
             kind, word = ("blocked", "적용할 수 없음") if rule.severity == BLOCKED else ("red", "빨간 줄")
             why = f'<span class="tag {kind}">{word}</span> {esc(rule.label)}'

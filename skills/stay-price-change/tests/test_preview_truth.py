@@ -252,6 +252,47 @@ class PreviewTruthTest(CommandCase):
         self.assertEqual(planned["plan"]["changes"][0]["choice"], "raise_list")
 
 
+class NothingToSaveTest(CommandCase):
+    """R4 — 빨간 줄을 모두 「그 칸은 안 바꿈」으로 골라 바꿀 칸이 없는 미리보기(`will_change: 0`, `saves: 0`)는 어디서나 그렇게
+    말한다: 페이지(띠 · 칸 · 끝), 짧은 답(고른 줄의 예), 안내문. 아무것도 저장하지 않고 "적용"을 청하지 않으며 begin 이 받지 않는다."""
+
+    def test_r4_a_plan_that_keeps_every_red_cell_saves_nothing_asks_nothing_and_begin_refuses_it(self):
+        from dataclasses import replace
+        snapshot, request = trial_scene.snapshot(), replace(trial_scene.request(), nights=(1,))
+        snap = self.write("snapshot.json", encode_snapshot(snapshot))
+        short = self.run_cli("plan", "--snapshot", snap, "--request", self.write("request.json", encode_request(request)),
+                             "--resolutions", self.write("choices.json", [{"rule": "ABOVE_LIST", "choice": "keep"}]), "--record",
+                             "--out", self.dir / "plan.json")
+        self.assertEqual((short["counts"]["will_change"], short["counts"]["red"], short["saves"], short["counts"]["keep"]), (0, 0, 0, 24))
+        chosen, = short["chosen"]
+        self.assertEqual((chosen["choice"], chosen["cells"]), ("keep", 24))
+        self.assertEqual(chosen["example"], "12/7 월 · 스탠다드 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 100.00 그대로",
+                         "안내문이 옮기라는 예가 비지 않는다 — 그 칸이 그대로라는 숫자")
+
+        page = Path(self.run_cli("render", "preview", "--plan", self.dir / "plan.json", "--out", self.dir / "preview.html")["page"])
+        text = " ".join(re.sub(r"<[^>]+>", " ", re.sub(r"<style>.*?</style>", " ", page.read_text(encoding="utf-8"), flags=re.S)).split())
+        self.assertIn("바꿀 칸이 없어 적용할 것이 없습니다", text)
+        self.assertIn("고르신 대로면 바꿀 칸이 없어 아무것도 저장하지 않습니다", text)
+        for said in ("고르신 대로 저장합니다", "저장합니다(", "\"적용\"이라고 하시면", "나눠 저장합니다"):
+            self.assertNotIn(said, text, "저장할 것이 없는 미리보기는 저장한다고도, 적용하라고도 말하지 않는다")
+        self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "칸마다도 저장하지 않는다고 말한다")
+
+        fresh = self.write("fresh.json", dict(encode_snapshot(snapshot), read_at=now_text()))
+        done = subprocess.run([sys.executable, str(SCRIPT), "begin", "--change", str(short["change_id"]), "--plan",
+                               str(self.dir / "plan.json"), "--snapshot", fresh], capture_output=True, text=True, env=self.env)
+        self.assertEqual(done.returncode, 2, done.stdout)
+        self.assertIn("바꿀 칸이 없어 적용할 것이 없습니다", json.loads(done.stderr)["error"], "빨간 줄을 고르라는 말이 아니다")
+        listed, = [item for item in self.run_cli("list")["changes"] if item["id"] == short["change_id"]]
+        self.assertEqual((listed["status"], listed["steps"]), ("previewed", 0), "begin 이 받지 않아 아무것도 시작하지 않았다")
+
+        skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
+        step = skill[skill.index("**읽고 미리보기.**"):skill.index("## 4. 되돌리기")]
+        red = (HERE.parent / "references" / "red-lines.md").read_text(encoding="utf-8")
+        for doc in (step, red):
+            self.assertIn("`saves` 가 0", doc, "안내문이 저장할 것이 없는 미리보기를 따로 말한다")
+            self.assertIn("\"적용\"을 청하지 않는다", doc)
+
+
 class ChosenListThroughLedgerTest(CommandCase):
     """V1 — 고른 대로 올리거나 지운 정가는 장부에 넣은 값으로 적히고, 결과 페이지에 보이고, 되돌리면 원래 정가로 돌아온다."""
 
