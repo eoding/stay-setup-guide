@@ -249,6 +249,13 @@ class RollbackPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("187.00 → 170.00", text)
         self.assertIn("550.00 그대로 둠", text)
         self.assertIn('그 사이 달라진 2칸도 되돌리려면 "2칸도 포함해서 되돌려"', text)
+        self.assertIn('"되돌려"라고 하시면 1칸을 되돌립니다.', text)
+
+        moved = replace(now, cells={**now.cells, c: CellValue(D("190.00"), None, None, "open")})
+        nothing = visible(render_rollback(plan_cell_rollback(recorded, later, moved), moved.reserved))
+        self.assertIn("되돌릴 칸이 없어 되돌릴 것이 없습니다. 아무것도 바뀌지 않았습니다.", nothing)
+        self.assertNotIn('"되돌려"라고 하시면', nothing, "되돌릴 칸이 없으면 0칸을 되돌리자고 청하지 않는다")
+        self.assertIn('그 사이 달라진 3칸도 되돌리려면 "3칸도 포함해서 되돌려"', nothing)
 
 
 class PricesPageTest(SelfContainedMixin, unittest.TestCase):

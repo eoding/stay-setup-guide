@@ -273,7 +273,8 @@ ROLLBACK_NOTE = "이 되돌리기도 장부에 한 번의 변경으로 적혀서
 def rollback_ask(plan: RollbackPlan, kind_notes: Iterable[str], unit: str = "칸") -> str:
     """되돌리기 미리보기의 끝 — 무엇을 말하면 되돌리는지와 알릴 것. `kind_notes` 는 종류마다 되돌려도 그대로인 것(예약 금액 ·
     판매 마감 · 값의 출처 표시 …), 그 뒤에 모든 종류에 같은 한 줄(ROLLBACK_NOTE)이 붙는다."""
-    ask = f'"되돌려"라고 하시면 {len(plan.restored):,}{unit}을 되돌립니다.'
+    ask = (f'"되돌려"라고 하시면 {len(plan.restored):,}{unit}을 되돌립니다.' if plan.restored else
+           f"되돌릴 {unit}이 없어 되돌릴 것이 없습니다. 아무것도 바뀌지 않았습니다.")   # 0{unit}을 되돌리자고 청하지 않는다
     if plan.kept and not plan.include_kept:
         ask += (f' 그 사이 달라진 {len(plan.kept):,}{unit}도 되돌리려면 "{len(plan.kept):,}{unit}도 포함해서 되돌려"라고 '
                 "해 주세요.")
