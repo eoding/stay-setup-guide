@@ -5,6 +5,8 @@
     render_result(record)      적용 결과 — 장부의 변경 하나: 저장 단계마다 된 것·멈춘 것, 다시 읽어 맞았는지
     render_rollback(plan)      되돌리기 미리보기 — 되돌리는 날짜, 그대로 두는 칸의 세 값과 까닭, 되돌리는 칸
     render_prices(snapshot)    지금 가격 보기 — 바꾸지 않고 표로만
+    render_sheet(check)        요금표를 이렇게 읽었습니다 — 요금표의 모양(객실이 줄, 기간이 열, 칸 안에 인원 · 박수)으로, 셈한 값은
+                               셈과 함께. ERP 를 읽기 전에 담당자가 종이와 견준다
 
 날짜 열은 ONE_COLUMN_PER_DATE_UP_TO(7)일까지 날짜마다 하나다(승인된 그림). 그보다 길면 표의 모든 줄이 똑같이 보이는 날끼리 —
 떨어져 있어도 — 열 하나를 쓰고, 열 머리에 날 수와 날짜 구간을 모두 적는다. `by_date` 면 길이와 상관없이 날짜마다 열 하나다.
@@ -28,12 +30,17 @@ from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 
 from price_model import (
-    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellKey, CellValue, ChangeRequest, Plan,
-    Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label, occupancy_order, value_of,
+    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellKey, CellValue,
+    ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label, occupancy_order,
+    value_of,
 )
 from price_plan import counts, day_runs, days_summary
+from price_sheet import SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
 
 MAKER = "어딩 Stay 가격 변경 도우미"
+# 요금표로 날짜별 가격을 맞춘 미리보기 · 결과가 꼭 다는 한 문장(결정 32). SKILL.md 도 도우미가 이 문장 그대로 말하게 한다.
+SEASON_REFILL_NOTE = ("여기서 날짜별로 바꾼 가격은 누가 ERP 시즌 화면에서 그 시즌의 [가격]을 '덮기'(이미 값이 있는 날도 덮기)로 "
+                      "다시 채우면 옛 요금으로 돌아갑니다.")
 ONE_COLUMN_PER_DATE_UP_TO = 7        # 날짜가 이만큼까지는 날짜마다 열 하나. 넘으면 칸이 모두 같은 날끼리 열 하나(결정 33A)
 
 
@@ -175,17 +182,19 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         return "", moved
 
     targets = isinstance(request, TargetTable)
-    what = f"목표 값 {len(request.targets):,}칸" if targets else operation_label(request, currency)
+    sheet = targets and request.from_sheet
+    what = (f"{'새 요금표' if sheet else '목표 값'} {len(request.targets):,}칸" if targets else operation_label(request, currency))
     title = f"미리보기 · {request.hotel} · {request.offer} · {what}"
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 것입니다'
             f'{f" (장부 {change_id}번에 적어 두었습니다)" if change_id else ""}. 통화 {esc(currency)}.</p>',
-            _request_box(request, currency, plan.absent_pairs), _preview_banners(tally),
+            _request_box(request, currency, plan.absent_pairs),
+            f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>' if sheet else "", _preview_banners(tally),
             stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄"),
                    (tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
                    (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
                    (tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
-            _skip_line(plan)]
+            _skip_line(plan), _coverage_section(plan.coverage) if sheet else ""]
     if steps:
         edits = sum(step.kind == "cell_edit" for step in steps)
         body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번'
@@ -213,6 +222,29 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
     body += [notes(lines),
              '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
     return page(title, "\n".join(body), MAKER)
+
+
+def _coverage_section(gaps: Sequence[Gap]) -> str:
+    """요금표로 맞출 때 넣지 않는 것 — 종류마다 수와 목록(객실 · 요금제 · 인원 · 박수 · 날짜 구간 · 줄 번호)."""
+    tally = coverage_counts(gaps)
+    out = ['<h2>요금표가 넣지 않는 것 <span class="sub">— 적용 전에 꼭 보세요</span></h2>']
+    if not gaps:
+        return out[0] + '<div class="banner ok">읽은 범위의 칸을 요금표가 빠짐없이 덮습니다.</div>'
+    units = {"untouched": "칸", "unseen": "칸", "no_sale": "일", "unknown": "개", "unnamed": "개"}
+    for kind, title in GAP_KINDS.items():
+        items = [gap for gap in gaps if gap.kind == kind]
+        if not items:
+            continue
+        rows = []
+        for gap in items:
+            line = "" if gap.occupancy is None else line_label(gap.occupancy, gap.nights)
+            days = f"{runs_label(gap.dates)} ({len(gap.dates):,}일)" if gap.dates else ""
+            nos = ", ".join(f"{no}번째 줄" for no in gap.lines)
+            rows.append("<tr>" + "".join(f'<td class="text">{esc(text)}</td>' for text in
+                                         (f"{gap.room} · {gap.rate_plan}", line, days, nos)) + "</tr>")
+        out.append(f"<h3>{esc(title)} · {tally[kind]:,}{units[kind]}</h3><div class=\"scroll\"><table>"
+                   "<tr><th>객실 · 요금제</th><th>인원 · 박수</th><th>날짜</th><th>요금표 줄</th></tr>" + "".join(rows) + "</table></div>")
+    return "\n".join(out)
 
 
 def _skip_line(plan: Plan) -> str:
@@ -384,6 +416,8 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
     if undone:
         body.append(f'<p class="sub">이 변경의 {undone_count:,}칸은 뒤에 되돌렸습니다(장부 '
                     f'{", ".join(f"{number}번" for number in undone)}).</p>')
+    if (record.request or {}).get("from_sheet"):
+        body.append(f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>')
     body += [steps_list(record.steps), stopped_choices(record)]
     closed = {key for key, view in views.items() if view.before.state == "closed"}
     reserved = {(key.room, key.date) for key, view in views.items() if view.reserved}
@@ -477,4 +511,78 @@ def render_prices(snapshot: Snapshot, by_date: bool = False) -> str:
                                 for room in sorted({r for r, _ in snapshot.no_sale}))) + "</p>"] if snapshot.no_sale else []),
             notes(["판매가는 굵게, 정가(손님 화면에 줄 그어 보이는 값)와 공급 원가는 작게 보입니다.",
                    '바꾸고 싶으면 대화창에서 "12월 디럭스 +10,000" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.'])]
+    return page(title, "\n".join(body), MAKER)
+
+
+def _sheet_cell(line: SheetLine, currency: str) -> str:
+    """요금표 칸 하나 — 그 줄의 인원 · 박수마다 값(요금표에 적힌 차례). 셈한 값은 「계산」 꼬리표와 셈."""
+    parts = [f'<small class="more">{line.no}번째 줄</small>']
+    for (occupancy, nights), values in line_figures(line, currency).items():
+        sell = values["sell"]
+        parts.append(f'<div>{esc(line_label(occupancy, nights))} <span class="now">{fmt_money(sell.value, currency)}</span>'
+                     + ('<span class="tag new">계산</span>' if sell.formula else "") + "</div>")
+        for name, figure in values.items():
+            if name != "sell":
+                parts.append(f'<small class="more">{FIELD_LABELS[name]} {fmt_money(figure.value, currency)}'
+                             f'{" (계산)" if figure.formula else ""}</small>')
+        parts += [f'<small class="more">{FIELD_LABELS[name]} = {esc(figure.formula)}</small>'
+                  for name, figure in values.items() if figure.formula]
+    return "".join(parts)
+
+
+def render_sheet(check: SheetCheck) -> str:
+    sheet, currency = check.sheet, check.sheet.currency
+    title = f"요금표를 이렇게 읽었습니다 · {sheet.hotel} · {sheet.offer}"
+    lines, known = check.selected, set(check.hotel_pairs)
+    days = sorted({day for line in lines for day in line.days})
+    columns: dict[tuple, list[SheetLine]] = {}
+    for line in sorted(lines, key=lambda item: (item.days[0], item.no)):
+        columns.setdefault((line.season, line.periods), []).append(line)
+    pairs = list(dict.fromkeys((line.room, line.rate_plan) for line in lines))
+    heads = "".join(f'<th class="days">{f"<b>{esc(season)}</b><br>" if season else ""}{esc(periods_label(periods))}</th>'
+                    for season, periods in columns)
+    rows = []
+    for room, plan in pairs:
+        tag = "" if (room, plan) in known else '<span class="tag blocked">호텔에 없음</span>'
+        tds = []
+        for members in columns.values():
+            mine = [line for line in members if (line.room, line.rate_plan) == (room, plan)]
+            tds.append(f'<td class="text">{"".join(_sheet_cell(line, currency) for line in mine)}</td>' if mine
+                       else '<td class="none">—</td>')
+        rows.append(f'<tr><td class="text">{esc(room)} · {esc(plan)}{tag}</td>{"".join(tds)}</tr>')
+    facts = [("호텔", sheet.hotel), ("오퍼", sheet.offer), ("통화", currency), ("요금표 줄", f"{len(lines):,}줄"),
+             ("날짜", f"{days[0]} ~ {days[-1]}"), ("칸", f"{len(check.cells):,}칸 (날짜마다 인원 · 박수 하나씩, 호텔에 있는 객실 · 요금제만)")]
+    if not check.part.whole:
+        window = f"{check.part.first or '처음'} ~ {check.part.last or '끝'}" if check.part.first or check.part.last else ""
+        facts.append(("이번에 하는 부분", " / ".join(part for part in (" · ".join(check.part.rooms), window) if part)))
+    sentence = f'<p class="sub">요청: “{esc(sheet.sentence)}”</p>' if sheet.sentence else ""
+    body = [f"<h1>{esc(title)}</h1>",
+            '<p class="sub"><b>아직 ERP 에서 아무것도 읽지 않았고, 아무것도 바뀌지 않았습니다.</b> 종이 요금표와 한 줄씩 견주어 봐 주세요.</p>',
+            f'<div class="frame">{sentence}<dl class="kv">'
+            + "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in facts) + "</dl></div>"]
+    for gap in check.gaps:
+        nos = ", ".join(f"{no}번째 줄" for no in gap.lines)
+        if gap.kind == "unknown":
+            body.append(f'<div class="banner amber"><b>호텔(이 오퍼)에 없는 객실 · 요금제</b> {esc(gap.room)} · {esc(gap.rate_plan)} '
+                        f'({esc(nos)}) — 이 줄은 넣지 않습니다. 이름을 잘못 옮겼으면 알려 주세요.</div>')
+        else:
+            body.append(f'<div class="banner blue"><b>요금표에 없는 객실 · 요금제</b> {esc(gap.room)} · {esc(gap.rate_plan)} '
+                        "— 가격을 그대로 둡니다.</div>")
+    body += ["<h2>요금표</h2>",
+             f'<div class="scroll"><table><tr><th>객실 · 요금제</th>{heads}</tr>{"".join(rows)}</table></div>']
+    reads, scope = check.reads, check.range
+    if scope is not None:
+        body.append("<h2>맞으면 ERP 에서 읽을 것</h2>"
+                    f'<p class="sub">객실 · 요금제 {len(scope.pairs)}개 × {len(scope.dates):,}일({scope.dates[0]} ~ {scope.dates[-1]}, '
+                    "요금표가 비운 날도 읽어 「요금표에 없는 칸」을 댑니다). 페이지 작업은 가격 읽기 "
+                    f"{reads['readPair']}번, 예약 있는 날 읽기 {reads['readReserved']}번(숨은 줄이 있으면 더), 그리고 읽은 화면 조각마다 "
+                    "받기(800자에 한 번)입니다.</p>")
+        if not reads["fits"]:
+            body.append(f'<div class="banner amber">읽기 한 번은 가격 읽기와 예약 있는 날 읽기를 합쳐 {reads["limit"]}번까지라, '
+                        "이 요금표는 객실이나 기간을 나눠 한 부분씩 읽고 바꿉니다.</div>")
+    body += [notes([f"「계산」 꼬리표가 붙은 값은 요금표가 차이(+금액 · %)로 적은 값을 도우미의 명령이 셈한 것입니다. 셈은 값 아래에 적었습니다. "
+                    + _rounding_note(currency),
+                    "나머지 숫자는 요금표에 적힌 그대로 옮겼습니다.",
+                    "요금표와 다른 곳이 있으면 몇 번째 줄인지 말씀해 주세요."]),
+             '<div class="banner blue">맞으면 대화창에서 "맞아"라고 해 주세요. 그때 ERP 에서 지금 가격을 읽어 미리보기를 만듭니다.</div>']
     return page(title, "\n".join(body), MAKER)
