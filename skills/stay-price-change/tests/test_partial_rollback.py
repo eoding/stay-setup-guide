@@ -137,6 +137,10 @@ class PartialRollbackTest(unittest.TestCase):
         self.assertTrue(result.name.endswith(f" · {scene.HOTEL} · 되돌리기 결과.html"), result.name)
         self.assertIn(f"되돌리기 결과 · {scene.HOTEL} · {scene.OFFER} 장부 {rid}번 · 요청 “일부 되돌려” · {self.change}번 변경을 되돌림",
                       visible(result.read_text(encoding="utf-8")))
+        self.assertIn(MARK_ON_ROLLBACK, visible(result.read_text(encoding="utf-8")),
+                      "R6 — ERP 의 '손입력' 표시는 도우미가 읽지도 되돌리지도 못한다고 말한다")
+        self.assertIn("'손입력' 표시는 되돌리지 않습니다", text, "되돌리기 미리보기도 되돌려도 그대로인 것으로 말한다")
+        self.assertIn("읽지도 되돌리지도 못한다", (HERE.parent / "references" / "commands.md").read_text(encoding="utf-8"))
 
         rest, _ = self.plan()
         second, _ = self.apply(rest)
@@ -184,6 +188,9 @@ class PartialRollbackTest(unittest.TestCase):
         self.assertEqual((result["scope"], len(result["rollback"]["restored"]), len(result["steps"])),
                          (f"스위트(룸온리) · 1/1 금 (1일, 2027년) · {self.change}번 되돌리기 (스위트 / 룸온리 / 1/1 금 ~ 끝만)", 6, 1),
                          "범위는 되돌리는 칸 · 한 일 · 고른 칸 — 장부 목록의 줄과 같은 셈")
+
+
+MARK_ON_ROLLBACK = "되돌린 칸도 ERP 에서 '손입력'으로 표시됩니다. 이 표시는 도우미가 읽지도 되돌리지도 못해, 넣기 전의 표시로 돌아가지 않습니다."
 
 
 if __name__ == "__main__":

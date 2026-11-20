@@ -46,7 +46,11 @@ ONE_COLUMN_PER_DATE_UP_TO = 7        # 날짜가 이만큼까지는 날짜마다
 RESERVED_NOTE = "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다."
 CLOSED_NOTE = "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다."
 # 되돌려도 그대로인 것 — 되돌리기 미리보기의 끝에 단다(chrome.rollback_ask)
-ROLLBACK_KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.", "판매 마감·판매 가능 상태는 되돌리지 않고 값만 되돌립니다.")
+ROLLBACK_KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.", "판매 마감·판매 가능 상태는 되돌리지 않고 값만 되돌립니다.",
+                  "ERP 의 '손입력' 표시는 되돌리지 않습니다 — 도우미가 읽지도 되돌리지도 못합니다.")
+# 결과 페이지의 값 출처 표시 — 도우미가 넣은 칸은 ERP 가 「손입력」으로 단다. 도우미는 그 표시를 읽지도 되돌리지도 못한다
+MARK = "이 칸들은 ERP 에서 '손입력'으로 표시됩니다."
+MARK_ON_ROLLBACK = "되돌린 칸도 ERP 에서 '손입력'으로 표시됩니다. 이 표시는 도우미가 읽지도 되돌리지도 못해, 넣기 전의 표시로 돌아가지 않습니다."
 
 
 def _short_day(day: str) -> str:
@@ -701,7 +705,7 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
     if record.status in ("applied", "stopped"):
         lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
                  "이미 받은 예약의 금액은 그대로입니다.",
-                 "이 칸들은 ERP 에서 '손입력'으로 표시됩니다.",
+                 MARK_ON_ROLLBACK if result_name(record) == "되돌리기 결과" else MARK,
                  f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
         if ledger_path:
             lines.insert(3, f"기록: {ledger_path}")
