@@ -7,8 +7,9 @@
  *   3. `await stayPriceLoader.load()` → 이름으로 골라 도우미 → 부트 → 가격 도우미 차례로 실행하고 작은 상태를 돌려준다.
  *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()` — 적어 둔 원본을 같은 차례로 다시 실행한다.
  *
- * localStorage 에는 원본 셋만 적는다: 러너의 두 키(`stayHelperSrc`·`stayBoot`)와 `stayPriceSrc`. 러너의 계획
- * (`staySteps`)과 이어 하기 자리(`stayRunCursor`)는 읽지도 쓰지도 않는다 — 탭에 예전 러너 계획이 남아 있을 수 있다.
+ * localStorage 에는 원본 셋만, `stayPrice` 로 시작하는 제 키에만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·`stayPriceSrc`).
+ * 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 — 탭에 예전 러너 실행의
+ * 원본(다른 판일 수 있다)과 계획·이어 하기 자리가 남아 있을 수 있고, 덮으면 그 실행이 깨진다.
  * 돌려주는 값에는 주소가 없다(파일 이름 · 바이트 수 · 판 번호뿐).
  */
 (function () {
@@ -16,8 +17,8 @@
 
   var BRIDGE = 'stay_price_bridge';
   var FILES = [
-    { name: 'stay_helper.js', key: 'stayHelperSrc' },
-    { name: 'stay_boot.js', key: 'stayBoot' },
+    { name: 'stay_helper.js', key: 'stayPriceHelperSrc' },
+    { name: 'stay_boot.js', key: 'stayPriceBootSrc' },
     { name: 'stay_price.js', key: 'stayPriceSrc' }
   ];
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
