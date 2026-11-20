@@ -1,6 +1,6 @@
 ---
 name: stay-price-change
-description: "이미 판매 중인 호텔 하나의 ERP Stay 가격 캘린더 값(판매가·정가·공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌리고, 지금 상태를 저장해 둔다. '가격 올려줘', '요금 바꿔줘', '12월 디럭스 +10,000', '지금 가격 보여줘', '어제 바꾼 거 되돌려줘', '지금 상태 저장해 둬', '새 요금표로 가격 바꿔줘' 요청에 쓴다. 계약서로 새 호텔을 처음 세팅하는 일은 stay-setup-guide(지시서)와 stay-setup-run(실행)이 맡는다. 부가옵션 금액은 stay-addon-price-change, 부과금 금액은 stay-charge-change 가 맡는다. 프로모션 할인은 다루지 않는다."
+description: "이미 판매 중인 호텔 하나의 ERP Stay 가격 캘린더 값(판매가·정가·공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌리고, 지금 상태를 저장해 둔다. '가격 올려줘', '요금 바꿔줘', '12월 디럭스 +10,000', '지금 가격 보여줘', '어제 바꾼 거 되돌려줘', '지금 상태 저장해 둬', '새 요금표로 가격 바꿔줘' 요청에 쓴다. 계약서로 새 호텔을 세팅하는 일은 stay-setup-guide(지시서)와 stay-setup-run(실행)이 맡는다. 부가옵션은 stay-addon-price-change, 부과금은 stay-charge-change 가 맡고 프로모션 할인은 다루지 않는다."
 platforms: [linux, macos, windows]
 metadata:
   hermes:
