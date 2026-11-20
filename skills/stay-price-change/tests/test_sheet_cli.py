@@ -21,6 +21,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import sheet_scene as S  # noqa: E402
 from change_core.ledger import now_text  # noqa: E402
+from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import encode_snapshot  # noqa: E402
 from price_pages import SEASON_REFILL_NOTE  # noqa: E402
 from test_cli import answer  # noqa: E402
@@ -53,7 +54,7 @@ class SheetCommandTest(unittest.TestCase):
         self.assertEqual((check["kind"], check["lines"], check["cells"]), ("sheet_check", 8, 112))
         self.assertEqual(check["gaps"], [{"kind": "unnamed", "room": "패밀리", "rate_plan": S.PLAN, "occupancy": None, "nights": None,
                                           "dates": [], "lines": []}])
-        self.assertEqual(check["reads"], {"readPair": 2, "readReserved": 1, "limit": 40, "fits": True})
+        self.assertEqual(check["reads"], {"readPair": 2, "readReserved": 1, "limit": PAGE_KEEPS, "fits": True})
         page = self.run_cli("render", "sheet", "--plan", self.dir / "sheet-check.json", "--out", self.dir / "sheet.html")["page"]
         self.assertIn("요금표를 이렇게 읽었습니다", visible(Path(page).read_text(encoding="utf-8")))
 
@@ -96,7 +97,7 @@ class SheetCommandTest(unittest.TestCase):
                             "--out", self.dir / "part.json")
         self.assertEqual((part["cells"], part["range"]["pairs"], part["range"]["first"]),
                          (7 * 4, [{"room": "스위트", "rate_plan": S.PLAN}], "2027-01-11"))
-        rooms = [f"객실 {n}" for n in range(1, 21)]
+        rooms = [f"객실 {n}" for n in range(1, PAGE_KEEPS // 2 + 1)]   # 1년은 객실마다 가격 읽기 2번 + 예약 읽기 1번 — 하나 넘친다
         big = dict(S.sheet_data(), lines=[{"room": room, "rate_plan": S.PLAN, "periods": [{"from": "2027-01-01", "to": "2027-12-31"}],
                                            "rows": S.rows("200")} for room in rooms])
         look = dict(S.look_data(), pairs=[{"room": room, "rate_plan": S.PLAN} for room in rooms])
@@ -105,7 +106,8 @@ class SheetCommandTest(unittest.TestCase):
         self.assertFalse(check["reads"]["fits"])
         error = self.run_cli("read-calls", "--request", self.dir / "big-check.json", code=2)["error"]
         self.assertIn("읽기 한 번에 들지 않습니다", error)
-        self.assertIn("40번까지", error)
+        self.assertIn("이 요금표(부분)는", error)
+        self.assertIn(f"{PAGE_KEEPS}번까지", error)
 
     def test_the_wrong_file_or_hotel_is_refused(self):
         snapshot = self.write("snapshot.json", encode_snapshot(S.reading()))

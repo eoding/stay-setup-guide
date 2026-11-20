@@ -22,7 +22,7 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | 명령 | 플래그 | 하는 일 · 답 |
 |---|---|---|
 | `look` | `--answers` (여러 번) | `stayPrice.look()` 의 답과 그 조각 → `{login, hotel, offer, offers, pairs}`. 목록이 길어 `body` 로 왔을 때만 쓴다. |
-| `read-calls` | `--request` 또는 `--record` | 읽을 범위 → `{pairs: [readPair 부를 값], reserved: [readReserved 첫 물음]}`. `--request` 는 범위 파일(`kind: range`)·바꾸기 요청·목표 값 표·`sheet` 가 낸 파일(읽기 한 번에 들지 않으면 거절), `--record` 는 장부 번호(그 번호의 계산이 바탕으로 삼은 범위). 부를 값마다 `hotel` 이 든다. 기간은 고른 날만 덮게 끊는다(readPair 186일씩). |
+| `read-calls` | `--request` 또는 `--record` | 읽을 범위 → `{pairs: [readPair 부를 값], reserved: [readReserved 첫 물음]}`. `--request` 는 범위 파일(`kind: range`)·바꾸기 요청·목표 값 표·`sheet` 가 낸 파일, `--record` 는 장부 번호(그 번호의 계산이 바탕으로 삼은 범위). 부를 값마다 `hotel` 이 든다. 기간은 고른 날만 덮게 끊는다(readPair 186일씩). 읽기 한 번은 가격 읽기와 예약 있는 날 읽기를 합쳐 200번까지다 — 넘는 범위는 아무것도 내지 않고 거절한다(까닭은 「`sheet` 가 낸 파일」). |
 | `reserved` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) | `read-calls` 가 낸 파일과 readReserved 답들 → `{done, ask, answered, failed}`. 숨긴 줄이 있던 물음은 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 `ask` 에 다시 낸다. 답 폴더를 통째로 주면 된다. 예약 조각이 어디에도 없으면 종료 2 와 `refetch`. |
 | `read` | `--calls` · `--answers` (여러 번) · `--earlier` (여러 번) · `--read-at` | 브라우저 답 → 지금 값 `{hotel, offer, currency, read_at, cells, reserved, pairs, room_names, no_sale, dates}`. 호텔은 페이지가 알아본 것이다. readPair 답이 없는 부를 값이나 남은 예약 물음이 있으면 거절하고, 어디에도 없는 조각이 있으면 종료 2 와 `refetch`. `--hotel`·`--hotel-id`·`--price-page`·`--adjust-page` 는 화면 조각 파일로 읽는 시험용이다. |
 | `sheet` | `--sheet` · `--look` · `--room` (여러 번) · `--from` · `--to` | 요금표 파일(「요금표」)을 읽기 전에 확인한다 → `sheet-check.json`: `{kind: "sheet_check", sheet, hotel_pairs, part, lines, cells, currency, gaps, range, reads}`. `--look` 은 `look()` 의 답(`hotel`·`offer`·`pairs`, 길면 `look` 명령이 묶은 파일). 요금표 전체의 셈과 펼침을 해 보고 없는 줄을 가리킴 · 고리 · 두 줄이 한 칸에 다른 값 · 틀린 기간이면 거절한다. `gaps` 는 읽기 전에 아는 넣지 않는 것(`unknown`·`unnamed`), `range` 는 읽을 범위(객실 · 요금제와 첫 날 · 끝 날 · 날 수), `reads` 는 읽기 한 번의 페이지 작업 `{readPair, readReserved, limit, fits}`. `--room`·`--from`·`--to` 는 요금표의 한 부분만(객실 하나 · 시즌 하나) 할 때. 이 파일을 `read-calls`·`plan` 의 `--request`, `render sheet` 의 `--plan` 으로 준다. |
@@ -133,7 +133,7 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 `read-calls`·`plan` 의 `--request`, `render sheet` 의 `--plan` 으로 준다. 고치지 않는다 — 요금표를 고쳤으면 `sheet` 를 다시 한다. 명령은 그 안의 `sheet`·`hotel_pairs`·`part` 만 읽고 나머지는 다시 셈한다.
 
 - 읽을 범위는 넣을 줄(고른 부분 가운데 호텔에 있는 객실 · 요금제)의 객실 · 요금제 × 첫 날부터 끝 날까지 모든 날이다. 요금표가 비운 날도 읽어야 그대로 둘 칸을 빠짐없이 댄다.
-- 읽기 한 번은 가격 읽기(`readPair`, 객실 · 요금제마다 186일에 한 번)와 예약 있는 날 읽기(`readReserved`, 550일에 한 번 — 숨은 줄이 있으면 쪼개져 늘어난다)를 합쳐 40번까지다. 페이지가 읽은 화면 조각을 40개까지만 두고(`stay_price.js` 의 `KEEP_BODIES`), 조각은 다 읽은 뒤에 받으므로 넘으면 앞 조각이 밀려난다. `reads.fits` 가 false 면 `read-calls` 가 거절한다 — `--room` 이나 `--from`·`--to` 로 나눈다.
+- 읽기 한 번은 가격 읽기(`readPair`, 객실 · 요금제마다 186일에 한 번)와 예약 있는 날 읽기(`readReserved`, 550일에 한 번 — 숨은 줄이 있으면 쪼개져 늘어난다)를 합쳐 200번까지다(1년이면 객실 · 요금제 99개). 페이지가 읽은 화면 조각을 200개까지만 두고(`stay_price.js` 의 `KEEP_BODIES`), 조각은 다 읽은 뒤에 받으므로 넘으면 앞 조각이 밀려난다. `reads.fits` 가 false 면 `read-calls` 가 거절한다 — `--room` 이나 `--from`·`--to` 로 나눈다. 요금표가 아닌 범위도 `read-calls` 가 같은 수로 거절한다.
 
 ## 넣지 않는 것
 
@@ -204,6 +204,7 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out <파일>]
 | `기간의 시작일 … 보다 뒤입니다` · `날짜는 ISO 형식` · `고른 요일 … 이 하루도 없습니다` · `요일은 「월 화 수 목 금 토 일」` · `금액을 읽지 못했습니다` · `판매가(sell)가 없습니다` · `같은 인원 · 박수가 두 번 있습니다` · `요금표의 통화(currency)` | 요금표 파일 모양을 고친다. 요금표에서 읽지 못한 숫자면 짐작하지 않고 담당자에게 묻는다 |
 | `요금표 파일(kind sheet)은 sheet 명령으로 확인하고` · `sheet 명령이 낸 파일` | `--request` 에는 `sheet` 가 낸 `sheet-check.json` 을 준다 |
 | `요금표 파일은 … 인데 look 의 답은 …` · `--look 은 hotel · offer · pairs 가 든 look 의 답입니다` | 요금표의 호텔 · 오퍼와 탭이 다르다, 또는 look 의 답이 아니다. 「준비」 3 으로 그 오퍼를 다시 본다 |
+| `이 범위는 읽기 한 번에 들지 않습니다` | 아무것도 부르지 않았다. 담당자에게 "한 번에 읽기에는 범위가 커서 객실(또는 기간)별로 나눠 하겠습니다"라고 말하고, 범위를 객실 · 요금제나 날짜로 나눠 범위 파일을 둘 이상 쓰고 하나씩 한다. 나눈 것마다 읽기 · 장부 번호가 따로다 |
 | `이 요금표(부분)는 읽기 한 번에 들지 않습니다` | 객실(`--room`)이나 시즌의 날짜 창(`--from`·`--to`)으로 나눠 `sheet` 를 다시 하고 한 부분씩 한다 |
 | `고른 객실이 요금표에 없습니다` · `고른 부분에 요금표 줄이 하나도 없습니다` · `넣을 요금표 줄이 없습니다` | 나눈 부분을 다시 고른다 |
 | `요금표의 통화는 … 인데 ERP 의 이 오퍼는 …` | 멈추고 담당자에게 묻는다. 바꿔 셈하지 않는다 |

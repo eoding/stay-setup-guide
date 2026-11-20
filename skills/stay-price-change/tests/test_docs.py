@@ -190,13 +190,20 @@ class SheetDocsTest(unittest.TestCase):
         per_pair = len(read_calls(hotel, "오퍼", [("객실", "요금제")], year))
         probes = len(reserved_probes(hotel, "오퍼", [("객실", "요금제")], year))
         most = max(n for n in range(1, PAGE_KEEPS + 1) if n * per_pair + probes <= PAGE_KEEPS)
-        self.assertEqual((per_pair, probes, most), (2, 1, 19))
+        self.assertEqual((per_pair, probes, most), (2, 1, 99), "1년이면 객실 · 요금제 99개까지 한 번에 읽는다")
         self.assertIn(f"가격 읽기(`readPair`) {per_pair}번({READ_SPAN}일에 한 번)", self.sheet)
         self.assertIn(f"예약 있는 날 읽기(`readReserved`) {probes}번({ERP_MAX_DAYS}일에 한 번", self.sheet)
         self.assertIn(f"합쳐 {PAGE_KEEPS}번까지", self.sheet)
         self.assertIn(f"객실 · 요금제 {most}개까지", self.sheet)
         for words in (f"{READ_SPAN}일에 한 번", f"{ERP_MAX_DAYS}일에 한 번", f"합쳐 {PAGE_KEEPS}번까지", "`KEEP_BODIES`"):
             self.assertIn(words, self.commands)
+
+    def test_every_count_of_kept_screens_in_the_instructions_is_what_the_page_keeps(self):
+        said = {doc.name: [int(n) for n in re.findall(r"조각[을이]? (\d+)개|(\d+)개 조각|(?<=합쳐 )(\d+)(?=번까지)", doc.read_text(encoding="utf-8"))
+                           for n in n if n] for doc in DOCS}
+        for name in ("commands.md", "page.md", "sheet.md"):
+            self.assertTrue(said[name], f"{name} 가 페이지가 두는 조각 수를 말한다")
+        self.assertEqual({n for numbers in said.values() for n in numbers}, {PAGE_KEEPS}, said)
 
 
 if __name__ == "__main__":

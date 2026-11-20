@@ -159,20 +159,20 @@ class SheetExpandTest(unittest.TestCase):
             self.assertIn(words, str(caught.exception))
 
     def test_a_span_beyond_one_reading_is_refused_with_the_limit_and_where_it_comes_from(self):
-        rooms = [f"객실 {n}" for n in range(1, 21)]
+        rooms = [f"객실 {n}" for n in range(1, PAGE_KEEPS // 2 + 1)]   # 1년은 객실마다 가격 읽기 2번 — 예약 읽기 1번을 더하면 하나 넘친다
         data = dict(S.sheet_data(), lines=[{"room": room, "rate_plan": S.PLAN, "periods": [{"from": "2027-01-01", "to": "2027-12-31"}],
                                             "rows": S.rows("200")} for room in rooms])
         check = SheetCheck(decode_sheet(data), tuple((room, S.PLAN) for room in rooms))
-        self.assertEqual(check.reads, {"readPair": 40, "readReserved": 1, "limit": PAGE_KEEPS, "fits": False})
+        self.assertEqual(check.reads, {"readPair": 2 * len(rooms), "readReserved": 1, "limit": PAGE_KEEPS, "fits": False})
         with self.assertRaises(Refused) as caught:
             check.fitting_range()
         message = str(caught.exception)
-        for words in ("가격 읽기 40번 + 예약 있는 날 읽기 1번", f"{PAGE_KEEPS}번까지", "stay_price.js KEEP_BODIES", "--room", "--from"):
+        for words in (f"가격 읽기 {2 * len(rooms)}번 + 예약 있는 날 읽기 1번", f"{PAGE_KEEPS}번까지", "stay_price.js KEEP_BODIES", "--room", "--from"):
             self.assertIn(words, message)
         # 한 부분씩이면 든다 — 객실 하나, 또는 상반기
         self.assertTrue(replace(check, part=Part(rooms=("객실 1",))).reads["fits"])
         half = replace(check, part=Part(first="2027-01-01", last="2027-06-30"))
-        self.assertEqual((half.reads["readPair"], half.reads["fits"], half.range.dates[-1]), (20, True, "2027-06-30"))
+        self.assertEqual((half.reads["readPair"], half.reads["fits"], half.range.dates[-1]), (len(rooms), True, "2027-06-30"))
 
 
 class SheetReadingRangeTest(unittest.TestCase):

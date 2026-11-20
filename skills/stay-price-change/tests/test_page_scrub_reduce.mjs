@@ -159,3 +159,24 @@ test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 �
   assert.ok(charsOf(huge) <= 800 && huge.cut === true && /페이지에 없습니다/.test(huge.error), '어떤 값이 길게 들어와도 답은 줄여서 800자 안');
   page.w.close();
 });
+
+test('W2 · 페이지는 명령이 읽기 한 번에 허락하는 작업 수(PAGE_KEEPS)만큼 조각을 두어, 그만큼 부른 뒤에도 첫 조각을 받는다', async () => {
+  const keeps = Number(/^PAGE_KEEPS = (\d+)$/m.exec(readFileSync(join(HERE, '..', 'scripts', 'price_browser.py'), 'utf8'))[1]);
+  const page = erpPage();
+  const read = async () => plain(await page.w.stayPrice.readPair(inPage(page.w, { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함',
+    from: '2026-07-01', to: '2026-07-01', weekdays: ['월', '화', '수', '목', '금', '토', '일'] })));
+  // 그 사이의 작업은 지어낸 조각으로 대신한다 — 작업 하나가 1초쯤이라 수백 번을 다 부르지 않는다. 앞뒤의 작업은 진짜다
+  const between = (n) => {
+    const store = page.w.__stayPriceBodies;
+    for (let i = 0; i < n; i++) { const id = `between-${store.order.length}`; store.items[id] = { text: '{}', bytes: 2, crc32: '00000000' }; store.order.push(id); }
+  };
+  const first = await read();
+  between(keeps - 2);
+  const last = await read();
+  assert.equal(plain(page.w.stayPrice.take(first.body.id, 0)).ok, true, `작업 ${keeps}번을 부른 뒤에도 첫 조각을 받는다`);
+  between(1);
+  await read();
+  assert.match(plain(page.w.stayPrice.take(first.body.id, 0)).error, /페이지에 없습니다/, '하나 더 넘치면 가장 앞 조각부터 밀려난다');
+  assert.equal(plain(page.w.stayPrice.take(last.body.id, 0)).ok, true);
+  page.w.close();
+});

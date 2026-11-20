@@ -25,9 +25,9 @@ from typing import Iterable, Mapping
 
 from change_core.chrome import fmt_money
 from change_core.money import money, money_text, round_money
-from price_browser import PAGE_KEEPS, READ_SPAN, read_calls, reserved_probes
+from price_browser import PAGE_KEEPS, read_calls, reading_size, reserved_probes, too_big
 from price_model import (
-    ERP_MAX_DAYS, FIELD_LABELS, FIELDS, GAP_KINDS, WEEKDAYS, CellKey, Gap, Plan, ReadRange, Snapshot, Target, TargetTable,
+    FIELD_LABELS, FIELDS, GAP_KINDS, WEEKDAYS, CellKey, Gap, Plan, ReadRange, Snapshot, Target, TargetTable,
     decode_hotel, encode_gap, encode_hotel, hotel_label, iso_day, line_label, occupancy_order, same_hotel,
 )
 from price_plan import PlanError, day_runs, plan_targets
@@ -380,14 +380,13 @@ class SheetCheck:
 
     @cached_property
     def reads(self) -> dict:
-        """읽기 한 번의 페이지 작업 수 — readPair 는 객실 · 요금제마다 READ_SPAN 일씩, readReserved 는 첫 물음(ERP_MAX_DAYS 일씩,
-        숨은 줄이 있으면 쪼개져 늘어난다). 둘을 합쳐 PAGE_KEEPS 를 넘으면 한 번에 읽지 못한다(조각이 밀려난다)."""
+        """읽기 한 번의 페이지 작업 수(`reading_size`) — readPair 는 객실 · 요금제마다 READ_SPAN 일씩, readReserved 는 첫 물음
+        (ERP_MAX_DAYS 일씩, 숨은 줄이 있으면 쪼개져 늘어난다)."""
         if self.range is None:
             return dict(readPair=0, readReserved=0, limit=PAGE_KEEPS, fits=False)
         hotel = encode_hotel(self.sheet.hotel, self.sheet.hotel_id)
-        pairs = len(read_calls(hotel, self.sheet.offer, self.range.pairs, self.range.dates))
-        probes = len(reserved_probes(hotel, self.sheet.offer, self.range.pairs, self.range.dates))
-        return dict(readPair=pairs, readReserved=probes, limit=PAGE_KEEPS, fits=pairs + probes <= PAGE_KEEPS)
+        return reading_size(dict(pairs=read_calls(hotel, self.sheet.offer, self.range.pairs, self.range.dates),
+                                 reserved=reserved_probes(hotel, self.sheet.offer, self.range.pairs, self.range.dates)))
 
     def fitting_range(self) -> ReadRange:
         """읽을 범위 — 넣을 줄이 없거나 읽기 한 번에 들지 않으면 까닭과 한도를 대고 거절한다."""
@@ -395,12 +394,8 @@ class SheetCheck:
             raise PlanError("넣을 요금표 줄이 없습니다 — 고른 부분의 객실 · 요금제가 모두 호텔(이 오퍼)에 없습니다")
         reads = self.reads
         if not reads["fits"]:
-            raise PlanError(
-                f"이 요금표(부분)는 읽기 한 번에 들지 않습니다 — 페이지 작업이 가격 읽기 {reads['readPair']}번 + 예약 있는 날 읽기 "
-                f"{reads['readReserved']}번인데, 읽기 한 번은 {PAGE_KEEPS}번까지입니다(페이지가 읽은 화면 조각을 {PAGE_KEEPS}개까지만 "
-                f"두고 — stay_price.js KEEP_BODIES — 조각은 다 읽은 뒤에 받으므로 넘으면 앞 조각이 밀려납니다. 가격 읽기는 객실 · "
-                f"요금제마다 {READ_SPAN}일에 한 번, 예약 읽기는 {ERP_MAX_DAYS}일에 한 번). 객실(--room)이나 날짜 창(--from · --to)으로 "
-                "나눠 sheet 를 다시 합니다")
+            raise PlanError(f"이 요금표(부분)는 읽기 한 번에 들지 않습니다 — {too_big(reads)}. 객실(--room)이나 날짜 창(--from · --to)으로 "
+                            "나눠 sheet 를 다시 합니다")
         return self.range
 
     @cached_property

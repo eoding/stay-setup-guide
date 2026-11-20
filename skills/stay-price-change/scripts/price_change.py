@@ -56,8 +56,8 @@ from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reserved_probes, reserved_round, step_call,
-    step_outcome, unanswered,
+    BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reading_size, reserved_probes, reserved_round,
+    step_call, step_outcome, too_big, unanswered,
 )
 from price_model import (
     ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
@@ -190,10 +190,16 @@ def request_scope(data: dict) -> ReadRange:
 
 
 def cmd_read_calls(args):
+    """페이지가 조각을 다 두지 못하는 읽기는 아무것도 부르기 전에 거절한다 — 받으려 할 때는 앞 조각이 이미 밀려나 있다."""
     scope: ReadRange = recorded_reading(Ledger(), args.record).range if args.record else request_scope(load(args.request))
     hotel = encode_hotel(scope.hotel, scope.hotel_id)
-    return dict(pairs=read_calls(hotel, scope.offer, scope.pairs, scope.dates),
-                reserved=reserved_probes(hotel, scope.offer, scope.pairs, scope.dates))
+    calls = dict(pairs=read_calls(hotel, scope.offer, scope.pairs, scope.dates),
+                 reserved=reserved_probes(hotel, scope.offer, scope.pairs, scope.dates))
+    size = reading_size(calls)
+    if not size["fits"]:
+        raise PlanError(f"이 범위는 읽기 한 번에 들지 않습니다 — {too_big(size)}. 객실 · 요금제나 날짜로 나눠 범위 파일을 둘 이상 쓰고 "
+                        "하나씩 읽습니다")
+    return calls
 
 
 def cmd_reserved(args):

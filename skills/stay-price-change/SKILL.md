@@ -65,11 +65,12 @@ metadata:
 범위는 처음에는 요청 파일(바꾸기 요청, 바꾸지 않으면 `kind: range` — commands.md 「요청 파일」)로, 장부 번호가 있는 일(적용 직전·뒤, 되돌리기, 이어서)은 `--record <번호>` 로 준다. 번호를 주면 장부가 그 번호를 계산할 때 읽은 범위를 그대로 다시 읽는다.
 
 1. `python3 scripts/price_change.py read-calls --request <요청 파일> --out <R>/calls.json`(또는 `--record <번호>`).
+   - `이 범위는 읽기 한 번에 들지 않습니다` 면 아무것도 부르지 않았다. "한 번에 읽기에는 범위가 커서 객실(또는 기간)별로 나눠 하겠습니다"라고 말하고, 범위를 객실 · 요금제나 날짜로 나눠 나눈 것마다 따로 한다(읽기 · 장부 번호 · 페이지가 따로다).
 2. **가격.** `calls.json` 의 `pairs` 값마다(i = 1, 2 …) `await stayPrice.readPair(<값 그대로>)` 의 답을 `<R>/pair-<i>.json` 에 저장한다. 조각은 아직 받지 않는다.
 3. **예약 있는 날.** `price_change.py reserved --calls <R>/calls.json --answers <R> <앞선>` 의 `ask` 값마다(n 은 이어서 1, 2 …) `await stayPrice.readReserved(<값 그대로>)` 의 답을 `<R>/resv-<n>.json` 에 저장한다. `done: true` 까지 되풀이한다. `failed` 가 있으면 멈추고 그 `error` 를 page.md 에서 찾는다.
 4. **지금 값으로 묶기.** `price_change.py read --calls <R>/calls.json --answers <R> <앞선> --out <R>/snapshot.json`.
 5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/take-<id>-<at>.json`, 답의 `next` 가 `end` 가 될 때까지 `stayPrice.take("<id>", <next>)` 를 한 쪽씩 이어 받고, 그 명령을 다시 한다. 가격 조각도 예약 있는 날의 조각도 이렇게 받는다. 잘려서 `next` 가 안 보이면 그대로 저장하고 명령을 다시 한다(명령이 더 작은 크기를 댄다).
-   - `그 조각이 페이지에 없습니다` 면 새 폴더로 처음부터 다시 읽는다. 그 밖의 오류는 commands.md.
+   - `그 조각이 페이지에 없습니다` 면 새 폴더로 처음부터 다시 읽는다. 같은 범위에서 또 나면 1 의 거절처럼 나눈다. 그 밖의 오류는 commands.md.
 
 답이 `started: false` 면 아무것도 하지 않은 것이다. 저장하지 않고 `wait` 초 뒤 같은 값으로 다시 부른다.
 

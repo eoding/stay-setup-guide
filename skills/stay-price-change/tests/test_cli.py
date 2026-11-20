@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import date, timedelta
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -20,7 +21,7 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
-from price_browser import ask_sum  # noqa: E402
+from price_browser import PAGE_KEEPS, ask_sum  # noqa: E402
 from price_model import CellKey, Snapshot, decode_snapshot, decode_step, encode_request, encode_snapshot  # noqa: E402
 
 
@@ -243,6 +244,23 @@ class CommandTest(unittest.TestCase):
         statuses = {row["id"]: row["status"] for row in self.run_cli("list")["changes"]}
         self.assertEqual([statuses[n] for n in (rollback, preview, second["change_id"])], ["previewed"] * 3,
                          "거절한 바꾸기는 앞 번호를 그대로 둔다")
+
+    def test_w2_a_reading_larger_than_the_page_keeps_is_refused_before_anything_is_called(self):
+        year = [(date(2027, 1, 1) + timedelta(days=n)).isoformat() for n in range(365)]
+
+        def year_of(pairs: int) -> str:
+            return self.write(f"range-{pairs}.json", {"kind": "range", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼",
+                                                      "pairs": [{"room": f"객실 {n}", "rate_plan": "조식 포함"} for n in range(1, pairs + 1)],
+                                                      "dates": year})
+        example = self.run_cli("read-calls", "--request", year_of(20))
+        self.assertEqual((len(example["pairs"]), len(example["reserved"])), (40, 1),
+                         "1년 · 객실 · 요금제 20개(가격 읽기 40번 + 예약 있는 날 읽기 1번)는 한 번에 읽는다")
+        most = (PAGE_KEEPS - 1) // 2
+        self.assertEqual(len(self.run_cli("read-calls", "--request", year_of(most))["pairs"]), 2 * most)
+        refused = self.run_cli("read-calls", "--request", year_of(most + 1), code=2)["error"]
+        for words in ("이 범위는 읽기 한 번에 들지 않습니다", f"가격 읽기 {2 * most + 2}번 + 예약 있는 날 읽기 1번", f"{PAGE_KEEPS}번까지",
+                      "KEEP_BODIES", "나눠"):
+            self.assertIn(words, refused)
 
     def test_a_request_on_another_value_and_a_clear_request_plan_through_the_command(self):
         clear = self.write("clear.json", encode_request(scene.request(operation="clear", value=None, field="list")))

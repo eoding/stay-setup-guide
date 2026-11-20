@@ -133,7 +133,11 @@
   // 둘 다 맞을 때만 쓴다(`price_browser.attach_bodies`). 잘린 쪽은 같은 자리에서 더 작은 size 로 다시 받으면 된다.
   var RESULT_CHARS = 800;
   var PIECE_MIN = 200;
-  var KEEP_BODIES = 40;
+  // 두는 조각 수. 읽기는 작업을 다 부른 뒤에 조각을 받으므로 읽기 한 번의 작업이 이보다 많으면 앞 조각이 밀려난다. 명령(read-calls)은
+  // 작업이 이보다 많은 읽기를 거절한다(파이썬 `price_browser.PAGE_KEEPS` — 시험이 같은 수인지 본다). 1년이면 객실 · 요금제 99개까지다.
+  // 탭이 드는 메모리는 조각 글자 수 × 2바이트쯤이다. 186일 readPair 조각은 틀 1,300자 + 가격 줄마다 110자라 보통 수만 자, 200개면
+  // 수십 MB 안이다. 전체 페이지 이동이면 사라진다.
+  var KEEP_BODIES = 200;
   function shownLength(value) { return JSON.stringify(value).length; }
   function utf8(text) {
     var out = [];

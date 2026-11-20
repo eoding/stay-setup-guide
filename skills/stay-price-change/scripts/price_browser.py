@@ -42,8 +42,9 @@ from price_model import ERP_MAX_DAYS, FIELDS, WEEKDAYS, day_windows, decode_step
 
 READ_SPAN = 186                      # readPair 한 번의 기간 — 달마다 달력 칸을 보므로(판매일 확인) 여섯 달 남짓으로 끊어 45초 안에
 # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES). 읽기는 readPair · readReserved 를 다 부른 뒤에 조각을 받으므로(take),
-# 한 번의 읽기가 이보다 많은 조각을 만들면 앞 조각이 밀려나 받을 수 없다 — 그것이 읽기 한 번이 덮을 수 있는 크기다.
-PAGE_KEEPS = 40
+# 한 번의 읽기가 이보다 많은 조각을 만들면 앞 조각이 밀려나 받을 수 없다 — 그것이 읽기 한 번이 덮을 수 있는 크기이고, read-calls 는
+# 이보다 큰 읽기를 거절한다(`reading_size`). 1년이면 객실 · 요금제 99개, 550일(ERP_MAX_DAYS)이면 66개까지 한 번에 읽는다.
+PAGE_KEEPS = 200
 PROBE_FIELDS = ("hotel", "offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
 OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
 
@@ -266,6 +267,21 @@ def read_calls(hotel: Mapping, offer: str, pairs: Iterable[tuple[str, str]], dat
     spans, hotel = periods(dates, READ_SPAN), _hotel(hotel)
     return [{"hotel": hotel, "offer": offer, "room": room, "ratePlan": plan, "from": first, "to": last, "weekdays": weekdays}
             for room, plan in dict.fromkeys(pairs) for first, last, weekdays in spans]
+
+
+def reading_size(calls: Mapping) -> dict:
+    """읽기 한 번(read-calls 가 낸 `{pairs, reserved}`)의 페이지 작업 수 — 숨은 줄로 예약 읽기가 쪼개지기 전의 수다. 합쳐
+    PAGE_KEEPS 를 넘으면 한 번에 읽지 못한다(앞 조각이 밀려난다)."""
+    pairs, probes = len(calls["pairs"]), len(calls["reserved"])
+    return dict(readPair=pairs, readReserved=probes, limit=PAGE_KEEPS, fits=pairs + probes <= PAGE_KEEPS)
+
+
+def too_big(size: Mapping) -> str:
+    """읽기 한 번에 들지 않는 까닭 — 거절 문장의 가운데."""
+    return (f"페이지 작업이 가격 읽기 {size['readPair']}번 + 예약 있는 날 읽기 {size['readReserved']}번인데, 읽기 한 번은 "
+            f"{PAGE_KEEPS}번까지입니다(페이지가 읽은 화면 조각을 {PAGE_KEEPS}개까지만 두고 — stay_price.js KEEP_BODIES — 조각은 다 읽은 "
+            f"뒤에 받으므로 넘으면 앞 조각이 밀려납니다. 가격 읽기는 객실 · 요금제마다 {READ_SPAN}일에 한 번, 예약 읽기는 "
+            f"{ERP_MAX_DAYS}일에 한 번)")
 
 
 def reserved_probes(hotel: Mapping, offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
