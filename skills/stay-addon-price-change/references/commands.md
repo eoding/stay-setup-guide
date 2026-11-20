@@ -12,7 +12,7 @@
 | `read-calls` | `--request` 또는 `--record` · `--look` · `--out` | 읽을 줄 → `readLine` 부를 값 `{lines: [{hotel, addon, line}]}`. 요청이 `addons` · `all` 로 고르면 `--look` 이 있어야 한다. 한 번에 200줄까지 |
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readLine` 답과 조각 → 지금 값(`kind: addon_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
-| `render` | `preview` · `result` · `rollback` · `prices` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다 |
+| `render` | `preview` · `result` · `rollback` · `prices` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다. `--text` 면 파일을 만들지 않고 페이지에 보이는 글만 `text` 로 낸다(`--out` 과 같이 주지 않는다) |
 | `begin` | `--change` · `--plan` · `--snapshot` | 적용 시작. 방금 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 줄이라도(딸린 칸까지) 다르면 아무것도 시작하지 않는다(종료 1, `differences`). 15분보다 오래된 읽은 값, 저장할 줄이 없는(`saves` 0) 계산은 받지 않는다 |
 | `calls` | `--change` | 아직 저장되지 않은 단계 → `applyLine` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다 |
 | `record-result` | `--change` · `--result` | `applyLine` 답 하나 → 장부에 됨 · 멈춤. 다른 단계 · 다른 값을 물은 답이면 거절한다. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |

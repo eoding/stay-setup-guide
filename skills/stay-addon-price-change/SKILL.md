@@ -36,7 +36,7 @@ metadata:
 ## 담당자에게 말할 때
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷 · 플랜 · JSON · 명령 · 스크립트 · DB · payload · stale · verify. 대신 지금 값 · 미리보기 · 장부 · 저장 · 가격 줄 · ERP 화면이라고 한다.
-- 숫자는 명령의 짧은 답에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지의 글을 옮겨야 하면 같은 `render` 를 `--text` 를 붙여 다시 하고 답의 `text` 에서 옮긴다.
+- 숫자는 명령의 짧은 답에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지의 글을 옮겨야 하면 같은 `render` 를 `--text` 를 붙여 부르고 답의 `text` 에서 옮긴다 — `--text` 는 글만 내고 파일을 만들지 않는다.
 
 ## 준비
 

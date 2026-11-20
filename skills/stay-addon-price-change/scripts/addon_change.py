@@ -231,6 +231,8 @@ def moved_since(ledger: Ledger, change_id: int, now: Snapshot) -> list[dict]:
 
 
 def cmd_render(args):
+    if args.text and args.out:
+        raise ValueError("--text 는 글만 내고 파일을 만들지 않습니다 — --out 과 같이 주지 않습니다")
     name = PAGE_NAMES[args.kind]
     if args.kind == "preview":
         data = load(args.plan)
@@ -249,9 +251,11 @@ def cmd_render(args):
         moved = moved_since(ledger, args.change, decode_snapshot(load(args.snapshot))) if args.snapshot else ()
         html, hotel = render_result(record, moved, str(ledger.path)), record.hotel
         name = "부가옵션 되돌리기 결과" if record.kind == "rollback" else name
+    if args.text:           # 글만 옮길 때 — 페이지 파일을 하나 더 만들지 않는다
+        return dict(text=page_text(html))
     path = Path(args.out) if args.out else page_path(hotel, name)
     path.write_text(html, encoding="utf-8")
-    return dict(page=str(path.resolve()), **({"text": page_text(html)} if args.text else {}))
+    return dict(page=str(path.resolve()))
 
 
 # ───────────── 적용 ─────────────
@@ -473,7 +477,7 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--look", help="prices 의 look 파일")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
     sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값(그대로여야 할 칸이 달라졌는지도 보인다)")
-    sub.add_argument("--text", action="store_true", help="페이지에 보이는 글을 답의 text 로도 낸다")
+    sub.add_argument("--text", action="store_true", help="페이지에 보이는 글만 답의 text 로 낸다 — 파일을 만들지 않는다")
     sub = command("begin", cmd_begin, "적용 시작")
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--plan", required=True, help="steps 가 든 plan-<k>.json 또는 rollback-<k>.json")

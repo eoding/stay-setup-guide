@@ -93,7 +93,7 @@ class EndToEndTest(Flow):
         self.assertEqual((data["counts"]["will_change"], data["counts"]["red"], data["counts"]["blocked"]), (2, 0, 0))
         moves = {item["line"]["listed"]["line"]: (item["after"]["sell"], item["after"]["supply"]) for item in data["plan"]["changes"]}
         self.assertEqual(moves, {"301": ("22.00", "15.00"), "304": ("33.00", "25.00")})
-        page = self.cli("render", "preview", "--plan", plan, "--text", "--out", self.work / "미리보기.html")
+        page = self.cli("render", "preview", "--plan", plan, "--text")
         self.assertIn("20.00 → 22.00", page["text"])
         self.assertIn("15.00 그대로", page["text"], "바뀌지 않는 공급 원가는 그대로라고 보인다")
         self.assertIn("ERP 손입력", page["text"], "되돌릴 수 없는 출처 표시를 적용 전에 말한다")
@@ -109,7 +109,7 @@ class EndToEndTest(Flow):
         after = self.read(record=change)
         verified = self.cli("verify", "--change", change, "--snapshot", after)
         self.assertEqual((verified["same"], verified["mismatches"], verified["moved"]), (True, [], []))
-        result = self.cli("render", "result", "--change", change, "--snapshot", after, "--text", "--out", self.work / "결과.html")
+        result = self.cli("render", "result", "--change", change, "--snapshot", after, "--text")
         self.assertIn("적용했고, 다시 읽어 확인했습니다", result["text"])
 
         # 되돌리기 → 견주기
@@ -164,7 +164,7 @@ class RollbackKeepsTest(Flow):
         kept, = json.loads(out.read_text(encoding="utf-8"))["rollback"]["kept"]
         self.assertEqual((kept["recorded"], kept["written"], kept["now"]["fields"]["sell"]),
                          ({"sell": "30.00"}, {"sell": "33.00"}, "40.00"))
-        page = self.cli("render", "rollback", "--plan", out, "--text", "--out", self.work / "되돌리기.html")["text"]
+        page = self.cli("render", "rollback", "--plan", out, "--text")["text"]
         self.assertIn("도우미 밖에서 바뀜", page)
         self.assertIn("ERP 손입력", page, "되돌려도 출처 표시는 돌아오지 않는다고 말한다")
 
@@ -180,7 +180,7 @@ class RollbackKeepsTest(Flow):
         self.assertEqual(loose["scope"], entry["scope"], "장부에 적지 않아도 같은 줄이다")
         self.assertEqual(short["scope"], f"부가옵션 가격 줄 1개 (데모 오퍼 2027 · 엑스트라베드 · 엑스트라베드 1개 · 전체) · "
                                          f"{change}번 되돌리기 (가격 줄 304번만)")
-        page = self.cli("render", "rollback", "--plan", self.work / "rollback-1.json", "--text", "--out", self.work / "되돌리기.html")
+        page = self.cli("render", "rollback", "--plan", self.work / "rollback-1.json", "--text")
         self.assertIn(f"되돌리는 범위: {short['scope']}", page["text"])
 
     def test_a_later_change_by_the_helper_is_named_as_the_cause(self):
@@ -274,7 +274,7 @@ class NothingToSaveTest(Flow):
         self.assertEqual((short["saves"], short["counts"]["will_change"], short["counts"]["red"], short["counts"]["unchanged"]),
                          (0, 0, 0, 1))
 
-        text = self.cli("render", "preview", "--plan", plan, "--text", "--out", self.work / "미리보기.html")["text"]
+        text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
         self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", text)
         self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "줄에서도 저장하지 않는다고 말한다")
         for said in ("저장 0번", '"적용"이라고 해 주세요', "저장은 줄마다 한 번"):
@@ -299,8 +299,7 @@ class ScopeCardTest(Flow):
 
     def plan(self, lines, k):
         change, plan = self.preview(self.request(f"request-{k}.json", lines=lines), f"plan-{k}.json")
-        return json.loads(plan.read_text(encoding="utf-8")), self.cli("render", "preview", "--plan", plan, "--text",
-                                                                      "--out", self.work / f"미리보기-{k}.html")["text"]
+        return json.loads(plan.read_text(encoding="utf-8")), self.cli("render", "preview", "--plan", plan, "--text")["text"]
 
     def test_the_short_answer_says_whether_a_saved_line_has_a_scope_card_and_the_page_shows_its_values(self):
         self.erp = scene.Erp(scene.demo_lines() + [scene.line("205", "늦은 체크아웃", "306", "18시까지", "50.00", "40.00", scope=False)])
@@ -331,8 +330,8 @@ class SameNameTest(Flow):
         self.erp = scene.Erp([scene.line("204", "성인 엑스트라베드", "680", "성인 엑스트라베드 1개", "30.00", "25.00", offer=self.SPRING),
                               scene.line("205", "성인 엑스트라베드", "681", "성인 엑스트라베드 1개", "30.00", "25.00", offer=self.SUMMER)])
 
-    def page(self, kind, *flags, name):
-        return self.cli("render", kind, *flags, "--text", "--out", self.work / name)["text"]
+    def page(self, kind, *flags):
+        return self.cli("render", kind, *flags, "--text")["text"]
 
     def test_every_place_that_names_a_line_tells_two_same_named_add_ons_apart_by_their_offer(self):
         spring = f"{self.SPRING} · 성인 엑스트라베드 · 성인 엑스트라베드 1개 · 전체"
@@ -341,11 +340,11 @@ class SameNameTest(Flow):
         self.assertEqual(red["examples"][0]["name"], spring, "빨간 줄의 예가 그 줄을 오퍼로 부른다")
 
         change, plan = self.preview(self.request("request-2.json", lines=self.TWINS[:1], percent="10"), "plan-2.json")
-        preview = self.page("preview", "--plan", plan, name="미리보기.html")
+        preview = self.page("preview", "--plan", plan)
         self.assertIn(spring, preview)
         self.assertNotIn(self.SUMMER, preview)
         self.apply(change, plan)
-        result = self.page("result", "--change", change, name="결과.html")
+        result = self.page("result", "--change", change)
         self.assertIn(spring, result)
         other, _ = self.preview(self.request("request-3.json", lines=self.TWINS[1:], percent="10"), "plan-3.json")
 
@@ -356,12 +355,28 @@ class SameNameTest(Flow):
 
         out = self.work / "rollback-1.json"
         back = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--record", "--out", out)
-        self.assertIn(spring, self.page("rollback", "--plan", out, name="되돌리기.html"))
+        self.assertIn(spring, self.page("rollback", "--plan", out))
         self.assertIn(f"({spring})", {e["id"]: e for e in self.cli("list")["changes"]}[back["change_id"]]["scope"],
                       "되돌리기 확인이 읽는 줄도 오퍼로 가른다")
 
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("오퍼 이름(`offer`)부터 댄다", skill, "안내문이 담당자에게 줄을 오퍼로 말하라고 한다")
+
+
+class PageTextTest(Flow):
+    def test_reading_a_pages_text_creates_no_file(self):
+        scene.write_answers(self.work / "look", "look", [scene.look_answer(self.erp)])
+        self.cli("look", "--answers", self.work / "look", "--out", self.work / "look.json")
+        ledger = Path(self.env["STAY_PRICE_LEDGER_DIR"])
+        page = self.cli("render", "prices", "--look", self.work / "look.json")
+        self.assertEqual([path.name for path in ledger.glob("*.html")], [Path(page["page"]).name])
+        text = self.cli("render", "prices", "--look", self.work / "look.json", "--text")
+        self.assertEqual(set(text), {"text"})
+        self.assertIn("지금 부가옵션 가격 · 데모 호텔", text["text"])
+        self.assertEqual(len(list(ledger.glob("*.html"))), 1, "글을 읽어도 「… (2).html」 이 생기지 않는다")
+        refused = self.cli("render", "prices", "--look", self.work / "look.json", "--text", "--out", self.work / "p.html", code=2)
+        self.assertIn("파일을 만들지 않습니다", refused["error"])
+        self.assertFalse((self.work / "p.html").exists())
 
 
 class PageObjectTest(Flow):
