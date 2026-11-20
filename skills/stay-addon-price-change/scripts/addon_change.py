@@ -61,6 +61,7 @@ from change_core.ledger import Ledger, LedgerError, ledger_dir
 from change_core.money import money, money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution, said_in
+from change_core.window import moved_since as window_moved
 
 PAGE_OBJECT = "stayAddonPrice"      # 이 도우미의 페이지 모듈 — 조각을 다시 받으라는 글이 이 이름의 take 를 부르라고 한다
 PREFIXES = ("look-", "line-", "take-")
@@ -212,23 +213,9 @@ def cmd_plan(args):
 
 
 def moved_since(ledger: Ledger, change_id: int, now: Snapshot) -> list[dict]:
-    """저장한 줄 가운데 그대로여야 할 것이 달라진 것 — 넣지 않은 금액(장부 untouched)과 딸린 칸(그 번호의 읽은 값과 견줌)."""
-    record = ledger.change(change_id)
-    then = snapshot_items(recorded_snapshot(ledger, change_id))
-    items = snapshot_items(now)
-    saved = {row.item_key for row in record.rows if row.written}
-    moved = [dict(key=item.item_key, label=item.label, what=f"{FIELD_LABELS[item.field]} "
-                  f"{money_text(item.after) or '없음'} → {money_text(item.seen) or '없음'}")
-             for item in ledger.untouched(change_id, items)]
-    for kind_key in sorted(saved):
-        before, after = then.get((ITEM_KIND, kind_key)), items.get((ITEM_KIND, kind_key))
-        if before is None or after is None or after.state == "missing":
-            continue
-        for name in sorted(set(before.others) | set(after.others)):
-            if before.others.get(name) != after.others.get(name) and name.startswith("form."):
-                moved.append(dict(key=kind_key, label=before.label,
-                                  what=f"{name[5:]} 칸 {before.others.get(name, '없음')!r} → {after.others.get(name, '없음')!r}"))
-    return moved
+    """저장한 줄 가운데 그대로여야 할 것이 달라진 것 — 넣지 않은 금액과 딸린 칸(change_core.window.moved_since, 저장 단위는 줄 하나)."""
+    return window_moved(ledger, change_id, snapshot_items(recorded_snapshot(ledger, change_id)), snapshot_items(now),
+                        label_of=lambda key, field: FIELD_LABELS[field])
 
 
 def cmd_render(args):

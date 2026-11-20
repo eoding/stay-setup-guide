@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "stay-price-change"
 from change_core.answers import BrowserError  # noqa: E402
 from change_core.items import ItemState, Reading as Items, Refused, absent, item_key, key_fields  # noqa: E402
 from change_core.money import money, money_text  # noqa: E402
+from change_core.window import Form, form_value  # noqa: E402
 
 ITEM_KIND = "addon_price"
 FIELDS = ("sell", "supply")
@@ -195,21 +196,6 @@ def listing_of(answer: Mapping, read_at: str) -> Listing:
 
 
 # ───────────── 편집 창 · 읽은 값 ─────────────
-
-Form = tuple[tuple[str, str], ...]
-
-
-def form_value(form: Form, name: str, what: str) -> str:
-    values = [value for key, value in form if key == name]
-    if len(values) != 1:
-        raise BrowserError(f"{what} 편집 창이 {name} 칸을 {len(values)}개 보냅니다 — 하나여야 합니다")
-    return values[0]
-
-
-def with_values(form: Form, values: Mapping[str, str]) -> Form:
-    """편집 창이 보내는 쌍 가운데 `values` 의 이름만 그 값으로 바꾼 것 — 나머지는 그대로, 차례도 그대로."""
-    return tuple((name, values.get(name, value)) for name, value in form)
-
 
 @dataclass(frozen=True)
 class Line:

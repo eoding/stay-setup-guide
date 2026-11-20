@@ -18,13 +18,14 @@ from decimal import Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from addon_model import (
-    DIFFER, DOUBT_LABELS, FIELD_LABELS, FIELDS, FORM_NAMES, HIDDEN, ITEM_KIND, PRESENT, ChangeRequest, Form, Line, LineKey,
-    ModelError, Snapshot, encode_hotel, form_value, hotel_label, key_of_item, line_item_key, snapshot_items, with_values,
+    DIFFER, DOUBT_LABELS, FIELD_LABELS, FIELDS, FORM_NAMES, HIDDEN, ITEM_KIND, PRESENT, ChangeRequest, Line, LineKey,
+    ModelError, Snapshot, encode_hotel, hotel_label, key_of_item, line_item_key, snapshot_items,
 )
 from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import money, money_text, round_money
 from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_rollback
 from change_core.rules import BLOCKED, RED, Resolution, Rule, RuleTable, decide, moved_far
+from change_core.window import Form, form_value, with_values
 
 Values = Mapping[str, Decimal | None]
 
@@ -212,8 +213,8 @@ class LineStep:
         return LineKey(self.addon, self.line)
 
     def sent(self) -> Form:
-        """저장 단추가 보낼 칸 전부 — 읽은 칸에 바꾸는 칸만 새 값."""
-        return with_values(self.form, self.set)
+        """저장 단추가 보낼 칸 전부 — 읽은 칸에 바꾸는 칸만 새 값(change_core.window — 부과금 도우미와 같은 걸음)."""
+        return with_values(self.form, {(name, 0): value for name, value in self.set.items()})
 
     def writes(self) -> tuple[FieldWrite, ...]:
         names = {form_name: name for name, form_name in FORM_NAMES.items()}
