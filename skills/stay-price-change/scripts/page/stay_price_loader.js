@@ -9,6 +9,7 @@
  *   3. `await stayPriceLoader.load()`(부가옵션은 `load('addon')`) → 이름으로 골라 도우미 → 부트 → 가격 도우미(→ 부가옵션 가격
  *      도우미) 차례로 실행하고 작은 상태를 돌려준다.
  *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()`(부가옵션은 `again('addon')`) — 적어 둔 원본을 같은 차례로 다시 실행한다.
+ *   `again` 이 거절하면(원본이 없거나 예전 판) 그 묶음의 파일 이름(`want`)을 대어, 무엇을 올릴지 그 답 하나로 안다.
  *
  * 묶음은 둘이다 — 인자 없이(가격 캘린더) 세 파일, `'addon'`(부가옵션 가격) 네 파일. `bridge` · `load` · `again` · `status` 가 같은
  * 인자를 받는다. 파일 칸은 하나라 네 이름을 모두 모은다.
@@ -189,10 +190,11 @@
     var every = COUNT[files.length] + ' 파일';
     var texts = files.map(function (f) { return localStorage.getItem(f.key); });
     var missing = files.filter(function (f, i) { return !texts[i]; }).map(function (f) { return f.key; });
-    if (missing.length) return clean({ ok: false, error: '적어 둔 원본이 없습니다: ' + missing.join(', ') + ' — ' + every + '을 다시 올립니다(load)' });
+    var want = files.map(function (f) { return f.name; });
+    if (missing.length) return clean({ ok: false, want: want, error: '적어 둔 원본이 없습니다: ' + missing.join(', ') + ' — ' + every + '을 다시 올립니다(load)' });
     var wrong = notInstalled(files, texts);
     if (wrong.length) {
-      return clean({ ok: false, wrong: wrong, error: '적어 둔 원본이 설치된 도우미와 다릅니다: ' + wrong.join(', ') +
+      return clean({ ok: false, wrong: wrong, want: want, error: '적어 둔 원본이 설치된 도우미와 다릅니다: ' + wrong.join(', ') +
         ' — 도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판입니다. ' + every + '을 다시 올립니다(load)' });
     }
     return evaluate(set, files, texts, false);
