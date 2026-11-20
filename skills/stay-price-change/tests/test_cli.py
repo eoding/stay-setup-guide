@@ -78,8 +78,8 @@ class CommandTest(unittest.TestCase):
         fresh = self.write("fresh.json", encode_snapshot(scene.fresh(scene.snapshot())))
         self.assertIn("빨간 줄", self.run_cli("begin", "--change", change, "--plan", self.dir / "plan1.json", "--snapshot", fresh, code=2)["error"])
 
-        self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
-                     "--out", self.dir / "plan.json")
+        change = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
+                              "--record", "--out", self.dir / "plan.json")["change_id"]
         plan = json.loads((self.dir / "plan.json").read_text(encoding="utf-8"))
         self.assertEqual(len(plan["steps"]), 8)
         page = Path(self.run_cli("render", "preview", "--plan", self.dir / "plan.json")["page"])
@@ -124,7 +124,7 @@ class CommandTest(unittest.TestCase):
         listed = self.run_cli("list")
         self.assertEqual([(row["id"], row["kind"], row["status"]) for row in listed["changes"]],
                          [(snapshot_id, "snapshot", "applied"), (rollback["change_id"], "rollback", "applying"),
-                          (change, "change", "applied")])
+                          (change, "change", "applied"), (first["change_id"], "change", "previewed")])
         self.assertTrue(listed["ledger"].endswith("가격장부.sqlite3"))
 
     def test_a_request_on_another_value_and_a_clear_request_plan_through_the_command(self):

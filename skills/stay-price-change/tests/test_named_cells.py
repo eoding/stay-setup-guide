@@ -21,7 +21,7 @@ import scene  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import CellKey, decode_request, encode_request, encode_snapshot  # noqa: E402
 from price_pages import render_preview  # noqa: E402
-from price_plan import PlanError, counts, plan_change, resolve, save_steps  # noqa: E402
+from price_plan import PlanError, counts, plan_change, plan_steps, resolve, unresolved  # noqa: E402
 from test_pages import visible  # noqa: E402
 
 
@@ -41,8 +41,8 @@ class NamedCellsTest(unittest.TestCase):
         plan = plan_change(scene.snapshot(), scene.request(occupancies=("A2",), nights=(1,)))
         tally = counts(plan.changes, len(plan.skipped))
         self.assertEqual((tally["ABOVE_LIST"], tally["reserved"], tally["closed"]), (2, 4, 1))
-        self.assertEqual(len(resolve(plan, [])[1]), 2, "정가를 넘는 칸은 여전히 빨간 줄이다")
-        steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "keep")])[0])
+        self.assertEqual(len(unresolved(plan)), 2, "정가를 넘는 칸은 여전히 빨간 줄이다")
+        steps = plan_steps(resolve(plan, [Resolution("ABOVE_LIST", "keep")]))
         self.assertTrue(all(row.occupancy == "A2" and row.nights == 1 for step in steps for row in step.rows), "저장은 짚은 줄만 보낸다")
 
     def test_a_child_cell_named_alone_still_scales_the_adult_share_only(self):

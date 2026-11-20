@@ -15,7 +15,7 @@ import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import MISSING, CellKey, CellValue, CellWrite, ChangeRequest, Snapshot, key_of_item  # noqa: E402
-from price_plan import PlanError, counts, plan_change, resolve, save_steps, stale_cells  # noqa: E402
+from price_plan import PlanError, counts, plan_change, plan_steps, resolve, save_steps, stale_cells, unresolved  # noqa: E402
 
 D = Decimal
 DAY, NEXT, LATER = "2026-12-25", "2026-12-26", "2026-12-28"
@@ -58,9 +58,9 @@ class SceneTest(unittest.TestCase):
 
     def test_save_steps_after_choosing_for_the_two_cells_above_list_price(self):
         for choice in ("raise_list", "keep"):
-            writes, unresolved = resolve(self.plan, [Resolution("ABOVE_LIST", choice)])
-            self.assertEqual(unresolved, ())
-            self.assertEqual(len(save_steps(writes)), 8, choice)
+            chosen = resolve(self.plan, [Resolution("ABOVE_LIST", choice)])
+            self.assertEqual(unresolved(chosen), ())
+            self.assertEqual(len(plan_steps(chosen)), 8, choice)
 
     def test_values_from_the_picture(self):
         values = {(c.key.room, c.key.rate_plan, c.key.date, c.key.occupancy, c.key.nights): c for c in self.plan.changes}
@@ -115,7 +115,7 @@ class OperationTest(unittest.TestCase):
                                           (NEXT, "A2", 1): None})
         self.assertEqual(after_of(plan)[(NEXT, "A2", 1)], D("350.00"))
         self.assertEqual([(item.key.occupancy, item.reason) for item in plan.skipped], [("A2", "no_price")])
-        self.assertEqual([(w.key.date, w.sell) for w in resolve(plan, [])[0]], [(NEXT, D("350.00"))])
+        self.assertEqual([(c.key.date, c.writes) for c in plan.changes if c.writes], [(NEXT, {"sell": D("350.00")})])
 
     def test_percent_multiplies_adults_only_cells(self):
         plan = plan_change(snap({(DAY, "A2", 1): open_("200.00"), (DAY, "", 1): open_("150.00")}), ask("percent", "-10"))
@@ -223,9 +223,8 @@ class FieldTest(unittest.TestCase):
         plan = plan_change(snap(cells), ChangeRequest("H", "O", ("R",), ("P",), (DAY,), "clear", None, field="supply"))
         self.assertEqual(self.changed(plan, "supply"), {("A2", 1): None})
         self.assertEqual([(item.key.occupancy, item.reason) for item in plan.skipped], [("A3", "no_supply")])
-        writes, _ = resolve(plan, [])
-        self.assertEqual([(w.key.occupancy, w.sell, w.clear) for w in writes], [("A2", None, ("supply",))])
-        steps = save_steps(writes)
+        self.assertEqual([(c.key.occupancy, c.writes) for c in plan.changes if c.writes], [("A2", {"supply": None})])
+        steps = plan_steps(plan)
         self.assertEqual([(step.kind, step.key.occupancy, step.clear) for step in steps], [("cell_edit", "A2", ("supply",))])
 
     def test_a_negative_supply_cost_cannot_be_applied(self):
@@ -249,14 +248,14 @@ class ListChoiceTest(unittest.TestCase):
         self.over = CellKey("스위트", "조식 포함", "2027-01-01", "A2", 1)
 
     def test_raise_list_puts_both_columns_on_the_bulk_row(self):
-        steps = save_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        steps = plan_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list")]))
         step = next(s for s in steps if s.kind == "bulk" and s.room == "스위트" and s.rate_plan == "조식 포함"
                     and "2027-01-01" in s.dates)
         row = next(r for r in step.rows if (r.occupancy, r.nights) == ("A2", 1))
         self.assertEqual((row.sell, row.list, row.supply), (D("528.00"), D("548.00"), None))
 
     def test_clear_list_adds_a_cell_window_save_before_the_bulk_saves_of_that_room_and_plan(self):
-        steps = save_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "clear_list")])[0])
+        steps = plan_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "clear_list")]))
         self.assertEqual((len(steps), sum(s.kind == "bulk" for s in steps)), (10, 8))
         suite = [s for s in steps if s.kind == "cell_edit" or (s.room, s.rate_plan) == ("스위트", "조식 포함")]
         self.assertEqual([s.kind for s in suite], ["cell_edit", "cell_edit", "bulk", "bulk"])
@@ -274,14 +273,14 @@ class NoEmptySaveTest(unittest.TestCase):
         plan = plan_change(snapshot, ask("set", "350", dates=(DAY, NEXT), base_occupancy="A2"))
         self.assertEqual([(i.key.date, i.key.occupancy, i.reason) for i in plan.skipped],
                          [(DAY, "A2", "same"), (DAY, "A3", "same")])
-        steps = save_steps(resolve(plan, [])[0])
+        steps = plan_steps(plan)
         self.assertEqual([(s.dates, [r.occupancy for r in s.rows]) for s in steps], [((NEXT,), ["A2"])])
 
     def test_a_change_that_moves_nothing_produces_no_save_at_all(self):
         plan = plan_change(snap({(DAY, "A2", 1): open_("100.00"), (NEXT, "A2", 1): open_("100.00")}),
                            ask("percent", "0", dates=(DAY, NEXT)))
         self.assertEqual((plan.changes, len(plan.skipped)), ((), 2))
-        self.assertEqual(save_steps(resolve(plan, [])[0]), ())
+        self.assertEqual(plan_steps(plan), ())
 
     def test_a_write_without_any_value_is_ignored_by_save_steps(self):
         self.assertEqual(save_steps([CellWrite(CellKey("R", "P", DAY, "A2", 1))]), ())
@@ -316,25 +315,34 @@ class ResolveTest(unittest.TestCase):
         }), ask("amount", "20", dates=(DAY, NEXT)))
 
     def test_red_line_cells_wait_for_a_choice(self):
-        writes, unresolved = resolve(self.plan, [])
-        self.assertEqual(sorted((c.key.date, c.key.occupancy) for c in unresolved),
+        plan = resolve(self.plan, [])
+        self.assertEqual(sorted((c.key.date, c.key.occupancy) for c in unresolved(plan)),
                          [(DAY, "A2"), (NEXT, "A2"), (NEXT, "A3")])
-        self.assertEqual([(w.key.date, w.key.occupancy, w.sell) for w in writes], [(DAY, "A3", D("120.00"))])
+        self.assertEqual([(c.key.date, c.key.occupancy, c.writes) for c in plan.changes if c.writes],
+                         [(DAY, "A3", {"sell": D("120.00")})])
+        self.assertIsNone(plan_steps(plan), "빨간 줄이 남아 있으면 저장 단계가 없다")
 
     def test_blocked_cells_are_never_written_and_need_no_choice(self):
         plan = plan_change(snap({(DAY, "A2", 1): open_("150.00"), (DAY, "A3", 1): open_("300.00")}),
                            ask("amount", "-150"))
-        writes, unresolved = resolve(plan, [Resolution("OVER_30", "include")])
-        self.assertEqual(unresolved, ())
-        self.assertEqual([(w.key.occupancy, w.sell) for w in writes], [("A3", D("150.00"))])
+        chosen = resolve(plan, [Resolution("OVER_30", "include")])
+        self.assertEqual(unresolved(chosen), ())
+        self.assertEqual([(c.key.occupancy, c.writes) for c in chosen.changes if c.writes], [("A3", {"sell": D("150.00")})])
 
     def test_raise_list_moves_the_list_price_by_the_same_amount_and_a_named_cell_overrides(self):
         nxt = CellKey("R", "P", NEXT, "A2", 1)
-        writes, unresolved = resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list"), Resolution("OVER_30", "include"),
-                                                 Resolution("ABOVE_LIST", "keep", (nxt,))])
-        self.assertEqual(unresolved, ())
-        self.assertEqual({(w.key.date, w.key.occupancy): (w.sell, w.list) for w in writes}, {
-            (DAY, "A2"): (D("220.00"), D("230.00")), (DAY, "A3"): (D("120.00"), None), (NEXT, "A3"): (D("30.00"), None)})
+        chosen = resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list"), Resolution("OVER_30", "include"),
+                                     Resolution("ABOVE_LIST", "keep", (nxt,))])
+        self.assertEqual(unresolved(chosen), ())
+        self.assertEqual({(c.key.date, c.key.occupancy): c.writes for c in chosen.changes if c.writes}, {
+            (DAY, "A2"): {"sell": D("220.00"), "list": D("230.00")}, (DAY, "A3"): {"sell": D("120.00")},
+            (NEXT, "A3"): {"sell": D("30.00")}})
+        cells = {(c.key.date, c.key.occupancy): c for c in chosen.changes}
+        self.assertEqual({key: (c.verdict, c.choice) for key, c in cells.items()}, {
+            (DAY, "A2"): ("ABOVE_LIST", "raise_list"), (NEXT, "A2"): ("ABOVE_LIST", "keep"), (DAY, "A3"): (None, None),
+            (NEXT, "A3"): ("OVER_30", "include")}, "고른 칸은 걸린 규칙과 고른 것을 함께 갖는다")
+        self.assertEqual(cells[(NEXT, "A2")].after, cells[(NEXT, "A2")].before, "안 바꾸는 칸의 후 값은 전 값 그대로")
+        self.assertEqual(cells[(DAY, "A2")].after.list, D("230.00"), "정가도 올린 칸의 후 값은 올린 정가")
 
     def test_naming_a_cell_that_is_not_on_that_red_line_is_refused(self):
         with self.assertRaises(Refused):

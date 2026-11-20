@@ -22,7 +22,7 @@ from change_core.rules import Resolution  # noqa: E402
 from price_model import encode_request, encode_snapshot, key_of_item, snapshot_reading  # noqa: E402
 from price_pages import render_result, render_rollback  # noqa: E402
 from price_plan import (  # noqa: E402
-    cell_filter, plan_cell_rollback, plan_change, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    cell_filter, plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
     step_plans,
 )
 from test_pages import visible  # noqa: E402
@@ -32,8 +32,8 @@ class PartialRollbackTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
-        plan = plan_change(scene.snapshot(), scene.request())
-        steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        plan = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        steps = plan_steps(plan)
         self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
                                                  request=encode_request(plan.request))

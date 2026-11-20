@@ -25,8 +25,8 @@ from change_core.rollback import plan_rollback  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import BulkStep, CellKey, ChangeRequest, encode_request, snapshot_reading  # noqa: E402
 from price_plan import (  # noqa: E402
-    plan_cell_rollback, plan_change, preview_rows, resolve, rollback_rows, rollback_writes, save_steps, snapshot_rows,
-    step_plans,
+    plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    snapshot_rows, step_plans,
 )
 
 D = Decimal
@@ -82,9 +82,8 @@ class LifecycleTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
         self.before = scene.snapshot()
-        self.plan = plan_change(self.before, scene.request())
-        writes, _ = resolve(self.plan, [Resolution("ABOVE_LIST", "raise_list")])
-        self.steps = save_steps(writes)
+        self.plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        self.steps = plan_steps(self.plan)
         self.change_id = record_preview(self.ledger, self.plan)
 
     def tearDown(self):
@@ -144,8 +143,9 @@ class LifecycleTest(unittest.TestCase):
                          [("12/25 금 · 디럭스 · 조식 포함 · 성인 2 · 1박", "sell", D("220.00"), D("1.00"))])
 
     def test_clearing_is_recorded_as_its_own_action_and_verified_as_empty(self):
-        change = record_preview(self.ledger, self.plan)
-        steps = save_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "clear_list")])[0])
+        cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
+        change = record_preview(self.ledger, cleared)
+        steps = plan_steps(cleared)
         self.ledger.begin(change, step_plans(steps), read_at=now_text())
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
@@ -172,6 +172,22 @@ class LifecycleTest(unittest.TestCase):
         with self.assertRaises(LedgerError):
             self.ledger.begin(self.change_id, step_plans(self.steps), encode_request(scene.request("15")), read_at=now_text())
         self.assertEqual(self.ledger.change(self.change_id).status, "previewed")
+
+    def test_v1_begin_takes_only_the_values_the_preview_showed_and_all_of_them(self):
+        rows = {(row.label, row.field): row for row in self.ledger.change(self.change_id).rows}
+        raised = rows[("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박", "list")]
+        self.assertEqual((raised.after, raised.action, raised.choice), (D("548.00"), "set", "raise_list"),
+                         "미리보기 줄에 올린 정가가 넣는 값으로 적힌다")
+        cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
+        with self.assertRaises(LedgerError) as caught:
+            self.ledger.begin(self.change_id, step_plans(plan_steps(cleared)), read_at=now_text())
+        self.assertIn("미리보기와 다른 값입니다: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 · list", str(caught.exception))
+        with self.assertRaises(LedgerError) as caught:
+            self.ledger.begin(self.change_id, step_plans(self.steps[:-1]), read_at=now_text())
+        self.assertIn("어느 저장 단계도 넣지 않습니다", str(caught.exception))
+        record = self.ledger.change(self.change_id)
+        self.assertEqual((record.status, record.steps), ("previewed", ()))
+        self.assertTrue(all(row.step is None for row in record.rows), "거절한 begin 은 아무것도 적지 않는다")
 
     def test_nothing_is_ever_deleted(self):
         self.ledger.begin(self.change_id, step_plans(self.steps), read_at=now_text())
@@ -202,7 +218,7 @@ class OtherKindTest(unittest.TestCase):
             ledger = Ledger(Path(folder) / DB_NAME)
             key = item_key({"charge": "리조트 요금", "season": "성수기"})
             change = ledger.record_preview(hotel="H", hotel_id="", offer="", currency="USD", sentence="리조트 요금 25 로", read_at="t1",
-                                           rows=[ValueRow("charge", key, "리조트 요금 · 성수기", "amount", "on", D("20"), D("25")),
+                                           rows=[ValueRow("charge", key, "리조트 요금 · 성수기", "amount", "on", D("20"), D("25"), action="set"),
                                                  ValueRow("charge", key, "리조트 요금 · 성수기", "per", "on", D("1"))])
             ledger.begin(change, [StepPlan("charge_edit", "리조트 요금", {"charge": "리조트 요금"},
                                            (FieldWrite("charge", key, "amount", D("25")),))], read_at=now_text())
@@ -220,8 +236,8 @@ class RollbackThroughLedgerTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
         before = scene.snapshot()
-        plan = plan_change(before, scene.request())
-        steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        plan = resolve(plan_change(before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        steps = plan_steps(plan)
         self.a = record_preview(self.ledger, plan)
         self.ledger.begin(self.a, step_plans(steps), read_at=now_text())
         for index in range(1, len(steps) + 1):
@@ -230,7 +246,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
         later = ChangeRequest(scene.HOTEL, scene.OFFER, ("디럭스",), ("룸온리",), ("2027-01-02",), "set",
                               D("310"), base_occupancy="A2", sentence="1/2 디럭스 룸온리 310 으로", hotel_id=scene.HOTEL_ID)
         plan_b = plan_change(after_a, later)
-        steps_b = save_steps(resolve(plan_b, [])[0])
+        steps_b = plan_steps(plan_b)
         self.b = record_preview(self.ledger, plan_b)
         self.ledger.begin(self.b, step_plans(steps_b), read_at=now_text())
         self.ledger.record_step(self.b, 1, saved=True)

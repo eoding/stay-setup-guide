@@ -9,7 +9,8 @@
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
     TargetTable  칸마다 목표 값을 적은 표 — 지금 값과 다른 칸만 바뀐다. 새 요금표(price_sheet)도 이 모양으로 펼쳐 들어온다
     Gap          요금표로 맞출 때 넣지 않는 것 하나(요금표에 없는 칸 · 없는 인원 조합 · 판매일 없는 날 · 없는 객실) — Plan.coverage
-    CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
+    CellChange   칸 하나의 전 → 저장한 뒤 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나 · 빨간 줄에 고른 것.
+                 저장 단계와 장부의 줄은 이것에서만 나온다
     CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
     CellWrite    칸 하나에 넣을 값(필드마다 새 값 또는 비움)
     BulkStep     [선택 날짜 가격 수정] 저장 한 번 — 객실 × 요금제 × 줄과 값이 같은 날들(떨어져 있어도), 줄(RowWrite)마다 새 값
@@ -284,15 +285,35 @@ class TargetTable:
 
 @dataclass(frozen=True)
 class CellChange:
+    """칸 하나 — 미리보기 · 저장 단계 · 장부가 모두 이것에서 나온다.
+
+    `after` 는 저장하면 그 칸이 될 값이다. 빨간 줄을 고른 칸은 고른 대로다(정가도 올림이면 올린 정가, 정가 지움이면 빈 정가,
+    안 바꿈이면 전 값 그대로). `verdict` 는 계산한 값이 걸린 규칙이고 고른 뒤에도 남는다. `choice` 는 그 빨간 줄에 담당자가 고른
+    것(CHOICE_LABELS)이고, 아직 고르지 않았으면 None — 그때 `after` 는 계산한 값이다. 적용할 수 없는 칸의 `after` 는 계산한
+    값(셈하지 못했으면 None)이고 저장하지 않는다.
+    """
     key: CellKey
     before: CellValue
     after: CellValue | None
     marks: tuple[str, ...]
     verdict: str | None
+    choice: str | None = None
 
     @property
     def changed(self) -> tuple[str, ...]:
         return () if self.after is None else tuple(f for f in FIELDS if getattr(self.after, f) != getattr(self.before, f))
+
+    @property
+    def waiting(self) -> bool:
+        """아직 고르지 않은 빨간 줄."""
+        return CELL_RULES.severity(self.verdict) == RED and self.choice is None
+
+    @property
+    def writes(self) -> dict[str, Decimal | None]:
+        """저장이 이 칸에 넣는 필드 → 값(비우면 None). 적용할 수 없는 칸 · 아직 고르지 않은 빨간 줄은 넣지 않는다."""
+        if CELL_RULES.severity(self.verdict) == BLOCKED or self.waiting:
+            return {}
+        return {name: getattr(self.after, name) for name in self.changed}
 
 
 def _moved_far(before: CellValue, after: CellValue | None) -> bool:
@@ -624,12 +645,12 @@ def request_range(data: Mapping) -> ReadRange:
 
 def encode_change(change: CellChange) -> dict:
     return dict(key=encode_key(change.key), before=encode_value(change.before), after=encode_value(change.after),
-                marks=list(change.marks), verdict=change.verdict)
+                marks=list(change.marks), verdict=change.verdict, choice=change.choice)
 
 
 def decode_change(data: Mapping) -> CellChange:
     return CellChange(decode_key(data["key"]), decode_value(data["before"]), decode_value(data.get("after")),
-                      tuple(data.get("marks") or ()), data.get("verdict"))
+                      tuple(data.get("marks") or ()), data.get("verdict"), data.get("choice"))
 
 
 def encode_step(step: BulkStep | CellEditStep) -> dict:

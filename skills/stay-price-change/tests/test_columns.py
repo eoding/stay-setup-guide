@@ -27,9 +27,7 @@ from change_core.ledger import DB_NAME, Ledger, now_text  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot, encode_snapshot  # noqa: E402
 from price_pages import ONE_COLUMN_PER_DATE_UP_TO, render_preview, render_prices, render_result, render_rollback  # noqa: E402
-from price_plan import (  # noqa: E402
-    plan_cell_rollback, plan_change, preview_rows, resolve, save_steps, step_plans,
-)
+from price_plan import plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
 
 ROOM, PLAN = "디럭스", "조식 포함"
 DECEMBER = [(date(2026, 12, 1) + timedelta(days=offset)).isoformat() for offset in range(31)]
@@ -100,9 +98,10 @@ class GroupedColumnsTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as folder:
             ledger = Ledger(Path(folder) / DB_NAME)
+            plan = resolve(plan, [Resolution("OVER_30", "include")])
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                            sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan))
-            steps = save_steps(resolve(plan, [Resolution("OVER_30", "include")])[0])
+            steps = plan_steps(plan)
             ledger.begin(change, step_plans(steps), read_at=now_text())
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)

@@ -28,7 +28,7 @@ from change_core.rules import Resolution  # noqa: E402
 from price_browser import ask_sum  # noqa: E402
 from price_model import encode_request, encode_snapshot, snapshot_reading  # noqa: E402
 from price_pages import render_result  # noqa: E402
-from price_plan import plan_change, preview_rows, resolve, save_steps, step_plans  # noqa: E402
+from price_plan import plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
 from test_pages import visible  # noqa: E402
 
 REAL = datetime.now().astimezone()
@@ -45,8 +45,8 @@ class ResumeLedgerTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / DB_NAME
         self.before = scene.snapshot()
-        plan = plan_change(self.before, scene.request())
-        self.steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        self.steps = plan_steps(plan)
         self.change = self.ledger(0).record_preview(
             hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
             read_at=self.before.read_at, rows=preview_rows(plan), request=encode_request(plan.request),

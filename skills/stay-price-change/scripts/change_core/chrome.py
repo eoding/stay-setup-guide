@@ -48,6 +48,7 @@ td:first-child, th:first-child, td.text { text-align:left; }
 td.text { white-space: normal; }
 .was { color: var(--soft); } .now { font-weight: 700; } .arrow { color: var(--soft); padding: 0 3px; }
 td.red { background: var(--red-bg); } td.blocked { background: var(--amber-bg); } td.new { background: var(--blue-bg); }
+td.chosen { background: var(--pick-bg); }
 td.none, td.same { color: var(--soft); text-align:center; }
 small.more { display:block; color: var(--soft); font-size: 12px; }
 .tag { display:inline-block; font-size: 11.5px; font-weight:700; padding: 0 7px; border-radius: 99px; margin-left: 4px;
@@ -55,6 +56,7 @@ small.more { display:block; color: var(--soft); font-size: 12px; }
 .tag.res { background: var(--blue-bg); color: var(--blue); } .tag.closed { background: var(--cell); color: var(--soft); }
 .tag.red { background: var(--red); color: var(--paper); } .tag.blocked { background: var(--amber); color: var(--paper); }
 .tag.ok { background: var(--pick); color: var(--paper); } .tag.new { background: var(--blue); color: var(--paper); }
+.tag.chosen { background: var(--paper); color: var(--pick); border: 1px solid var(--pick); }
 .steps { list-style:none; padding:0; margin: 8px 0; }
 .steps li { display:grid; grid-template-columns: 26px 1fr auto; gap: 8px; padding: 7px 10px; border-bottom:1px solid var(--line); }
 .steps .ok { color: var(--pick); font-weight:700; } .steps .fail { color: var(--red); font-weight:700; }

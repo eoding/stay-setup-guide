@@ -22,7 +22,7 @@ from price_model import (  # noqa: E402
     CellKey, Target, TargetTable, decode_request, encode_key, encode_request, encode_snapshot,
 )
 from price_pages import render_preview  # noqa: E402
-from price_plan import counts, plan_targets, resolve, save_steps  # noqa: E402
+from price_plan import counts, plan_steps, plan_targets, unresolved  # noqa: E402
 from test_pages import visible  # noqa: E402
 
 D = Decimal
@@ -50,9 +50,8 @@ class TargetPlanTest(unittest.TestCase):
             (key("2027-01-01", room="스위트"), {"list": None})))
         self.assertEqual([(c.key.date, c.changed) for c in plan.changes],
                          [("2026-12-26", ("sell", "list", "supply")), ("2027-01-01", ("list",))])
-        writes, unresolved = resolve(plan, [])
-        self.assertEqual(unresolved, ())
-        steps = save_steps(writes)
+        self.assertEqual(unresolved(plan), ())
+        steps = plan_steps(plan)
         self.assertEqual([s.kind for s in steps], ["bulk", "cell_edit"])
         self.assertEqual([(r.sell, r.list, r.supply) for r in steps[0].rows], [(D("210.00"), D("260.00"), D("150.00"))])
 
@@ -62,7 +61,7 @@ class TargetPlanTest(unittest.TestCase):
         change = plan.changes[0]
         self.assertEqual((change.marks, change.verdict, change.after.state), (("new",), None, "open"))
         self.assertEqual(counts(plan.changes)["new"], 1)
-        steps = save_steps(resolve(plan, [])[0])
+        steps = plan_steps(plan)
         self.assertEqual([(s.dates, [(r.occupancy, r.sell, r.supply) for r in s.rows]) for s in steps],
                          [(("2027-01-02",), [("A2", D("450.00"), D("300.00"))])])
 
@@ -73,7 +72,7 @@ class TargetPlanTest(unittest.TestCase):
             (key("2026-12-25", nights=7), {"sell": "150.00"})))
         self.assertEqual(sorted((c.key.occupancy, c.key.nights, c.verdict) for c in plan.changes),
                          [("A2", 1, "NEW_WITHOUT_SELL"), ("A2", 7, "NEW_NOT_SHOWN"), ("A4", 1, "NEW_NOT_SHOWN")])
-        self.assertEqual(resolve(plan, [])[0], ())
+        self.assertEqual(plan_steps(plan), ())
 
     def test_the_same_rules_apply_to_the_resulting_cell(self):
         plan = plan_targets(self.snapshot, table(

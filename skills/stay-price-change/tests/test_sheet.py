@@ -18,7 +18,7 @@ import sheet_scene as S  # noqa: E402
 from change_core.items import Refused  # noqa: E402
 from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import CellKey, MISSING, decode_request  # noqa: E402
-from price_plan import resolve, save_steps  # noqa: E402
+from price_plan import plan_steps, unresolved  # noqa: E402
 from price_sheet import (  # noqa: E402
     Part, SheetCheck, coverage_counts, decode_sheet, encode_sheet, expand, line_figures, plan_sheet,
 )
@@ -253,9 +253,8 @@ class SheetPlanTest(unittest.TestCase):
         self.assertEqual(coverage_counts(plan_sheet(S.reading(), check).coverage)["unknown"], 2)
 
     def test_the_save_steps_are_one_per_pair_and_identical_rows(self):
-        writes, unresolved = resolve(self.plan, [])
-        self.assertEqual(unresolved, ())
-        steps = save_steps(writes)
+        self.assertEqual(unresolved(self.plan), ())
+        steps = plan_steps(self.plan)
         self.assertEqual([(s.room, s.dates) for s in steps], [
             ("디럭스", ("2027-01-11", "2027-01-12", "2027-01-13", "2027-01-14", "2027-01-17")),
             ("디럭스", ("2027-01-15", "2027-01-16")),

@@ -20,7 +20,7 @@ import scene  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import ChangeRequest, Snapshot, decode_request, encode_request, encode_snapshot  # noqa: E402
 from price_pages import render_preview  # noqa: E402
-from price_plan import PlanError, counts, plan_change, resolve, save_steps  # noqa: E402
+from price_plan import PlanError, counts, plan_change, plan_steps, resolve  # noqa: E402
 from test_pages import visible  # noqa: E402
 
 D = Decimal
@@ -40,7 +40,7 @@ class PairsTest(unittest.TestCase):
         self.assertEqual(plan.absent_pairs, (("스위트", "룸온리"),))
         self.assertEqual({(c.key.room, c.key.rate_plan) for c in plan.changes},
                          {("디럭스", "조식 포함"), ("디럭스", "룸온리"), ("스위트", "조식 포함")})
-        steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        steps = plan_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")]))
         self.assertEqual((counts(plan.changes, len(plan.skipped))["cells"], len(steps)), (72, 6))
 
     def test_the_preview_names_which_rooms_lack_which_rate_plan(self):

@@ -10,9 +10,9 @@
                  그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다), 마지막으로 이어 가도 된다고 본
                  때(`active_at` — begin 이 받아들인 읽은 값의 시각, 저장 결과를 적은 때, 이어서 해도 된다고 한 check 의
                  읽은 값의 시각)
-    item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 넣을 값,
-                 넣는 방법(set / clear, 넣지 않으면 비어 있음), 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값,
-                 되돌린 되돌리기 번호
+    item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 후 값,
+                 넣는 방법(set / clear, 넣지 않으면 비어 있음 — 미리보기 때 정해지고 begin 은 저장 단계가 이것과 같은지 본다),
+                 판정 · 표시 · 빨간 줄에 고른 것, 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값, 되돌린 되돌리기 번호
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS item_values (
   rolled_back_by INTEGER REFERENCES changes(id),
   verdict TEXT,
   marks TEXT NOT NULL DEFAULT '',
+  choice TEXT,
   PRIMARY KEY (change_id, item_kind, item_key, field)
 );
 CREATE TABLE IF NOT EXISTS steps (
@@ -134,7 +135,9 @@ def _minutes(span: timedelta) -> int:
 
 @dataclass(frozen=True)
 class ValueRow:
-    """미리보기 때 적는 한 줄 — `after` 는 계산한 새 값(바뀌지 않는 필드는 None)."""
+    """미리보기 때 적는 한 줄 — 미리보기가 보인 그 항목의 그 필드. `after` 는 후 값(바뀌지 않는 필드는 None), `action` 은
+    저장이 그 필드에 하는 일(`set` 넣음 · `clear` 비움 · None 넣지 않음), `choice` 는 그 항목의 빨간 줄에 고른 것.
+    `begin` 은 저장 단계가 쓰는 값이 이 줄들과 꼭 같을 때만 시작한다."""
     item_kind: str
     item_key: str
     label: str
@@ -144,6 +147,13 @@ class ValueRow:
     after: Decimal | None = None
     verdict: str | None = None
     marks: tuple[str, ...] = ()
+    action: str | None = None
+    choice: str | None = None
+
+    def __post_init__(self):
+        if (self.action not in (None, "set", "clear") or (self.action == "set" and self.after is None)
+                or (self.action == "clear" and self.after is not None)):
+            raise LedgerError(f"넣는 값과 방법이 맞지 않습니다: {self.label} · {self.field} ({self.action}, {self.after})")
 
 
 @dataclass(frozen=True)
@@ -193,6 +203,7 @@ class RowRecord:
     rolled_back_by: int | None
     verdict: str | None
     marks: tuple[str, ...]
+    choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -315,10 +326,10 @@ class Ledger:
              stamp if status == "applied" else None, reverses, None if request is None else _body(request),
              None if reading is None else _body(reading))).lastrowid
         db.executemany(
-            "INSERT INTO item_values (change_id, item_kind, item_key, label, field, state, before, after, verdict, marks)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO item_values (change_id, item_kind, item_key, label, field, state, before, after, action, verdict, marks,"
+            " choice) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(change_id, row.item_kind, row.item_key, row.label, row.field, row.state, money_text(row.before),
-              money_text(row.after), row.verdict, ",".join(row.marks)) for row in rows])
+              money_text(row.after), row.action, row.verdict, ",".join(row.marks), row.choice) for row in rows])
         return change_id
 
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
@@ -379,8 +390,10 @@ class Ledger:
                            (header["id"], header["reverses"], row["item_kind"], row["item_key"], row["field"]))
 
     def begin(self, change_id: int, steps: Sequence[StepPlan], request: Mapping | None = None, *, read_at: str) -> None:
-        """적용 시작 — 저장 단계를 적고 단계가 쓰는 필드마다 넣을 값·방법·단계 번호를 단다.
+        """적용 시작 — 저장 단계를 적고 단계가 쓰는 필드마다 단계 번호를 단다.
 
+        단계가 쓰는 값은 미리보기 때 적은 줄(넣는 필드 · 넣는 값 · 비움)과 꼭 같아야 한다. 미리보기에 없던 값, 다른 값, 두 번
+        쓰는 값, 그리고 미리보기가 넣는다고 보였는데 어느 단계도 쓰지 않는 값이 하나라도 있으면 시작하지 않는다.
         `read_at` 은 적용 직전에 읽어 미리보기 때 값과 같다고 본 읽은 값의 시각이다. IDLE 보다 오래된 읽은 값으로는 시작하지
         않는다. 그 시각이 첫 활동이다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은
         요청과 같은 계산인지 본다.
@@ -403,17 +416,24 @@ class Ledger:
                                   f"{_minutes(IDLE)}분 안에 읽은 값으로만 시작합니다. 다시 읽고 begin 을 부릅니다")
             for index, step in enumerate(steps, 1):
                 for write in step.writes:
-                    row = db.execute(f"SELECT step FROM item_values WHERE change_id = ? AND {ROW}",
+                    row = db.execute(f"SELECT label, after, action, step FROM item_values WHERE change_id = ? AND {ROW}",
                                      (change_id, write.item_kind, write.item_key, write.field)).fetchone()
-                    if row is None:
-                        raise LedgerError(f"미리보기에 없던 값입니다: {step.label} · {write.field}")
+                    if row is None or row["action"] is None:
+                        raise LedgerError(f"미리보기가 넣는다고 보이지 않은 값입니다: {step.label} · {write.field}")
+                    if row["action"] != ("clear" if write.after is None else "set") or money(row["after"]) != write.after:
+                        raise LedgerError(f"미리보기와 다른 값입니다: {row['label']} · {write.field} — 미리보기 "
+                                          f"{'비움' if row['action'] == 'clear' else row['after']}, 저장 {money_text(write.after) or '비움'}")
                     if row["step"] is not None:
                         raise LedgerError(f"같은 값을 두 번 씁니다: {step.label} · {write.field}")
-                    db.execute(f"UPDATE item_values SET after = ?, action = ?, step = ? WHERE change_id = ? AND {ROW}",
-                               (money_text(write.after), "clear" if write.after is None else "set", index, change_id,
-                                write.item_kind, write.item_key, write.field))
+                    db.execute(f"UPDATE item_values SET step = ? WHERE change_id = ? AND {ROW}",
+                               (index, change_id, write.item_kind, write.item_key, write.field))
                 db.execute("INSERT INTO steps (change_id, idx, kind, label, body, status) VALUES (?, ?, ?, ?, ?, 'pending')",
                            (change_id, index, step.kind, step.label, _body(step.body)))
+            left = db.execute("SELECT label, field FROM item_values WHERE change_id = ? AND action IS NOT NULL AND step IS NULL"
+                              " ORDER BY rowid", (change_id,)).fetchall()
+            if left:
+                raise LedgerError(f"미리보기가 넣는다고 보인 값 {len(left)}개를 어느 저장 단계도 넣지 않습니다 — 처음 것: "
+                                  f"{left[0]['label']} · {left[0]['field']}")
             db.execute("UPDATE changes SET status = 'applying', updated_at = ?, active_at = ? WHERE id = ?",
                        (self._stamp(), read_at, change_id))
 
@@ -610,7 +630,7 @@ class Ledger:
                 RowRecord(row["item_kind"], row["item_key"], row["label"], row["field"], row["state"], money(row["before"]),
                           money(row["after"]), row["action"], row["step"], row["step"] in saved, bool(row["verified"]),
                           money(row["seen"]), row["seen_state"], row["rolled_back_by"], row["verdict"],
-                          tuple(mark for mark in row["marks"].split(",") if mark))
+                          tuple(mark for mark in row["marks"].split(",") if mark), row["choice"])
                 for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
         cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps])
         return ChangeRecord(header["id"], header["kind"], self._status(header), header["hotel"], header["hotel_id"],

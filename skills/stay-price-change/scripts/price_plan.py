@@ -4,7 +4,8 @@
 
     plan_change(snapshot, request)      → Plan          칸마다 전 → 후, 표시, 판정
     plan_targets(snapshot, table)       → Plan          목표 값 표 — 다른 칸만, 새로 생기는 칸 포함. 인원·박수가 없는 줄은 하나뿐인 줄로
-    resolve(plan, resolutions)          → (writes, unresolved)   빨간 줄을 고른 뒤 넣을 값
+    resolve(plan, resolutions)          → Plan          빨간 줄 고름을 칸에 단다 — 고른 칸의 후 값은 고른 대로(정가도 올림 · 지움 · 안 바꿈)
+    plan_steps(plan)                    → 저장 단계들   칸이 넣는 값(CellChange.writes)에서만. 고르지 않은 빨간 줄이 있으면 None
     save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 줄과 값이 같은 날들(떨어져 있어도 한 번, 550일까지)
     stale_cells(then, now)              → 다른 항목들   (change_core.items.stale_items)
     plan_cell_rollback(recorded, …)     → RollbackPlan (change_core.rollback.plan_rollback) — cell_filter 로 일부만
@@ -22,12 +23,12 @@ from change_core.items import Difference, Refused, stale_items
 from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import round_money
 from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_restore, plan_rollback
-from change_core.rules import BLOCKED, RED, Resolution, decide
+from change_core.rules import BLOCKED, Resolution, decide
 
 from price_model import (
     CELL_RULES, CLOSED, ERP_MAX_DAYS, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    cell_state, day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
+    day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
     snapshot_reading, split_occupancy, value_of,
 )
 
@@ -224,47 +225,68 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
     return Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), (), no_sale=tuple(sorted(no_sale)))
 
 
+CHOICES = ("include", "keep", "raise_list", "clear_list")
+
+
 def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
-    """미리보기 머리 숫자. `cells` 는 계산한 칸, `will_change` 는 그중 적용할 수 없는 칸을 뺀 수, `new` 는 새로 생기는 칸."""
-    tally = dict(cells=len(changes), will_change=0, blocked=0, red=0, reserved=0, closed=0, new=0, skipped=skipped)
+    """미리보기 머리 숫자. `cells` 는 계산한 칸, `will_change` 는 그중 저장할 칸(적용할 수 없는 칸과 안 바꾸기로 고른 칸을 뺀 수,
+    아직 고르지 않은 빨간 줄은 든다), `red` 는 아직 고르지 않은 빨간 줄, `chosen` 은 고른 빨간 줄, 고름마다(`raise_list` 등)
+    그 수, `new` 는 새로 생기는 칸. 규칙 코드마다의 수는 고르기 전이든 뒤든 그 규칙에 걸린 칸이다."""
+    tally = dict(cells=len(changes), will_change=0, blocked=0, red=0, chosen=0, reserved=0, closed=0, new=0, skipped=skipped)
     tally.update({rule.code: 0 for rule in CELL_RULES.rules})
+    tally.update({choice: 0 for choice in CHOICES})
     for change in changes:
         severity = CELL_RULES.severity(change.verdict)
-        tally["blocked" if severity == BLOCKED else "will_change"] += 1
-        tally["red"] += severity == RED
+        tally["blocked"] += severity == BLOCKED
+        tally["will_change"] += severity != BLOCKED and change.choice != "keep"
+        tally["red"] += change.waiting
         if change.verdict:
             tally[change.verdict] += 1
+        if change.choice:
+            tally["chosen"] += 1
+            tally[change.choice] += 1
         for mark in change.marks:
             tally[mark] += 1
     return tally
 
 
-def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> tuple[tuple[CellWrite, ...], tuple[CellChange, ...]]:
-    """`(넣을 값, 아직 고르지 않은 빨간 줄 칸)`. 칸을 짚은 고름이 규칙 전체 고름보다 앞선다.
+def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
+    """빨간 줄 고름을 칸에 단 미리보기. 칸을 짚은 고름이 규칙 전체 고름보다 앞선다. 고르지 않은 빨간 줄 칸은 그대로 둔다.
 
-    정가를 넘는 칸: raise_list 는 정가도 판매가와 같은 만큼 옮기고(정가 − 판매가 차이 유지), clear_list 는 정가를 비운다.
+    고른 칸의 후 값은 고른 대로다 — include 계산한 값 그대로 · keep 전 값 그대로 · raise_list 정가도 판매가와 같은 만큼
+    옮김(정가 − 판매가 차이 유지) · clear_list 정가를 비움. 저장 단계(plan_steps)와 장부의 줄(preview_rows)이 이 값에서 나온다.
     """
     flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
-    chosen, waiting = decide(CELL_RULES, flagged, resolutions, cell_name)
-    by_key = {change.key: change for change in plan.changes}
-    writes = []
-    for change in plan.changes:
-        if CELL_RULES.severity(change.verdict) == BLOCKED or change.key in waiting:
-            continue
-        choice = chosen.get(change.key, "include")
-        if choice == "keep":
-            continue
-        fields = {name: getattr(change.after, name) for name in change.changed}
-        if choice == "raise_list":
-            if change.before.list is None or change.before.sell is None:
-                raise PlanError(f"정가를 같은 만큼 올릴 수 없는 칸입니다(전 정가가 없음): {cell_name(change.key)}")
-            fields["list"] = change.after.sell + (change.before.list - change.before.sell)
-        if choice == "clear_list":
-            fields["list"] = None
-        write = _write(change.key, change.before, fields)
-        if write is not None:
-            writes.append(write)
-    return tuple(writes), tuple(by_key[key] for key in waiting)
+    chosen, _waiting = decide(CELL_RULES, flagged, resolutions, cell_name)
+    return replace(plan, changes=tuple(_choose(change, chosen.get(change.key)) for change in plan.changes))
+
+
+def _choose(change: CellChange, choice: str | None) -> CellChange:
+    if choice is None:
+        return change
+    after = change.after
+    if choice == "keep":
+        after = change.before
+    elif choice == "raise_list":
+        if change.before.list is None or change.before.sell is None:
+            raise PlanError(f"정가를 같은 만큼 올릴 수 없는 칸입니다(전 정가가 없음): {cell_name(change.key)}")
+        after = replace(after, list=after.sell + (change.before.list - change.before.sell))
+    elif choice == "clear_list":
+        after = replace(after, list=None)
+    return replace(change, after=after, choice=choice)
+
+
+def unresolved(plan: Plan) -> tuple[CellChange, ...]:
+    """아직 고르지 않은 빨간 줄 칸."""
+    return tuple(change for change in plan.changes if change.waiting)
+
+
+def plan_steps(plan: Plan) -> tuple[BulkStep | CellEditStep, ...] | None:
+    """칸이 넣는 값(CellChange.writes)만으로 나눈 저장 단계. 고르지 않은 빨간 줄이 있으면 None — 아직 저장할 수 없다."""
+    if unresolved(plan):
+        return None
+    writes = (_write(change.key, change.before, change.writes) for change in plan.changes)
+    return save_steps(write for write in writes if write is not None)
 
 
 def _write(key: CellKey, current: CellValue, fields: Mapping[str, Decimal | None]) -> CellWrite | None:
@@ -357,20 +379,27 @@ def step_plans(steps: Iterable[BulkStep | CellEditStep]) -> list[StepPlan]:
     return [StepPlan(step.kind, step_label(step), encode_step(step), step_writes(step)) for step in steps]
 
 
-def _rows(key: CellKey, before: CellValue, after: CellValue | None, verdict=None, marks=()) -> list[ValueRow]:
-    return [ValueRow(ITEM_KIND, cell_item_key(key), cell_name(key), name, before.state, getattr(before, name),
-                     getattr(after, name) if after is not None and getattr(after, name) != getattr(before, name) else None,
-                     verdict, marks) for name in FIELDS]
+def _rows(key: CellKey, before: CellValue, after: CellValue | None, writes: Mapping[str, Decimal | None],
+          verdict=None, marks=(), choice=None) -> list[ValueRow]:
+    """칸 하나 → 필드마다 장부 한 줄. `after` 는 그 칸의 후 값(전과 다른 필드만 적힌다), `writes` 는 저장이 넣는 필드(비움은 None)."""
+    rows = []
+    for name in FIELDS:
+        old, new = getattr(before, name), None if after is None else getattr(after, name)
+        action = None if name not in writes else "clear" if writes[name] is None else "set"
+        rows.append(ValueRow(ITEM_KIND, cell_item_key(key), cell_name(key), name, before.state, old, None if new == old else new,
+                             verdict, marks, action, choice))
+    return rows
 
 
 def preview_rows(plan: Plan) -> list[ValueRow]:
-    return [row for change in plan.changes for row in _rows(change.key, change.before, change.after, change.verdict,
-                                                             change.marks)]
+    """미리보기의 칸 그대로 — 필드마다 전 값 · 후 값 · 넣는지(set · clear) · 판정 · 표시 · 고른 것."""
+    return [row for change in plan.changes for row in _rows(change.key, change.before, change.after, change.writes,
+                                                             change.verdict, change.marks, change.choice)]
 
 
 def snapshot_rows(snapshot: Snapshot) -> list[ValueRow]:
     return [row for key, value in sorted(snapshot.cells.items())
-            for row in _rows(key, value, None, marks=(RESERVED,) if (key.room, key.date) in snapshot.reserved else ())]
+            for row in _rows(key, value, None, {}, marks=(RESERVED,) if (key.room, key.date) in snapshot.reserved else ())]
 
 
 def stale_cells(then: Snapshot, now: Snapshot) -> tuple[Difference, ...]:
@@ -428,19 +457,28 @@ def plan_cell_restore(snapshot: RecordedChange, now: Snapshot,
                         None if select is None else lambda kind, key: kind == ITEM_KIND and select(key_of_item(key)))
 
 
+def _restores(plan: RollbackPlan) -> list[tuple[CellKey, CellValue, CellWrite]]:
+    """돌릴 칸마다 `(칸, 지금 값, 넣을 값)` — 적어 둔 값을 넣고(적어 둔 값이 없던 필드는 비운다), 이미 그 값인 필드는 넣지 않는다."""
+    out = []
+    for item in plan.restored:
+        key = key_of_item(item.key)
+        now = value_of(item.now) if item.now.fields else MISSING
+        write = _write(key, now, item.targets)
+        if write is not None:
+            out.append((key, now, write))
+    return out
+
+
 def rollback_writes(plan: RollbackPlan) -> tuple[CellWrite, ...]:
-    """돌릴 칸마다 적어 둔 값을 넣는다(적어 둔 값이 없던 필드는 비운다). 이미 그 값인 필드는 넣지 않는다."""
-    writes = (_write(key_of_item(item.key), value_of(item.now), item.targets) for item in plan.restored)
-    return tuple(write for write in writes if write is not None)
+    return tuple(write for _key, _now, write in _restores(plan))
 
 
 def rollback_rows(plan: RollbackPlan) -> list[ValueRow]:
+    """되돌리기의 장부 줄 — rollback_writes 와 같은 넣을 값에서."""
     rows = []
-    for item in plan.restored:
-        key = key_of_item(item.key)
-        now = item.now if item.now.fields else cell_state(key, MISSING)
-        for name in FIELDS:
-            target = item.targets.get(name, now.fields.get(name))
-            rows.append(ValueRow(ITEM_KIND, item.key, item.label, name, now.state, now.fields.get(name),
-                                 target if target != now.fields.get(name) else None))
+    for key, now, write in _restores(plan):
+        fields = write.fields()
+        after = CellValue(*(fields.get(name, getattr(now, name)) for name in FIELDS),
+                          "open" if now.state == "missing" else now.state)
+        rows += _rows(key, now, after, fields)
     return rows

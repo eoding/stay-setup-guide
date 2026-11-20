@@ -22,7 +22,7 @@ from price_model import (  # noqa: E402
     ITEM_KIND, CellKey, CellValue, ChangeRequest, Snapshot, cell_item_key, cell_name, encode_request, snapshot_reading,
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback  # noqa: E402
-from price_plan import plan_cell_rollback, plan_change, preview_rows, resolve, save_steps, step_plans  # noqa: E402
+from price_plan import plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
 
 D = Decimal
 
@@ -42,21 +42,21 @@ class SelfContainedMixin:
 class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
     def test_scene_preview_shows_counts_banners_marks_and_cells(self):
         plan = plan_change(scene.snapshot(), scene.request())
-        steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
-        page = render_preview(plan, change_id=3, steps=steps)
+        page = render_preview(plan, change_id=3)
         text = visible(page)
         self.assert_self_contained(page)
         self.assertIn("미리보기 · 데모 호텔 · 기본 오퍼 · 판매가 +10%", text)
         self.assertIn("아직 아무것도 바뀌지 않았습니다. 지금 값은 2026-11-20 14:02 에 ERP 에서 읽은 것입니다 (장부 3번에 적어 두었습니다)",
                       text)
-        for number, label in ((90, "바뀌는 칸"), (2, "빨간 줄"), (0, "적용할 수 없는 칸"), (24, "예약 있는 날의 칸"),
+        for number, label in ((90, "바뀌는 칸"), (2, "빨간 줄 (고르기 전)"), (0, "적용할 수 없는 칸"), (24, "예약 있는 날의 칸"),
                               (6, "판매 마감인 칸"), (6, "건너뛰는 칸")):
             self.assertIn(f"{number} {label}", text)
+        self.assertNotIn("고른 빨간 줄", text)
         self.assertIn("빨간 줄 · 2칸이 정가(줄 그은 값)를 넘습니다.", text)
         self.assertIn("정가도 같은 만큼 올림 / 정가 지움 / 이 칸은 안 바꿈", text)
+        self.assertIn("빨간 줄 2칸을 어떻게 할지 고르시면 ERP 에 몇 번 나눠 저장하는지 정해집니다", text, "V4 — 고르기 전에는 저장 횟수가 없다")
+        self.assertNotIn("나눠 저장합니다", text)
         self.assertIn("건너뛰는 칸의 까닭: 가격 없음 6칸", text)
-        self.assertIn("ERP 에 8번 나눠 저장합니다", text)
-        self.assertIn("객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번", text, "T7 — 저장 묶음을 말하는 글")
         for heading in ("디럭스 · 조식 포함", "디럭스 · 룸온리", "스위트 · 조식 포함", "스위트 · 룸온리"):
             self.assertIn(heading, text)
         self.assertIn("12/26 토 판매 마감", text)
@@ -68,6 +68,28 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박", text)
         self.assertIn("성인 몫에만 곱하고 아동 추가분은 그대로", text)
         self.assertIn("성인 2 + 아동 1 · 3박 이상", text)
+
+    def test_v1_after_choosing_the_preview_shows_the_choice_and_the_list_price_it_will_write(self):
+        plan = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        text = visible(render_preview(plan, change_id=4, steps=plan_steps(plan)))
+        for number, label in ((90, "바뀌는 칸"), (0, "빨간 줄 (고르기 전)"), (2, "고른 빨간 줄")):
+            self.assertIn(f"{number} {label}", text)
+        self.assertNotIn("골라 주세요", text)
+        self.assertNotIn("넘음", text, "고른 칸은 「정가 넘음」이 아니라 고른 것으로 보인다")
+        self.assertIn("고르신 빨간 줄 · 2칸 (정가보다 비싸집니다) 정가도 같은 만큼 올림 · 2칸 판매가와 같은 만큼 정가도 올려 저장합니다. "
+                      "예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 — 판매가 480.00 → 528.00 정가 500.00 → 548.00", text)
+        self.assertIn("480.00 → 528.00 정가 500.00 → 548.00 정가도 같은 만큼 올림 정가보다 비싸집니다 · 고르신 대로", text)
+        self.assertIn("500.00 → 548.00 없음 고름 정가보다 비싸집니다 고르신 것: 정가도 같은 만큼 올림", text)
+        self.assertIn("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다.", text)
+        self.assertIn("ERP 에 8번 나눠 저장합니다", text)
+        self.assertIn("객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번", text, "T7 — 저장 묶음을 말하는 글")
+        self.assertIn("다만 정가를 넘는 2칸은 고르신 대로 정가도 같이 바뀝니다", text)
+
+        kept = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "keep")])
+        text = visible(render_preview(kept, steps=plan_steps(kept)))
+        self.assertIn("88 바뀌는 칸", text, "안 바꾸기로 고른 칸은 바뀌는 칸에서 빠진다")
+        self.assertIn("480.00 그대로 이 칸은 안 바꿈", text)
+        self.assertNotIn("480.00 → 528.00", text)
 
     def test_a_hundred_percent_puts_red_banners_up_without_double_counting(self):
         text = visible(render_preview(plan_change(scene.snapshot(), scene.request("100"))))
@@ -103,8 +125,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("판매가와 공급 원가는 바꾸지 않습니다", text)
         cleared = plan_change(scene.snapshot(), scene.request(operation="clear", value=None, field="list",
                                                               rooms=("스위트",), rate_plans=("조식 포함",)))
-        steps = save_steps(resolve(cleared, [])[0])
-        text = visible(render_preview(cleared, steps=steps))
+        text = visible(render_preview(cleared, steps=plan_steps(cleared)))
         self.assertIn("정가 500.00 → 비움", text)
         self.assertIn("그중 정가·원가를 비우는 셀 창 저장 2번", text)
 
@@ -121,8 +142,8 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
         self.before = scene.snapshot()
-        plan = plan_change(self.before, scene.request())
-        self.steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
+        plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        self.steps = plan_steps(plan)
         self.id = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
                                              read_at=plan.read_at, rows=preview_rows(plan),
                                              request=encode_request(plan.request))

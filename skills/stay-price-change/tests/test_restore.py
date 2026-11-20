@@ -25,8 +25,8 @@ from price_model import (  # noqa: E402
 )
 from price_pages import render_preview, render_rollback  # noqa: E402
 from price_plan import (  # noqa: E402
-    cell_filter, plan_cell_restore, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows,
-    rollback_writes, save_steps, snapshot_rows, step_plans,
+    cell_filter, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows, resolve,
+    rollback_rows, rollback_writes, save_steps, snapshot_rows, step_plans,
 )
 from test_pages import visible  # noqa: E402
 
@@ -51,10 +51,11 @@ class RestoreTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def apply(self, plan, current, resolutions=()):
+        plan = resolve(plan, resolutions)
         change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                             sentence=plan.request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                             request=encode_request(plan.request))
-        steps = save_steps(resolve(plan, resolutions)[0])
+        steps = plan_steps(plan)
         self.ledger.begin(change, step_plans(steps), read_at=now_text())
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
@@ -151,7 +152,7 @@ class UnremovableTest(unittest.TestCase):
             self.assertIn("이 칸들은 나중에 되돌려도 지울 수 없습니다", preview)
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표",
                                            read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(plan.request))
-            steps = save_steps(resolve(plan, [])[0])
+            steps = plan_steps(plan)
             ledger.begin(change, step_plans(steps), read_at=now_text())
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)

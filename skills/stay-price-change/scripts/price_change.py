@@ -65,8 +65,8 @@ from price_model import (
 from price_pages import render_prices, render_preview, render_result, render_rollback, render_sheet
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
-    PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
-    snapshot_rows, stale_cells, step_plans,
+    PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows,
+    resolve, rollback_rows, rollback_writes, save_steps, snapshot_rows, stale_cells, step_plans, unresolved,
 )
 
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
@@ -225,15 +225,15 @@ def cmd_plan(args):
     request = plan.request
     resolutions = [Resolution(str(item["rule"]), str(item["choice"]), decode_resolution_items(item.get("cells")))
                    for item in load(args.resolutions)] if args.resolutions else []
-    writes, unresolved = resolve(plan, resolutions)
-    steps = save_steps(writes) if not unresolved else None
+    plan = resolve(plan, resolutions)
+    steps = plan_steps(plan)
     change_id = Ledger().record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=request.offer,
                                         currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                         request=encode_request(plan.request),
                                         reading=encode_snapshot(snapshot)) if args.record else None
     result = dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
-                  unresolved=[encode_change(change) for change in unresolved],
+                  unresolved=[encode_change(change) for change in unresolved(plan)],
                   steps=None if steps is None else [encode_step(step) for step in steps])
     if isinstance(request, TargetTable) and request.from_sheet:
         result["coverage"] = coverage_counts(plan.coverage)

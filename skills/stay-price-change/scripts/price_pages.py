@@ -30,9 +30,9 @@ from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 
 from price_model import (
-    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellKey, CellValue,
-    ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label, occupancy_order,
-    value_of,
+    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
+    CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label,
+    occupancy_order, value_of,
 )
 from price_plan import counts, day_runs, days_summary
 from price_sheet import SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
@@ -135,6 +135,20 @@ def _flag(verdict: str, after: CellValue, currency: str) -> str:
     return "적용할 수 없음"
 
 
+def _value_moves(before: CellValue, after: CellValue, currency: str, name: str) -> str:
+    """정가 · 공급 원가 칸 — 바뀌면 `전 → 후`, 그대로면 그 값."""
+    old, new = getattr(before, name), getattr(after, name)
+    if old == new:
+        return fmt_money(old, currency)
+    return f"{'새로' if old is None else fmt_money(old, currency)} → {'비움' if new is None else fmt_money(new, currency)}"
+
+
+def _chosen_tag(change: CellChange) -> str:
+    """고른 빨간 줄 칸의 꼬리표 — 고른 것과 걸렸던 규칙."""
+    return (f'<span class="tag chosen">{esc(CHOICE_LABELS[change.choice])}</span>'
+            f'<small class="more">{esc(CELL_RULES.by_code[change.verdict].label)} · 고르신 대로</small>')
+
+
 def _move(before: CellValue, after: CellValue, currency: str) -> str:
     """바뀐 필드마다 `전 → 후`. 판매가는 굵은 줄로, 정가·원가는 작은 줄로."""
     parts = []
@@ -173,8 +187,14 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         if severity == BLOCKED:
             was = "가격 없음" if change.before.sell is None else fmt_money(change.before.sell, currency)
             return "blocked", f'<span class="was">{was}</span><span class="tag blocked">적용할 수 없음</span>'
+        if change.choice == "keep":
+            was = "가격 없음" if change.before.sell is None else fmt_money(change.before.sell, currency)
+            return "chosen", (f'<span class="was">{was}</span>'
+                              f'<small class="more">그대로</small>{_chosen_tag(change)}')
 
         moved = _move(change.before, change.after, currency)
+        if change.choice:
+            return "chosen", moved + _chosen_tag(change)
         if severity == RED:
             return "red", f'{moved}<span class="tag red">{esc(_flag(change.verdict, change.after, currency))}</span>'
         if NEW in change.marks:
@@ -189,13 +209,17 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
             f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 것입니다'
             f'{f" (장부 {change_id}번에 적어 두었습니다)" if change_id else ""}. 통화 {esc(currency)}.</p>',
             _request_box(request, currency, plan.absent_pairs),
-            f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>' if sheet else "", _preview_banners(tally),
-            stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄"),
-                   (tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
-                   (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
-                   (tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
+            f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>' if sheet else "", _preview_banners(plan, tally),
+            stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄 (고르기 전)")]
+                  + ([(tally["chosen"], "고른 빨간 줄")] if tally["chosen"] else [])
+                  + [(tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
+                     (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
+                     (tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
             _skip_line(plan), _coverage_section(plan.coverage) if sheet else ""]
-    if steps:
+    if tally["red"]:
+        body.append(f'<p class="sub">빨간 줄 {tally["red"]:,}칸을 어떻게 할지 고르시면 ERP 에 몇 번 나눠 저장하는지 정해집니다. '
+                    "그때 미리보기를 다시 보여 드립니다.</p>")
+    elif steps:
         edits = sum(step.kind == "cell_edit" for step in steps)
         body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번'
                     f'{f", 그중 정가·원가를 비우는 셀 창 저장 {edits}번" if edits else ""}).</p>')
@@ -211,10 +235,13 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
                  '<div class="banner blue">말씀이 없으면 아무것도 바뀌지 않습니다. 대화창에서 "적용"이라고 하시면 바꿉니다.</div>']
         return page(title, "\n".join(body), MAKER)
     others = [FIELD_LABELS[name] for name in FIELDS if name != request.field]
+    moved_list = sum(change.choice in ("raise_list", "clear_list") for change in plan.changes)
     lines = [_rounding_note(currency),
              "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
              "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다.",
-             f"{others[0]}와 {others[1]}는 바꾸지 않습니다(정가를 넘는 칸에서 정가를 올리거나 지우라고 고르신 경우만 정가가 같이 바뀝니다)."]
+             f"{others[0]}와 {others[1]}는 바꾸지 않습니다" + (
+                 f". 다만 정가를 넘는 {moved_list:,}칸은 고르신 대로 정가도 같이 바뀝니다(표의 「정가 … → …」 줄)." if moved_list else
+                 "(정가를 넘는 칸에서 정가를 올리거나 지우라고 고르신 경우만 정가가 같이 바뀝니다).")]
     if request.operation == "percent":
         lines.insert(0, "아동이 있는 칸은 아동 추가분도 같은 비율로 곱했습니다." if request.scale_child_surcharge else
                      "아동이 있는 칸은 ERP 와 똑같이 성인 몫에만 곱하고 아동 추가분은 그대로 둡니다. "
@@ -304,7 +331,16 @@ def _request_box(request: ChangeRequest | TargetTable, currency: str, absent: It
     return f'<div class="frame">{sentence}<dl class="kv">{dl}</dl></div>'
 
 
-def _preview_banners(tally: Mapping) -> str:
+CHOSEN_WORDS = {   # 고른 빨간 줄 띠 — 고른 것마다 저장이 그 칸에 하는 일
+    "include": "계산한 값 그대로 바꿉니다.",
+    "keep": "그 칸은 바꾸지 않습니다.",
+    "raise_list": "판매가와 같은 만큼 정가도 올려 저장합니다.",
+    "clear_list": "정가를 지워 저장합니다(손님 화면에 줄 그은 값이 없어집니다).",
+}
+
+
+def _preview_banners(plan: Plan, tally: Mapping) -> str:
+    """머리 띠 — 적용할 수 없는 칸, 아직 고르지 않은 빨간 줄(규칙마다), 고른 빨간 줄(규칙마다, 고른 것과 그 칸의 예 하나)."""
     out = []
     blocked = [rule for rule in CELL_RULES.rules if rule.severity == BLOCKED and tally[rule.code]]
     if blocked:
@@ -318,12 +354,32 @@ def _preview_banners(tally: Mapping) -> str:
         "OVER_30": ("지금 값보다 30% 넘게 바뀝니다.", "금액을 잘못 말씀하신 것은 아닌지 확인해 주세요. "
                     "맞으면 그 칸을 짚어 다시 말씀해 주세요."),
     }
+    currency = plan.currency
     for rule in CELL_RULES.rules:
-        if rule.severity == RED and tally[rule.code]:
+        if rule.severity != RED:
+            continue
+        waiting = sum(change.waiting for change in plan.changes if change.verdict == rule.code)
+        if waiting:
             headline, detail = messages[rule.code]
-            out.append(f'<div class="banner red"><b>빨간 줄 · {tally[rule.code]:,}칸이 {esc(headline)}</b> {esc(detail)}</div>')
+            out.append(f'<div class="banner red"><b>빨간 줄 · {waiting:,}칸이 {esc(headline)}</b> {esc(detail)}</div>')
+        chosen = [change for change in plan.changes if change.verdict == rule.code and change.choice]
+        if not chosen:
+            continue
+        parts = []
+        for choice in rule.choices:
+            picked = [change for change in chosen if change.choice == choice]
+            if not picked:
+                continue
+            example = picked[0]
+            shown = "".join(f" {FIELD_LABELS[name]} {_value_moves(example.before, example.after, currency, name)}"
+                            for name in FIELDS if name in example.changed)
+            parts.append(f"<li><b>{esc(CHOICE_LABELS[choice])} · {len(picked):,}칸</b> {esc(CHOSEN_WORDS[choice])}"
+                         + (f' <span class="sub">예: {esc(cell_name(example.key))} —{esc(shown)}</span>' if shown else "") + "</li>")
+        out.append(f'<div class="banner amber"><b>고르신 빨간 줄 · {len(chosen):,}칸 ({esc(rule.label)})</b>'
+                   f'<ul class="notes">{"".join(parts)}</ul></div>')
     if not tally["red"] and not tally["blocked"]:
-        out.append('<div class="banner ok">빨간 줄이 없습니다.</div>')
+        out.append('<div class="banner ok">' + ("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다." if tally["chosen"] else
+                                               "빨간 줄이 없습니다.") + "</div>")
     return "\n".join(out)
 
 
@@ -335,15 +391,22 @@ def _flagged_section(plan: Plan, currency: str) -> str:
     for change in flagged:
         rule = CELL_RULES.by_code[change.verdict]
         after = change.after or change.before
-        moved = "—" if change.after is None else _move(change.before, change.after, currency)
-        choices = " / ".join(CHOICE_LABELS[choice] for choice in rule.choices) if rule.choices else "바꾸지 않음"
-        kind, word = ("blocked", "적용할 수 없음") if rule.severity == BLOCKED else ("red", "빨간 줄")
+        if change.choice == "keep":
+            moved = "그대로"
+        else:
+            moved = "—" if change.after is None else _move(change.before, change.after, currency)
+        if change.choice:
+            kind, word, choices = "chosen", "고름", f"고르신 것: {CHOICE_LABELS[change.choice]}"
+        else:
+            kind, word = ("blocked", "적용할 수 없음") if rule.severity == BLOCKED else ("red", "빨간 줄")
+            choices = " / ".join(CHOICE_LABELS[choice] for choice in rule.choices) if rule.choices else "바꾸지 않음"
         rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(change.before.sell, currency)}</td>'
-                    f'<td>{moved}</td><td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'
+                    f'<td>{moved}</td><td>{_value_moves(change.before, after, currency, "list")}</td>'
+                    f'<td>{_value_moves(change.before, after, currency, "supply")}</td>'
                     f'<td class="text"><span class="tag {kind}">{word}</span> {esc(rule.label)}</td>'
                     f'<td class="text">{esc(choices)}</td></tr>')
     return ('<h2>따로 확인할 칸</h2><div class="scroll"><table><tr><th>칸</th><th>지금 판매가</th><th>바뀌는 값</th>'
-            '<th>정가(바뀐 뒤)</th><th>공급 원가(바뀐 뒤)</th><th>왜</th><th>고를 수 있는 것</th></tr>'
+            '<th>정가 (지금 → 바뀐 뒤)</th><th>공급 원가 (지금 → 바뀐 뒤)</th><th>왜</th><th>고를 수 있는 것</th></tr>'
             + "".join(rows) + "</table></div>")
 
 
