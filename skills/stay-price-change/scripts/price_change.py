@@ -83,7 +83,7 @@ def cmd_plan(args):
     steps = save_steps(writes) if not unresolved else None
     change_id = Ledger().record_preview(hotel=request.hotel, offer=request.offer, currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
-                                        request=encode_request(request)) if args.record else None
+                                        request=encode_request(plan.request)) if args.record else None
     return dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
                 unresolved=[encode_change(change) for change in unresolved],
                 steps=None if steps is None else [encode_step(step) for step in steps])

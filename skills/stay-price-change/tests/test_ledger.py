@@ -87,7 +87,9 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual({row.field for row in record.rows}, {"sell", "list", "supply"})
         self.assertEqual(len({row.item_key for row in record.rows if "reserved" in row.marks}), 24)
         self.assertEqual({row.verdict for row in record.rows}, {None, "ABOVE_LIST"})
-        self.assertEqual(record.request, encode_request(scene.request()))
+        self.assertEqual(record.request, encode_request(self.plan.request))
+        self.assertEqual([(pair["room"], pair["rate_plan"]) for pair in record.request["pairs"]],
+                         [("디럭스", "조식 포함"), ("디럭스", "룸온리"), ("스위트", "조식 포함"), ("스위트", "룸온리")])
 
     def test_steps_are_written_as_each_finishes_and_a_failure_stops_the_change(self):
         self.ledger.begin(self.change_id, step_plans(self.steps))

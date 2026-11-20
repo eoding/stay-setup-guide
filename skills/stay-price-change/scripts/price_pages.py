@@ -146,7 +146,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 것입니다'
             f'{f" (장부 {change_id}번에 적어 두었습니다)" if change_id else ""}. 통화 {esc(currency)}.</p>',
-            _request_box(request, currency), _preview_banners(tally),
+            _request_box(request, currency, plan.absent_pairs), _preview_banners(tally),
             stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄"),
                    (tally["blocked"], "적용할 수 없는 칸"), (tally["reserved"], "예약 있는 날의 칸 (바꿉니다)"),
                    (tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)"),
@@ -193,20 +193,27 @@ def _skip_line(plan: Plan) -> str:
     return "".join(lines)
 
 
-def _request_box(request: ChangeRequest | TargetTable, currency: str) -> str:
+def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:
+    """(객실, 요금제) 쌍 → "디럭스(조식 포함 · 룸온리), 스위트(조식 포함)"."""
+    by_room: dict[str, list[str]] = {}
+    for room, plan in pairs:
+        by_room.setdefault(room, []).append(plan)
+    return ", ".join(f"{room}({' · '.join(plans)})" for room, plans in by_room.items())
+
+
+def _request_box(request: ChangeRequest | TargetTable, currency: str, absent: Iterable[tuple[str, str]] = ()) -> str:
     if isinstance(request, TargetTable):
         keys = [target.key for target in request.targets]
         rows = [("호텔", request.hotel), ("오퍼", request.offer),
-                ("객실", " · ".join(dict.fromkeys(key.room for key in keys))),
-                ("요금제", " · ".join(dict.fromkeys(key.rate_plan for key in keys))),
+                ("객실 · 요금제", pairs_label(dict.fromkeys((key.room, key.rate_plan) for key in keys))),
                 ("날짜", days_summary({key.date for key in keys})), ("목표 값", f"{len(keys):,}칸")]
-        dl = "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in rows)
-        sentence = f'<p class="sub">요청: “{esc(request.sentence)}”</p>' if request.sentence else ""
-        return f'<div class="frame">{sentence}<dl class="kv">{dl}</dl></div>'
-    rows = [("호텔", request.hotel), ("오퍼", request.offer), ("객실", " · ".join(request.rooms)),
-            ("요금제", " · ".join(request.rate_plans)), ("날짜", days_summary(request.dates)),
-            ("바꾸는 값", operation_label(request, currency)),
-            ("칸", "모든 인원 조합 · 모든 박수")]
+    else:
+        rows = [("호텔", request.hotel), ("오퍼", request.offer), ("객실 · 요금제", pairs_label(request.pairs)),
+                ("날짜", days_summary(request.dates)), ("바꾸는 값", operation_label(request, currency)),
+                ("칸", "모든 인원 조합 · 모든 박수")]
+    absent = list(absent)
+    if absent:
+        rows.append(("없는 요금제", ", ".join(f"{room}에는 {plan} 요금제가 없어 뺐습니다" for room, plan in absent)))
     dl = "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in rows)
     sentence = f'<p class="sub">요청: “{esc(request.sentence)}”</p>' if request.sentence else ""
     return f'<div class="frame">{sentence}<dl class="kv">{dl}</dl></div>'

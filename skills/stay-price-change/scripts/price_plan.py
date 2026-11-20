@@ -100,12 +100,32 @@ def _skip_reason(snapshot: Snapshot, request: ChangeRequest, key: CellKey, befor
     return None
 
 
+def requested_pairs(snapshot: Snapshot, request: ChangeRequest) -> tuple[tuple[tuple[str, str], ...],
+                                                                         tuple[tuple[str, str], ...]]:
+    """`(요청하는 쌍, 그 객실에 없어 뺀 조합)`.
+
+    쌍을 짚은 요청은 그대로다(읽지 않은 쌍은 `_check_scope` 가 이름을 대고 멈춘다). 객실·요금제를 따로 받았으면 읽은 쌍만
+    요청하고, 나머지 조합은 그 객실에 없는 요금제로 돌려준다. 단 적은 객실이 적은 요금제를 하나도 읽지 않았거나 적은 요금제를
+    어느 적은 객실도 읽지 않았으면, 없는 것이 아니라 읽지 않은 것이라 이름을 대고 멈춘다.
+    """
+    if request.pairs:
+        return request.pairs, ()
+    combos = [(room, plan) for room in request.rooms for plan in request.rate_plans]
+    read = [pair for pair in combos if pair in snapshot.pairs]
+    rooms, plans = {room for room, _plan in read}, {plan for _room, plan in read}
+    unread = [f"{room} · {plan}" for room, plan in combos if room not in rooms or plan not in plans]
+    if unread:
+        raise PlanError(f"읽지 않은 객실·요금제가 있습니다: {', '.join(unread)}. 그 객실·요금제의 가격을 먼저 읽어야 합니다")
+    return tuple(read), tuple(pair for pair in combos if pair not in snapshot.pairs)
+
+
 def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
+    pairs, absent = requested_pairs(snapshot, request)
+    request = replace(request, pairs=pairs)
     rooms = {room: rank for rank, room in enumerate(request.rooms)}
     plans = {plan: rank for rank, plan in enumerate(request.rate_plans)}
-    dates = set(request.dates)
-    keys = [key for key in snapshot.cells if key.room in rooms and key.rate_plan in plans and key.date in dates]
-    pairs = [(room, plan) for room in request.rooms for plan in request.rate_plans]
+    dates, wanted = set(request.dates), set(pairs)
+    keys = [key for key in snapshot.cells if (key.room, key.rate_plan) in wanted and key.date in dates]
     empty = _check_scope(snapshot, request.hotel, request.offer, pairs,
                          [(room, plan, day) for room, plan in pairs for day in request.dates])
     keys.sort(key=lambda k: (rooms[k.room], plans[k.rate_plan], occupancy_order(k.occupancy), k.nights, k.date))
@@ -123,7 +143,7 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
             continue
         changes.append(CellChange(key, before, after, _marks(snapshot, key, before),
                                   CELL_RULES.verdict(before, after, lacking)))
-    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty)
+    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent)
 
 
 def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:

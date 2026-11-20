@@ -118,6 +118,9 @@ class ChangeRequest:
     """범위 안의 칸에서 값 하나(`field`: 판매가 sell · 정가 list · 공급 원가 supply)를 바꾸는 요청.
 
     amount ±금액 · percent ±% · set 기준 인원 1박 칸을 그 값으로(나머지는 같은 만큼) · clear 비움(정가·공급 원가만).
+
+    범위는 (객실, 요금제) 쌍 `pairs` 다. 객실과 요금제를 따로 주면 "적은 객실마다 그 객실에 있는 적은 요금제"이고,
+    계산(`plan_change`)이 읽은 쌍으로 풀어 `pairs` 를 채운다. 쌍만 주면 객실·요금제는 쌍에서 나온 차례로 채운다.
     """
     hotel: str
     offer: str
@@ -130,8 +133,19 @@ class ChangeRequest:
     scale_child_surcharge: bool = False
     sentence: str = ""
     field: str = "sell"
+    pairs: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self):
+        pairs = tuple((str(room), str(plan)) for room, plan in self.pairs)
+        if len(set(pairs)) != len(pairs):
+            raise ValueError("같은 객실·요금제 쌍이 두 번 있습니다")
+        object.__setattr__(self, "pairs", pairs)
+        if pairs and not self.rooms:
+            object.__setattr__(self, "rooms", tuple(dict.fromkeys(room for room, _plan in pairs)))
+        if pairs and not self.rate_plans:
+            object.__setattr__(self, "rate_plans", tuple(dict.fromkeys(plan for _room, plan in pairs)))
+        if any(room not in self.rooms or plan not in self.rate_plans for room, plan in pairs):
+            raise ValueError("쌍의 객실·요금제가 적은 객실·요금제 안에 있어야 합니다")
         if self.operation not in OPERATIONS:
             raise ValueError(f"바꾸는 방법을 모릅니다: {self.operation!r}")
         if self.field not in FIELDS:
@@ -289,13 +303,17 @@ class Skipped:
 
 @dataclass(frozen=True)
 class Plan:
-    """`empty_pairs` 는 요청한 (객실, 요금제) 가운데 읽었지만 칸이 하나도 없던 것 — 건너뜀으로 알린다."""
+    """`empty_pairs` 는 요청한 (객실, 요금제) 가운데 읽었지만 칸이 하나도 없던 것 — 건너뜀으로 알린다.
+
+    `absent_pairs` 는 객실·요금제를 따로 받았을 때 그 객실에 없어(읽은 쌍에 없어) 요청에서 뺀 조합 — 미리보기가 이름을 댄다.
+    """
     request: ChangeRequest | TargetTable
     currency: str
     read_at: str
     changes: tuple[CellChange, ...]
     skipped: tuple[Skipped, ...]
     empty_pairs: tuple[tuple[str, str], ...] = ()
+    absent_pairs: tuple[tuple[str, str], ...] = ()
 
 
 # ─── 사람이 읽는 이름 ───
@@ -404,6 +422,7 @@ def encode_request(request: ChangeRequest | TargetTable) -> dict:
                                                                       target.values}) for target in request.targets])
     return dict(kind="change", hotel=request.hotel, offer=request.offer, rooms=list(request.rooms),
                 rate_plans=list(request.rate_plans), dates=list(request.dates), field=request.field,
+                pairs=[dict(room=room, rate_plan=plan) for room, plan in request.pairs],
                 operation=dict(kind=request.operation, value=money_text(request.value),
                                base_occupancy=request.base_occupancy),
                 scale_child_surcharge=request.scale_child_surcharge, sentence=request.sentence)
@@ -422,6 +441,7 @@ def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
         value=money(operation.get("value")), base_occupancy=operation.get("base_occupancy"),
         scale_child_surcharge=bool(data.get("scale_child_surcharge", False)), sentence=str(data.get("sentence") or ""),
         field=str(data.get("field") or "sell"),
+        pairs=tuple((item["room"], item["rate_plan"]) for item in data.get("pairs") or ()),
     )
 
 
@@ -462,11 +482,13 @@ def encode_plan(plan: Plan) -> dict:
     return dict(request=encode_request(plan.request), currency=plan.currency, read_at=plan.read_at,
                 changes=[encode_change(change) for change in plan.changes],
                 skipped=[dict(key=encode_key(item.key), reason=item.reason) for item in plan.skipped],
-                empty_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.empty_pairs])
+                empty_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.empty_pairs],
+                absent_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.absent_pairs])
 
 
 def decode_plan(data: Mapping) -> Plan:
     return Plan(decode_request(data["request"]), str(data["currency"]).upper(), str(data["read_at"]),
                 tuple(decode_change(item) for item in data["changes"]),
                 tuple(Skipped(decode_key(item["key"]), str(item["reason"])) for item in data.get("skipped") or ()),
-                tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("empty_pairs") or ()))
+                tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("empty_pairs") or ()),
+                tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("absent_pairs") or ()))
