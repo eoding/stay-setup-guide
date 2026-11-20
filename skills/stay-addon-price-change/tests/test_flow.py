@@ -382,6 +382,23 @@ class PageObjectTest(Flow):
         self.assertNotIn("stayPrice.take(", error["error"])
 
 
+class LookReuseTest(Flow):
+    def test_a_later_look_of_the_same_screen_borrows_the_pieces_an_earlier_look_folder_took(self):
+        work = Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "작업"
+        first, second = work / "2026-11-21 100000" / "look", work / "2026-11-21 103000" / "look"
+        scene.write_answers(first, "look", [scene.look_answer(self.erp)])
+        self.cli("look", "--answers", first, "--out", first.parent / "look.json")
+        scene.write_answers(second, "look", [scene.look_answer(self.erp, body_id="blook2")[:1]])
+        short = self.cli("look", "--answers", second, "--out", second.parent / "look.json")
+        self.assertEqual((short["addons"], short["lines"]), (3, 4), "같은 화면이면 쪽을 다시 받지 않는다")
+
+        self.erp.lines["301"]["sell"] = "21.00"            # 화면이 바뀌면 빌릴 것이 없어 받으라고 한다
+        third = work / "2026-11-21 110000" / "look"
+        scene.write_answers(third, "look", [scene.look_answer(self.erp, body_id="blook3")[:1]])
+        error = self.cli("look", "--answers", third, "--out", third.parent / "look.json", code=2)
+        self.assertEqual([item["id"] for item in error["refetch"]], ["blook3"])
+
+
 class TrapLineTest(Flow):
     def test_a_line_whose_amount_records_the_screen_cannot_see_is_never_saved(self):
         request = self.file("request.json", dict(kind="addon_change", hotel=scene.HOTEL, all=True, field="sell", percent="5",

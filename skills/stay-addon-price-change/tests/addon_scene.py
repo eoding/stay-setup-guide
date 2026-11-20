@@ -133,15 +133,15 @@ def write_answers(folder: Path, prefix: str, answers) -> None:
         (folder / f"{prefix}-{index}.json").write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
 
 
-def look_answer(erp: Erp):
-    """look 의 답(작은 답 + take 답들) — 지금 상태의 부가옵션과 줄 전부."""
+def look_answer(erp: Erp, body_id: str = "blook"):
+    """look 의 답(작은 답 + take 답들) — 지금 상태의 부가옵션과 줄 전부. 페이지는 볼 때마다 새 조각 id 를 붙인다(`body_id`)."""
     addons = {}
     for item in erp.lines.values():
         entry = addons.setdefault(item["addon"], {"id": item["addon"], "name": item["addon_name"], "offer": item["offer"],
                                                   "lines": []})
         entry["lines"].append(row_of(item))
     keep = {"hotel": HOTEL, "addons": list(addons.values())}
-    return reply("look", {}, keep, pieces=4, body_id="blook", login=False, hotel=HOTEL,
+    return reply("look", {}, keep, pieces=4, body_id=body_id, login=False, hotel=HOTEL,
                  count={"addons": len(addons), "lines": len(erp.lines)}, doneAt=erp.tick())
 
 

@@ -5,7 +5,8 @@
 (`../stay-price-change/scripts/change_core`). 장부는 같은 파일이고, 이 명령은 그 장부를 부가옵션 가격 줄(`addon_price`)의 장부로
 연다 — 목록에는 부가옵션 가격 줄 번호만 나오고, 다른 도우미의 번호는 거절한다.
 
-    look          stayAddonPrice.look() 의 답과 그 조각(take 답들) → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로)
+    look          stayAddonPrice.look() 의 답과 그 조각(take 답들) → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로). 기록 폴더의
+                  다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     read-calls    요청 파일(필요하면 --look), 또는 장부 번호 → readLine 부를 값(calls.json)
     read          calls.json + readLine 답과 조각(폴더째) → 지금 값(snapshot.json). 읽은 시각은 그 답들이 끝난 시각 가운데 가장
                   이른 것. 기록 폴더의 앞선 읽기 폴더(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
@@ -56,13 +57,14 @@ from change_core.answers import BrowserError, answers_for, attach_bodies, readin
 from change_core.chrome import page_text
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
-from change_core.ledger import Ledger, LedgerError
+from change_core.ledger import Ledger, LedgerError, ledger_dir
 from change_core.money import money, money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 
 PAGE_OBJECT = "stayAddonPrice"      # 이 도우미의 페이지 모듈 — 조각을 다시 받으라는 글이 이 이름의 take 를 부르라고 한다
 PREFIXES = ("look-", "line-", "take-")
+LOOK_FOLDER = "look"        # 작업 폴더 안에서 look 답을 두는 폴더(SKILL.md 「준비」) — 다음 look 이 여기서 조각을 빌린다
 READS = ("readLine",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readLine 하나가 조각 하나다
 PAGE_NAMES = {"preview": "부가옵션 미리보기", "result": "부가옵션 적용 결과", "rollback": "부가옵션 되돌리기 미리보기",
@@ -80,9 +82,27 @@ def load_results(paths) -> list:
 
 # ───────────── 읽기 ─────────────
 
+def lent_looks(results: list, answer_paths) -> list:
+    """이 look 에 조각을 빌려 줄 답들 — 기록 폴더의 다른 작업 폴더마다의 `look/` 가운데 같은 호텔을 본 것의 답 파일. 읽기가 앞선 읽기
+    폴더에서 빌리는 것과 같다(change_core.files.lent_answers): 알아볼 값 넷이 같은 다 받은 조각만 쓰고, 이번 look 의 답으로 치지 않는다."""
+    hotels = {str((result.get("hotel") or {}).get("id")) for result in results
+              if isinstance(result, dict) and result.get("op") == "look"}
+    own = {(path if path.is_dir() else path.parent).resolve() for path in map(Path, answer_paths)}
+    lent = []
+    for folder in sorted((ledger_dir() / files.WORK).glob(f"*/{LOOK_FOLDER}")):
+        if not folder.is_dir() or folder.resolve() in own:
+            continue
+        answers = load_results([folder])
+        if any(isinstance(answer, dict) and answer.get("op") == "look" and str((answer.get("hotel") or {}).get("id")) in hotels
+               for answer in answers):
+            lent += answers
+    return lent
+
+
 def cmd_look(args):
     results = load_results(args.answers)
-    looks = [result for result in attach_bodies(answers_for(results, "look"), page=PAGE_OBJECT) if result.get("op") == "look"]
+    looks = [result for result in attach_bodies(answers_for(results, "look"), lent_looks(results, args.answers), PAGE_OBJECT)
+             if result.get("op") == "look"]
     if len(looks) != 1:
         raise BrowserError(f"stayAddonPrice.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
     look = looks[0]

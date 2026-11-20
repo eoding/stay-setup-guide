@@ -8,7 +8,7 @@
 
 | 명령 | 플래그 | 하는 일 |
 |---|---|---|
-| `look` | `--answers` (여러 번) · `--out` | `stayAddonPrice.look()` 의 답과 조각 → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로 — 번호 · 이름 · 적용 대상 · 판매가 · 통화별 금액). `kind: addon_listing` |
+| `look` | `--answers` (여러 번) · `--out` | `stayAddonPrice.look()` 의 답과 조각 → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로 — 번호 · 이름 · 오퍼 · 적용 대상 · 판매가 · 통화별 금액). `kind: addon_listing`. 기록 폴더의 다른 작업 폴더의 `look/`(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `read-calls` | `--request` 또는 `--record` · `--look` · `--out` | 읽을 줄 → `readLine` 부를 값 `{lines: [{hotel, addon, line}]}`. 요청이 `addons` · `all` 로 고르면 `--look` 이 있어야 한다. 한 번에 200줄까지 |
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readLine` 답과 조각 → 지금 값(`kind: addon_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
