@@ -18,7 +18,7 @@ import scene  # noqa: E402
 from browser_replies import reply, take as browser_take  # noqa: E402
 from erp_read import ParseError  # noqa: E402
 from price_browser import (  # noqa: E402
-    BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call,
+    BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, page_hotel, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call,
     step_outcome,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
@@ -27,6 +27,7 @@ ERP = HERE / "fixtures" / "erp"
 REJECTED = (ERP / "adjust-rejected.html").read_text(encoding="utf-8")
 PRICE = (ERP / "price-runs-closed-absent-list.html").read_text(encoding="utf-8")
 OFFER = "〈오퍼 관리용 이름〉"
+HOTEL = scene.HOTEL_REF
 CONTRACT = HERE / "fixtures" / "browser" / "calls.json"
 
 
@@ -50,10 +51,10 @@ class ReadCallsTest(unittest.TestCase):
     def test_one_period_covers_exactly_the_chosen_days(self):
         days = ["2026-12-25", "2026-12-26", "2027-01-01", "2027-01-02"]
         self.assertEqual(periods(days), [("2026-12-25", "2027-01-02", ["금", "토"])])
-        calls = read_calls("데모 오퍼", [("디럭스", "조식 포함"), ("스위트", "룸온리"), ("디럭스", "조식 포함")], days)
+        calls = read_calls(HOTEL, "데모 오퍼", [("디럭스", "조식 포함"), ("스위트", "룸온리"), ("디럭스", "조식 포함")], days)
         self.assertEqual(calls, [
-            {"offer": "데모 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"]},
-            {"offer": "데모 오퍼", "room": "스위트", "ratePlan": "룸온리", "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"]}])
+            {"hotel": HOTEL, "offer": "데모 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"]},
+            {"hotel": HOTEL, "offer": "데모 오퍼", "room": "스위트", "ratePlan": "룸온리", "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"]}])
 
     def test_days_one_period_cannot_cover_are_read_in_runs_never_reading_an_unchosen_day(self):
         # 수·목을 고른 기간이면 7/8(수)이 끼므로 이어진 날마다 따로 — 판매일 없는 날이 끼면 ERP 가 기간을 통째로 거절한다
@@ -62,9 +63,9 @@ class ReadCallsTest(unittest.TestCase):
 
     def test_reads_are_cut_at_186_days_so_one_call_walks_few_calendar_months(self):
         year = [(date(2027, 1, 1) + timedelta(days=offset)).isoformat() for offset in range(365)]
-        calls = read_calls("O", [("R", "P")], year)
+        calls = read_calls(HOTEL, "O", [("R", "P")], year)
         self.assertEqual([(call["from"], call["to"]) for call in calls], [("2027-01-01", "2027-07-05"), ("2027-07-06", "2027-12-31")])
-        self.assertEqual(len(reserved_probes("O", [("R", "P")], year)), 1, "가감 물음은 550일까지 한 번에")
+        self.assertEqual(len(reserved_probes(HOTEL, "O", [("R", "P")], year)), 1, "가감 물음은 550일까지 한 번에")
 
     def test_a_span_longer_than_550_days_is_split(self):
         thursdays = [(date(2026, 1, 1) + timedelta(weeks=week)).isoformat() for week in range(79)]
@@ -74,13 +75,13 @@ class ReadCallsTest(unittest.TestCase):
     def test_the_scene_request_reads_four_pairs_and_asks_one_reserved_probe(self):
         request = scene.request()
         pairs = [(room, plan) for room in request.rooms for plan in request.rate_plans]
-        self.assertEqual(len(read_calls(request.offer, pairs, request.dates)), 4)
-        self.assertEqual(reserved_probes(request.offer, pairs, request.dates), [
-            {"offer": request.offer, "rooms": ["디럭스", "스위트"], "ratePlans": ["조식 포함", "룸온리"],
+        self.assertEqual(len(read_calls(HOTEL, request.offer, pairs, request.dates)), 4)
+        self.assertEqual(reserved_probes(HOTEL, request.offer, pairs, request.dates), [
+            {"hotel": HOTEL, "offer": request.offer, "rooms": ["디럭스", "스위트"], "ratePlans": ["조식 포함", "룸온리"],
              "from": "2026-12-25", "to": "2027-01-02", "weekdays": ["금", "토"], "occupancy": "*", "nights": "all"}])
 
     def test_read_answers_must_be_what_was_asked(self):
-        asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        asked = {"hotel": HOTEL, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}
         read, = pair_reads(reply("readPair", asked, {"fragment": PRICE}))
         self.assertEqual((read.offer, read.room, read.rate_plan, read.page.room, read.page.currency),
                          ("샘플 오퍼", "디럭스", "조식 포함", "샘플 오퍼 · 디럭스", "USD"))
@@ -91,10 +92,25 @@ class ReadCallsTest(unittest.TestCase):
         with self.assertRaisesRegex(BrowserError, "readPair 의 답이 아닙니다"):
             pair_reads(reply("applyBulk", asked, {"fragment": PRICE}))
 
+    def test_g2_a_reading_from_another_hotel_than_asked_is_refused_and_the_page_names_the_hotel(self):
+        asked = {"hotel": HOTEL, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        other = {"id": "2", "name": HOTEL["name"]}
+        with self.assertRaisesRegex(BrowserError, "물은 호텔\\(1\\)이 아닌 2 호텔"):
+            pair_reads(reply("readPair", asked, {"fragment": PRICE, "hotel": other}))
+        with self.assertRaisesRegex(BrowserError, "물은 호텔"):
+            pair_reads(reply("readPair", dict(asked, hotel=None), {"fragment": PRICE}))
+        self.assertEqual(page_hotel(reply("readPair", asked, {"fragment": PRICE, "hotel": dict(HOTEL, name="페이지 이름")})),
+                         {"id": "1", "name": "페이지 이름"})
+        with self.assertRaisesRegex(BrowserError, "하나로 정하지 못했습니다"):
+            page_hotel(reply("readPair", asked, {"fragment": PRICE}) + reply("readPair", dict(asked, hotel=other), {"fragment": PRICE}))
+        with self.assertRaisesRegex(BrowserError, "호텔 번호가 없습니다"):
+            read_calls({"name": "데모 호텔"}, "O", [("R", "P")], ["2026-12-25"])
+
 
 class ReservedRoundTest(unittest.TestCase):
     def setUp(self):
-        self.start = reserved_probes(OFFER, [("디럭스", "조식 포함"), ("스위트", "룸온리")],
+        self.start = reserved_probes(HOTEL, OFFER, [("디럭스", "조식 포함"), ("스위트", "룸온리")],
                                      ["2026-12-24", "2026-12-25", "2026-12-26", "2026-12-27"])
 
     def test_no_answer_asks_the_first_probe(self):
@@ -153,16 +169,16 @@ CELL = CellEditStep(CellKey("디럭스", "조식 포함", "2026-07-01", "", 1), 
 
 class StepCallTest(unittest.TestCase):
     def test_ledger_steps_become_the_page_payloads_pinned_for_the_node_test(self):
-        calls = [step_call(1, OFFER, BULK.kind, encode_step(BULK)), step_call(2, OFFER, CELL.kind, encode_step(CELL))]
+        calls = [step_call(1, HOTEL, OFFER, BULK.kind, encode_step(BULK)), step_call(2, HOTEL, OFFER, CELL.kind, encode_step(CELL))]
         self.assertEqual(calls, json.loads(CONTRACT.read_text(encoding="utf-8")))
         self.assertEqual(calls[0]["payload"]["rows"], [{"occupancy": "", "nights": 1, "sell": "125000.00", "list": None, "supply": None}])
 
     def test_an_unknown_step_kind_or_a_bad_body_is_refused(self):
         with self.assertRaises(ValueError):
-            step_call(1, OFFER, "cell_edit", dict(encode_step(CELL), clear=["sell"]))
+            step_call(1, HOTEL, OFFER, "cell_edit", dict(encode_step(CELL), clear=["sell"]))
 
     def test_a_result_is_recorded_only_for_the_step_it_asked_about(self):
-        call = step_call(1, OFFER, BULK.kind, encode_step(BULK))
+        call = step_call(1, HOTEL, OFFER, BULK.kind, encode_step(BULK))
         saved = {"ok": True, "op": "applyBulk", "no": 1, "ask": ask_sum(call["payload"]), "saved": True, "pressed": True, "note": "저장했습니다 · 디럭스"}
         self.assertEqual(step_outcome(call, saved), Outcome(True, "저장했습니다 · 디럭스"))
         blocked = dict(saved, ok=False, error="허용 목록에 없는 클릭을 막았습니다: a")

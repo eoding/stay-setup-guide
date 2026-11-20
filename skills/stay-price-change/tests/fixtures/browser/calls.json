@@ -4,6 +4,10 @@
     "op": "applyBulk",
     "payload": {
       "no": 1,
+      "hotel": {
+        "id": "1",
+        "name": "데모 호텔"
+      },
       "offer": "〈오퍼 관리용 이름〉",
       "room": "디럭스",
       "ratePlan": "조식 포함",
@@ -26,6 +30,10 @@
     "op": "applyCell",
     "payload": {
       "no": 2,
+      "hotel": {
+        "id": "1",
+        "name": "데모 호텔"
+      },
       "offer": "〈오퍼 관리용 이름〉",
       "room": "디럭스",
       "ratePlan": "조식 포함",

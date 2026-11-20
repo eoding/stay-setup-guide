@@ -3,7 +3,7 @@
 
     CellKey      칸 하나의 자리 — 객실 · 요금제 · 날짜 · 인원 조합 · 박수 층
     CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
-    Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜)
+    Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜). 호텔은 페이지가 알아본 번호(hotel_id)와 이름
     Skipped      건너뛰는 칸과 까닭(가격 없음 · 바꿀 값 없음 · 이미 그 값)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
     TargetTable  칸마다 목표 값을 적은 표(새 요금표가 이 모양으로 들어온다) — 지금 값과 다른 칸만 바뀐다
@@ -40,6 +40,27 @@ WEEKDAYS = "월화수목금토일"
 
 def iso_day(text: str) -> str:
     return date.fromisoformat(text).isoformat()
+
+
+def same_hotel(name: str, hotel_id: str, other_name: str, other_id: str) -> bool:
+    """같은 호텔인지는 번호로 정한다(이름이 같은 호텔이 있다). 번호가 없는 값끼리만 이름으로 본다(시험에서 만든 값)."""
+    return hotel_id == other_id and (bool(hotel_id) or name == other_name)
+
+
+def hotel_label(name: str, hotel_id: str) -> str:
+    return f"호텔 {hotel_id} ({name})" if hotel_id else name
+
+
+def encode_hotel(name: str, hotel_id: str) -> dict:
+    """JSON 의 호텔 — stayPrice.look() 의 `hotel` 과 같은 모양 {id, name}."""
+    return dict(id=hotel_id, name=name)
+
+
+def decode_hotel(data) -> tuple[str, str]:
+    """`{id, name}` → (이름, 번호). 번호는 페이지가 알아본 것이어야 한다 — 이름만으로는 호텔을 정하지 않는다."""
+    if not isinstance(data, Mapping) or not str(data.get("id") or "").strip():
+        raise ValueError("hotel 은 stayPrice.look() 이 준 {id, name} 을 그대로 적습니다(호텔 번호 없이 이름만으로는 정하지 않습니다)")
+    return str(data.get("name") or ""), str(data["id"]).strip()
 
 
 def split_occupancy(key: str) -> tuple[str | None, bool | None]:
@@ -105,6 +126,7 @@ class Snapshot:
     pairs: frozenset[tuple[str, str]]
     room_names: Mapping[str, str] = field(default_factory=dict)
     no_sale: frozenset[tuple[str, str]] = frozenset()
+    hotel_id: str = ""
 
     def __post_init__(self):
         stray = sorted({(key.room, key.rate_plan) for key in self.cells} - set(self.pairs))
@@ -140,6 +162,7 @@ class ChangeRequest:
     sentence: str = ""
     field: str = "sell"
     pairs: tuple[tuple[str, str], ...] = ()
+    hotel_id: str = ""
 
     def __post_init__(self):
         pairs = tuple((str(room), str(plan)) for room, plan in self.pairs)
@@ -181,6 +204,7 @@ class TargetTable:
     offer: str
     targets: tuple[Target, ...]
     sentence: str = ""
+    hotel_id: str = ""
 
     def __post_init__(self):
         if not self.targets:
@@ -404,7 +428,8 @@ def decode_value(data: Mapping | None) -> CellValue | None:
 
 def encode_snapshot(snapshot: Snapshot) -> dict:
     return dict(
-        hotel=snapshot.hotel, offer=snapshot.offer, currency=snapshot.currency, read_at=snapshot.read_at,
+        hotel=encode_hotel(snapshot.hotel, snapshot.hotel_id), offer=snapshot.offer, currency=snapshot.currency,
+        read_at=snapshot.read_at,
         cells=[dict(encode_key(key), **encode_value(value)) for key, value in sorted(snapshot.cells.items())],
         reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)],
         pairs=[dict(room=room, rate_plan=plan) for room, plan in sorted(snapshot.pairs)],
@@ -420,19 +445,22 @@ def decode_snapshot(data: Mapping) -> Snapshot:
         if key in cells:
             raise ValueError(f"같은 칸이 두 번 있습니다: {encode_key(key)}")
         cells[key] = decode_value(item)
-    return Snapshot(str(data["hotel"]), str(data["offer"]), str(data["currency"]).upper(), str(data["read_at"]),
+    hotel, hotel_id = decode_hotel(data["hotel"])
+    return Snapshot(hotel, str(data["offer"]), str(data["currency"]).upper(), str(data["read_at"]),
                     cells, frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("reserved") or []),
                     frozenset((str(item["room"]), str(item["rate_plan"])) for item in data["pairs"]),
                     {str(item["room"]): str(item["drawer"]) for item in data.get("room_names") or []},
-                    frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("no_sale") or []))
+                    frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("no_sale") or []), hotel_id)
 
 
 def encode_request(request: ChangeRequest | TargetTable) -> dict:
     if isinstance(request, TargetTable):
-        return dict(kind="targets", hotel=request.hotel, offer=request.offer, sentence=request.sentence,
+        return dict(kind="targets", hotel=encode_hotel(request.hotel, request.hotel_id), offer=request.offer,
+                    sentence=request.sentence,
                     targets=[dict(key=encode_key(target.key), values={name: money_text(value) for name, value in
                                                                       target.values}) for target in request.targets])
-    return dict(kind="change", hotel=request.hotel, offer=request.offer, rooms=list(request.rooms),
+    return dict(kind="change", hotel=encode_hotel(request.hotel, request.hotel_id), offer=request.offer,
+                rooms=list(request.rooms),
                 rate_plans=list(request.rate_plans), dates=list(request.dates), field=request.field,
                 pairs=[dict(room=room, rate_plan=plan) for room, plan in request.pairs],
                 operation=dict(kind=request.operation, value=money_text(request.value),
@@ -441,14 +469,15 @@ def encode_request(request: ChangeRequest | TargetTable) -> dict:
 
 
 def decode_request(data: Mapping) -> ChangeRequest | TargetTable:
+    hotel, hotel_id = decode_hotel(data["hotel"])
     if data.get("kind") == "targets":
-        return TargetTable(str(data["hotel"]), str(data["offer"]),
+        return TargetTable(hotel, str(data["offer"]),
                            tuple(Target(decode_key(item["key"]), tuple((str(name), money(value)) for name, value in
                                                                       item["values"].items())) for item in data["targets"]),
-                           str(data.get("sentence") or ""))
+                           str(data.get("sentence") or ""), hotel_id)
     operation = data["operation"]
     return ChangeRequest(
-        hotel=str(data["hotel"]), offer=str(data["offer"]), rooms=tuple(data["rooms"]),
+        hotel=hotel, hotel_id=hotel_id, offer=str(data["offer"]), rooms=tuple(data["rooms"]),
         rate_plans=tuple(data["rate_plans"]), dates=tuple(data["dates"]), operation=operation["kind"],
         value=money(operation.get("value")), base_occupancy=operation.get("base_occupancy"),
         scale_child_surcharge=bool(data.get("scale_child_surcharge", False)), sentence=str(data.get("sentence") or ""),

@@ -401,6 +401,9 @@
     if (missing.length) return remember(fit({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
     var busy = window.__stayPriceBusy;
     if (busy) return notStarted(op, input, '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다', BUSY_WAIT);
+    // 작업 넷은 요청이 짚은 호텔에서만 돈다 — 무엇이든 누르기 전에 탭이 그 번호의 호텔인지 본다(이름은 같은 호텔이 있어 보지 않는다)
+    var here = op === 'look' ? pageHotel() : boundHotel(op, input);
+    if (here.refusal) return remember(here.refusal);
     var token = window.__stayPriceBusy = { op: op };
     var started = Date.now(), limits = Object.assign({}, LIMITS);
     var hardAt = started + limits.hardMs, endAt = hardAt + limits.restMs;
@@ -427,7 +430,7 @@
           { started: false, wait: REST_WAIT });
       }
       var result = await body(input || {}, ctx);
-      if (result.keep) { result.body = keep(Object.assign({ op: op, asked: askedOf(input) }, result.keep)); delete result.keep; }
+      if (result.keep) { result.body = keep(Object.assign({ op: op, asked: askedOf(input), hotel: here }, result.keep)); delete result.keep; }
       return result;
     })().then(function (value) { return { value: value }; }, function (error) { return { error: error }; });
     var first = await Promise.race([work, at(hardAt).then(function () { return { late: true }; })]);
@@ -500,6 +503,21 @@
     if (!id) return { error: loginShown() ? '탭이 로그인 화면입니다 — 담당자가 직접 로그인한 뒤 다시 부릅니다' : '이 탭에서 호텔 번호를 찾지 못했습니다 — 호텔의 Stay 편집 화면이 아닙니다' };
     if (said && C(said[1]) !== id) return { error: '이 탭의 호텔 번호가 화면 두 곳에서 다릅니다(' + id + ' · ' + C(said[1]) + ') — 새로 고친 뒤 다시 부릅니다' };
     return { id: id, name: name };
+  }
+  // 작업의 `hotel`({id, name} — look() 의 hotel 그대로)이 이 탭의 호텔인지. 맞으면 이 탭의 호텔, 아니면 {refusal: 답}
+  function boundHotel(op, input) {
+    var no = input && typeof input.no === 'number' ? input.no : undefined;
+    var refuse = function (message, extra) {
+      return { refusal: fit(Object.assign({ op: op }, no !== undefined ? { no: no } : {}, { ok: false, ask: crc32(canon(askedOf(input))), clicks: {}, error: message }, extra || {})) };
+    };
+    var want = input && input.hotel;
+    if (!want || typeof want !== 'object' || !C(want.id)) return refuse('`hotel` 이 없습니다 — stayPrice.look() 의 hotel({id, name})을 그대로 넣습니다. 아무것도 누르지 않았습니다');
+    var here = pageHotel();
+    if (here.error) return refuse(here.error + ' — 아무것도 누르지 않았습니다');
+    if (C(want.id) !== here.id) {
+      return refuse('이 탭은 호텔 ' + here.id + ' (' + here.name + ') 입니다 — 요청은 호텔 ' + C(want.id) + ' (' + C(want.name) + ') 입니다. 아무것도 누르지 않았습니다', { hotel: here });
+    }
+    return here;
   }
 
   /* ───────────── 5. 화면 부품 — 가격 캘린더 · 칩 · 드로어 ───────────── */

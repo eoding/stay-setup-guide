@@ -7,11 +7,11 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, runFixture, ownFixture, takeAll, charsOf, HERE, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, ownFixture, takeAll, charsOf, HERE, OFFER, HOTEL } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
-const PAIR = { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
-const RESERVED = { offer: OFFER, rooms: ['디럭스', '스위트'], ratePlans: ['조식 포함', '룸온리'], from: '2026-12-24', to: '2026-12-31', weekdays: ALL_WEEK, occupancy: '*', nights: 'all' };
+const PAIR = { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
+const RESERVED = { hotel: HOTEL, offer: OFFER, rooms: ['디럭스', '스위트'], ratePlans: ['조식 포함', '룸온리'], from: '2026-12-24', to: '2026-12-31', weekdays: ALL_WEEK, occupancy: '*', nights: 'all' };
 
 function pythonRead(kind, html) {
   const dir = mkdtempSync(join(tmpdir(), 'stay-price-read-'));

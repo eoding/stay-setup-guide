@@ -296,7 +296,8 @@ class PairRead:
 
 
 def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
-                   adjust_pages: Iterable[AdjustPage] = ()) -> Snapshot:
+                   adjust_pages: Iterable[AdjustPage] = (), hotel_id: str = "") -> Snapshot:
+    """`hotel`·`hotel_id` 는 페이지가 알아본 호텔 이름과 번호다(브라우저 답의 조각에 실려 온다)."""
     reads, adjust_pages = list(reads), list(adjust_pages)
     if not reads:
         raise ParseError("가격 수정 확인 단계를 하나 이상 읽어야 합니다")
@@ -354,4 +355,4 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if unknown:
         raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(sorted(unknown))}")
     return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names,
-                    frozenset(no_sale))
+                    frozenset(no_sale), hotel_id)

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -28,9 +29,8 @@ D = Decimal
 def suite_without_room_only() -> Snapshot:
     """그림 장면에서 스위트에 룸온리 요금제가 없는 호텔 — 그 쌍을 읽지 않았다(없으니까)."""
     full = scene.snapshot()
-    return Snapshot(full.hotel, full.offer, full.currency, full.read_at,
-                    {k: v for k, v in full.cells.items() if (k.room, k.rate_plan) != ("스위트", "룸온리")}, full.reserved,
-                    full.pairs - {("스위트", "룸온리")})
+    return replace(full, cells={k: v for k, v in full.cells.items() if (k.room, k.rate_plan) != ("스위트", "룸온리")},
+                   pairs=full.pairs - {("스위트", "룸온리")})
 
 
 class PairsTest(unittest.TestCase):

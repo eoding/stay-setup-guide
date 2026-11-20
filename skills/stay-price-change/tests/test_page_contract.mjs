@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, takeAll, runFixture, ownFixture, HERE, SKILL, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, runFixture, ownFixture, HERE, SKILL, OFFER, HOTEL } from './page_harness.mjs';
 
 // price_browser 의 함수 하나를 부른다 — 값은 표준 입력 JSON 으로 주고받는다
 function python(fn, args) {
@@ -46,7 +46,7 @@ test('G7 · 앞 화면이 아직 정리 중이면 저장 작업은 아무것도 
 });
 
 test('B5 · read_calls 의 부를 값으로 읽은 답을 pair_reads 가 받는다(객실은 칩의 이름, 드로어 이름은 옆에)', async () => {
-  const [call] = python('b.read_calls(args["offer"], [("디럭스", "조식 포함")], ["2026-07-01"])', { offer: OFFER });
+  const [call] = python('b.read_calls(args["hotel"], args["offer"], [("디럭스", "조식 포함")], ["2026-07-01"])', { hotel: HOTEL, offer: OFFER });
   const page = erpPage();
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, call)));
   assert.equal(r.ok, true, r.error);
@@ -56,7 +56,7 @@ test('B5 · read_calls 의 부를 값으로 읽은 답을 pair_reads 가 받는�
 });
 
 test('B6 · reserved_probes 의 물음을 페이지가 그대로 묻고, 그 답으로 reserved_round 가 끝난다', async () => {
-  const probes = python('b.reserved_probes(args["offer"], [("디럭스", "조식 포함"), ("스위트", "룸온리")], ["2026-12-24", "2026-12-25"])', { offer: OFFER });
+  const probes = python('b.reserved_probes(args["hotel"], args["offer"], [("디럭스", "조식 포함"), ("스위트", "룸온리")], ["2026-12-24", "2026-12-25"])', { hotel: HOTEL, offer: OFFER });
   const page = erpPage();
   const r = plain(await page.w.stayPrice.readReserved(inPage(page.w, probes[0])));
   assert.equal(r.ok, true, r.error);
@@ -76,8 +76,8 @@ test('B11 · 표시명이 있는 호텔 — 칩 이름으로 읽고 묻고, 스�
     bulkReview: runFixture('calendar-bulk--price-step2.html').replaceAll('(공급 통화)', '(KRW)'),
     adjustReview: ownFixture('adjust-rejected.html').replaceAll('<td>디럭스</td>', `<td>${SHOWN}</td>`).replaceAll('<td>스위트</td>', `<td>${SHOWN}</td>`)
   });
-  const [call] = python('b.read_calls(args["offer"], [(args["room"], "조식 포함")], ["2026-07-01"])', { offer: OFFER, room: SHOWN });
-  const [probe] = python('b.reserved_probes(args["offer"], [(args["room"], "조식 포함")], ["2026-12-24", "2026-12-25"])', { offer: OFFER, room: SHOWN });
+  const [call] = python('b.read_calls(args["hotel"], args["offer"], [(args["room"], "조식 포함")], ["2026-07-01"])', { hotel: HOTEL, offer: OFFER, room: SHOWN });
+  const [probe] = python('b.reserved_probes(args["hotel"], args["offer"], [(args["room"], "조식 포함")], ["2026-12-24", "2026-12-25"])', { hotel: HOTEL, offer: OFFER, room: SHOWN });
   const read = plain(await page.w.stayPrice.readPair(inPage(page.w, call)));
   assert.equal(read.ok, true, read.error);
   const reserved = plain(await page.w.stayPrice.readReserved(inPage(page.w, probe)));
@@ -85,7 +85,7 @@ test('B11 · 표시명이 있는 호텔 — 칩 이름으로 읽고 묻고, 스�
   const dir = mkdtempSync(join(tmpdir(), 'stay-price-names-'));
   try {
     const file = (name, data) => { const path = join(dir, name); writeFileSync(path, JSON.stringify(data)); return path; };
-    const done = spawnSync('python3', [join(SKILL, 'scripts', 'price_change.py'), 'read', '--hotel', '데모 호텔',
+    const done = spawnSync('python3', [join(SKILL, 'scripts', 'price_change.py'), 'read',
       '--pair-result', file('pair.json', [read, ...takeAll(page.w, read).takes]),
       '--reserved-probes', file('probes.json', [probe]), '--reserved-result', file('reserved.json', [reserved, ...takeAll(page.w, reserved).takes])],
     { encoding: 'utf8', env: Object.assign({}, process.env, { STAY_PRICE_LEDGER_DIR: join(dir, 'ledger') }) });

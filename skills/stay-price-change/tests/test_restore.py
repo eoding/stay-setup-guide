@@ -39,19 +39,19 @@ class RestoreTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
         self.saved_state = scene.snapshot()
-        self.saved = self.ledger.record_snapshot(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD",
+        self.saved = self.ledger.record_snapshot(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence="연말 가격 바꾸기 전에 저장", read_at=self.saved_state.read_at,
                                                  rows=snapshot_rows(self.saved_state))
         now = self.apply(plan_change(self.saved_state, scene.request()), self.saved_state,
                          [Resolution("ABOVE_LIST", "raise_list")])
         self.now = self.apply(plan_targets(now, TargetTable(scene.HOTEL, scene.OFFER,
-                                                            (Target(CREATED, (("sell", D("450.00")),)),))), now)
+                                                            (Target(CREATED, (("sell", D("450.00")),)),), hotel_id=scene.HOTEL_ID)), now)
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def apply(self, plan, current, resolutions=()):
-        change = self.ledger.record_preview(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD",
+        change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                             sentence=plan.request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                             request=encode_request(plan.request))
         steps = save_steps(resolve(plan, resolutions)[0])
@@ -73,7 +73,7 @@ class RestoreTest(unittest.TestCase):
 
     def test_a_restore_is_recorded_as_a_change_and_can_itself_be_rolled_back(self):
         plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.now)
-        restore = self.ledger.record_preview(hotel=plan.hotel, offer=plan.offer, currency=plan.currency,
+        restore = self.ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
                                              request=dict(kind="restore_snapshot", snapshot=self.saved))
         steps = save_steps(rollback_writes(plan))
@@ -144,10 +144,11 @@ class UnremovableTest(unittest.TestCase):
             before = scene.snapshot()
             plan = plan_targets(before, TargetTable(scene.HOTEL, scene.OFFER, (
                 Target(CREATED, (("sell", D("450.00")),)),
-                Target(CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1), (("sell", D("205.00")),))), "새 요금표"))
+                Target(CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1), (("sell", D("205.00")),))), "새 요금표",
+                scene.HOTEL_ID))
             preview = visible(render_preview(plan))
             self.assertIn("이 칸들은 나중에 되돌려도 지울 수 없습니다", preview)
-            change = ledger.record_preview(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD", sentence="새 요금표",
+            change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표",
                                            read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(plan.request))
             steps = save_steps(resolve(plan, [])[0])
             ledger.begin(change, step_plans(steps))

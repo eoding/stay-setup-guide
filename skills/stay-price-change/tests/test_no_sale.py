@@ -12,6 +12,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
+import scene  # noqa: E402
 from browser_replies import reply  # noqa: E402
 from erp_read import PairRead, ParseError, build_snapshot, parse_price_page  # noqa: E402
 from price_browser import BrowserError, pair_reads  # noqa: E402
@@ -24,12 +25,13 @@ from price_plan import plan_change, plan_targets  # noqa: E402
 PRICE = (HERE / "fixtures" / "erp" / "price-runs-closed-absent-list.html").read_text(encoding="utf-8")   # 12/24 ~ 12/31
 PAGE = parse_price_page(PRICE)
 CLOSED_DAYS = ("2027-01-01", "2027-01-02")
-ASKED = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2027-01-02",
+ASKED = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2027-01-02",
          "weekdays": list("월화수목금토일")}
 
 
 def snapshot():
-    return build_snapshot("데모 호텔", "2026-11-20T19:00:00+09:00", [PairRead("샘플 오퍼", "디럭스", "조식 포함", PAGE, CLOSED_DAYS)])
+    return build_snapshot("데모 호텔", "2026-11-20T19:00:00+09:00", [PairRead("샘플 오퍼", "디럭스", "조식 포함", PAGE, CLOSED_DAYS)],
+                          hotel_id="1")
 
 
 class NoSaleTest(unittest.TestCase):
@@ -64,7 +66,7 @@ class NoSaleTest(unittest.TestCase):
             PairRead("샘플 오퍼", "디럭스", "조식 포함", PAGE, ("2026-12-24",))
 
     def test_planning_lists_them_as_skipped_with_that_reason_and_changes_the_open_days(self):
-        request = ChangeRequest(hotel="데모 호텔", offer="샘플 오퍼", rooms=("디럭스",), rate_plans=("조식 포함",),
+        request = ChangeRequest(hotel="데모 호텔", hotel_id="1", offer="샘플 오퍼", rooms=("디럭스",), rate_plans=("조식 포함",),
                                 dates=("2026-12-24", "2027-01-01", "2027-01-02"), operation="amount", value=D("5"))
         plan = plan_change(snapshot(), request)
         self.assertEqual(plan.no_sale, tuple(("디럭스", "조식 포함", day) for day in CLOSED_DAYS))
@@ -76,7 +78,7 @@ class NoSaleTest(unittest.TestCase):
     def test_target_tables_skip_them_too(self):
         targets = TargetTable("데모 호텔", "샘플 오퍼", (
             Target(CellKey("디럭스", "조식 포함", "2026-12-24", "A2", 1), (("sell", D("150.00")),)),
-            Target(CellKey("디럭스", "조식 포함", "2027-01-01", "A2", 1), (("sell", D("150.00")),))))
+            Target(CellKey("디럭스", "조식 포함", "2027-01-01", "A2", 1), (("sell", D("150.00")),))), hotel_id="1")
         plan = plan_targets(snapshot(), targets)
         self.assertEqual(plan.no_sale, (("디럭스", "조식 포함", "2027-01-01"),))
         self.assertEqual([change.key.date for change in plan.changes], ["2026-12-24"])

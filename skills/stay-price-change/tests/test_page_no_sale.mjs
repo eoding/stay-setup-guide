@@ -6,10 +6,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, takeAll, runFixture, SKILL, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, runFixture, SKILL, OFFER, HOTEL } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
-const ASK = (from, to) => ({ offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from, to, weekdays: ALL_WEEK });
+const ASK = (from, to) => ({ hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from, to, weekdays: ALL_WEEK });
 function sentRanges(page) {
   const sent = [];
   page.doc.addEventListener('click', (e) => {

@@ -53,25 +53,25 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual(calls["pairs"][0]["weekdays"], ["금", "토"])
         self.assertEqual(len(calls["reserved"]), 1)
 
-        probe = {"offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24", "to": "2026-12-31",
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24", "to": "2026-12-31",
                  "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
         probes = self.write("probes.json", [probe])
         first = self.run_cli("reserved", "--probes", probes)
         self.assertEqual((first["done"], first["ask"], first["answered"]), (False, [probe], 0))
-        pair = self.write("pair.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
-        left = self.run_cli("read", "--hotel", "데모 호텔", "--pair-result", pair, "--reserved-probes", probes, code=2)
+        pair = self.write("pair.json", reply("readPair", {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
+        left = self.run_cli("read", "--pair-result", pair, "--reserved-probes", probes, code=2)
         self.assertIn("물음이 1개 남았습니다", left["error"])
 
         answers = self.write("answers.json", reply("readReserved", probe, {"fragment": REJECTED}))
         self.assertTrue(self.run_cli("reserved", "--probes", probes, "--result", answers)["done"])
-        self.run_cli("read", "--hotel", "데모 호텔", "--pair-result", pair, "--reserved-probes", probes, "--reserved-result", answers,
+        self.run_cli("read", "--pair-result", pair, "--reserved-probes", probes, "--reserved-result", answers,
                      "--read-at", "2026-11-20T18:00:00+09:00", "--out", self.dir / "snapshot.json")
         snapshot = decode_snapshot(json.loads((self.dir / "snapshot.json").read_text(encoding="utf-8")))
         self.assertEqual((snapshot.offer, snapshot.currency, len(snapshot.cells)), ("샘플 오퍼", "USD", 16))
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
 
-        wrong = self.write("wrong.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
-        self.assertIn("물었는데 화면은", self.run_cli("read", "--hotel", "H", "--pair-result", wrong, code=2)["error"])
+        wrong = self.write("wrong.json", reply("readPair", {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리", "from": "2026-12-24", "to": "2026-12-31", "weekdays": list("월화수목금토일")}, {"fragment": PRICE}))
+        self.assertIn("물었는데 화면은", self.run_cli("read", "--pair-result", wrong, code=2)["error"])
 
     def test_calls_list_unsaved_steps_and_record_result_writes_only_the_step_it_answers(self):
         snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
@@ -103,6 +103,30 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual([call["no"] for call in self.run_cli("calls", "--change", change)["calls"]], list(range(2, 9)),
                          "멈춘 단계는 이어서 할 목록에 남는다")
 
+    def test_g2_the_ledger_keeps_the_hotel_the_page_named_and_rollback_or_restore_elsewhere_is_refused(self):
+        snapshot = encode_snapshot(scene.snapshot())
+        snapshot["hotel"] = {"id": scene.HOTEL_ID, "name": "페이지가 부르는 이름"}
+        read = self.write("snapshot.json", snapshot)
+        request = self.write("request.json", encode_request(scene.request()))
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        change = self.run_cli("plan", "--snapshot", read, "--request", request, "--resolutions", choice, "--record",
+                              "--out", self.dir / "plan.json")["change_id"]
+        listed = self.run_cli("list")["changes"][0]
+        self.assertEqual((listed["hotel"], listed["hotel_id"]), ("페이지가 부르는 이름", scene.HOTEL_ID),
+                         "장부에는 요청에 적은 이름이 아니라 페이지가 알아본 호텔이 적힌다")
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")
+        call = self.run_cli("calls", "--change", change)["calls"][0]
+        self.assertEqual(call["payload"]["hotel"], {"id": scene.HOTEL_ID, "name": "페이지가 부르는 이름"}, "부를 값마다 그 호텔이 실린다")
+        saved = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True}
+        self.run_cli("record-result", "--change", change, "--result", self.write("saved.json", saved))
+        elsewhere = dict(snapshot, hotel={"id": "2", "name": "페이지가 부르는 이름"})
+        other = self.write("other.json", elsewhere)
+        refused = self.run_cli("rollback", "--change", change, "--snapshot", other, code=2)["error"]
+        self.assertIn("호텔 2 (페이지가 부르는 이름)", refused)
+        self.assertIn(f"호텔 {scene.HOTEL_ID} (페이지가 부르는 이름)", refused)
+        saved_state = self.run_cli("save-snapshot", "--snapshot", read)["change_id"]
+        self.assertIn("호텔 2", self.run_cli("restore", "--saved", saved_state, "--snapshot", other, code=2)["error"])
+
     def test_g7_a_save_that_never_started_is_not_recorded_and_the_run_goes_on(self):
         snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
         request = self.write("request.json", encode_request(scene.request()))
@@ -128,19 +152,19 @@ class BrowserCommandTest(unittest.TestCase):
 
 
     def test_a_cut_piece_makes_read_say_which_piece_to_fetch_again_and_at_what_size(self):
-        asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31",
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31",
                  "weekdays": list("월화수목금토일")}
         result, *takes = reply("readPair", asked, {"fragment": PRICE}, pieces=3)
         cut = json.dumps(takes[1], ensure_ascii=False)[:990] + "[TRUNCATED]"
-        error = self.run_cli("read", "--hotel", "H", "--pair-result", self.write("pair.json", [result, takes[0], cut, takes[2]]), code=2)
+        error = self.run_cli("read", "--pair-result", self.write("pair.json", [result, takes[0], cut, takes[2]]), code=2)
         self.assertEqual(error["refetch"], [{"id": result["body"]["id"], "at": takes[1]["at"], "size": 600}])
         self.assertIn("stayPrice.take(", error["error"])
         raw = self.dir / "cut.txt"
         raw.write_text(cut, encoding="utf-8")
-        again = self.run_cli("read", "--hotel", "H", "--pair-result", self.write("rest.json", [result, takes[0], takes[2]]),
+        again = self.run_cli("read", "--pair-result", self.write("rest.json", [result, takes[0], takes[2]]),
                              "--pair-result", raw, code=2)
         self.assertEqual(again["refetch"][0]["size"], 600, "JSON 이 아닌 파일은 도구가 보인 그대로의 답으로 읽는다")
-        whole = self.run_cli("read", "--hotel", "H", "--pair-result", self.write("whole.json", [result, *takes]))
+        whole = self.run_cli("read", "--pair-result", self.write("whole.json", [result, *takes]))
         self.assertEqual(whole["offer"], "샘플 오퍼")
 
 

@@ -88,8 +88,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
 
     def test_a_pair_read_without_prices_is_named(self):
         snapshot = scene.snapshot()
-        snapshot = Snapshot(snapshot.hotel, snapshot.offer, "USD", snapshot.read_at, snapshot.cells, snapshot.reserved,
-                            snapshot.pairs | {("디럭스", "반값 요금"), ("스위트", "반값 요금")})
+        snapshot = replace(snapshot, pairs=snapshot.pairs | {("디럭스", "반값 요금"), ("스위트", "반값 요금")})
         plan = plan_change(snapshot, scene.request(rate_plans=("조식 포함", "룸온리", "반값 요금")))
         self.assertIn("읽었지만 가격이 하나도 없어 건너뛰는 객실·요금제: 디럭스 · 반값 요금, 스위트 · 반값 요금",
                       visible(render_preview(plan)))
@@ -110,8 +109,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
 
     def test_names_are_shown_as_text_not_markup(self):
         snapshot = scene.snapshot()
-        snapshot = Snapshot("<b>호텔</b>", snapshot.offer, snapshot.currency, snapshot.read_at, snapshot.cells,
-                            snapshot.reserved, snapshot.pairs)
+        snapshot = replace(snapshot, hotel="<b>호텔</b>")
         page = render_preview(plan_change(snapshot, scene.request(hotel="<b>호텔</b>")))
         self.assertNotIn("<b>호텔</b>", page)
         self.assertIn("&lt;b&gt;호텔&lt;/b&gt;", page)
@@ -124,7 +122,7 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
         self.before = scene.snapshot()
         plan = plan_change(self.before, scene.request())
         self.steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
-        self.id = self.ledger.record_preview(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
+        self.id = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
                                              read_at=plan.read_at, rows=preview_rows(plan),
                                              request=encode_request(plan.request))
         self.ledger.begin(self.id, step_plans(self.steps))

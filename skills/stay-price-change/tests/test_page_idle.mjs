@@ -3,7 +3,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, personClick, PAGE, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, personClick, PAGE, OFFER, HOTEL } from './page_harness.mjs';
 
 test('B13 · 작업 밖에서 러너 함수를 바로 불러도 아무것도 누르지 못한다', async () => {
   const page = erpPage();
@@ -49,7 +49,7 @@ test('B13 · standDown() 하나로 내리고, standUp() 이나 다시 올리면 
 test('B13 · 작업 중에는 그 작업의 허용 목록이 판단하고, 끝나면 쉬는 벽으로 돌아온다', async () => {
   const page = erpPage();
   const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
-  const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK })));
+  const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK })));
   assert.equal(r.ok, true, r.error);
   const reached = page.log.reached.length;
   page.doc.querySelector('#stay_calendar [data-calendar-bulk-action="price"]').click();

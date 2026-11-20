@@ -12,6 +12,8 @@ from change_core.money import round_money
 from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot
 
 HOTEL, OFFER = "데모 호텔", "기본 오퍼"
+HOTEL_ID = "1"                       # 지어낸 호텔 번호(페이지의 #master_id)
+HOTEL_REF = {"id": HOTEL_ID, "name": HOTEL}
 DATES = ("2026-12-25", "2026-12-26", "2027-01-01", "2027-01-02")
 OCCUPANCIES = (("A2", 0), ("A3", 60), ("A2C1_CHD", 30))
 NIGHTS = (1, 3)
@@ -41,11 +43,12 @@ def snapshot(read_at="2026-11-20T14:02:00+09:00") -> Snapshot:
                     sell = round_money(sell * Decimal("0.9") if nights == 3 else sell, "USD")
                     state = "closed" if (room, plan, day) in CLOSED_DAYS else "open"
                     cells[key] = CellValue(sell, LIST_PRICES.get((room, plan, day, occupancy, nights)), None, state)
-    return Snapshot(HOTEL, OFFER, "USD", read_at, cells, RESERVED, frozenset((room, plan) for room, plan, _ in GROUPS))
+    return Snapshot(HOTEL, OFFER, "USD", read_at, cells, RESERVED, frozenset((room, plan) for room, plan, _ in GROUPS),
+                    hotel_id=HOTEL_ID)
 
 
 def request(percent="10", **over) -> ChangeRequest:
-    fields = dict(hotel=HOTEL, offer=OFFER, rooms=("디럭스", "스위트"), rate_plans=("조식 포함", "룸온리"),
+    fields = dict(hotel=HOTEL, hotel_id=HOTEL_ID, offer=OFFER, rooms=("디럭스", "스위트"), rate_plans=("조식 포함", "룸온리"),
                   dates=DATES, operation="percent", value=Decimal(percent), sentence=SENTENCE)
     fields.update(over)
     return ChangeRequest(**fields)
@@ -65,9 +68,8 @@ def applied(snapshot: Snapshot, steps, read_at="2026-11-20T14:06:00+09:00") -> S
                 new = {name: getattr(row, name) for name in ("sell", "list", "supply") if getattr(row, name) is not None}
                 cells[key] = CellValue(new.get("sell", old.sell), new.get("list", old.list), new.get("supply", old.supply),
                                        "open" if old.state == "missing" else old.state)
-    return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at, cells, snapshot.reserved, snapshot.pairs)
+    return replace(snapshot, read_at=read_at, cells=cells)
 
 
 def with_cells(snapshot: Snapshot, changes: dict, read_at=None) -> Snapshot:
-    return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at or snapshot.read_at,
-                    {**snapshot.cells, **changes}, snapshot.reserved, snapshot.pairs)
+    return replace(snapshot, read_at=read_at or snapshot.read_at, cells={**snapshot.cells, **changes})

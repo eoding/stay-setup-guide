@@ -4,10 +4,10 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, runFixture, charsOf, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, charsOf, OFFER, HOTEL } from './page_harness.mjs';
 
-const BULK = { no: 1, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] };
-const CELL = { no: 2, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] };
+const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] };
+const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] };
 const LEAKS = ['erp.example.test', '?month', '/stay/', 'offer=9', 'stay_tab_calendar'];
 const priceOf = (post, key, col) => {
   const n = Object.keys(post).map((k) => /^prices-(\d+)-los_nights$/.exec(k)).filter(Boolean).map((m) => m[1])

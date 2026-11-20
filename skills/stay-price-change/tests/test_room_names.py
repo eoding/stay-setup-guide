@@ -29,7 +29,7 @@ def adjust_naming(room: str) -> str:
 
 def snapshot(shown: str, adjust: str, price: str = PRICE):
     return build_snapshot("데모 호텔", "2026-11-20T19:00:00+09:00", [PairRead.of(shown, parse_price_page(price))],
-                          [parse_adjust_page(adjust)])
+                          [parse_adjust_page(adjust)], hotel_id="1")
 
 
 class RoomNamesTest(unittest.TestCase):
@@ -66,7 +66,7 @@ class RoomNamesTest(unittest.TestCase):
     def test_the_pairing_survives_json_and_the_request_names_the_calendar_room(self):
         snap = decode_snapshot(encode_snapshot(snapshot(SHOWN, adjust_naming(SHOWN))))
         self.assertEqual(snap.room_names, {SHOWN: "샘플 오퍼 · 디럭스"})
-        request = ChangeRequest(hotel="데모 호텔", offer="샘플 오퍼", rooms=(SHOWN,), rate_plans=("조식 포함",),
+        request = ChangeRequest(hotel="데모 호텔", hotel_id="1", offer="샘플 오퍼", rooms=(SHOWN,), rate_plans=("조식 포함",),
                                 dates=("2026-12-24",), operation="amount", value=D("5"))
         plan = plan_change(snap, request)
         self.assertEqual({change.key.room for change in plan.changes}, {SHOWN})

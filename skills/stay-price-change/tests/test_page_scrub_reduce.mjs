@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, takeAll, charsOf, runFixture, loadJsdom, JSDOM_MISSING, OWN_FIXTURES, HERE, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, charsOf, runFixture, loadJsdom, JSDOM_MISSING, OWN_FIXTURES, HERE, OFFER, HOTEL } from './page_harness.mjs';
 import { crc32 } from 'node:zlib';
 
 const CSRF = 'q8Zr3VbN0aWkT5yLmP2xC7dJ9eFh4gUs6iO1nRtYvBwXzAcQ'; // 지어낸 64자 꼴 토큰
@@ -126,7 +126,7 @@ test('B9 · B16 · 큰 조각은 페이지에 남고 JSON 으로 800자 안의 �
   const long = '아주 긴 "객실" 이름 칸 '.repeat(400);
   const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('인원 무관 단일가 · 1박 이상', long) });
   const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
-  const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK })));
+  const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK })));
   assert.equal(r.ok, true, r.error);
   assert.ok(charsOf(r) <= 800, `읽기 답: ${charsOf(r)}자`);
   assert.equal(r.fragment, undefined, '답에는 조각을 싣지 않는다');

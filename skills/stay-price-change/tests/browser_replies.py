@@ -14,7 +14,9 @@ def reply(op: str, asked: dict, keep: dict | None = None, pieces: int = 3, **fie
     result = {"ok": True, "op": op, "ask": ask_sum(asked), **fields}
     if keep is None:
         return [result]
-    text = json.dumps({"op": op, "asked": {k: v for k, v in asked.items() if k != "no"}, **keep}, ensure_ascii=False)
+    # 페이지는 조각에 자기가 알아본 호텔을 싣는다 — 물은 호텔(없으면 시험 호텔)을 그대로, keep 의 hotel 이 있으면 그것으로
+    body = {"op": op, "asked": {k: v for k, v in asked.items() if k != "no"}, "hotel": asked.get("hotel"), **keep}
+    text = json.dumps(body, ensure_ascii=False)
     size = max(1, -(-len(text) // pieces))
     data = text.encode("utf-8")
     meta = {"id": f"b{zlib.crc32(data):08x}", "chars": len(text), "bytes": len(data), "crc32": f"{zlib.crc32(data):08x}", "pieces": pieces}

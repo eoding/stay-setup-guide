@@ -94,10 +94,11 @@ class JsonTest(unittest.TestCase):
         key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2C1_CHD", 3)
         snapshot = Snapshot("데모 호텔", "기본 오퍼", "USD", "2026-11-20T14:02:00+09:00",
                             {key: CellValue(D("339.95"), None, D("0.10"), "closed")},
-                            frozenset({("디럭스", "2026-12-25")}), frozenset({("디럭스", "조식 포함"), ("디럭스", "룸온리")}))
+                            frozenset({("디럭스", "2026-12-25")}), frozenset({("디럭스", "조식 포함"), ("디럭스", "룸온리")}),
+                            hotel_id="1")
         self.assertEqual(decode_snapshot(encode_snapshot(snapshot)), snapshot)
         request = ChangeRequest("데모 호텔", "기본 오퍼", ("디럭스",), ("조식 포함",), ("2026-12-25",),
-                                "set", D("350.00"), base_occupancy="A2", sentence="350 으로")
+                                "set", D("350.00"), base_occupancy="A2", sentence="350 으로", hotel_id="1")
         self.assertEqual(decode_request(encode_request(request)), request)
 
     def test_cell_window_step_round_trip_and_only_list_or_supply_can_be_cleared(self):
@@ -110,7 +111,7 @@ class JsonTest(unittest.TestCase):
         cell = dict(room="R", rate_plan="P", date="2026-12-25", occupancy="A2", nights=1,
                     sell="1", list=None, supply=None, state="open")
         with self.assertRaises(ValueError):
-            decode_snapshot(dict(hotel="H", offer="O", currency="USD", read_at="t", cells=[cell, cell]))
+            decode_snapshot(dict(hotel={"id": "1", "name": "H"}, offer="O", currency="USD", read_at="t", cells=[cell, cell]))
 
 
 if __name__ == "__main__":

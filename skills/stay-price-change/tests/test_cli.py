@@ -53,15 +53,15 @@ class CommandTest(unittest.TestCase):
     def test_read_builds_a_snapshot_from_fragments(self):
         erp = HERE / "fixtures" / "erp"
         adjust = (erp / "adjust-rejected.html").read_text(encoding="utf-8").replace("<td>스위트</td>", "<td>디럭스</td>")
-        result = self.run_cli("read", "--hotel", "데모 호텔", "--price-page", f"디럭스={erp / 'price-runs-closed-absent-list.html'}",
+        result = self.run_cli("read", "--hotel", "데모 호텔", "--hotel-id", "1", "--price-page", f"디럭스={erp / 'price-runs-closed-absent-list.html'}",
                               "--adjust-page", self.write_text("adjust.html", adjust), "--read-at", "2026-11-20T14:02:00+09:00",
                               "--out", self.dir / "read.json")
         snapshot = decode_snapshot(json.loads((self.dir / "read.json").read_text(encoding="utf-8")))
         self.assertEqual((result["offer"], len(snapshot.cells), snapshot.currency), ("샘플 오퍼", 16, "USD"))
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
-        error = self.run_cli("read", "--hotel", "H", "--price-page", f"디럭스={erp / 'calendar-adjust--step2.html'}", code=2)
+        error = self.run_cli("read", "--hotel", "H", "--hotel-id", "9", "--price-page", f"디럭스={erp / 'calendar-adjust--step2.html'}", code=2)
         self.assertIn("가격 수정", error["error"])
-        self.assertIn("캘린더의 객실 이름=파일", self.run_cli("read", "--hotel", "H", "--price-page", erp / "calendar-adjust--step2.html", code=2)["error"])
+        self.assertIn("캘린더의 객실 이름=파일", self.run_cli("read", "--hotel", "H", "--hotel-id", "9", "--price-page", erp / "calendar-adjust--step2.html", code=2)["error"])
 
     def test_preview_apply_verify_rollback_and_list(self):
         first = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",
@@ -84,9 +84,7 @@ class CommandTest(unittest.TestCase):
         self.assertTrue(self.run_cli("stale", "--before", self.snapshot, "--after", self.snapshot)["same"])
         moved = scene.snapshot()
         key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
-        moved = Snapshot(moved.hotel, moved.offer, moved.currency, moved.read_at,
-                         {**moved.cells, key: replace(moved.cells[key], sell=moved.cells[key].sell + 1)}, moved.reserved,
-                         moved.pairs)
+        moved = replace(moved, cells={**moved.cells, key: replace(moved.cells[key], sell=moved.cells[key].sell + 1)})
         stale = self.run_cli("stale", "--before", self.snapshot, "--after", self.write("moved.json", encode_snapshot(moved)),
                              code=1)
         self.assertEqual([item["key"]["date"] for item in stale["differences"]], ["2026-12-25"])
@@ -129,8 +127,12 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(self.run_cli("plan", "--snapshot", self.snapshot, "--request", supply)["counts"]["skipped"], 96)
 
     def test_mismatched_input_and_a_plan_for_another_request_are_refused(self):
-        other = self.write("other.json", {**encode_request(scene.request()), "hotel": "다른 호텔"})
-        self.assertIn("다른 호텔", self.run_cli("plan", "--snapshot", self.snapshot, "--request", other, code=2)["error"])
+        other = self.write("other.json", {**encode_request(scene.request()), "hotel": {"id": "2", "name": "데모 호텔"}})
+        refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", other, code=2)["error"]
+        self.assertIn("호텔 1 (데모 호텔)", refused, "G2 — 이름이 같아도 번호가 다르면 다른 호텔이다")
+        self.assertIn("호텔 2 (데모 호텔)", refused)
+        nameless = self.write("nameless.json", {**encode_request(scene.request()), "hotel": "데모 호텔"})
+        self.assertIn("호텔 번호 없이", self.run_cli("plan", "--snapshot", self.snapshot, "--request", nameless, code=2)["error"])
         change = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record")["change_id"]
         fifteen = self.write("request15.json", encode_request(scene.request("15")))
         self.run_cli("plan", "--snapshot", self.snapshot, "--request", fifteen, "--resolutions", self.choice,

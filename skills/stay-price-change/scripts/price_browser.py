@@ -1,11 +1,15 @@
 """price_browser.py — 브라우저 쪽 `window.stayPrice`(`scripts/page/stay_price.js`)와 주고받는 모양.
 
-    read_calls(offer, pairs, dates)       readPair 부를 값 — 객실 × 요금제마다, 고른 날만 덮는 기간·요일로(186일씩)
-    reserved_probes(offer, pairs, dates)  readReserved 첫 물음 — 같은 기간마다 객실·요금제 전부
+    read_calls(hotel, offer, pairs, dates)       readPair 부를 값 — 객실 × 요금제마다, 고른 날만 덮는 기간·요일로(186일씩)
+    reserved_probes(hotel, offer, pairs, dates)  readReserved 첫 물음 — 같은 기간마다 객실·요금제 전부
+    page_hotel(results)                   읽기 답의 조각이 말하는 호텔(페이지가 알아본 번호·이름) — 하나여야 한다
     attach_bodies(results)                읽기 답에 페이지에 남겨 둔 조각을 붙인다 — 쪽(take 답)을 잇고 바이트 수·CRC-32 를 맞춰 본다
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
     pair_reads(results)                   readPair 답 → PairRead — 객실은 물은(캘린더 칩의) 이름, 화면의 오퍼·요금제가 다르면 거절
-    step_call(no, offer, kind, body)      장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
+    step_call(no, hotel, offer, kind, body)  장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
+
+부를 값에는 언제나 `hotel`({id, name} — stayPrice.look() 의 hotel)이 든다. 페이지는 무엇이든 누르기 전에 탭이 그 번호의 호텔인지
+보고, 아니면 두 호텔을 대며 거절한다.
     step_outcome(call, result)            브라우저 답 → Outcome(저장됨 · 안 됨 · 모름 · 시작 안 함). 그 단계를 물은 답이 아니면 거절
 
 가감 확인 단계는 건너뛰는 칸을 300줄까지만 보이고 나머지는 숨긴 줄 수로 말한다. 숨긴 줄이 있는 답은 쓰지 않고,
@@ -33,7 +37,7 @@ from price_model import FIELDS, WEEKDAYS, decode_step, iso_day
 
 MAX_SPAN = 550                       # ERP 가 한 번에 받는 기간(일)
 READ_SPAN = 186                      # readPair 한 번의 기간 — 달마다 달력 칸을 보므로(판매일 확인) 여섯 달 남짓으로 끊어 45초 안에
-PROBE_FIELDS = ("offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
+PROBE_FIELDS = ("hotel", "offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
 OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
 
 
@@ -196,17 +200,41 @@ def periods(dates: Iterable[str], span: int = MAX_SPAN) -> list[tuple[str, str, 
     return out
 
 
-def read_calls(offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
-    spans = periods(dates, READ_SPAN)
-    return [{"offer": offer, "room": room, "ratePlan": plan, "from": first, "to": last, "weekdays": weekdays}
+def _hotel(hotel: Mapping) -> dict:
+    if not str(hotel.get("id") or "").strip():
+        raise BrowserError("부를 값에 호텔 번호가 없습니다 — stayPrice.look() 의 hotel 을 그대로 씁니다")
+    return {"id": str(hotel["id"]).strip(), "name": str(hotel.get("name") or "")}
+
+
+def read_calls(hotel: Mapping, offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
+    spans, hotel = periods(dates, READ_SPAN), _hotel(hotel)
+    return [{"hotel": hotel, "offer": offer, "room": room, "ratePlan": plan, "from": first, "to": last, "weekdays": weekdays}
             for room, plan in dict.fromkeys(pairs) for first, last, weekdays in spans]
 
 
-def reserved_probes(offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
-    pairs = list(dict.fromkeys(pairs))
+def reserved_probes(hotel: Mapping, offer: str, pairs: Iterable[tuple[str, str]], dates: Iterable[str]) -> list[dict]:
+    pairs, hotel = list(dict.fromkeys(pairs)), _hotel(hotel)
     rooms, plans = list(dict.fromkeys(room for room, _ in pairs)), list(dict.fromkeys(plan for _, plan in pairs))
-    return [{"offer": offer, "rooms": rooms, "ratePlans": plans, "from": first, "to": last, "weekdays": weekdays,
-             "occupancy": "*", "nights": "all"} for first, last, weekdays in periods(dates)]
+    return [{"hotel": hotel, "offer": offer, "rooms": rooms, "ratePlans": plans, "from": first, "to": last,
+             "weekdays": weekdays, "occupancy": "*", "nights": "all"} for first, last, weekdays in periods(dates)]
+
+
+def _same_hotel_as_asked(result: Mapping) -> None:
+    """페이지는 물은 호텔이 아니면 읽지 않는다. 조각이 말하는 호텔이 물은 번호와 다르면 쓰지 않는다(덧붙인 파일이 섞였을 때)."""
+    seen, asked = result.get("hotel"), (result.get("asked") or {}).get("hotel")
+    if not isinstance(seen, Mapping) or not isinstance(asked, Mapping) or str(seen.get("id")) != str(asked.get("id")):
+        raise BrowserError(f"{result.get('op')} 의 답이 물은 호텔({(asked or {}).get('id')})이 아닌 "
+                           f"{(seen or {}).get('id') if isinstance(seen, Mapping) else '모르는'} 호텔에서 읽은 것입니다")
+
+
+def page_hotel(results: Iterable) -> dict:
+    """읽기 답들이 말하는 호텔 {id, name} — 페이지가 알아본 그대로. 둘 이상이거나 없으면 거절한다."""
+    seen = {(str(result["hotel"].get("id")), str(result["hotel"].get("name") or "")) for result in attach_bodies(results)
+            if result.get("op") in ("readPair", "readReserved") and result.get("ok") and isinstance(result.get("hotel"), Mapping)}
+    if len(seen) != 1:
+        raise BrowserError("읽기 답에서 호텔을 하나로 정하지 못했습니다: " + (" · ".join(f"{i} ({n})" for i, n in sorted(seen)) or "없음"))
+    hotel_id, name = seen.pop()
+    return {"id": hotel_id, "name": name}
 
 
 def probe_key(probe: Mapping) -> str:
@@ -250,6 +278,7 @@ def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Rou
             raise BrowserError(f"readReserved 의 답이 아닙니다: {result.get('op')}")
         key = str(result.get("ask"))
         if result.get("ok"):
+            _same_hotel_as_asked(result)
             answers[key] = parse_adjust_page(result["fragment"])
             failures.pop(key, None)
         elif key not in answers:
@@ -279,6 +308,7 @@ def pair_reads(results: Iterable[Mapping]) -> list[PairRead]:
         if not result.get("ok"):
             raise BrowserError(f"{result.get('what') or '객실 · 요금제'} 를 읽지 못했습니다: {result.get('error')}")
         asked = result["asked"]
+        _same_hotel_as_asked(result)
         page = parse_price_page(result["fragment"]) if result.get("fragment") else None
         no_sale = tuple(sorted(iso_day(day) for day in result.get("noSale") or ()))
         wanted = set(selected(asked["from"], asked["to"], asked["weekdays"]))
@@ -288,15 +318,17 @@ def pair_reads(results: Iterable[Mapping]) -> list[PairRead]:
     return reads
 
 
-def step_call(no: int, offer: str, kind: str, body: Mapping) -> dict:
-    """장부의 저장 단계(번호 · 종류 · `encode_step` 모양) → `{no, op, payload}`. payload 는 stayPrice 의 그 작업에 그대로 넘긴다."""
-    step = decode_step(dict(body, kind=kind))
+def step_call(no: int, hotel: Mapping, offer: str, kind: str, body: Mapping) -> dict:
+    """장부의 저장 단계(번호 · 종류 · `encode_step` 모양) → `{no, op, payload}`. payload 는 stayPrice 의 그 작업에 그대로 넘긴다.
+    `hotel` 은 장부가 적어 둔 호텔(페이지가 알아본 번호 · 이름) — 다른 호텔의 탭이면 페이지가 누르지 않는다."""
+    step, hotel = decode_step(dict(body, kind=kind)), _hotel(hotel)
     if step.kind == "cell_edit":
         key = step.key
-        payload = {"no": no, "offer": offer, "room": key.room, "ratePlan": key.rate_plan, "date": key.date,
+        payload = {"no": no, "hotel": hotel, "offer": offer, "room": key.room, "ratePlan": key.rate_plan, "date": key.date,
                    "occupancy": key.occupancy, "nights": key.nights, "clear": list(step.clear)}
     else:
-        payload = {"no": no, "offer": offer, "room": step.room, "ratePlan": step.rate_plan, "dates": list(step.dates),
+        payload = {"no": no, "hotel": hotel, "offer": offer, "room": step.room, "ratePlan": step.rate_plan,
+                   "dates": list(step.dates),
                    "rows": [{"occupancy": row.occupancy, "nights": row.nights,
                              **{name: money_text(getattr(row, name)) for name in FIELDS}} for row in step.rows]}
     return {"no": no, "op": OPS[step.kind], "payload": payload}

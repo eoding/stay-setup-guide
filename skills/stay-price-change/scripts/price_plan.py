@@ -27,8 +27,8 @@ from change_core.rules import BLOCKED, RED, Resolution, decide
 from price_model import (
     CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    cell_state, day_label, encode_step, key_of_item, occupancy_label, occupancy_order, snapshot_reading, split_occupancy,
-    value_of,
+    cell_state, day_label, encode_step, hotel_label, key_of_item, occupancy_label, occupancy_order, same_hotel,
+    snapshot_reading, split_occupancy, value_of,
 )
 
 
@@ -41,14 +41,16 @@ def _marks(snapshot: Snapshot, key: CellKey, value: CellValue) -> tuple[str, ...
                                        (CLOSED, value.state == "closed"), (NEW, value.state == "missing")) if on)
 
 
-def _check_scope(snapshot: Snapshot, hotel: str, offer: str, pairs: Iterable[tuple[str, str]],
+def _check_scope(snapshot: Snapshot, request: ChangeRequest | TargetTable, pairs: Iterable[tuple[str, str]],
                  days: Iterable[tuple[str, str, str]]) -> tuple[tuple[str, str], ...]:
-    """요청한 (객실, 요금제) 가 모두 읽혔는지, 칸이 있는 쌍은 요청한 날이 모두 읽혔는지 본다 — 하나라도 아니면 이름을 대고 멈춘다.
+    """요청과 읽은 값이 같은 호텔(번호) · 같은 오퍼인지, 요청한 (객실, 요금제) 가 모두 읽혔는지, 칸이 있는 쌍은 요청한 날이 모두
+    읽혔는지 본다 — 하나라도 아니면 이름을 대고 멈춘다.
 
     읽었지만 칸이 하나도 없는 쌍은 멈추지 않고 돌려준다(건너뜀으로 알린다).
     """
-    if (snapshot.hotel, snapshot.offer) != (hotel, offer):
-        raise PlanError(f"읽은 값은 {snapshot.hotel} · {snapshot.offer} 것이고, 요청은 {hotel} · {offer} 입니다")
+    if not same_hotel(snapshot.hotel, snapshot.hotel_id, request.hotel, request.hotel_id) or snapshot.offer != request.offer:
+        raise PlanError(f"읽은 값은 {hotel_label(snapshot.hotel, snapshot.hotel_id)} · {snapshot.offer} 것이고, 요청은 "
+                        f"{hotel_label(request.hotel, request.hotel_id)} · {request.offer} 입니다")
     pairs = list(dict.fromkeys(pairs))
     unread = [f"{room} · {plan}" for room, plan in pairs if (room, plan) not in snapshot.pairs]
     if unread:
@@ -126,7 +128,7 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     plans = {plan: rank for rank, plan in enumerate(request.rate_plans)}
     dates, wanted = set(request.dates), set(pairs)
     keys = [key for key in snapshot.cells if (key.room, key.rate_plan) in wanted and key.date in dates]
-    empty = _check_scope(snapshot, request.hotel, request.offer, pairs,
+    empty = _check_scope(snapshot, request, pairs,
                          [(room, plan, day) for room, plan in pairs for day in request.dates])
     no_sale = tuple((room, plan, day) for room, plan in pairs for day in sorted(set(request.dates))
                     if (room, day) in snapshot.no_sale)
@@ -153,7 +155,7 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
     """목표 값 표 → 미리보기. 지금 값과 다른 칸만 남긴다. 가격 없던 칸의 목표는 새로 생기는 칸이다 — 판매가가 있어야 하고,
     읽은 값에서 그 객실·요금제에 보인 적 없는 인원 조합·박수라면 만들지 않는다(적용할 수 없음)."""
     keys = [target.key for target in table.targets]
-    _check_scope(snapshot, table.hotel, table.offer, [(k.room, k.rate_plan) for k in keys],
+    _check_scope(snapshot, table, [(k.room, k.rate_plan) for k in keys],
                  [(k.room, k.rate_plan, k.date) for k in keys])
     shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key in snapshot.cells}
     rooms = {room: rank for rank, room in enumerate(dict.fromkeys(t.key.room for t in table.targets))}
@@ -350,8 +352,9 @@ def cell_filter(rooms: Iterable[str] = (), rate_plans: Iterable[str] = (), date_
 def plan_cell_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequence[LaterWrite]], now: Snapshot,
                        include_kept: bool = False, select: Callable[[CellKey], bool] | None = None) -> RollbackPlan:
     """가격 칸 되돌리기 — 지금 값을 읽은 날짜인지 보고, 공통 되돌리기 계산에 넘긴다. `select` 는 칸을 고르는 조건."""
-    if (now.hotel, now.offer) != (recorded.hotel, recorded.offer):
-        raise PlanError(f"지금 읽은 값은 {now.hotel} · {now.offer} 것이고, 되돌릴 변경은 {recorded.hotel} · {recorded.offer} 입니다")
+    if not same_hotel(now.hotel, now.hotel_id, recorded.hotel, recorded.hotel_id) or now.offer != recorded.offer:
+        raise PlanError(f"지금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, 되돌릴 변경은 "
+                        f"{hotel_label(recorded.hotel, recorded.hotel_id)} · {recorded.offer} 입니다")
     chosen = [item for item in recorded.items if item.kind == ITEM_KIND and (select is None or select(key_of_item(item.key)))]
     gaps = sorted({f"{key.room} · {key.rate_plan} · {key.date}" for key in map(key_of_item, (i.key for i in chosen))
                    if not now.covers(key.room, key.rate_plan, key.date)})
@@ -364,8 +367,9 @@ def plan_cell_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str],
 def plan_cell_restore(snapshot: RecordedChange, now: Snapshot,
                       select: Callable[[CellKey], bool] | None = None) -> RollbackPlan:
     """저장해 둔 상태(장부의 지금 상태 저장)로 돌리기 — 지금 값을 그 범위만큼 읽었는지 보고 공통 계산에 넘긴다."""
-    if (now.hotel, now.offer) != (snapshot.hotel, snapshot.offer):
-        raise PlanError(f"지금 읽은 값은 {now.hotel} · {now.offer} 것이고, 저장해 둔 상태는 {snapshot.hotel} · {snapshot.offer} 입니다")
+    if not same_hotel(now.hotel, now.hotel_id, snapshot.hotel, snapshot.hotel_id) or now.offer != snapshot.offer:
+        raise PlanError(f"지금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, 저장해 둔 상태는 "
+                        f"{hotel_label(snapshot.hotel, snapshot.hotel_id)} · {snapshot.offer} 입니다")
     chosen = [key_of_item(item.key) for item in snapshot.items
               if item.kind == ITEM_KIND and (select is None or select(key_of_item(item.key)))]
     gaps = sorted({f"{key.room} · {key.rate_plan} · {key.date}" for key in chosen

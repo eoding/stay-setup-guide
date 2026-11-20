@@ -35,7 +35,7 @@ def key(day, occupancy="A2", nights=1, room=ROOM, plan=PLAN):
 def table(*targets, sentence="새 요금표"):
     return TargetTable(scene.HOTEL, scene.OFFER, tuple(Target(k, tuple((name, None if v is None else D(v))
                                                                        for name, v in values.items()))
-                                                       for k, values in targets), sentence)
+                                                       for k, values in targets), sentence, scene.HOTEL_ID)
 
 
 class TargetPlanTest(unittest.TestCase):

@@ -4,7 +4,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_loader.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, HELPER, BOOT, PAGE, LOADER, RUNNER_STEPS, RUNNER_CURSOR, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, HELPER, BOOT, PAGE, LOADER, RUNNER_STEPS, RUNNER_CURSOR, OFFER, HOTEL } from './page_harness.mjs';
 
 // 업로드 도구가 하는 일 — 파일 칸에 파일을 놓고 change 를 낸다(jsdom 에서는 files 를 직접 덮는다)
 function upload(page, files) {
@@ -48,7 +48,7 @@ test('B10 · 올리개를 실행하면 숨은 파일 칸이 생기고, 세 파�
   assert.deepEqual([HELPER, BOOT, PAGE], KEYS.map((k) => page.w.localStorage.getItem(k)));
   assert.deepEqual(Object.keys(page.w.localStorage).filter((k) => !before.includes(k)).sort(), [...KEYS].sort(), '올리개가 새로 쓴 키는 제 키 셋뿐이다(모두 stayPrice 로 시작)');
   runnerKeysUntouched(page);
-  const read = plain(await page.w.stayPrice.readPair(inPage(page.w, { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ['월', '화', '수', '목', '금', '토', '일'] })));
+  const read = plain(await page.w.stayPrice.readPair(inPage(page.w, { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ['월', '화', '수', '목', '금', '토', '일'] })));
   assert.equal(read.ok, true, `올린 뒤 작업이 돈다: ${read.error}`);
   page.w.close();
 });

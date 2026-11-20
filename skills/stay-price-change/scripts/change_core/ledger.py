@@ -258,8 +258,8 @@ class Ledger:
         return change_id
 
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
-                       rows: Iterable[ValueRow], request: Mapping | None = None, reverses: int | None = None,
-                       hotel_id: str = "", reading: Mapping | None = None) -> int:
+                       hotel_id: str, rows: Iterable[ValueRow], request: Mapping | None = None,
+                       reverses: int | None = None, reading: Mapping | None = None) -> int:
         """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다. `reading` 은 그 계산이 바탕으로 삼은
         읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다."""
         with self._db() as db:
@@ -269,7 +269,7 @@ class Ledger:
                                 currency, sentence, read_at, rows, reverses, request, reading)
 
     def record_snapshot(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
-                        rows: Iterable[ValueRow], hotel_id: str = "", reading: Mapping | None = None) -> int:
+                        hotel_id: str, rows: Iterable[ValueRow], reading: Mapping | None = None) -> int:
         with self._db() as db:
             return self._insert(db, "snapshot", "applied", hotel, hotel_id, offer, currency, sentence, read_at, rows,
                                 reading=reading)

@@ -43,10 +43,10 @@ from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    BrowserError, attach_bodies, pair_reads, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+    BrowserError, attach_bodies, page_hotel, pair_reads, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
 )
 from price_model import (
-    decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_plan,
+    decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_plan,
     TargetTable, encode_request, encode_snapshot, encode_step, snapshot_reading,
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback
@@ -127,28 +127,38 @@ def cmd_look(args):
 
 
 def cmd_read(args):
-    pages = [price_page_arg(text) for text in args.price_page or ()]
-    pages += pair_reads(load_results(args.pair_result))
-    adjusts = [parse_adjust_page(Path(path).read_text(encoding="utf-8")) for path in args.adjust_page or ()]
-    if args.reserved_probes:
-        done = reserved_round(load(args.reserved_probes), load_results(args.reserved_result))
-        if not done.done:
-            raise BrowserError(f"예약 있는 날 물음이 {len(done.ask)}개 남았습니다 — reserved 명령으로 남은 물음을 보세요")
-        adjusts += done.pages
-    return encode_snapshot(build_snapshot(args.hotel, args.read_at or now_text(), pages, adjusts))
+    if args.pair_result:
+        if args.hotel or args.hotel_id or args.price_page or args.adjust_page:
+            raise ValueError("브라우저 답으로 읽을 때 호텔은 페이지가 알아본 것을 씁니다 — --hotel · --hotel-id · 화면 조각 파일을 같이 주지 않습니다")
+        pair_answers, reserved_answers = load_results(args.pair_result), load_results(args.reserved_result)
+        hotel = page_hotel(pair_answers + reserved_answers)
+        pages, adjusts = pair_reads(pair_answers), []
+        if args.reserved_probes:
+            done = reserved_round(load(args.reserved_probes), reserved_answers)
+            if not done.done:
+                raise BrowserError(f"예약 있는 날 물음이 {len(done.ask)}개 남았습니다 — reserved 명령으로 남은 물음을 보세요")
+            adjusts = done.pages
+    else:
+        if not (args.hotel and args.hotel_id):
+            raise ValueError("화면 조각 파일로 읽을 때는 --hotel 과 --hotel-id 를 함께 줍니다")
+        hotel = {"id": args.hotel_id, "name": args.hotel}
+        pages = [price_page_arg(text) for text in args.price_page or ()]
+        adjusts = [parse_adjust_page(Path(path).read_text(encoding="utf-8")) for path in args.adjust_page or ()]
+    return encode_snapshot(build_snapshot(hotel["name"], args.read_at or now_text(), pages, adjusts, hotel["id"]))
 
 
-def request_scope(request) -> tuple[str, list[tuple[str, str]], list[str]]:
+def request_scope(request) -> tuple[dict, str, list[tuple[str, str]], list[str]]:
+    hotel = encode_hotel(request.hotel, request.hotel_id)
     if isinstance(request, TargetTable):
         keys = [target.key for target in request.targets]
-        return request.offer, [(key.room, key.rate_plan) for key in keys], [key.date for key in keys]
+        return hotel, request.offer, [(key.room, key.rate_plan) for key in keys], [key.date for key in keys]
     pairs = list(request.pairs) or [(room, plan) for room in request.rooms for plan in request.rate_plans]
-    return request.offer, pairs, list(request.dates)
+    return hotel, request.offer, pairs, list(request.dates)
 
 
 def cmd_read_calls(args):
-    offer, pairs, dates = request_scope(decode_request(load(args.request)))
-    return dict(pairs=read_calls(offer, pairs, dates), reserved=reserved_probes(offer, pairs, dates))
+    hotel, offer, pairs, dates = request_scope(decode_request(load(args.request)))
+    return dict(pairs=read_calls(hotel, offer, pairs, dates), reserved=reserved_probes(hotel, offer, pairs, dates))
 
 
 def cmd_reserved(args):
@@ -163,7 +173,8 @@ def cmd_plan(args):
                    for item in load(args.resolutions)] if args.resolutions else []
     writes, unresolved = resolve(plan, resolutions)
     steps = save_steps(writes) if not unresolved else None
-    change_id = Ledger().record_preview(hotel=request.hotel, offer=request.offer, currency=plan.currency,
+    change_id = Ledger().record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=request.offer,
+                                        currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                         request=encode_request(plan.request)) if args.record else None
     return dict(change_id=change_id, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
@@ -211,12 +222,20 @@ def cmd_record_step(args):
                 status=Ledger().record_step(args.change, args.step, args.saved, args.note))
 
 
+def record_hotel(record) -> dict:
+    """장부가 적어 둔 호텔 — 페이지가 알아본 번호 · 이름. 부를 값마다 실려 다른 호텔의 탭에서는 페이지가 누르지 않는다."""
+    if not record.hotel_id:
+        raise LedgerError(f"{record.id}번에는 호텔 번호가 적혀 있지 않아 브라우저에서 이어 갈 수 없습니다")
+    return encode_hotel(record.hotel, record.hotel_id)
+
+
 def cmd_calls(args):
     record = Ledger().change(args.change)
     if not record.steps:
         raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
     return dict(change_id=record.id, status=record.status,
-                calls=[step_call(step.index, record.offer, step.kind, step.body) for step in record.steps if step.status != "saved"])
+                calls=[step_call(step.index, record_hotel(record), record.offer, step.kind, step.body)
+                       for step in record.steps if step.status != "saved"])
 
 
 def cmd_record_result(args):
@@ -226,7 +245,7 @@ def cmd_record_result(args):
     step = next((step for step in record.steps if step.index == result.get("no")), None)
     if step is None:
         raise LedgerError(f"{args.change}번 변경에 {result.get('no')}번째 저장이 없습니다")
-    outcome = step_outcome(step_call(step.index, record.offer, step.kind, step.body), result)
+    outcome = step_outcome(step_call(step.index, record_hotel(record), record.offer, step.kind, step.body), result)
     if not outcome.started:
         return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note,
                     status=record.status)
@@ -254,8 +273,8 @@ def cmd_rollback(args):
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
                               args.include_kept, select)
-    change_id = ledger.record_preview(hotel=plan.hotel, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
-                                      read_at=plan.read_at, rows=rollback_rows(plan),
+    change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
+                                      sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan),
                                       reverses=args.change) if args.record else None
     return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
@@ -268,8 +287,8 @@ def cmd_restore(args):
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), snapshot, select)
     change_id = ledger.record_preview(
-        hotel=plan.hotel, offer=plan.offer, currency=plan.currency, sentence=args.sentence, read_at=plan.read_at,
-        rows=rollback_rows(plan),
+        hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
+        read_at=plan.read_at, rows=rollback_rows(plan),
         request=dict(kind="restore_snapshot", snapshot=args.saved, scope=scope)) if args.record else None
     return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
@@ -278,7 +297,8 @@ def cmd_restore(args):
 
 def cmd_save_snapshot(args):
     snapshot = decode_snapshot(load(args.snapshot))
-    return dict(change_id=Ledger().record_snapshot(hotel=snapshot.hotel, offer=snapshot.offer, currency=snapshot.currency,
+    return dict(change_id=Ledger().record_snapshot(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer,
+                                                   currency=snapshot.currency,
                                                    sentence=args.sentence, read_at=snapshot.read_at,
                                                    rows=snapshot_rows(snapshot)))
 
@@ -303,7 +323,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
 
     sub = command("read", cmd_read, "ERP 화면 조각 → 지금 값")
-    sub.add_argument("--hotel", required=True)
+    sub.add_argument("--hotel", help="화면 조각 파일(시험용)로 읽을 때의 호텔 이름 — 브라우저 답은 페이지가 알아본 호텔을 쓴다")
+    sub.add_argument("--hotel-id", help="화면 조각 파일(시험용)로 읽을 때의 호텔 번호")
     sub.add_argument("--price-page", action="append", help="'캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")
     sub.add_argument("--pair-result", action="append", help="stayPrice.readPair 답과 그 조각의 take 답들 JSON — 목록 (여러 번)")
     sub.add_argument("--adjust-page", action="append", help="[선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")

@@ -34,7 +34,7 @@ D = Decimal
 
 def record_preview(ledger, plan):
     request = plan.request
-    return ledger.record_preview(hotel=request.hotel, offer=request.offer, currency=plan.currency,
+    return ledger.record_preview(hotel=request.hotel, hotel_id=request.hotel_id, offer=request.offer, currency=plan.currency,
                                  sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                  request=encode_request(request))
 
@@ -206,7 +206,7 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len(self.ledger.change(self.change_id).steps), 8)
 
     def test_snapshot_is_recorded_whole_and_cannot_be_applied(self):
-        snapshot_id = self.ledger.record_snapshot(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD",
+        snapshot_id = self.ledger.record_snapshot(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                   sentence="지금 상태만 저장", read_at=self.before.read_at,
                                                   rows=snapshot_rows(self.before))
         record = self.ledger.change(snapshot_id)
@@ -224,7 +224,7 @@ class OtherKindTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             ledger = Ledger(Path(folder) / DB_NAME)
             key = item_key({"charge": "리조트 요금", "season": "성수기"})
-            change = ledger.record_preview(hotel="H", offer="", currency="USD", sentence="리조트 요금 25 로", read_at="t1",
+            change = ledger.record_preview(hotel="H", hotel_id="", offer="", currency="USD", sentence="리조트 요금 25 로", read_at="t1",
                                            rows=[ValueRow("charge", key, "리조트 요금 · 성수기", "amount", "on", D("20"), D("25")),
                                                  ValueRow("charge", key, "리조트 요금 · 성수기", "per", "on", D("1"))])
             ledger.begin(change, [StepPlan("charge_edit", "리조트 요금", {"charge": "리조트 요금"},
@@ -251,7 +251,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
             self.ledger.record_step(self.a, index, saved=True)
         after_a = scene.applied(before, steps)
         later = ChangeRequest(scene.HOTEL, scene.OFFER, ("디럭스",), ("룸온리",), ("2027-01-02",), "set",
-                              D("310"), base_occupancy="A2", sentence="1/2 디럭스 룸온리 310 으로")
+                              D("310"), base_occupancy="A2", sentence="1/2 디럭스 룸온리 310 으로", hotel_id=scene.HOTEL_ID)
         plan_b = plan_change(after_a, later)
         steps_b = save_steps(resolve(plan_b, [])[0])
         self.b = record_preview(self.ledger, plan_b)
@@ -277,7 +277,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
 
     def test_a_rollback_is_itself_a_recorded_change_that_reverses_the_first(self):
         rollback = plan_cell_rollback(self.ledger.recorded_change(self.a), self.ledger.later_writes(self.a), self.now)
-        r = self.ledger.record_preview(hotel=rollback.hotel, offer=rollback.offer, currency=rollback.currency,
+        r = self.ledger.record_preview(hotel=rollback.hotel, hotel_id=rollback.hotel_id, offer=rollback.offer, currency=rollback.currency,
                                        sentence="방금 것 되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback),
                                        reverses=self.a)
         steps = save_steps(rollback_writes(rollback))

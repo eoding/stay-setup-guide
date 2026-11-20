@@ -34,7 +34,7 @@ class PartialRollbackTest(unittest.TestCase):
         self.ledger = Ledger(Path(self.tmp.name) / DB_NAME)
         plan = plan_change(scene.snapshot(), scene.request())
         steps = save_steps(resolve(plan, [Resolution("ABOVE_LIST", "raise_list")])[0])
-        self.change = self.ledger.record_preview(hotel=scene.HOTEL, offer=scene.OFFER, currency="USD",
+        self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
                                                  request=encode_request(plan.request))
         self.ledger.begin(self.change, step_plans(steps))
@@ -51,7 +51,7 @@ class PartialRollbackTest(unittest.TestCase):
                                   self.now, select=select), scope
 
     def apply(self, rollback, saved=None):
-        rid = self.ledger.record_preview(hotel=rollback.hotel, offer=rollback.offer, currency=rollback.currency,
+        rid = self.ledger.record_preview(hotel=rollback.hotel, hotel_id=rollback.hotel_id, offer=rollback.offer, currency=rollback.currency,
                                          sentence="일부 되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback),
                                          reverses=self.change)
         steps = save_steps(rollback_writes(rollback))
