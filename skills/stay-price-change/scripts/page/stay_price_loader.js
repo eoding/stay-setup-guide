@@ -1,20 +1,25 @@
-/* stay_price_loader.js — 가격 변경 도우미를 로그인된 ERP 탭에 올리는 작은 실행 묶음 (stay-price-change).
+/* stay_price_loader.js — 가격 변경 도우미를 로그인된 ERP 탭에 올리는 작은 실행 묶음 (stay-price-change · stay-addon-price-change).
  *
  * 쓰는 법(브라우저 도구 셋):
  *   1. JS 실행 도구로 이 파일 전체를 실행한다 → 파일 칸 `input#stay_price_bridge`(접근성 이름 `stay price file bridge`)가 생기고
  *      `window.stayPriceLoader` 가 선다. 칸은 1px · 거의 투명이라 보이지 않지만 접근성 트리에는 남아 도구가 이름으로 찾는다.
- *   2. 업로드 도구로 **그 이름의** 칸에 세 파일을 올린다(ERP 의 사진 올리기 칸과 헷갈리지 않게 — 한 번에 셋이든 하나씩이든):
- *      러너의 `stay_helper.js`·`stay_boot.js`, 그리고 `stay_price.js`.
- *   3. `await stayPriceLoader.load()` → 이름으로 골라 도우미 → 부트 → 가격 도우미 차례로 실행하고 작은 상태를 돌려준다.
- *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()` — 적어 둔 원본을 같은 차례로 다시 실행한다.
+ *   2. 업로드 도구로 **그 이름의** 칸에 파일을 올린다(ERP 의 사진 올리기 칸과 헷갈리지 않게 — 한 번에 모두든 하나씩이든):
+ *      가격 캘린더는 러너의 `stay_helper.js`·`stay_boot.js`, 그리고 `stay_price.js` 셋. 부가옵션 가격은 그 셋에
+ *      `stay_addon_price.js` 를 더한 넷.
+ *   3. `await stayPriceLoader.load()`(부가옵션은 `load('addon')`) → 이름으로 골라 도우미 → 부트 → 가격 도우미(→ 부가옵션 가격
+ *      도우미) 차례로 실행하고 작은 상태를 돌려준다.
+ *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()`(부가옵션은 `again('addon')`) — 적어 둔 원본을 같은 차례로 다시 실행한다.
  *
- * 이 파일은 설치된 세 파일의 알아볼 값(`INSTALLED`)을 안다. 도우미는 이 파일을 설치된 스킬에서 늘 새로 붙여 넣으므로, 그 값과 다른
+ * 묶음은 둘이다 — 인자 없이(가격 캘린더) 세 파일, `'addon'`(부가옵션 가격) 네 파일. `bridge` · `load` · `again` · `status` 가 같은
+ * 인자를 받는다. 파일 칸은 하나라 네 이름을 모두 모은다.
+ *
+ * 이 파일은 설치된 네 파일의 알아볼 값(`INSTALLED`)을 안다. 도우미는 이 파일을 설치된 스킬에서 늘 새로 붙여 넣으므로, 그 값과 다른
  * 글자는 예전 판이다 — `load()` 는 올라온 파일이, `again()` 은 적어 둔 원본이 그 값과 다르면 아무것도 실행하지 않고 어느 파일인지
  * 말한다. 플러그인을 새로 깐 뒤 예전 탭이 예전 코드를 되살리지 않는다.
  *
- * localStorage 에는 원본 셋만, `stayPrice` 로 시작하는 제 키에만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·`stayPriceSrc`).
- * 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 — 탭에 예전 러너 실행의
- * 원본(다른 판일 수 있다)과 계획·이어 하기 자리가 남아 있을 수 있고, 덮으면 그 실행이 깨진다.
+ * localStorage 에는 원본만, `stayPrice` 로 시작하는 제 키에만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·`stayPriceSrc`, 부가옵션
+ * 묶음은 `stayPriceAddonSrc` 까지). 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 —
+ * 탭에 예전 러너 실행의 원본(다른 판일 수 있다)과 계획·이어 하기 자리가 남아 있을 수 있고, 덮으면 그 실행이 깨진다.
  * 돌려주는 값에는 주소가 없다(파일 이름 · 바이트 수 · 판 번호뿐). 판 번호는 점을 `·` 로 바꿔 보낸다(`0·15·0`).
  */
 (function () {
@@ -22,17 +27,21 @@
 
   var BRIDGE = 'stay_price_bridge';
   var LABEL = 'stay price file bridge';   // 러너의 칸은 `stay file bridge` — 이름이 달라 서로 헷갈리지 않는다
-  var FILES = [
-    { name: 'stay_helper.js', key: 'stayPriceHelperSrc' },
-    { name: 'stay_boot.js', key: 'stayPriceBootSrc' },
-    { name: 'stay_price.js', key: 'stayPriceSrc' }
-  ];
-  // 설치된 세 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
-  // 세 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
+  var HELPER = { name: 'stay_helper.js', key: 'stayPriceHelperSrc' };
+  var BOOT = { name: 'stay_boot.js', key: 'stayPriceBootSrc' };
+  var PRICE = { name: 'stay_price.js', key: 'stayPriceSrc' };
+  var ADDON = { name: 'stay_addon_price.js', key: 'stayPriceAddonSrc' };
+  // 묶음 → 실행 차례. 인자 없이 부르면 가격 캘린더 묶음이다
+  var SETS = { price: [HELPER, BOOT, PRICE], addon: [HELPER, BOOT, PRICE, ADDON] };
+  var KNOWN = SETS.addon;
+  var COUNT = { 3: '세', 4: '네' };
+  // 설치된 네 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
+  // 네 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 83278, crc32: 'a777e3d4', fnv: '29002560' }
+    'stay_price.js': { bytes: 85980, crc32: '09ed56d9', fnv: '79892bf5' },
+    'stay_addon_price.js': { bytes: 21769, crc32: 'f2e7195b', fnv: '3d496ceb' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
 
@@ -48,7 +57,7 @@
   function collect(input) {
     [].slice.call(input.files || []).forEach(function (file) {
       var name = baseName(file.name);
-      if (FILES.some(function (f) { return f.name === name; })) picked[name] = readText(file);
+      if (KNOWN.some(function (f) { return f.name === name; })) picked[name] = readText(file);
     });
   }
 
@@ -77,15 +86,25 @@
     var hex = function (n) { return ('0000000' + (n >>> 0).toString(16)).slice(-8); };
     return { bytes: bytes, crc32: hex(crc ^ 0xffffffff), fnv: hex(fnv) };
   }
-  // 설치된 것과 다른 파일의 이름들 — texts 는 FILES 차례
-  function notInstalled(texts) {
-    return FILES.filter(function (f, i) {
+  // 설치된 것과 다른 파일의 이름들 — texts 는 files 차례
+  function notInstalled(files, texts) {
+    return files.filter(function (f, i) {
       var seen = identity(texts[i]), want = INSTALLED[f.name];
       return seen.bytes !== want.bytes || seen.crc32 !== want.crc32 || seen.fnv !== want.fnv;
     }).map(function (f) { return f.name; });
   }
+  // 묶음 이름 → 실행할 파일들. 인자 없이는 가격 캘린더, 모르는 이름이면 null
+  function filesOf(set) {
+    if (set === undefined || set === null) return SETS.price;
+    return Object.prototype.hasOwnProperty.call(SETS, set) ? SETS[set] : null;
+  }
+  function unknownSet(set) {
+    return clean({ ok: false, label: LABEL, error: '모르는 묶음입니다: ' + String(set).slice(0, 40) + ' — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격입니다' });
+  }
 
-  function bridge() {
+  function bridge(set) {
+    var files = filesOf(set);
+    if (!files) return unknownSet(set);
     var input = document.getElementById(BRIDGE);
     if (!input) {
       input = document.createElement('input');
@@ -100,7 +119,7 @@
     input.hidden = false;
     input.setAttribute('aria-label', LABEL);
     input.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;z-index:2147483647;';
-    return clean({ ok: true, bridge: BRIDGE, label: LABEL, want: FILES.map(function (f) { return f.name; }) });
+    return clean({ ok: true, bridge: BRIDGE, label: LABEL, want: files.map(function (f) { return f.name; }) });
   }
   // 브라우저 도구는 점으로 이은 조각 셋 이상뿐인 글자(판 번호 `0.15.0`)를 토큰으로 보고 가린다 — 점을 `·` 로 바꾼다.
   // 가격 도우미가 올라오기 전의 답도 지나므로 `stayPrice.scrub` 과 따로 둔다(그 scrub 도 같은 규칙이다)
@@ -116,55 +135,66 @@
     return value;
   }
   function clean(result) { return dotless(window.stayPrice && typeof window.stayPrice.scrub === 'function' ? window.stayPrice.scrub(result) : result); }
-  function status() {
-    return clean({
-      ok: !!(window.stayRun && window.stayPrice),
+  function status(set) {
+    var files = filesOf(set);
+    if (!files) return unknownSet(set);
+    var addon = files === SETS.addon;
+    var out = {
+      ok: !!(window.stayRun && window.stayPrice && (!addon || window.stayAddonPrice)),
       label: LABEL,
       helper: window.stayRun ? window.stayRun.version : null,
-      price: window.stayPrice ? window.stayPrice.version : null,
-      stored: FILES.filter(function (f) { return !!localStorage.getItem(f.key); }).map(function (f) { return f.key; })
-    });
+      price: window.stayPrice ? window.stayPrice.version : null
+    };
+    if (addon) out.addon = window.stayAddonPrice ? window.stayAddonPrice.version : null;
+    out.stored = files.filter(function (f) { return !!localStorage.getItem(f.key); }).map(function (f) { return f.key; });
+    return clean(out);
   }
   // 차례대로 실행한다. 하나라도 던지면 거기서 멈추고, store 일 때도 아무것도 적지 않는다
-  function evaluate(texts, store) {
-    for (var i = 0; i < FILES.length; i++) {
+  function evaluate(set, files, texts, store) {
+    for (var i = 0; i < files.length; i++) {
       try { (0, eval)(texts[i]); } catch (e) {
-        return clean({ ok: false, error: FILES[i].name + ' 을 실행하다 멈췄습니다: ' + String(e && e.message || e).slice(0, 160) });
+        return clean({ ok: false, error: files[i].name + ' 을 실행하다 멈췄습니다: ' + String(e && e.message || e).slice(0, 160) });
       }
     }
-    if (store) FILES.forEach(function (f, i) { localStorage.setItem(f.key, texts[i]); });
-    var out = status();
-    out.loaded = FILES.map(function (f, i) { return { name: f.name, chars: texts[i].length }; });
+    if (store) files.forEach(function (f, i) { localStorage.setItem(f.key, texts[i]); });
+    var out = status(set);
+    out.loaded = files.map(function (f, i) { return { name: f.name, chars: texts[i].length }; });
     return out;
   }
-  async function load() {
+  async function load(set) {
+    var files = filesOf(set);
+    if (!files) return unknownSet(set);
+    var every = COUNT[files.length] + ' 파일';
     var input = document.getElementById(BRIDGE);
     if (input) collect(input);       // change 사건 없이 올린 도구도 있다
-    var missing = FILES.filter(function (f) { return !picked[f.name]; }).map(function (f) { return f.name; });
-    if (missing.length) return clean({ ok: false, label: LABEL, error: '올라온 파일에 없는 것: ' + missing.join(', ') + ' — 세 파일을 「' + LABEL + '」 칸에 올린 뒤 다시 부릅니다', got: Object.keys(picked) });
+    var missing = files.filter(function (f) { return !picked[f.name]; }).map(function (f) { return f.name; });
+    if (missing.length) return clean({ ok: false, label: LABEL, error: '올라온 파일에 없는 것: ' + missing.join(', ') + ' — ' + every + '을 「' + LABEL + '」 칸에 올린 뒤 다시 부릅니다', got: Object.keys(picked) });
     var texts;
-    try { texts = await Promise.all(FILES.map(function (f) { return picked[f.name]; })); } catch (e) {
+    try { texts = await Promise.all(files.map(function (f) { return picked[f.name]; })); } catch (e) {
       return clean({ ok: false, error: '올라온 파일을 읽지 못했습니다: ' + String(e && e.message || e).slice(0, 160) });
     }
-    var wrong = notInstalled(texts);
+    var wrong = notInstalled(files, texts);
     if (wrong.length) {
       return clean({ ok: false, label: LABEL, wrong: wrong, error: '올라온 파일이 설치된 도우미의 것과 다릅니다: ' + wrong.join(', ') +
         ' — 올린 폴더에 남은 예전 복사본일 수 있습니다. 설치된 스킬 폴더의 그 파일을 「' + LABEL + '」 칸에 다시 올린 뒤 다시 부릅니다' });
     }
     if (input) input.value = '';
     picked = {};
-    return evaluate(texts, true);
+    return evaluate(set, files, texts, true);
   }
-  function again() {
-    var texts = FILES.map(function (f) { return localStorage.getItem(f.key); });
-    var missing = FILES.filter(function (f, i) { return !texts[i]; }).map(function (f) { return f.key; });
-    if (missing.length) return clean({ ok: false, error: '적어 둔 원본이 없습니다: ' + missing.join(', ') + ' — 세 파일을 다시 올립니다(load)' });
-    var wrong = notInstalled(texts);
+  function again(set) {
+    var files = filesOf(set);
+    if (!files) return unknownSet(set);
+    var every = COUNT[files.length] + ' 파일';
+    var texts = files.map(function (f) { return localStorage.getItem(f.key); });
+    var missing = files.filter(function (f, i) { return !texts[i]; }).map(function (f) { return f.key; });
+    if (missing.length) return clean({ ok: false, error: '적어 둔 원본이 없습니다: ' + missing.join(', ') + ' — ' + every + '을 다시 올립니다(load)' });
+    var wrong = notInstalled(files, texts);
     if (wrong.length) {
       return clean({ ok: false, wrong: wrong, error: '적어 둔 원본이 설치된 도우미와 다릅니다: ' + wrong.join(', ') +
-        ' — 도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판입니다. 세 파일을 다시 올립니다(load)' });
+        ' — 도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판입니다. ' + every + '을 다시 올립니다(load)' });
     }
-    return evaluate(texts, false);
+    return evaluate(set, files, texts, false);
   }
 
   window.stayPriceLoader = { bridge: bridge, load: load, again: again, status: status };

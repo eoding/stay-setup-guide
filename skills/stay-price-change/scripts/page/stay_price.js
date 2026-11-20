@@ -16,6 +16,8 @@
  *   stayPrice.take(id, at, size)                                               읽은 조각의 한 쪽 — at=0 부터 next 를 따라 end 까지
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
  *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
+ *   window.stayPageKit                                                         벽 · 작업 틀 · press · 답 거르기를 다른 페이지 모듈
+ *                                                                              (부가옵션 `stay_addon_price.js`)이 제 표(spec)로 쓴다
  *
  * 지키는 것
  *  - 작업 하나 = 호출 하나. 34초에 답을 정하고 화면이 쉴 때(드로어가 다 닫힌 뒤) 돌려준다 — 45초 안이다. 저장은 다시 누르지
@@ -309,17 +311,19 @@
     return el.localName + (marks.length ? '[' + marks.join(' ') + ']' : '') + (text ? ' "' + text + '"' : '');
   }
 
-  function Wall(op) {
-    var names = ALLOW[op], counts = {}, pins = {}, log = { clicks: [], blocked: [] };
+  // 벽 하나는 작업 하나와 그 모듈의 표(spec)로 선다 — 표는 allow(작업별 허용 낱말) · controls(낱말 → 고르개) · when(pins 조건) ·
+  // never(먼저 보는 금지 목록) · late(시간이 다 된 뒤에도 지나는 낱말)를 싣는다. 가격 캘린더의 표는 CALENDAR 다
+  function Wall(op, spec) {
+    var names = spec.allow[op], counts = {}, pins = {}, log = { clicks: [], blocked: [] };
     var judge = function (target, counting) {
       var el = target && target.nodeType === 1 ? target : target && target.parentElement;
       var ctl = el ? (el.closest(CONTROL) || el) : null;
       if (!ctl) return { why: '대상을 알 수 없는 클릭' };
-      for (var i = 0; i < NEVER.length; i++) if (ctl.closest(NEVER[i].sel)) return { ctl: ctl, why: NEVER[i].why + ' — 이 도우미는 누르지 않습니다' };
+      for (var i = 0; i < spec.never.length; i++) if (ctl.closest(spec.never[i].sel)) return { ctl: ctl, why: spec.never[i].why + ' — 이 도우미는 누르지 않습니다' };
       for (var j = 0; j < names.length; j++) {
-        var entry = CONTROLS[names[j]];
+        var entry = spec.controls[names[j]];
         if (!ctl.matches(entry.sel)) continue;
-        if (entry.when && !WHEN[entry.when](ctl, pins)) return { ctl: ctl, why: '이 작업이 고른 대상이 아닙니다(' + names[j] + ')' };
+        if (entry.when && !spec.when[entry.when](ctl, pins)) return { ctl: ctl, why: '이 작업이 고른 대상이 아닙니다(' + names[j] + ')' };
         if (counting && entry.max && (counts[names[j]] || 0) >= entry.max) return { ctl: ctl, why: '같은 저장을 다시 누르지 않습니다' };
         return { allow: names[j] };
       }
@@ -334,11 +338,12 @@
     var wall = {
       pins: pins, log: log,
       handle: function (e) {
-        // 시간이 다 된 작업: 사람의 클릭과 셀 창 [닫기] 만 지나고, 뒤에 남은 러너 코드의 클릭은 모두 막는다
+        // 시간이 다 된 작업: 사람의 클릭과 표의 late 낱말(셀 창 [닫기])만 지나고, 뒤에 남은 러너 코드의 클릭은 모두 막는다
         if (frozen) {
           var at = e.target && e.target.nodeType === 1 ? e.target : e.target && e.target.parentElement;
           var shut = at && at.closest(CONTROL);
-          if (e.isTrusted || (e.type === 'click' && shut && shut.matches(CONTROLS.cellClose.sel))) return;
+          var late = e.type === 'click' && !!shut && spec.late.some(function (name) { return shut.matches(spec.controls[name].sel); });
+          if (e.isTrusted || late) return;
           return block(e, { ctl: shut || at, why: '시간이 다 된 작업의 클릭입니다' });
         }
         if (e.type === 'submit') {
@@ -396,6 +401,10 @@
   }
 
   var SAVES = { applyBulk: 'bulkSave', applyCell: 'cellSave' };
+  // 가격 캘린더 작업의 표 — 벽(allow · controls · when · never · late)과 작업 틀(saves: 작업 → 저장 낱말 · needs: 러너 부품 ·
+  // loose: 호텔에 묶이지 않는 작업 · tidy: 작업 뒤 정리). 다른 모듈(부가옵션)은 제 표로 같은 run · Wall 을 쓴다
+  var CALENDAR = { name: 'stayPrice', allow: ALLOW, controls: CONTROLS, when: WHEN, never: NEVER, late: ['cellClose'],
+    saves: SAVES, needs: NEEDS, loose: ['look'], tidy: closeAll };
   function at(ms) { var wait = Math.max(1, ms - Date.now()); return window.stayRun.sleep ? window.stayRun.sleep(wait) : new Promise(function (r) { setTimeout(r, wait); }); }
 
   // 시작하지 않은 작업 — 아무것도 누르기 전에 지나가는 까닭(앞 작업이 아직 끝나는 중, 앞 화면이 아직 정리 중)으로 멈췄다.
@@ -409,23 +418,34 @@
     }));
   }
 
-  async function run(op, input, body) {
-    var missing = NEEDS.filter(function (name) { return typeof window[name] !== 'function'; });
+  // 작업 하나의 틀 — 어느 모듈의 작업이든 이 길을 지난다. 바쁨 표지(`__stayPriceBusy`)는 하나라 두 모듈을 통틀어 한 번에 하나다
+  async function run(op, input, body, spec) {
+    var loose = spec.loose.indexOf(op) >= 0, here = null;
+    // 호텔에 묶이지 않는 작업(보기)은 로그인 화면 · 호텔 번호 없는 화면을 무엇보다 먼저 알린다 — 러너가 없어도 답한다
+    if (loose) {
+      var ask = crc32(canon(askedOf(input)));
+      if (loginShown()) return remember(fit({ op: op, ok: true, login: true, ask: ask, note: '탭이 로그인 화면입니다 — 담당자가 직접 로그인해야 합니다', clicks: {} }));
+      here = pageHotel();
+      if (here.error) return remember(fit({ op: op, ok: false, login: false, ask: ask, error: here.error, clicks: {} }));
+    }
+    var missing = spec.needs.filter(function (name) { return typeof window[name] !== 'function'; });
     if (!window.stayRun || typeof window.stayRun.waitFor !== 'function') missing.unshift('stayRun');
     if (missing.length) return remember(fit({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
     var busy = window.__stayPriceBusy;
     if (busy) return notStarted(op, input, '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다', BUSY_WAIT);
-    // 작업 넷은 요청이 짚은 호텔에서만 돈다 — 무엇이든 누르기 전에 탭이 그 번호의 호텔인지 본다(이름은 같은 호텔이 있어 보지 않는다)
-    var here = op === 'look' ? pageHotel() : boundHotel(op, input);
-    if (here.refusal) return remember(here.refusal);
+    // 나머지 작업은 요청이 짚은 호텔에서만 돈다 — 무엇이든 누르기 전에 탭이 그 번호의 호텔인지 본다(이름은 같은 호텔이 있어 보지 않는다)
+    if (!loose) {
+      here = boundHotel(op, input, spec);
+      if (here.refusal) return remember(here.refusal);
+    }
     var token = window.__stayPriceBusy = { op: op };
     var started = Date.now(), limits = Object.assign({}, LIMITS);
     var hardAt = started + limits.hardMs, endAt = hardAt + limits.restMs;
     var no = input && typeof input.no === 'number' ? input.no : undefined;
     remember({ running: { op: op, no: no, at: new Date(started).toISOString() } });
-    var wall = Wall(op), out;
+    var wall = Wall(op, spec), out, saves = spec.saves[op];
     var ctx = {
-      wall: wall, pins: wall.pins,
+      wall: wall, pins: wall.pins, hotel: here,
       left: function () { return Math.max(0, Math.min(started + limits.budgetMs, hardAt) - Date.now()); },
       wait: function (cond, ms) { return window.stayRun.waitFor(cond, Math.max(1, Math.min(ms, ctx.left()))); },
       check: function () {
@@ -452,9 +472,9 @@
     if (late) {
       // 뒤에 남은 코드(러너의 기다림)는 아무것도 더 누르지 못한다. 그 코드가 끝나면 벽을 걷고 다음 작업을 받는다
       wall.freeze();
-      var pressed = SAVES[op] && wall.pressed(SAVES[op]);
+      var pressed = saves && wall.pressed(saves);
       out = { ok: false, error: '시간(' + Math.round(limits.hardMs / 1000) + '초) 안에 끝나지 않아 멈췄습니다 — 그 뒤로는 아무것도 누르지 않습니다' };
-      if (SAVES[op]) {
+      if (saves) {
         out.pressed = !!pressed;
         out.saved = pressed ? 'unknown' : false;
         if (pressed) out.error += ' · 저장 단추는 눌렸습니다. 저장됐는지 알 수 없으니 다시 읽어 확인합니다';
@@ -467,13 +487,13 @@
       out = first.value;
     }
     // 저장 작업의 답에는 언제나 saved · pressed 가 있다 — 누르기 전에 멈췄으면 저장 안 됨, 누른 뒤에 멈췄으면 「알 수 없음」
-    if (SAVES[op] && out.saved === undefined) {
-      out.pressed = wall.pressed(SAVES[op]);
+    if (saves && out.saved === undefined) {
+      out.pressed = wall.pressed(saves);
       out.saved = out.pressed ? 'unknown' : false;
     }
     // 정리는 restMs 안에서(늦어도 endAt 까지) — 쉬지 않는 화면 때문에 답을 더 붙잡지 않는다
     var restUntil = Math.min(endAt, Date.now() + limits.restMs);
-    try { await closeAll(op, restUntil); } catch (e) { /* 닫기 실패는 아래 결과에 남는다 */ }
+    try { await spec.tidy(op, restUntil); } catch (e) { /* 닫기 실패는 아래 결과에 남는다 */ }
     // 화면이 쉴 때 돌려준다 — 드로어가 다 닫히고(내용까지 비고) 셀 창이 없고 도는 요청이 없을 때
     out.rest = !!(await window.stayRun.waitFor(atRest, Math.max(1, restUntil - Date.now())));
     if (!out.rest) out.warn = '화면이 아직 정리되지 않았습니다(드로어·셀 창·요청) — 다음 작업은 정리된 뒤에 시작합니다';
@@ -525,13 +545,13 @@
     return { id: id, name: name };
   }
   // 작업의 `hotel`({id, name} — look() 의 hotel 그대로)이 이 탭의 호텔인지. 맞으면 이 탭의 호텔, 아니면 {refusal: 답}
-  function boundHotel(op, input) {
+  function boundHotel(op, input, spec) {
     var no = input && typeof input.no === 'number' ? input.no : undefined;
     var refuse = function (message, extra) {
       return { refusal: fit(Object.assign({ op: op }, no !== undefined ? { no: no } : {}, { ok: false, ask: crc32(canon(askedOf(input))), clicks: {}, error: message }, extra || {})) };
     };
     var want = input && input.hotel;
-    if (!want || typeof want !== 'object' || !C(want.id)) return refuse('`hotel` 이 없습니다 — stayPrice.look() 의 hotel({id, name})을 그대로 넣습니다. 아무것도 누르지 않았습니다');
+    if (!want || typeof want !== 'object' || !C(want.id)) return refuse('`hotel` 이 없습니다 — ' + spec.name + '.look() 의 hotel({id, name})을 그대로 넣습니다. 아무것도 누르지 않았습니다');
     var here = pageHotel();
     if (here.error) return refuse(here.error + ' — 아무것도 누르지 않았습니다');
     if (C(want.id) !== here.id) {
@@ -777,11 +797,8 @@
   // 칩만 그린다. 목록이 길면 `body` 로 두고 take 로 받는다
   function look(input) {
     input = input && typeof input === 'object' ? input : {};
-    var ask = crc32(canon(askedOf(input)));
-    if (loginShown()) return remember(fit({ op: 'look', ok: true, login: true, ask: ask, note: '탭이 로그인 화면입니다 — 담당자가 직접 로그인해야 합니다', clicks: {} }));
-    var hotel = pageHotel();
-    if (hotel.error) return remember(fit({ op: 'look', ok: false, login: false, ask: ask, error: hotel.error, clicks: {} }));
     return run('look', input, async function (p, ctx) {
+      var hotel = ctx.hotel;
       var offer = p.offer === undefined || p.offer === null ? null : text(p.offer, 'offer');
       await toCalendar(ctx);
       await coordView(ctx);
@@ -794,7 +811,7 @@
       if (shownLength(whole) <= RESULT_CHARS - 300) return whole;
       return { ok: true, login: false, hotel: hotel, offer: shown.picked, count: { offers: shown.names.length, pairs: pairs.length },
         keep: { hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs } };
-    });
+    }, CALENDAR);
   }
 
   function runsOf(days) {
@@ -837,7 +854,7 @@
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
       return { ok: true, what: clip(ctx.pins.chip + ' · ' + openSpan.ranges[0] + (openSpan.ranges.length > 1 ? ' 외 ' + (openSpan.ranges.length - 1) + '구간' : ''), 120),
         days: counts, keep: { fragment: fragment, noSale: noSale } };
-    });
+    }, CALENDAR);
   }
 
   var LOS = { all: 'all', one: 'one' };
@@ -933,7 +950,7 @@
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
       return { ok: true, what: clip(want.rooms.length + '객실 · ' + want.ratePlans.length + '요금제 · ' + want.from + ' ~ ' + want.to, 120),
         days: span.days.length, keep: { fragment: fragment } };
-    });
+    }, CALENDAR);
   }
 
   var AMOUNT = /^\d+(\.\d+)?$/;
@@ -1012,7 +1029,7 @@
       if (saved === 'unknown') out.error += ' — 저장 단추는 눌렸고 저장됐는지 알 수 없습니다. 다시 읽어 확인합니다(다시 누르지 않았습니다)';
       if (errors.length) out.errors = errors.slice(0, 2).map(function (e) { return clip(e, 60); });
       return out;
-    });
+    }, CALENDAR);
   }
 
   var CELL_FIELDS = { list: 'original_price', supply: 'net_amount' };
@@ -1100,8 +1117,26 @@
       }
       if (cellWindow()) { out.ok = false; out.error = (out.error ? out.error + ' · ' : '') + '셀 창을 닫지 못했습니다'; }
       return out;
-    });
+    }, CALENDAR);
   }
+
+  // 시험·점검용: 작업 하나의 벽을 그 모듈의 표로 세운 채 fn 을 돌린다(막기만 하고 풀어 주는 것은 없다)
+  async function guard(spec, op, fn, pins) {
+    if (!spec.allow[op]) throw new Error('모르는 작업: ' + op);
+    var wall = Wall(op, spec);
+    Object.assign(wall.pins, pins || {});
+    try { await fn(); } finally { wall.stop(); }
+    return { clicks: wall.log.clicks.slice(), blocked: wall.log.blocked.slice() };
+  }
+
+  // 다른 페이지 모듈(부가옵션 가격 도우미 `stay_addon_price.js`)이 이 파일을 베끼지 않고 쓰는 부품 — 벽 · 작업 틀 · 누르기 ·
+  // 답 거르기 · 조각 · 바쁨 표지가 하나라 두 모듈을 통틀어 작업은 한 번에 하나다. 이 파일을 다시 올리면 새로 선다
+  window.stayPageKit = Object.freeze({
+    run: run, press: press, settle: settle, fail: fail, Stop: Stop,
+    scrub: function (value) { return scrub(value); }, fit: fit, take: take, last: last, idle: idleState,
+    C: C, all: all, clip: clip, quiet: quiet,
+    drawerOpen: drawerOpen, closeDrawer: closeDrawer, atRest: atRest, pageHotel: pageHotel, guard: guard
+  });
 
   window.stayPrice = {
     version: VERSION,
@@ -1127,13 +1162,7 @@
     reduce: reduce,
     ALLOW: ALLOW, CONTROLS: CONTROLS, NEVER: NEVER,
     // 시험·점검용: 작업 하나의 벽을 세운 채 fn 을 돌린다(막기만 하고 풀어 주는 것은 없다)
-    guard: async function (op, fn, pins) {
-      if (!ALLOW[op]) throw new Error('모르는 작업: ' + op);
-      var wall = Wall(op);
-      Object.assign(wall.pins, pins || {});
-      try { await fn(); } finally { wall.stop(); }
-      return { clicks: wall.log.clicks.slice(), blocked: wall.log.blocked.slice() };
-    }
+    guard: function (op, fn, pins) { return guard(CALENDAR, op, fn, pins); }
   };
   return scrub({ ok: true, version: VERSION });
 })();
