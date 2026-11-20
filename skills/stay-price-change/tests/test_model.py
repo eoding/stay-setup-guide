@@ -94,7 +94,7 @@ class JsonTest(unittest.TestCase):
         key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2C1_CHD", 3)
         snapshot = Snapshot("데모 호텔", "기본 오퍼", "USD", "2026-11-20T14:02:00+09:00",
                             {key: CellValue(D("339.95"), None, D("0.10"), "closed")},
-                            frozenset({("디럭스", "2026-12-25")}))
+                            frozenset({("디럭스", "2026-12-25")}), frozenset({("디럭스", "조식 포함"), ("디럭스", "룸온리")}))
         self.assertEqual(decode_snapshot(encode_snapshot(snapshot)), snapshot)
         request = ChangeRequest("데모 호텔", "기본 오퍼", ("디럭스",), ("조식 포함",), ("2026-12-25",),
                                 "set", D("350.00"), base_occupancy="A2", sentence="350 으로")

@@ -41,7 +41,7 @@ def snapshot(read_at="2026-11-20T14:02:00+09:00") -> Snapshot:
                     sell = round_money(sell * Decimal("0.9") if nights == 3 else sell, "USD")
                     state = "closed" if (room, plan, day) in CLOSED_DAYS else "open"
                     cells[key] = CellValue(sell, LIST_PRICES.get((room, plan, day, occupancy, nights)), None, state)
-    return Snapshot(HOTEL, OFFER, "USD", read_at, cells, RESERVED)
+    return Snapshot(HOTEL, OFFER, "USD", read_at, cells, RESERVED, frozenset((room, plan) for room, plan, _ in GROUPS))
 
 
 def request(percent="10", **over) -> ChangeRequest:
@@ -65,9 +65,9 @@ def applied(snapshot: Snapshot, steps, read_at="2026-11-20T14:06:00+09:00") -> S
                 new = {name: getattr(row, name) for name in ("sell", "list", "supply") if getattr(row, name) is not None}
                 cells[key] = CellValue(new.get("sell", old.sell), new.get("list", old.list), new.get("supply", old.supply),
                                        "open" if old.state == "missing" else old.state)
-    return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at, cells, snapshot.reserved)
+    return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at, cells, snapshot.reserved, snapshot.pairs)
 
 
 def with_cells(snapshot: Snapshot, changes: dict, read_at=None) -> Snapshot:
     return Snapshot(snapshot.hotel, snapshot.offer, snapshot.currency, read_at or snapshot.read_at,
-                    {**snapshot.cells, **changes}, snapshot.reserved)
+                    {**snapshot.cells, **changes}, snapshot.reserved, snapshot.pairs)

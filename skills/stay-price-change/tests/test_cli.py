@@ -83,7 +83,8 @@ class CommandTest(unittest.TestCase):
         moved = scene.snapshot()
         key = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
         moved = Snapshot(moved.hotel, moved.offer, moved.currency, moved.read_at,
-                         {**moved.cells, key: replace(moved.cells[key], sell=moved.cells[key].sell + 1)}, moved.reserved)
+                         {**moved.cells, key: replace(moved.cells[key], sell=moved.cells[key].sell + 1)}, moved.reserved,
+                         moved.pairs)
         stale = self.run_cli("stale", "--before", self.snapshot, "--after", self.write("moved.json", encode_snapshot(moved)),
                              code=1)
         self.assertEqual([item["key"]["date"] for item in stale["differences"]], ["2026-12-25"])

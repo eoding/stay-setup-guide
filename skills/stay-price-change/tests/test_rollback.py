@@ -37,7 +37,7 @@ def recorded(*items):
 
 
 def now(cells, reserved=()):
-    return Snapshot("H", "O", "USD", "2026-11-25T09:00:00+09:00", cells, frozenset(reserved))
+    return Snapshot("H", "O", "USD", "2026-11-25T09:00:00+09:00", cells, frozenset(reserved), frozenset({("R", "P")}))
 
 
 class RollbackTest(unittest.TestCase):

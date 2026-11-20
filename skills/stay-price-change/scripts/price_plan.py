@@ -41,18 +41,24 @@ def _marks(snapshot: Snapshot, key: CellKey, value: CellValue) -> tuple[str, ...
                                        (CLOSED, value.state == "closed"), (NEW, value.state == "missing")) if on)
 
 
-def _check_scope(snapshot: Snapshot, request: ChangeRequest, keys: list[CellKey]) -> None:
-    if (snapshot.hotel, snapshot.offer) != (request.hotel, request.offer):
-        raise PlanError(f"읽은 값은 {snapshot.hotel} · {snapshot.offer} 것이고, 요청은 {request.hotel} · {request.offer} 입니다")
-    pairs = {(key.room, key.rate_plan) for key in keys}
-    absent = [room for room in request.rooms if all(room != pair[0] for pair in pairs)]
-    absent += [plan for plan in request.rate_plans if all(plan != pair[1] for pair in pairs)]
-    if absent:
-        raise PlanError(f"읽은 값에 없는 객실·요금제: {' · '.join(absent)}")
-    gaps = [f"{room} · {plan} · {day}" for room, plan in sorted(pairs) for day in request.dates
-            if not snapshot.covers(room, plan, day)]
+def _check_scope(snapshot: Snapshot, hotel: str, offer: str, pairs: Iterable[tuple[str, str]],
+                 days: Iterable[tuple[str, str, str]]) -> tuple[tuple[str, str], ...]:
+    """요청한 (객실, 요금제) 가 모두 읽혔는지, 칸이 있는 쌍은 요청한 날이 모두 읽혔는지 본다 — 하나라도 아니면 이름을 대고 멈춘다.
+
+    읽었지만 칸이 하나도 없는 쌍은 멈추지 않고 돌려준다(건너뜀으로 알린다).
+    """
+    if (snapshot.hotel, snapshot.offer) != (hotel, offer):
+        raise PlanError(f"읽은 값은 {snapshot.hotel} · {snapshot.offer} 것이고, 요청은 {hotel} · {offer} 입니다")
+    pairs = list(dict.fromkeys(pairs))
+    unread = [f"{room} · {plan}" for room, plan in pairs if (room, plan) not in snapshot.pairs]
+    if unread:
+        raise PlanError(f"읽지 않은 객실·요금제가 있습니다: {', '.join(unread)}. 그 객실·요금제의 가격을 먼저 읽어야 합니다")
+    filled = {(key.room, key.rate_plan) for key in snapshot.cells}
+    gaps = sorted({f"{room} · {plan} · {day}" for room, plan, day in days
+                   if (room, plan) in filled and not snapshot.covers(room, plan, day)})
     if gaps:
         raise PlanError(f"읽은 값에 없는 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
+    return tuple(pair for pair in pairs if pair not in filled)
 
 
 def _after_value(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue):
@@ -99,7 +105,9 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     plans = {plan: rank for rank, plan in enumerate(request.rate_plans)}
     dates = set(request.dates)
     keys = [key for key in snapshot.cells if key.room in rooms and key.rate_plan in plans and key.date in dates]
-    _check_scope(snapshot, request, keys)
+    pairs = [(room, plan) for room in request.rooms for plan in request.rate_plans]
+    empty = _check_scope(snapshot, request.hotel, request.offer, pairs,
+                         [(room, plan, day) for room, plan in pairs for day in request.dates])
     keys.sort(key=lambda k: (rooms[k.room], plans[k.rate_plan], occupancy_order(k.occupancy), k.nights, k.date))
     changes, skipped = [], []
     for key in keys:
@@ -115,18 +123,15 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
             continue
         changes.append(CellChange(key, before, after, _marks(snapshot, key, before),
                                   CELL_RULES.verdict(before, after, lacking)))
-    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped))
+    return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty)
 
 
 def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
     """목표 값 표 → 미리보기. 지금 값과 다른 칸만 남긴다. 가격 없던 칸의 목표는 새로 생기는 칸이다 — 판매가가 있어야 하고,
     읽은 값에서 그 객실·요금제에 보인 적 없는 인원 조합·박수라면 만들지 않는다(적용할 수 없음)."""
-    if (snapshot.hotel, snapshot.offer) != (table.hotel, table.offer):
-        raise PlanError(f"읽은 값은 {snapshot.hotel} · {snapshot.offer} 것이고, 목표 값 표는 {table.hotel} · {table.offer} 입니다")
-    gaps = sorted({f"{t.key.room} · {t.key.rate_plan} · {t.key.date}" for t in table.targets
-                   if not snapshot.covers(t.key.room, t.key.rate_plan, t.key.date)})
-    if gaps:
-        raise PlanError(f"읽은 값에 없는 날짜: {', '.join(gaps[:5])}{' …' if len(gaps) > 5 else ''}")
+    keys = [target.key for target in table.targets]
+    _check_scope(snapshot, table.hotel, table.offer, [(k.room, k.rate_plan) for k in keys],
+                 [(k.room, k.rate_plan, k.date) for k in keys])
     shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key in snapshot.cells}
     rooms = {room: rank for rank, room in enumerate(dict.fromkeys(t.key.room for t in table.targets))}
     plans = {plan: rank for rank, plan in enumerate(dict.fromkeys(t.key.rate_plan for t in table.targets))}

@@ -78,7 +78,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         snapshot = Snapshot("H", "O", "KRW", "2026-11-20T10:00:00+09:00",
                             {CellKey("R", "P", "2026-12-25", "A2", 1): CellValue(D("50000"), None, None, "open"),
                              CellKey("R", "P", "2026-12-25", "A3", 1): CellValue(D("90000"), None, None, "open")},
-                            frozenset())
+                            frozenset(), frozenset({("R", "P")}))
         plan = plan_change(snapshot, ChangeRequest("H", "O", ("R",), ("P",), ("2026-12-25",), "amount", D("-60000")))
         text = visible(render_preview(plan))
         self.assertIn("적용할 수 없음 · 1칸 ERP 가 받지 않는 값이라 이 칸은 바꾸지 않습니다. (0 이하가 됩니다 1칸)", text)
@@ -86,10 +86,18 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("90,000 → 30,000 30% 넘음", text)
         self.assertIn("판매가 -60,000 KRW", text)
 
+    def test_a_pair_read_without_prices_is_named(self):
+        snapshot = scene.snapshot()
+        snapshot = Snapshot(snapshot.hotel, snapshot.offer, "USD", snapshot.read_at, snapshot.cells, snapshot.reserved,
+                            snapshot.pairs | {("디럭스", "반값 요금"), ("스위트", "반값 요금")})
+        plan = plan_change(snapshot, scene.request(rate_plans=("조식 포함", "룸온리", "반값 요금")))
+        self.assertIn("읽었지만 가격이 하나도 없어 건너뛰는 객실·요금제: 디럭스 · 반값 요금, 스위트 · 반값 요금",
+                      visible(render_preview(plan)))
+
     def test_names_are_shown_as_text_not_markup(self):
         snapshot = scene.snapshot()
         snapshot = Snapshot("<b>호텔</b>", snapshot.offer, snapshot.currency, snapshot.read_at, snapshot.cells,
-                            snapshot.reserved)
+                            snapshot.reserved, snapshot.pairs)
         page = render_preview(plan_change(snapshot, scene.request(hotel="<b>호텔</b>")))
         self.assertNotIn("<b>호텔</b>", page)
         self.assertIn("&lt;b&gt;호텔&lt;/b&gt;", page)
@@ -156,7 +164,8 @@ class RollbackPageTest(SelfContainedMixin, unittest.TestCase):
                                                             dict(sell=D("310.00")))]}
         now = Snapshot("데모 호텔", "기본 오퍼", "USD", "2026-11-27T09:00:00+09:00", {
             a: CellValue(D("550.00"), None, None, "open"), b: CellValue(D("310.00"), None, None, "open"),
-            c: CellValue(D("187.00"), None, None, "open")}, frozenset({("디럭스", "2026-12-25")}))
+            c: CellValue(D("187.00"), None, None, "open")}, frozenset({("디럭스", "2026-12-25")}),
+            frozenset({("디럭스", "룸온리")}))
         page = render_rollback(plan_cell_rollback(recorded, later, now), now.reserved)
         text = visible(page)
         self.assert_self_contained(page)

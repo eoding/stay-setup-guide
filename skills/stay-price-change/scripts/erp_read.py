@@ -272,9 +272,10 @@ def build_snapshot(hotel: str, read_at: str, price_pages: Iterable[PricePage],
     if len(currencies) != 1 or not re.fullmatch(r"[A-Z]{3}", next(iter(currencies))):
         raise ParseError(f"통화를 하나로 정하지 못했습니다: {' · '.join(sorted(currencies))}")
     offer = offers.pop()
-    cells = {}
+    cells, pairs = {}, set()
     for page in price_pages:
         room = page.room[len(offer) + 3:] if page.room.startswith(f"{offer} · ") else page.room
+        pairs.add((room, page.rate_plan))
         for row in page.rows:
             for day, value in row.values.items():
                 key = CellKey(room, page.rate_plan, day, row.occupancy, row.nights)
@@ -287,7 +288,7 @@ def build_snapshot(hotel: str, read_at: str, price_pages: Iterable[PricePage],
                     raise ParseError(f"{room} · {page.rate_plan} · {day} 는 가격 없음인데 값이 있는 줄이 있습니다")
                 else:
                     cells[key] = CellValue(*value, state)
-    rooms = {key.room for key in cells}
+    rooms = {room for room, _plan in pairs}
     for page in adjust_pages:
         if page.hidden:
             raise ParseError(f"가감 확인 단계가 {page.hidden}줄을 숨겼습니다. 범위를 좁혀 다시 읽어야 예약 있는 날을 모두 압니다")
@@ -296,4 +297,4 @@ def build_snapshot(hotel: str, read_at: str, price_pages: Iterable[PricePage],
     unknown = sorted({room for room, _day in reserved} - rooms)
     if unknown:
         raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(unknown)}")
-    return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved))
+    return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs))

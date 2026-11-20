@@ -91,19 +91,26 @@ MISSING = CellValue(None, None, None, "missing")
 
 @dataclass(frozen=True)
 class Snapshot:
+    """ERP 에서 한 번 읽은 값. `pairs` 는 읽은 (객실, 요금제) 전부 — 칸이 하나도 없어도 읽었으면 여기 있다."""
     hotel: str
     offer: str
     currency: str
     read_at: str
     cells: Mapping[CellKey, CellValue]
     reserved: frozenset[tuple[str, str]]
+    pairs: frozenset[tuple[str, str]]
+
+    def __post_init__(self):
+        stray = sorted({(key.room, key.rate_plan) for key in self.cells} - set(self.pairs))
+        if stray:
+            raise ValueError(f"읽었다고 적지 않은 객실·요금제의 칸이 있습니다: {' · '.join(f'{r}/{p}' for r, p in stray)}")
 
     @cached_property
     def days_read(self) -> frozenset[tuple[str, str, str]]:
         return frozenset((key.room, key.rate_plan, key.date) for key in self.cells)
 
     def covers(self, room: str, rate_plan: str, day: str) -> bool:
-        return (room, rate_plan, day) in self.days_read
+        return (room, rate_plan) in self.pairs and (room, rate_plan, day) in self.days_read
 
 
 @dataclass(frozen=True)
@@ -282,11 +289,13 @@ class Skipped:
 
 @dataclass(frozen=True)
 class Plan:
+    """`empty_pairs` 는 요청한 (객실, 요금제) 가운데 읽었지만 칸이 하나도 없던 것 — 건너뜀으로 알린다."""
     request: ChangeRequest | TargetTable
     currency: str
     read_at: str
     changes: tuple[CellChange, ...]
     skipped: tuple[Skipped, ...]
+    empty_pairs: tuple[tuple[str, str], ...] = ()
 
 
 # ─── 사람이 읽는 이름 ───
@@ -372,6 +381,7 @@ def encode_snapshot(snapshot: Snapshot) -> dict:
         hotel=snapshot.hotel, offer=snapshot.offer, currency=snapshot.currency, read_at=snapshot.read_at,
         cells=[dict(encode_key(key), **encode_value(value)) for key, value in sorted(snapshot.cells.items())],
         reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)],
+        pairs=[dict(room=room, rate_plan=plan) for room, plan in sorted(snapshot.pairs)],
     )
 
 
@@ -383,7 +393,8 @@ def decode_snapshot(data: Mapping) -> Snapshot:
             raise ValueError(f"같은 칸이 두 번 있습니다: {encode_key(key)}")
         cells[key] = decode_value(item)
     return Snapshot(str(data["hotel"]), str(data["offer"]), str(data["currency"]).upper(), str(data["read_at"]),
-                    cells, frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("reserved") or []))
+                    cells, frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("reserved") or []),
+                    frozenset((str(item["room"]), str(item["rate_plan"])) for item in data["pairs"]))
 
 
 def encode_request(request: ChangeRequest | TargetTable) -> dict:
@@ -450,10 +461,12 @@ def decode_resolution_items(items) -> tuple[CellKey, ...] | None:
 def encode_plan(plan: Plan) -> dict:
     return dict(request=encode_request(plan.request), currency=plan.currency, read_at=plan.read_at,
                 changes=[encode_change(change) for change in plan.changes],
-                skipped=[dict(key=encode_key(item.key), reason=item.reason) for item in plan.skipped])
+                skipped=[dict(key=encode_key(item.key), reason=item.reason) for item in plan.skipped],
+                empty_pairs=[dict(room=room, rate_plan=plan_name) for room, plan_name in plan.empty_pairs])
 
 
 def decode_plan(data: Mapping) -> Plan:
     return Plan(decode_request(data["request"]), str(data["currency"]).upper(), str(data["read_at"]),
                 tuple(decode_change(item) for item in data["changes"]),
-                tuple(Skipped(decode_key(item["key"]), str(item["reason"])) for item in data.get("skipped") or ()))
+                tuple(Skipped(decode_key(item["key"]), str(item["reason"])) for item in data.get("skipped") or ()),
+                tuple((str(item["room"]), str(item["rate_plan"])) for item in data.get("empty_pairs") or ()))

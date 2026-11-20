@@ -183,10 +183,14 @@ def _skip_line(plan: Plan) -> str:
     reasons: dict[str, int] = {}
     for item in plan.skipped:
         reasons[item.reason] = reasons.get(item.reason, 0) + 1
-    if not reasons:
-        return ""
-    return ('<p class="sub">건너뛰는 칸의 까닭: '
-            + esc(" · ".join(f"{SKIP_LABELS[reason]} {count:,}칸" for reason, count in reasons.items())) + "</p>")
+    lines = []
+    if reasons:
+        lines.append('<p class="sub">건너뛰는 칸의 까닭: '
+                     + esc(" · ".join(f"{SKIP_LABELS[reason]} {count:,}칸" for reason, count in reasons.items())) + "</p>")
+    if plan.empty_pairs:
+        lines.append('<p class="sub">읽었지만 가격이 하나도 없어 건너뛰는 객실·요금제: '
+                     + esc(", ".join(f"{room} · {plan_name}" for room, plan_name in plan.empty_pairs)) + "</p>")
+    return "".join(lines)
 
 
 def _request_box(request: ChangeRequest | TargetTable, currency: str) -> str:

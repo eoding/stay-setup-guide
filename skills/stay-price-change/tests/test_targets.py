@@ -85,6 +85,9 @@ class TargetPlanTest(unittest.TestCase):
     def test_targets_outside_what_was_read_and_bad_tables_are_refused(self):
         with self.assertRaises(Refused):
             plan_targets(self.snapshot, table((key("2026-12-31"), {"sell": "200.00"})))
+        with self.assertRaises(Refused) as caught:
+            plan_targets(self.snapshot, table((key("2026-12-25", room="패밀리"), {"sell": "200.00"})))
+        self.assertIn("패밀리 · 조식 포함", str(caught.exception))
         with self.assertRaises(ValueError):
             table((key("2026-12-25"), {"sell": "1"}), (key("2026-12-25"), {"sell": "2"}))
         with self.assertRaises(ValueError):

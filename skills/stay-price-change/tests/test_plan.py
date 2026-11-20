@@ -20,11 +20,11 @@ D = Decimal
 DAY, NEXT, LATER = "2026-12-25", "2026-12-26", "2026-12-28"
 
 
-def snap(cells, currency="USD", reserved=()):
-    """`{(날짜, 인원, 박수): CellValue}` → 객실 R · 요금제 P 한 곳의 Snapshot."""
+def snap(cells, currency="USD", reserved=(), pairs=(("R", "P"),)):
+    """`{(날짜, 인원, 박수): CellValue}` → 객실 R · 요금제 P 한 곳(과 `pairs` 에 적은 읽은 쌍)의 Snapshot."""
     return Snapshot("H", "O", currency, "2026-11-20T10:00:00+09:00",
                     {CellKey("R", "P", day, occ, nights): value for (day, occ, nights), value in cells.items()},
-                    frozenset(reserved))
+                    frozenset(reserved), frozenset(pairs))
 
 
 def open_(sell, list_price=None, supply=None):
@@ -284,6 +284,25 @@ class NoEmptySaveTest(unittest.TestCase):
 
     def test_a_write_without_any_value_is_ignored_by_save_steps(self):
         self.assertEqual(save_steps([CellWrite(CellKey("R", "P", DAY, "A2", 1))]), ())
+
+
+class ReadPairsTest(unittest.TestCase):
+    """R9 — 읽지 않은 객실·요금제를 말없이 빼지 않는다. 읽었지만 칸이 없는 쌍은 건너뜀으로 알린다."""
+
+    def test_a_requested_pair_that_was_not_read_is_refused_by_name(self):
+        snapshot = snap({(DAY, "A2", 1): open_("100.00")})
+        with self.assertRaises(PlanError) as caught:
+            plan_change(snapshot, ChangeRequest("H", "O", ("R",), ("P", "Q"), (DAY,), "amount", D("1")))
+        self.assertIn("R · Q", str(caught.exception))
+
+    def test_a_pair_read_with_no_priced_cells_is_reported_as_skipped(self):
+        snapshot = snap({(DAY, "A2", 1): open_("100.00")}, pairs=(("R", "P"), ("R", "Q")))
+        plan = plan_change(snapshot, ChangeRequest("H", "O", ("R",), ("P", "Q"), (DAY,), "amount", D("1")))
+        self.assertEqual((len(plan.changes), plan.empty_pairs), (1, (("R", "Q"),)))
+
+    def test_a_snapshot_cannot_hold_cells_of_a_pair_it_does_not_say_it_read(self):
+        with self.assertRaises(ValueError):
+            snap({(DAY, "A2", 1): open_("100.00")}, pairs=(("R", "Q"),))
 
 
 class ResolveTest(unittest.TestCase):

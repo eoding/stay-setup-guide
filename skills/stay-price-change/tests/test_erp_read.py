@@ -127,6 +127,7 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(snapshot.cells[key("2026-12-28")], MISSING)
         self.assertEqual(len(snapshot.cells), 16)
         self.assertEqual(snapshot.reserved, {("디럭스", "2026-12-24"), ("디럭스", "2026-12-25"), ("디럭스", "2026-12-28")})
+        self.assertEqual(snapshot.pairs, {("디럭스", "조식 포함")})
 
     def test_hidden_rows_unknown_rooms_mixed_offers_and_placeholder_currency_are_refused(self):
         price = parse_price_page(fixture("price-runs-closed-absent-list.html"))
