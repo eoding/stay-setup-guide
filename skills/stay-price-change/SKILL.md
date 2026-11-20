@@ -37,7 +37,7 @@ metadata:
 ## 담당자에게 말할 때
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
-- 숫자는 미리보기·결과 페이지에 나온 숫자를 그대로 말한다. 페이지 경로를 알려 주고 연다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"`).
+- 도우미는 자기가 만든 페이지(이 컴퓨터의 HTML 파일)를 브라우저 도구로 열지 못한다. 브라우저 도구는 ERP 탭만 다룬다. 그래서 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 를 `--text` 를 붙여 다시 하고 답의 `text`(페이지에 보이는 글)에서 옮긴다.
 - 날짜가 8일을 넘는 표는 모든 줄의 칸이 같은 날끼리(떨어져 있어도) 열 하나로 묶여 나온다. 열 머리에 날 수와 그 날짜들이 모두 적혀 있고, 예약 있는 날은 그 머리에 따로 적힌다. 담당자가 "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다.
 
 ## 준비
@@ -53,22 +53,22 @@ metadata:
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.
    - `hotel.name` 이 말한 호텔이 아니면 "지금 탭에는 △△ 호텔이 열려 있습니다. ○○ 호텔 화면을 열어 주세요."
    - `offers` 는 오퍼, `offer` 는 고른 오퍼, `pairs` 는 그 오퍼의 객실 · 요금제다. 다른 오퍼는 `stayPrice.look({offer: "<이름>"})`.
-   - `pairs` 대신 `body` 가 오면(목록이 길다) 답을 `<작업>/look/look-1.json` 에 저장하고 `price_change.py look --answers <작업>/look`. 종료 2 의 `refetch` 는 「읽기」 5 처럼 받아 `<작업>/look/` 에 저장하고 다시 한다.
+   - `pairs` 대신 `body` 가 오면(목록이 길다) 답을 `<작업>/look/look-1.json` 에 저장하고 `price_change.py look --answers "<작업>/look"`. 종료 2 의 `refetch` 는 「읽기」 5 처럼 받아 `<작업>/look/` 에 저장하고 다시 한다.
 4. **장부 보기 · 작업 폴더.** `python3 scripts/price_change.py list` 를 한 번 본다.
    - 이 호텔(`hotel_id` 가 `look()` 의 `hotel.id`)의 `status: stopped` 인 변경이 있으면 다른 일보다 먼저 말한다. "장부 N번 '<sentence>'이 중간에 멈춰 있습니다(○월 ○일). 이어서 할까요, 된 것까지 되돌릴까요, 이대로 둘까요?" 고르면 「중간에 멈췄을 때」로 간다. 담당자가 다른 일을 먼저 하자고 하면 그 일을 한다.
-   - `ledger` 가 든 폴더가 기록 폴더다(보통 `~/Documents/어딩 Stay 가격 변경 기록`). 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(아래 `<작업>`)에 둔다. 작업 폴더는 담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 이어서)에 하나이고, 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` … 다. 같은 세션에서 방금 멈춘 변경을 이어서 하면 그 작업 폴더를 그대로 쓴다. 새 세션의 "N번 이어서", 되돌리기, 나중의 보기는 새 작업 폴더를 만든다.
+   - `ledger` 가 든 폴더가 기록 폴더다(보통 `~/Documents/어딩 Stay 가격 변경 기록`). 기록 폴더 · 작업 폴더 · 페이지 경로에는 빈칸과 `·` 가 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다(이 글의 예처럼 `--out "<작업>/plan-1.json"`). 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(아래 `<작업>`)에 둔다. 작업 폴더는 담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 이어서)에 하나이고, 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` … 다. 같은 세션에서 방금 멈춘 변경을 이어서 하면 그 작업 폴더를 그대로 쓴다. 새 세션의 "N번 이어서", 되돌리기, 나중의 보기는 새 작업 폴더를 만든다.
 
 ## 읽기 — 네 일이 모두 이것으로 읽는다
 
-브라우저 도구는 답을 1,000자쯤에서 자른다. 그래서 페이지는 읽은 화면(조각)을 페이지에 두고 답에는 짧은 머리만 싣는다. 머리의 `body` 는 그 조각을 알아볼 값이다. 명령은 앞선 읽기에서 이미 받은 같은 조각이면 그것을 쓰고, 어디에도 없는 조각만 받아 오라고(`refetch`) 한다. 읽기 한 번에 폴더 하나(`<작업>/읽기-1`, `읽기-2` …, 아래 `<R>`)를 쓴다. 아래 `<앞선>` 은 같은 호텔을 읽은 앞선 읽기 폴더마다 `--earlier <폴더>` 를 붙인 것이다. 어느 작업 폴더의 것이든 된다 — 「지금 상태 저장」 뒤에 바꾸기를 하면 그 저장의 `읽기-1` 도 준다. 같은 호텔의 읽기가 아직 없으면 없다.
+브라우저 도구는 답을 1,000자쯤에서 자른다. 그래서 페이지는 읽은 화면(조각)을 페이지에 두고 답에는 짧은 머리만 싣는다. 머리의 `body` 는 그 조각을 알아볼 값이다. 명령은 앞선 읽기에서 이미 받은 같은 조각이면 그것을 쓰고, 어디에도 없는 조각만 받아 오라고(`refetch`) 한다. 읽기 한 번에 폴더 하나(`<작업>/읽기-1`, `읽기-2` …, 아래 `<R>`)를 쓴다. 아래 `<앞선>` 은 같은 호텔을 읽은 앞선 읽기 폴더마다 `--earlier "<폴더>"` 를 붙인 것이다. 어느 작업 폴더의 것이든 된다 — 「지금 상태 저장」 뒤에 바꾸기를 하면 그 저장의 `읽기-1` 도 준다. 같은 호텔의 읽기가 아직 없으면 없다.
 
 범위는 처음에는 요청 파일(바꾸기 요청, 바꾸지 않으면 `kind: range` — commands.md 「요청 파일」)로, 장부 번호가 있는 일(적용 직전·뒤, 되돌리기, 이어서)은 `--record <번호>` 로 준다. 번호를 주면 장부가 그 번호를 계산할 때 읽은 범위를 그대로 다시 읽는다.
 
-1. `python3 scripts/price_change.py read-calls --request <요청 파일> --out <R>/calls.json`(또는 `--record <번호>`).
+1. `python3 scripts/price_change.py read-calls --request "<요청 파일>" --out "<R>/calls.json"`(또는 `--record <번호>`).
    - `이 범위는 읽기 한 번에 들지 않습니다` 면 아무것도 부르지 않았다. "한 번에 읽기에는 범위가 커서 객실(또는 기간)별로 나눠 하겠습니다"라고 말하고, 범위를 객실 · 요금제나 날짜로 나눠 나눈 것마다 따로 한다(읽기 · 장부 번호 · 페이지가 따로다).
 2. **가격.** 1 의 답의 `pairs` 값마다(i = 1, 2 …) `await stayPrice.readPair(<값 그대로>)` 의 답을 `<R>/pair-<i>.json` 에 저장한다. 조각은 아직 받지 않는다.
-3. **예약 있는 날.** `price_change.py reserved --calls <R>/calls.json --answers <R> <앞선>` 의 `ask` 값마다(n 은 이어서 1, 2 …) `await stayPrice.readReserved(<값 그대로>)` 의 답을 `<R>/resv-<n>.json` 에 저장한다. `done: true` 까지 되풀이한다. `failed` 가 있으면 멈추고 그 `error` 를 page.md 에서 찾는다.
-4. **지금 값으로 묶기.** `price_change.py read --calls <R>/calls.json --answers <R> <앞선> --out <R>/snapshot.json`.
+3. **예약 있는 날.** `price_change.py reserved --calls "<R>/calls.json" --answers "<R>" <앞선>` 의 `ask` 값마다(n 은 이어서 1, 2 …) `await stayPrice.readReserved(<값 그대로>)` 의 답을 `<R>/resv-<n>.json` 에 저장한다. `done: true` 까지 되풀이한다. `failed` 가 있으면 멈추고 그 `error` 를 page.md 에서 찾는다.
+4. **지금 값으로 묶기.** `price_change.py read --calls "<R>/calls.json" --answers "<R>" <앞선> --out "<R>/snapshot.json"`.
 5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/take-<id>-<at>.json`, 답의 `next` 가 `end` 가 될 때까지 `stayPrice.take("<id>", <next>)` 를 한 쪽씩 이어 받고, 그 명령을 다시 한다. 가격 조각도 예약 있는 날의 조각도 이렇게 받는다. 잘려서 `next` 가 안 보이면 그대로 저장하고 명령을 다시 한다(명령이 더 작은 크기를 댄다).
    - `그 조각이 페이지에 없습니다` 면 새 폴더로 처음부터 다시 읽는다. 같은 범위에서 또 나면 1 의 거절처럼 나눈다. 그 밖의 오류는 commands.md.
 
@@ -78,13 +78,13 @@ metadata:
 
 1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look()` 의 답에서 보여 준다. 범위가 크면(호텔 전체, 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
 2. `<작업>/range.json`(`kind: range`)을 쓰고 「읽기」 → `<R>/snapshot.json`.
-3. `save-snapshot --snapshot <R>/snapshot.json --sentence "<담당자 말>"` → 장부 번호 S. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
-4. `render prices --snapshot <R>/snapshot.json` → `page` 를 연다.
+3. `save-snapshot --snapshot "<R>/snapshot.json" --sentence "<담당자 말>"` → 장부 번호 S. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
+4. `render prices --snapshot "<R>/snapshot.json"` → `page` 를 연다.
 5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다." ○시 ○분은 「읽기」 4 의 답의 `read_at`(ERP 에서 읽은 시각)이다.
 
 ## 2. 지금 상태만 저장
 
-말한 범위만 저장한다. "호텔 전체"면 시간이 걸린다고 먼저 말하고 한다. 1 의 1~3 을 하고 이렇게 말한다(○시 ○분은 ERP 에서 읽은 시각 `read_at` — 장부 목록에서 이 번호의 상태는 `saved`). "지금 값을 장부 S번(○시 ○분)으로 적어 두었습니다. 나중에 'S번 상태로 되돌려'라고 하시면 그 값으로 되돌리는 미리보기를 보여 드립니다."
+말한 범위만 저장한다. "호텔 전체"면 시간이 걸린다고 먼저 말하고 한다. 1 의 1~4 를 한다 — 지금 가격 페이지도 열어 담당자가 무엇을 저장했는지 보게 한다. 그리고 이렇게 말한다(○시 ○분은 ERP 에서 읽은 시각 `read_at` — 장부 목록에서 이 번호의 상태는 `saved`). "지금 값을 장부 S번(○시 ○분)으로 적어 두었습니다. 나중에 'S번 상태로 되돌려'라고 하시면 그 값으로 되돌리는 미리보기를 보여 드립니다."
 
 ## 3. 가격 바꾸기
 
@@ -110,8 +110,8 @@ metadata:
 **읽고 미리보기.**
 
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」). 이것을 범위 파일로 「읽기」 → `<R>/snapshot.json`.
-2. `plan --snapshot <R>/snapshot.json --request <작업>/request.json --record --out <작업>/plan-1.json` → 짧은 답 `change_id`(N)·`counts`·`saves`(저장 횟수, 빨간 줄이 남았으면 null)·`red`·`chosen`·`blocked`·`above_one_night_before`. 계산 파일은 기록이라 다시 쓰지 않는다. 그 작업에서 k 번째 계산은 `<작업>/plan-<k>.json` 이다(명령이 있는 파일을 덮어쓰지 않는다).
-3. `render preview --plan <작업>/plan-<k>.json` → `page` 를 연다.
+2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답 `change_id`(N)·`counts`·`saves`(저장 횟수, 빨간 줄이 남았으면 null)·`red`·`chosen`·`blocked`·`above_one_night_before`. 계산 파일은 기록이라 다시 쓰지 않는다. 그 작업에서 k 번째 계산은 `<작업>/plan-<k>.json` 이다(명령이 있는 파일을 덮어쓰지 않는다).
+3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
 4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸(`will_change`)·적용할 수 없는 칸·예약 있는 날의 칸·판매 마감인 칸·새로 생기는 칸 수를 말한다(0 인 것은 뺀다). 예약 있는 날도 바꾸고 이미 받은 예약의 금액은 그대로라는 것, 마감인 날은 값만 바뀌고 마감은 그대로라는 것, 새로 생기는 칸은 되돌려도 지울 수 없다는 것을 해당될 때 말한다. 표에 인원 · 박수가 없던 목표 값 표면 미리보기 머리의 「칸」(예: 성인 2 · 1박 이상)으로 어느 줄에 넣는지 말한다. 그다음은 빨간 줄에 따라 다르다.
    - **빨간 줄이 남아 있으면**(`counts.red` 가 0 보다 큼, `saves` 가 null) 저장 횟수는 아직 정해지지 않았다. 저장 횟수를 말하지 않고, 답의 `red`(규칙마다 이름 `label` · 칸 수 `cells` · 고를 것 `choices`)대로 말한다. 고를 것은 `choices[].words` 를 그대로, 「정가도 같이 올림」은 그 `example`(정가가 어떻게 되는지의 숫자)과 함께 말한다: "빨간 줄 ○칸은 어떻게 할지 골라 주셔야 합니다. 정가보다 비싸지는 ○칸 — 정가도 12% 올림(예: 12/7 월 · 스탠다드 · 조식 포함 · 성인 2 · 1박 이상 — 정가 110.00 → 123.20) / 정가 지움 / 그 칸은 안 바꿈. 고르시면 미리보기를 다시 보여 드리고, 그때 몇 번 나눠 저장하는지 말씀드립니다." 아래 「빨간 줄」로 간다.
    - **빨간 줄을 다 골랐거나 없으면**(`counts.red` 가 0, `saves` 가 있음) 저장 횟수(`saves`)를 말한다. 고른 빨간 줄이 있으면 답의 `chosen` 줄마다(규칙 · 고름 · 칸 수 `cells` · 이름 `words` · 예 `example`) 무엇이 바뀌는지 그 숫자로 말한다: "정가를 넘는 ○칸은 정가도 12% 올립니다(예: … 정가 110.00 → 123.20)" · "○칸은 정가를 지웁니다" · "○칸은 바꾸지 않습니다" · "○칸은 그대로 바꿉니다". 그리고 "맞으면 '적용'이라고 해 주세요."
@@ -130,7 +130,7 @@ metadata:
 - 「정가도 같이 올림」의 정가는 ERP 의 「정가도 같이 조정」과 같은 규칙으로 명령이 셈한다: 판매가를 금액으로 바꾸면 정가도 같은 금액, 퍼센트면 같은 비율(아동이 있는 칸은 판매가처럼 성인 몫에만 — 아동 추가분은 그대로), 새 값 · 목표 값처럼 ERP 에 짝이 없는 것은 판매가가 오른 만큼이다. 담당자에게는 `red`·`chosen` 의 `words` 와 숫자로 말한다.
 - 「박수 층이 1박 이상 가격보다 비싸짐」은 ERP [선택 날짜 가격 가감]이 건너뛰는 칸이다(2박 이상 층이 그날 1박 이상보다 비싸지거나, 1박 이상을 내려 위 층보다 싸짐). 이 규칙은 다른 칸을 고른 뒤의 값으로 다시 보므로, 고른 뒤 새 미리보기에 이 빨간 줄이 새로 나올 수 있다(예: 정가 넘는 1박 이상 칸을 안 바꾸기로 하면 올린 3박 이상이 그보다 비싸진다). 그때는 그 칸도 골라 달라고 한다. 답의 `above_one_night_before` 가 0 보다 크면 "읽은 값에 바꾸기 전부터 1박 이상보다 비싼 박수 층 칸이 ○칸 있습니다. 이번에 바꾸지 않는 칸은 그대로 둡니다"라고 말한다.
 - 묶어서 말하면("정가 넘는 2칸은 정가 지우고") 그 규칙 전체, 칸을 짚으면 그 칸만(`cells`) 고른다. 칸 키는 답의 `red[].examples` 에 있으면 그것을, 없으면 계산 파일의 `unresolved` 에서 그 칸 하나를 찾아 옮긴다(파일을 통째로 읽지 않는다). 말한 칸 수가 미리보기와 다르면 다시 묻는다. 30% 넘는 칸이 많으면 금액을 잘못 말한 것은 아닌지 먼저 묻는다(10% 를 100% 로 말한 것처럼).
-- 고른 것을 `<작업>/choices-<k>.json` 에 적고 2 를 다시 한다: `plan --snapshot <R>/snapshot.json --request <작업>/request.json --resolutions <작업>/choices-<k>.json --replaces <N> --record --out <작업>/plan-<k>.json`(k 는 다음 계산 번호, N 은 바로 앞 미리보기의 번호). 새 번호가 이제 N 이다. 앞 번호는 장부에 `replaced`(바뀐 미리보기)로 남고 `begin` 이 받지 않는다. `counts.red` 가 0 이고 `saves` 가 있어야 적용할 수 있다.
+- **고름 파일.** 이름은 그 고름으로 만들 계산 파일과 같은 번호다 — `choices-<k>.json` 으로 `plan-<k>.json` 을 만든다(k 는 그 작업의 다음 계산 번호: `plan-1.json` 다음이면 `choices-2.json` → `plan-2.json`). 계산은 매번 요청에서 처음부터 하므로, 고름 파일에는 이번에 고른 것만이 아니라 지금까지 고른 것을 모두 적는다(앞 고름을 빼면 그 칸은 다시 빨간 줄이 된다). 고른 것을 `<작업>/choices-<k>.json` 에 적고 2 를 다시 한다: `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --resolutions "<작업>/choices-<k>.json" --replaces <N> --record --out "<작업>/plan-<k>.json"`(k 는 다음 계산 번호, N 은 바로 앞 미리보기의 번호). 새 번호가 이제 N 이다. 앞 번호는 장부에 `replaced`(바뀐 미리보기)로 남고 `begin` 이 받지 않는다. `counts.red` 가 0 이고 `saves` 가 있어야 적용할 수 있다.
 - 고름과 "적용"을 한 번에 말했으면("정가 넘는 2칸은 정가 지우고 적용") 바로 「적용하기」로 간다. 고름만 말했으면 3 으로 미리보기를 다시 열고 "적용"을 기다린다.
 - **빨간 줄이 남았는데 "적용"이라고만 하면** 저장하지 않는다(`saves` 가 null 이고 `begin` 도 받지 않는다). 미리보기 페이지도 그때는 "적용"을 청하지 않고 고를 것을 먼저 말한다. 이렇게 답한다: "빨간 줄 ○칸을 먼저 골라 주셔야 적용할 수 있습니다. 아직 아무것도 바꾸지 않았습니다." 그리고 `red` 대로 고를 것을 다시 말한다. "그냥 적용", "알아서 해"처럼 고르지 않는 말은 고름이 아니다. 도우미가 대신 고르지 않는다.
 
@@ -142,13 +142,13 @@ metadata:
 2. 되돌리기 계산. 일부만이면 고르기 플래그를 붙인다: `--room`·`--rate-plan`(여러 번)·`--from`·`--to`(날짜)·`--occupancy`(인원 조합 키를 읽은 값에서 골라서, 성인 2 는 `A2`).
 
    ```bash
-   python3 scripts/price_change.py rollback --change <N> --snapshot <R>/snapshot.json --record --sentence "<담당자 말>" --out <작업>/rollback-1.json
-   python3 scripts/price_change.py restore --saved <S> --snapshot <R>/snapshot.json --record --sentence "<담당자 말>" --out <작업>/rollback-1.json
+   python3 scripts/price_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"
+   python3 scripts/price_change.py restore --saved <S> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"
    ```
 
    짧은 답의 `change_id` 가 이 되돌리기의 번호다(아래 M). 답에는 `restore_to`(적어 둔 값의 시각) · `restored`(되돌리는 칸 수) · `kept`(그대로 두는 칸 수)와 그 까닭마다의 수 `kept_why`(`outside` 면 도우미 밖에서 바뀜, 아니면 그 장부 번호 · 시각 · 문장) · `unremovable`(지울 수 없는 칸 수) · `reserved`(되돌리는 칸 가운데 예약 있는 날의 칸 수) · `saves` 가 있다. 계산 파일은 기록이라 다시 쓰지 않는다. 그 작업에서 k 번째 되돌리기 계산은 `<작업>/rollback-<k>.json` 이다(명령이 있는 파일을 덮어쓰지 않는다).
-3. `render rollback --plan <작업>/rollback-<k>.json` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(가격이 없던 칸에 새로 생긴 칸, ERP 에 지우는 길이 없다), 예약 있는 날도 되돌리고 이미 받은 예약의 금액은 그대로라는 것. 그대로 두는 칸(`kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭(`kept_why`)을 말한다. 칸마다 적어 둔 값 · 도우미가 넣은 값 · 지금 값은 페이지에 있다.
-4. "되돌려" → 「적용하기」(이 되돌리기의 번호 M, 계산 파일 `rollback-<k>.json`). "○칸도 포함해서 되돌려"면 2 의 `rollback` 을 `--include-kept --replaces <M>` 을 붙여 다음 이름 `--out <작업>/rollback-<k>.json` 으로 다시 하고, 3 으로 새 미리보기를 보인 뒤 "되돌려"에 새 번호로 「적용하기」. 앞 번호 M 은 장부에 `replaced` 로 남고 `begin` 이 받지 않는다.
+3. `render rollback --plan "<작업>/rollback-<k>.json"` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(가격이 없던 칸에 새로 생긴 칸, ERP 에 지우는 길이 없다), 예약 있는 날도 되돌리고 이미 받은 예약의 금액은 그대로라는 것. 그대로 두는 칸(`kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭(`kept_why`)을 말한다. 칸마다 적어 둔 값 · 도우미가 넣은 값 · 지금 값은 페이지에 있다.
+4. "되돌려" → 「적용하기」(이 되돌리기의 번호 M, 계산 파일 `rollback-<k>.json`). "○칸도 포함해서 되돌려"면 2 의 `rollback` 을 `--include-kept --replaces <M>` 을 붙여 다음 이름 `--out "<작업>/rollback-<k>.json"` 으로 다시 하고, 3 으로 새 미리보기를 보인 뒤 "되돌려"에 새 번호로 「적용하기」. 앞 번호 M 은 장부에 `replaced` 로 남고 `begin` 이 받지 않는다.
 
 ## 5. 새 요금표로 맞추기
 
@@ -161,17 +161,17 @@ metadata:
 
 필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일(`plan-<k>.json` 또는 `rollback-<k>.json`).
 
-1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan <계산 파일> --snapshot S2`. `begin` 이 S2 를 미리보기 때 읽은 값과 견준다.
-   - 종료 1(`same: false`)이면 아무것도 시작하지 않았다. "적용 직전에 ERP 를 다시 읽었더니 미리보기 때와 다른 칸이 ○칸 있어 아무것도 바꾸지 않았습니다. 새 미리보기를 보여 드립니다." S2 로 계산을 다시 하고(`plan` 은 `--replaces N --record --out <작업>/plan-<k>.json`, 되돌리기는 `rollback`/`restore` 를 같은 고르기 플래그로 `--replaces N --record --out <작업>/rollback-<k>.json`) 미리보기부터 다시 한다. 빨간 줄도 다시 고른다.
+1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan "<계산 파일>" --snapshot "<S2>"`. `begin` 이 S2 를 미리보기 때 읽은 값과 견준다.
+   - 종료 1(`same: false`)이면 아무것도 시작하지 않았다. "적용 직전에 ERP 를 다시 읽었더니 미리보기 때와 다른 칸이 ○칸 있어 아무것도 바꾸지 않았습니다. 새 미리보기를 보여 드립니다." S2 로 계산을 다시 하고(`plan` 은 `--replaces N --record --out "<작업>/plan-<k>.json"`, 되돌리기는 `rollback`/`restore` 를 같은 고르기 플래그로 `--replaces N --record --out "<작업>/rollback-<k>.json"`) 미리보기부터 다시 한다. 빨간 줄도 다시 고른다.
    - `…분 전 것입니다` 면 읽은 지 15분이 지났다. 1 을 다시 한다.
    - `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다."
 2. `calls --change N` 의 `calls` 를 차례로 하나씩 한다.
    - `op` 가 `applyBulk` 면 `await stayPrice.applyBulk(<payload 그대로>)`, `applyCell` 이면 `await stayPrice.applyCell(<payload 그대로>)`.
-   - 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result <그 파일>`.
+   - 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result "<그 파일>"`.
    - `started: false` 면 아무것도 누르지 않았고 장부에도 적히지 않았다. `wait` 초 뒤 같은 payload 로 다시 부르고 다시 `record-result`.
    - `saved: true` 이고 `status: applying` 이면 다음으로, `status: applied` 면 3 으로 간다. 그 밖(저장이 안 됐거나 `status: stopped`)이면 다음 저장을 하지 않고 「중간에 멈췄을 때」로 간다. 15분 동안 아무 일이 없던 변경은 그 뒤 저장이 돼도 멈춘 채로 적힌다.
    - JS 호출이 답 없이 끊겼거나 답이 잘렸으면 `stayPrice.last()` 로 그 답을 받는다(`running` 이면 10초 뒤 다시). 같은 작업을 다시 부르지 않는다.
-3. **뒤에 다시 읽기.** 다 저장되면 `read-calls --record N` 으로 「읽기」 → S3. `verify --change N --snapshot S3`.
+3. **뒤에 다시 읽기.** 다 저장되면 `read-calls --record N` 으로 「읽기」 → S3. `verify --change N --snapshot "<S3>"`.
 4. `render result --change N` → `page` 를 연다.
    - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."
    - `same: false`(종료 1)면 "적용했지만 다시 읽었더니 ○칸이 넣은 값과 다릅니다. 페이지의 빨간 칸을 ERP 에서 확인해 주세요." 다시 저장하지 않는다.
@@ -182,7 +182,7 @@ metadata:
 
 여기로 오는 길은 셋이다. 적용하다 멈췄을 때, 담당자가 "N번 이어서"라고 할 때, 「준비」 4 에서 이 호텔의 멈춘 변경을 알렸을 때. 새 세션이면 「준비」 1~4 를 하고 새 작업 폴더에서 한다. 장부 번호 N 만 있으면 된다.
 
-1. `read-calls --record N` 으로 「읽기」 → S4. `check --change N --snapshot S4`.
+1. `read-calls --record N` 으로 「읽기」 → S4. `check --change N --snapshot "<S4>"`.
    - 저장마다 `seen` 이 `saved`(됨)·`not_saved`(안 됨)·`mixed`(섞임)·`changed`(그 사이 바뀜)다. `saved: "unknown"`(단추는 눌렸고 저장됐는지 모름)이던 저장은 읽은 값으로 가려져 장부에 적힌다(`settled`).
    - `status` 가 `applied` 면 다 저장된 것이다. 「적용하기」 3 으로 간다.
    - `last_saved` 는 마지막으로 저장된 단계, `next` 는 다음에 할 단계다(`{no, label}`, 없으면 null). `cause` 는 멈춘 까닭이다: `failed` 저장이 실패함(`note` 가 그 까닭) · `unknown` 저장 단추는 눌렸고 저장됐는지 몰랐음 · `cut_off` 실패한 저장 없이 중간에 끊김.

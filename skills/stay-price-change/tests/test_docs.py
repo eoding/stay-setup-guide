@@ -108,6 +108,15 @@ class DocNamesTest(unittest.TestCase):
                             self.assertIsNotNone(owner, f"{doc.name}: 없는 플래그 {word} ({line.strip()})")
                             self.assertIn(word, self.commands[owner], f"{doc.name}: {owner} {word} ({line.strip()})")
 
+    def test_paths_handed_to_a_command_in_the_instructions_are_quoted(self):
+        # 기록 폴더 · 작업 폴더 · 페이지 이름에는 빈칸과 「·」가 있다 — 따옴표 없이 넘긴 경로는 셸이 쪼갠다(Y7)
+        flags = r"--(?:out|snapshot|request|plan|calls|answers|resolutions|result|sheet|look|earlier)"
+        for doc in DOCS:
+            for bit in code_bits(doc.read_text(encoding="utf-8")):
+                for found in re.finditer(rf"({flags}) (\S+)", bit):
+                    if "<" in found.group(2):
+                        self.assertTrue(found.group(2).startswith('"'), f"{doc.name}: {found.group(0)}")
+
     def test_where_the_instructions_call_a_command_with_flags_they_give_every_required_flag(self):
         # begin 은 적용 직전에 읽은 값(--snapshot) 없이는 시작하지 않는다(T1) — 글이 그 플래그를 빠뜨리면 여기서 실패한다
         needed = required()

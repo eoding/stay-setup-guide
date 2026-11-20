@@ -124,6 +124,16 @@ class CommandTest(unittest.TestCase):
         self.assertEqual((short["mode"], short["restored"]), ("restore", len(whole["rollback"]["restored"])))
         self.assertNotIn('"targets"', text)
 
+    def test_render_text_gives_the_words_the_page_shows(self):
+        self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--out", self.dir / "plan-1.json")
+        shown = self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text", "--out", self.dir / "미리 보기 · 1.html")
+        lines = shown["text"].splitlines()
+        self.assertEqual(lines[0], "미리보기 · 데모 호텔 · 기본 오퍼 · 판매가 +10%")
+        self.assertIn("빨간 줄 · 2칸이 정가(줄 그은 값)를 넘습니다.", shown["text"])
+        self.assertIn("성인 2 · 1박 이상 | 200.00 → 220.00", shown["text"], "표의 줄은 한 줄, 칸은 | 로")
+        self.assertNotIn("<", shown["text"])
+        self.assertNotIn("text", self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--out", self.dir / "p.html"))
+
     def test_preview_apply_verify_rollback_and_list(self):
         first = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--record",
                              "--out", self.dir / "plan1.json")

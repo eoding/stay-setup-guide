@@ -51,6 +51,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from change_core.chrome import page_text
 from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
 from change_core.money import money_text
@@ -286,7 +287,7 @@ def cmd_render(args):
         html, hotel = render_result(record, str(ledger.path), args.by_date), record.hotel
     path = Path(args.out) if args.out else page_path(hotel, args.kind)
     path.write_text(html, encoding="utf-8")
-    return dict(page=str(path.resolve()))
+    return dict(page=str(path.resolve()), **({"text": page_text(html)} if args.text else {}))
 
 
 def differences_since(ledger: Ledger, change_id: int, now) -> list[dict]:
@@ -539,6 +540,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
     sub.add_argument("--by-date", action="store_true",
                      help="날짜마다 열 하나 — 기본은 8일 넘는 표에서 칸이 모두 같은 날끼리 열 하나(\"날짜별로 펼쳐 줘\")")
+    sub.add_argument("--text", action="store_true",
+                     help="답에 페이지에 보이는 글(text)도 싣는다 — 도우미는 자기 페이지를 브라우저 도구로 열지 못하니, 페이지의 글을 "
+                          "그대로 옮겨야 할 때 이것으로 읽는다")
 
     sub = command("begin", cmd_begin, "적용 시작 — 적용 직전에 읽은 값이 미리보기 때와 같을 때만")
     sub.add_argument("--change", type=int, required=True)

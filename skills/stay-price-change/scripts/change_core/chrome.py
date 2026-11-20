@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 from datetime import datetime
+from html.parser import HTMLParser
 from typing import Iterable, Mapping
 
 from .money import scale_of
@@ -94,6 +95,50 @@ def page(title: str, body: str, maker: str = "어딩 Stay 도우미") -> str:
             f'<meta name="color-scheme" content="light dark">\n<title>{esc(title)}</title>\n<style>{CSS}</style>\n'
             f'</head>\n<body>\n<main>\n{body}\n<footer>{esc(maker)}가 만든 페이지입니다.</footer>\n'
             f'</main>\n</body>\n</html>\n')
+
+
+class _Text(HTMLParser):
+    """페이지에 보이는 글 — 머리 · 문단 · 띠 · 표의 줄마다 한 줄, 표의 칸은 ` | ` 로 잇는다. 스타일 · 스크립트는 뺀다."""
+    BREAKS = {"h1", "h2", "h3", "p", "div", "tr", "li", "dt", "dd", "br", "table", "ul"}
+    CELLS = {"td", "th"}
+
+    def __init__(self):
+        super().__init__()
+        self.lines, self.line, self.skip, self.cells = [], [], 0, 0
+
+    def flush(self):
+        text = " ".join(" ".join(self.line).split())
+        if text:
+            self.lines.append(text)
+        self.line, self.cells = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("style", "script"):
+            self.skip += 1
+        elif tag in self.BREAKS:
+            self.flush()
+        elif tag in self.CELLS:
+            if self.cells:
+                self.line.append("|")
+            self.cells += 1
+
+    def handle_endtag(self, tag):
+        if tag in ("style", "script"):
+            self.skip -= 1
+        elif tag in self.BREAKS:
+            self.flush()
+
+    def handle_data(self, data):
+        if not self.skip and data.strip():
+            self.line.append(data.strip())
+
+
+def page_text(page_html: str) -> str:
+    """페이지 HTML → 담당자가 화면에서 읽는 글(줄마다). 도우미가 페이지의 글을 그대로 옮겨야 할 때 쓴다(render --text)."""
+    reader = _Text()
+    reader.feed(page_html)
+    reader.flush()
+    return "\n".join(reader.lines)
 
 
 def stats(items: Iterable[tuple[int, str]]) -> str:
