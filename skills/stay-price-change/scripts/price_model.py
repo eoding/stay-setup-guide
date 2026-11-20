@@ -426,7 +426,8 @@ def occupancy_label(key: str) -> str:
     adults = f"성인 {adult_key[1:]}"
     if not has_children:
         return adults
-    return f"{adults} + 아동 {sum(int(count) for count in re.findall(r'C(\d+)', key.upper()))}"
+    children = sum(int(count) for count in re.findall(r"C(\d+)", key.upper()))
+    return f"{adults} + 아동 {children}"
 
 
 def nights_label(nights: int) -> str:
