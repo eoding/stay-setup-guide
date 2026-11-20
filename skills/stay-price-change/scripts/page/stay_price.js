@@ -1184,7 +1184,15 @@
     if (bad) fail('`form` 은 ' + readOp + ' 이 돌려준 window.form([이름, 값] 목록) 그대로입니다');
     return value.map(function (x) { return [x[0], x[1]]; });
   }
-  function windowErrors(root) { return all('[data-stay-result="error"], small.error', root).map(function (el) { return C(el.textContent); }).filter(Boolean); }
+  // 창의 오류 글 — 보이는 것만. 화면 스크립트(Alpine x-show)가 숨겨 둔 안내 오류(`style="display: none"` · hidden)는 오류가 아니다
+  function windowErrors(root) {
+    var hidden = function (el) {
+      for (var n = el; n && n !== root.parentNode; n = n.parentElement) if (n.hidden || (n.style && n.style.display === 'none')) return true;
+      return false;
+    };
+    return all('[data-stay-result="error"], small.error', root).filter(function (el) { return !hidden(el); })
+      .map(function (el) { return C(el.textContent); }).filter(Boolean);
+  }
   // 「읽은 그대로 보내고 고른 칸만 바꾸기」 — edits 는 [이름, 몇 번째(그 이름의 보낼 칸 가운데 0 부터), 값] 목록이다. 치기 전에 창이
   // 보낼 칸이 form 과 꼭 같아야 하고, 친 뒤에는 form 에서 그 자리들만 바뀌어야 한다. opts 는 {window: 창 이름, settable(이름) → 칸의
   // 이름(글자) 또는 null, guard(after): 더 볼 것}. 누르기 전에 멈추면 refused 다. 친 뒤에 보낼 칸을 돌려준다
