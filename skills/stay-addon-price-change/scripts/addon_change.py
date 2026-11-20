@@ -354,8 +354,7 @@ def cmd_rollback(args):
                                       sentence=args.sentence, read_at=plan.read_at, rows=rows, reverses=args.change,
                                       request=request, reading=encode_snapshot(now), replaces=args.replaces) if args.record else None
     # 되돌리기 확인이 읽는 범위 한 줄 — 장부에 적었으면 `list` 의 그 번호 줄, 아니면 같은 셈
-    scope = (listed(ledger, change_id)[0]["scope"] if change_id is not None else
-             scope_line([row.label for row in rows if row.field == FIELDS[0]], record_what(request, args.change)))
+    scope = listed(ledger, change_id)[0]["scope"] if change_id is not None else scope_line(rows, record_what(request, args.change))
     return dict(change_id=change_id, replaces=args.replaces, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in steps])
 
@@ -372,17 +371,22 @@ def record_what(request: dict | None, reverses: int | None) -> str:
     return ""
 
 
-def scope_line(labels: list[str], did: str, stopped: str = "") -> str:
-    """범위 한 줄 — 몇 줄인지와 처음 줄 이름, 한 일, 멈췄으면 어디까지."""
-    names = list(dict.fromkeys(labels))
-    head = f"부가옵션 가격 줄 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
+def scope_line(rows, did: str, stopped: str = "") -> str:
+    """범위 한 줄 — 저장이 값을 넣는(넣을) 줄이 몇 줄인지와 처음 줄 이름, 한 일, 멈췄으면 어디까지. 안 바꾸기로 고른 줄 · 아직
+    고르지 않은 빨간 줄 · 적용할 수 없는 줄은 세지 않는다(가격 도우미의 「N칸」과 같은 셈 — 되돌리기 확인이 이 줄을 읽어 준다).
+    넣는 줄이 없으면 이름은 고른 줄의 것이다."""
+    written = {row.item_key for row in rows if row.action}
+    labels = [(row.label, row.item_key in written) for row in rows if row.field == FIELDS[0]]
+    names = list(dict.fromkeys(label for label, writes in labels if writes))
+    shown = names or list(dict.fromkeys(label for label, _writes in labels))
+    head = f"부가옵션 가격 줄 {len(names)}개" + (f" ({shown[0]}{' 외' if len(shown) > 1 else ''})" if shown else "")
     return " · ".join(part for part in (head, did, stopped) if part)
 
 
-def record_scope(entry: dict, labels: list[str]) -> str:
+def record_scope(entry: dict, rows) -> str:
     """장부 한 줄의 범위(scope_line)."""
     stopped = f"{entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped" else ""
-    return scope_line(labels, record_what(entry.get("request"), entry.get("reverses")), stopped)
+    return scope_line(rows, record_what(entry.get("request"), entry.get("reverses")), stopped)
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
@@ -390,10 +394,10 @@ def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
     하나에 묶이지 않아 장부의 오퍼 칸이 비어 있으므로, 그 번호의 읽은 값에서 줄마다의 오퍼를 모은다)."""
     out = []
     for entry in ledger.list_changes(change_id):
-        rows = [row for row in ledger.change(entry["id"]).rows if row.field == FIELDS[0]]
+        rows = ledger.change(entry["id"]).rows
         lines = recorded_snapshot(ledger, entry["id"]).lines
         offers = dict.fromkeys(lines[key].listed.offer for key in map(key_of_item, (row.item_key for row in rows)) if key in lines)
-        entry["scope"] = record_scope(entry, [row.label for row in rows])
+        entry["scope"] = record_scope(entry, rows)
         entry["offer"] = " · ".join(offer for offer in offers if offer)
         del entry["request"]
         out.append(entry)

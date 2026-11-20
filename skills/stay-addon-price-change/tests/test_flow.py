@@ -285,6 +285,8 @@ class NothingToSaveTest(Flow):
         self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", refused["error"], "빨간 줄을 고르라는 말이 아니다")
         entry, = [item for item in self.cli("list")["changes"] if item["id"] == short["change_id"]]
         self.assertEqual((entry["status"], entry["steps"]), ("previewed", 0), "begin 이 받지 않아 아무것도 시작하지 않았다")
+        self.assertTrue(entry["scope"].startswith("부가옵션 가격 줄 0개 ("), "범위 한 줄은 넣는 줄을 센다(F5 의 부가옵션 쪽) — "
+                        + entry["scope"])
         self.assertEqual(self.erp.posts, [])
 
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
