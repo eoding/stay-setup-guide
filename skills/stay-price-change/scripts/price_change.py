@@ -47,21 +47,21 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
-from datetime import datetime
 from pathlib import Path
 
+from change_core import files
+from change_core.answers import BrowserError, answers_for, attach_bodies, step_outcome, unanswered
 from change_core.chrome import page_text
+from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
-from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
+from change_core.ledger import Ledger, LedgerError, now_text
 from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    BrowserError, answers_for, attach_bodies, page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes,
-    reserved_round, step_call, step_outcome, too_big, unanswered,
+    page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_call, too_big,
 )
 from change_core.rules import BLOCKED
 from price_model import (
@@ -79,91 +79,25 @@ from price_plan import (
     resolve, rollback_rows, rollback_writes, save_steps, snapshot_rows, stale_cells, step_plans, unresolved,
 )
 
+def open_ledger() -> Ledger:
+    """가격 칸의 장부 — 목록에는 가격 칸 번호만 나오고, 다른 도우미(부가옵션 가격 …)의 번호는 거절한다."""
+    return Ledger(kind=ITEM_KIND)
+
+
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
               "sheet": "요금표 읽은 것"}   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
 
 
-def load(path: str):
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        raise ValueError(f"파일이 없습니다: {path}") from None
-    except json.JSONDecodeError as error:
-        raise ValueError(f"JSON 을 읽지 못했습니다: {path} ({error})") from None
-
-
-def page_path(hotel: str, name: str) -> Path:
-    safe = re.sub(r'[\\/:*?"<>|]', "_", hotel).strip() or "호텔"
-    base = f"{datetime.now().strftime('%Y-%m-%d %H시%M분')} · {safe} · {name}"
-    path, number = ledger_dir() / f"{base}.html", 2
-    while path.exists():
-        path, number = ledger_dir() / f"{base} ({number}).html", number + 1
-    return path
-
-
 ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
-WORK = "작업"   # 기록 폴더 안의 작업 폴더들 — 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`, 그 안의 읽기마다 `읽기-1/` …
-
-
-def answer_files(paths) -> list[Path]:
-    """답 파일 목록 — 파일은 그대로, 폴더는 그 안에서 이름이 look-·pair-·resv-·take- 로 시작하는 .json·.txt 파일(이름순)."""
-    files = []
-    for path in map(Path, paths or ()):
-        if path.is_dir():
-            files += sorted(item for item in path.iterdir() if item.is_file() and item.name.startswith(ANSWER_PREFIXES)
-                            and item.suffix in (".json", ".txt"))
-        else:
-            files.append(path)
-    return files
 
 
 def load_results(paths) -> list:
-    """브라우저 답 파일들(폴더도 된다 — answer_files) — 파일 하나에 답 하나(객체) 또는 여럿(목록). 목록의 글자 항목, 그리고
-    JSON 이 아닌 파일은 도구가 보인 그대로의 답이다(잘린 답일 수 있다 — price_browser.answers 가 알아본다)."""
-    results = []
-    for path in answer_files(paths):
-        try:
-            text = Path(path).read_text(encoding="utf-8")
-        except FileNotFoundError:
-            raise ValueError(f"파일이 없습니다: {path}") from None
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            data = text
-        results += data if isinstance(data, list) else [data]
-    return results
-
-
-def calls_hotel(calls: dict) -> str:
-    """read-calls 가 낸 부를 값이 부르는 호텔 번호 — 부를 값마다 같은 `hotel` 이 든다."""
-    ids = {str((call.get("hotel") or {}).get("id")) for call in calls["pairs"] + calls["reserved"]}
-    if len(ids) != 1:
-        raise ValueError(f"부를 값의 호텔이 하나가 아닙니다: {' · '.join(sorted(ids))}")
-    return ids.pop()
-
-
-def earlier_readings(hotel_id: str, own: list[Path]) -> list[Path]:
-    """기록 폴더의 읽기 폴더(`작업/<작업>/<읽기>/`) 가운데 같은 호텔을 읽은 것 — 그 폴더의 calls.json 이 그 호텔 번호를 부른다.
-    이번 읽기의 폴더(`own` — 부를 값 파일과 답 파일 · 폴더가 있는 곳)는 뺀다. 읽지 못하는 calls.json 은 건너뛴다(빌려 줄 뿐이다).
-
-    read · reserved 는 이 폴더들에서 다 받아 맞춰 본 조각만 빌린다. 이번 읽기의 답으로 치지 않는다(price_browser.attach_bodies)."""
-    own_folders = {(path if path.is_dir() else path.parent).resolve() for path in own}
-    found = []
-    for calls in sorted((ledger_dir() / WORK).glob("*/*/calls.json")):
-        if calls.parent.resolve() in own_folders:
-            continue
-        try:
-            if calls_hotel(json.loads(calls.read_text(encoding="utf-8"))) == hotel_id:
-                found.append(calls.parent)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
-            continue
-    return found
+    return files.load_results(paths, ANSWER_PREFIXES)
 
 
 def lent_answers(args, calls: dict) -> list:
-    """이번 읽기에 조각을 빌려 줄 답들 — 기록 폴더에서 같은 호텔을 읽은 앞선 읽기 폴더마다의 답 파일(earlier_readings)."""
-    own = [Path(args.calls), *map(Path, args.answers or ())]
-    return load_results(earlier_readings(calls_hotel(calls), own))
+    """이번 읽기에 조각을 빌려 줄 답들 — 기록 폴더에서 같은 호텔을 읽은 앞선 읽기 폴더마다의 답 파일."""
+    return files.lent_answers(args.calls, args.answers, calls, ANSWER_PREFIXES)
 
 
 def price_page_arg(text: str) -> PairRead:
@@ -234,7 +168,7 @@ def request_scope(data: dict) -> ReadRange:
 
 def cmd_read_calls(args):
     """페이지가 조각을 다 두지 못하는 읽기는 아무것도 부르기 전에 거절한다 — 받으려 할 때는 앞 조각이 이미 밀려나 있다."""
-    scope: ReadRange = recorded_reading(Ledger(), args.record).range if args.record else request_scope(load(args.request))
+    scope: ReadRange = recorded_reading(open_ledger(), args.record).range if args.record else request_scope(load(args.request))
     hotel = encode_hotel(scope.hotel, scope.hotel_id)
     calls = dict(pairs=read_calls(hotel, scope.offer, scope.pairs, scope.dates),
                  reserved=reserved_probes(hotel, scope.offer, scope.pairs, scope.dates))
@@ -268,12 +202,7 @@ def cmd_sheet(args):
 
 
 def fresh_record(args, name: str) -> None:
-    """계산 파일(plan · rollback · restore)은 기록이라 덮어쓰지 않는다 — 다시 계산하면 새 이름(`<name>-2.json` …)에 쓰고
-    `--replaces` 로 앞 번호를 댄다. 무엇이든 셈하거나 장부에 적기 전에 본다."""
-    if args.out and Path(args.out).exists():
-        raise ValueError(f"이미 있는 파일입니다: {args.out} — 다시 계산한 미리보기는 새 이름({name}-2.json · {name}-3.json …)으로 씁니다")
-    if args.replaces is not None and not args.record:
-        raise ValueError("--replaces 는 장부에 적을 때(--record)만 줍니다")
+    files.fresh_record(args.out, args.replaces, args.record, name)
 
 
 def cmd_plan(args):
@@ -289,7 +218,7 @@ def cmd_plan(args):
                    for item in load(args.resolutions)] if args.resolutions else []
     plan = resolve(plan, resolutions)
     steps = plan_steps(plan)
-    change_id = Ledger().record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=request.offer,
+    change_id = open_ledger().record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=request.offer,
                                         currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                         request=encode_request(plan.request), reading=encode_snapshot(snapshot),
@@ -323,7 +252,7 @@ def cmd_render(args):
         check = decode_check(load(args.plan))
         html, hotel = render_sheet(check), check.sheet.hotel
     else:
-        ledger = Ledger()
+        ledger = open_ledger()
         record = ledger.change(args.change)
         html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
     path = Path(args.out) if args.out else page_path(hotel, name)
@@ -331,14 +260,22 @@ def cmd_render(args):
     return dict(page=str(path.resolve()), **({"text": page_text(html)} if args.text else {}))
 
 
-def differences_since(ledger: Ledger, change_id: int, now) -> list[dict]:
-    """그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값(`now`)이 다른 칸 — 한쪽에만 있는 칸도. 다른 호텔·오퍼면 거절."""
+def reading_since(ledger: Ledger, change_id: int, now):
+    """그 번호의 계산이 바탕으로 삼은 읽은 값 — 방금 읽은 값(`now`)이 다른 호텔·오퍼면 거절."""
     then = recorded_reading(ledger, change_id)
     if not same_hotel(then.hotel, then.hotel_id, now.hotel, now.hotel_id) or then.offer != now.offer:
         raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {change_id}번은 "
                         f"{hotel_label(then.hotel, then.hotel_id)} · {then.offer} 입니다")
-    return [dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now))
-            for item in stale_cells(then, now)]
+    return then
+
+
+def encode_differences(differences) -> list[dict]:
+    return [dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in differences]
+
+
+def differences_since(ledger: Ledger, change_id: int, now) -> list[dict]:
+    """그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값(`now`)이 다른 칸 — 한쪽에만 있는 칸도. 다른 호텔·오퍼면 거절."""
+    return encode_differences(stale_cells(reading_since(ledger, change_id, now), now))
 
 
 def cmd_begin(args):
@@ -346,13 +283,13 @@ def cmd_begin(args):
     data = load(args.plan)
     if not data.get("steps"):
         raise PlanError("저장 단계가 없습니다. 빨간 줄 칸을 먼저 골라 주세요")
-    ledger, now = Ledger(), decode_snapshot(load(args.snapshot))
-    if ledger.change(args.change).status == "previewed":
-        differences = differences_since(ledger, args.change, now)
-        if differences:
-            return dict(change_id=args.change, status="previewed", same=False, differences=differences)
-    ledger.begin(args.change, step_plans(decode_step(step) for step in data["steps"]),
-                 data["plan"]["request"] if "plan" in data else None, read_at=now.read_at)
+    ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
+    then = reading_since(ledger, args.change, now) if ledger.change(args.change).status == "previewed" else now
+    differences = ledger.begin_fresh(args.change, step_plans(decode_step(step) for step in data["steps"]), snapshot_reading(then),
+                                     snapshot_reading(now), read_at=now.read_at,
+                                     request=data["plan"]["request"] if "plan" in data else None)
+    if differences:
+        return dict(change_id=args.change, status="previewed", same=False, differences=encode_differences(differences))
     record = ledger.change(args.change)
     return dict(change_id=record.id, status=record.status, steps=len(record.steps))
 
@@ -363,7 +300,7 @@ def record_hotel(record) -> dict:
 
 
 def cmd_calls(args):
-    record = Ledger().change(args.change)
+    record = open_ledger().change(args.change)
     if not record.steps:
         raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
     if record.status == "stopped":
@@ -376,7 +313,7 @@ def cmd_calls(args):
 
 def cmd_record_result(args):
     result = load(args.result)
-    ledger = Ledger()
+    ledger = open_ledger()
     record = ledger.change(args.change)
     step = next((step for step in record.steps if step.index == result.get("no")), None)
     if step is None:
@@ -391,7 +328,7 @@ def cmd_record_result(args):
 
 
 def cmd_check(args):
-    ledger = Ledger()
+    ledger = open_ledger()
     record, now = ledger.change(args.change), decode_snapshot(load(args.snapshot))
     if not same_hotel(record.hotel, record.hotel_id, now.hotel, now.hotel_id) or record.offer != now.offer:
         raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {args.change}번은 "
@@ -407,14 +344,14 @@ def cmd_check(args):
 
 
 def cmd_verify(args):
-    mismatches = Ledger().verify(args.change, snapshot_reading(decode_snapshot(load(args.snapshot))))
+    mismatches = open_ledger().verify(args.change, snapshot_reading(decode_snapshot(load(args.snapshot))))
     return dict(change_id=args.change, same=not mismatches, mismatches=[
         dict(key=key_fields(item.item_key), label=item.label, field=item.field, after=money_text(item.after),
              seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])
 
 
 def cmd_stale(args):
-    differences = differences_since(Ledger(), args.change, decode_snapshot(load(args.snapshot)))
+    differences = differences_since(open_ledger(), args.change, decode_snapshot(load(args.snapshot)))
     return dict(same=not differences, differences=differences)
 
 
@@ -433,7 +370,7 @@ def undone_before(ledger: Ledger, change_id: int) -> list[dict]:
 
 def cmd_rollback(args):
     fresh_record(args, "rollback")
-    ledger = Ledger()
+    ledger = open_ledger()
     snapshot = decode_snapshot(load(args.snapshot))
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
@@ -448,7 +385,7 @@ def cmd_rollback(args):
 
 def cmd_restore(args):
     fresh_record(args, "rollback")
-    ledger = Ledger()
+    ledger = open_ledger()
     snapshot = decode_snapshot(load(args.snapshot))
     select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_restore(ledger.recorded_snapshot(args.saved), snapshot, select)
@@ -461,7 +398,7 @@ def cmd_restore(args):
 
 def cmd_save_snapshot(args):
     snapshot = decode_snapshot(load(args.snapshot))
-    return dict(change_id=Ledger().record_snapshot(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer,
+    return dict(change_id=open_ledger().record_snapshot(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer,
                                                    currency=snapshot.currency,
                                                    sentence=args.sentence, read_at=snapshot.read_at,
                                                    rows=snapshot_rows(snapshot), reading=encode_snapshot(snapshot)))
@@ -480,7 +417,7 @@ def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
 
 
 def cmd_list(args):
-    ledger = Ledger()
+    ledger = open_ledger()
     return dict(ledger=str(ledger.path), changes=listed(ledger))
 
 

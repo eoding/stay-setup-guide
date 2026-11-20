@@ -19,6 +19,9 @@
 
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 다(적용한 것이 아니다 — 목록에서 적용된 변경과 갈린다).
 
+도우미마다 자기 항목 종류로 장부를 연다(`Ledger(kind="price_cell")`). 그러면 목록에는 그 종류의 번호만 나오고, 다른 종류의 번호를
+주면 어느 도우미의 기록인지 대며 거절한다. 번호의 종류는 그 번호에 적힌 항목 줄의 종류다(표의 모양은 그대로다).
+
 적용 중인 변경이 `IDLE`(15분) 동안 아무 일이 없으면 멈춘 변경이다 — 목록 · calls · check · 결과 페이지 어디서나. 세션이
 저장 사이에서 끊겨도 장부는 적용 중으로 남는데, 그 사이 ERP 값이 바뀌었을 수 있어 다시 읽지 않고는 남은 저장을 내지 않는다.
 멈춘 뒤에 적힌 저장 결과는 적기만 하고 변경을 다시 살리지 않는다. 다시 살리는 것은 방금 읽은 값으로 이어서 해도 된다고 본
@@ -37,7 +40,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, Sequence
 
-from .items import Reading
+from .items import Difference, Reading, stale_items
 from .money import money, money_text
 from .rollback import LaterWrite, RecordedChange, RecordedItem
 
@@ -47,6 +50,7 @@ DB_NAME = "가격장부.sqlite3"
 SCHEMA_VERSION = 2
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
+KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -294,10 +298,12 @@ def _body(data) -> str:
 
 
 class Ledger:
-    def __init__(self, path: Path | None = None, now=None):
-        """`now` 는 지금 시각을 주는 함수(시험이 시계를 옮겨 본다). 장부가 적는 시각과, 멈춤 · 읽은 값의 나이를 이것으로 셈한다."""
+    def __init__(self, path: Path | None = None, now=None, kind: str | None = None):
+        """`now` 는 지금 시각을 주는 함수(시험이 시계를 옮겨 본다). 장부가 적는 시각과, 멈춤 · 읽은 값의 나이를 이것으로 셈한다.
+        `kind` 를 주면 그 항목 종류의 장부로 연다 — 목록은 그 종류의 번호만, 다른 종류의 번호는 거절한다."""
         self.path = Path(path) if path else ledger_dir() / DB_NAME
         self._now = now or (lambda: datetime.now().astimezone())
+        self.kind = kind
         with self._db() as db:
             has_meta = db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone()
             found = db.execute("SELECT value FROM meta WHERE name = 'schema_version'").fetchone() if has_meta else None
@@ -391,6 +397,13 @@ class Ledger:
         row = db.execute("SELECT * FROM changes WHERE id = ?", (change_id,)).fetchone()
         if row is None:
             raise LedgerError(f"장부에 {change_id}번 변경이 없습니다")
+        if self.kind is not None:
+            other = db.execute("SELECT item_kind FROM item_values WHERE change_id = ? AND item_kind != ? LIMIT 1",
+                               (change_id, self.kind)).fetchone()
+            if other is not None:
+                owner = KIND_NAMES.get(other["item_kind"], other["item_kind"])
+                raise LedgerError(f"{change_id}번은 {owner}의 기록입니다 — 이 도우미는 {KIND_NAMES.get(self.kind, self.kind)}의 "
+                                  "기록만 다룹니다")
         return row
 
     def _stamp(self) -> str:
@@ -478,6 +491,19 @@ class Ledger:
             db.execute("UPDATE changes SET status = 'applying', updated_at = ?, active_at = ? WHERE id = ?",
                        (self._stamp(), read_at, change_id))
 
+    def begin_fresh(self, change_id: int, steps: Sequence[StepPlan], then: Reading, now: Reading, *, read_at: str,
+                    request: Mapping | None = None) -> tuple[Difference, ...]:
+        """적용 직전에 다시 읽고 시작하기(결정 18) — 방금 읽은 값(`now`, 읽은 시각 `read_at`)을 그 번호의 계산이 바탕으로 삼은 읽은
+        값(`then`)과 견주어, 한 항목이라도(딸린 칸까지) 다르면 아무것도 시작하지 않고 다른 항목들을 돌려준다. 같으면 begin 하고 빈
+        것을 돌려준다(읽은 값이 IDLE 보다 오래됐으면 begin 이 거절한다). 이미 적용을 시작한 번호는 견주지 않고 begin 에 넘긴다 — 같은
+        단계로 다시 부르면 아무것도 바꾸지 않는다."""
+        if self.change(change_id).status == "previewed":
+            differences = stale_items(then, now)
+            if differences:
+                return differences
+        self.begin(change_id, steps, request, read_at=read_at)
+        return ()
+
     def record_step(self, change_id: int, index: int, saved: bool, note: str | None = None, unknown: bool = False) -> str:
         """저장 한 번이 끝날 때마다 부른다. 새 상태를 돌려준다.
 
@@ -532,6 +558,25 @@ class Ledger:
             stamp = self._stamp()
             db.execute("UPDATE changes SET verified_at = ?, updated_at = ? WHERE id = ?", (stamp, stamp, change_id))
         return mismatches
+
+    def untouched(self, change_id: int, reading: Reading) -> list[Mismatch]:
+        """저장한 항목의 넣지 않은 필드 가운데 방금 읽은 값이 미리보기 때 값과 다른 것(`after` 는 그대로여야 할 값). 기록 하나를
+        통째로 다시 저장하는 화면(부가옵션 가격 줄 · 부과금 …)에서 저장이 다른 필드를 건드리지 않았는지 본다. 장부에는 적지 않는다."""
+        with self._db() as db:
+            self._header(db, change_id)
+            saved = {(row["item_kind"], row["item_key"]) for row in self._written(db, change_id)}
+            rows = db.execute("SELECT * FROM item_values WHERE change_id = ? AND action IS NULL AND state != 'missing'"
+                              " ORDER BY rowid", (change_id,)).fetchall()
+        moved = []
+        for row in rows:
+            if (row["item_kind"], row["item_key"]) not in saved:
+                continue
+            item = reading.get((row["item_kind"], row["item_key"]))
+            seen, before = None if item is None else item.fields.get(row["field"]), money(row["before"])
+            if item is None or item.state == "missing" or seen != before:
+                moved.append(Mismatch(row["item_kind"], row["item_key"], row["label"], row["field"], before, seen,
+                                      None if item is None else item.state))
+        return moved
 
     def check(self, change_id: int, now: Reading, then: Reading, read_at: str) -> CheckReport:
         """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
@@ -689,10 +734,17 @@ class Ledger:
         return json.loads(header["reading"])
 
     def list_changes(self, change_id: int | None = None) -> list[dict]:
-        """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
+        """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만, 종류로 열었으면 그 종류의 번호만). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
         `partly_rolled_back` 이다(`written` · `rolled_back` 이 그 수, `undone_by` 가 되돌린 번호들) — 되돌린 변경이 살아 있는
         것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None)."""
         item = "item_values.item_kind || '|' || item_values.item_key"
+        where, params = [], []
+        if change_id is not None:
+            where.append("changes.id = ?")
+            params.append(change_id)
+        if self.kind is not None:
+            where.append("NOT EXISTS (SELECT 1 FROM item_values AS other WHERE other.change_id = changes.id AND other.item_kind != ?)")
+            params.append(self.kind)
         with self._db() as db:
             rows = db.execute(
                 f"SELECT changes.*, COUNT(DISTINCT {item}) AS items,"
@@ -703,8 +755,8 @@ class Ledger:
                 " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id AND s.status = 'saved') AS saved_steps"
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
                 " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
-                + ("" if change_id is None else " WHERE changes.id = ?") + " GROUP BY changes.id ORDER BY changes.id DESC",
-                () if change_id is None else (change_id,)).fetchall()
+                + (" WHERE " + " AND ".join(where) if where else "") + " GROUP BY changes.id ORDER BY changes.id DESC",
+                params).fetchall()
         return [dict(id=row["id"], kind=row["kind"], status=self._listed_status(row), hotel=row["hotel"], hotel_id=row["hotel_id"],
                      offer=row["offer"], currency=row["currency"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],

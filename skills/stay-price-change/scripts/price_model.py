@@ -29,7 +29,7 @@ from typing import Mapping
 
 from change_core.items import ItemState, Reading, item_key, key_fields
 from change_core.money import money, money_text
-from change_core.rules import BLOCKED, RED, Rule, RuleTable
+from change_core.rules import BLOCKED, RED, Rule, RuleTable, moved_far
 
 ITEM_KIND = "price_cell"
 FIELDS = ("sell", "list", "supply")
@@ -37,7 +37,6 @@ FIELD_LABELS = {"sell": "판매가", "list": "정가", "supply": "공급 원가"
 STATES = ("open", "closed", "missing")
 OPERATIONS = ("amount", "percent", "set", "clear")
 RESERVED, CLOSED, NEW = "reserved", "closed", "new"
-RED_LINE_SHARE = Decimal("0.30")
 WEEKDAYS = "월화수목금토일"
 # ERP 가 날짜 고르기 한 번에 받는 날 — basecamp `stay/date_selection.py` 의 MAX_DAYS(구간 하나의 길이도, 고른 날 수도 550일까지).
 # 드로어 ① 의 시작일 ~ 종료일도 이 길이까지다(러너 `CAL_MAX_DAYS`). 구간 줄의 수 자체는 정해 두지 않았다(글자 12,000자 칸).
@@ -321,13 +320,7 @@ class CellChange:
 
 
 def _moved_far(before: CellValue, after: CellValue | None) -> bool:
-    if after is None:
-        return False
-    for name in FIELDS:
-        old, new = getattr(before, name), getattr(after, name)
-        if old is not None and new is not None and abs(new - old) > abs(old) * RED_LINE_SHARE:
-            return True
-    return False
+    return after is not None and any(moved_far(getattr(before, name), getattr(after, name)) for name in FIELDS)
 
 
 CHOICE_LABELS = {

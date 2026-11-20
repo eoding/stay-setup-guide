@@ -21,7 +21,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger  # noqa: E402
-from price_browser import ask_sum  # noqa: E402
+from change_core.answers import ask_sum  # noqa: E402
 from price_model import CellKey, decode_step, encode_request, encode_snapshot  # noqa: E402
 
 

@@ -1,13 +1,15 @@
 """항목 값의 공통 모양과 낡음 확인.
 
-항목 하나 = (종류, 키). 종류는 `price_cell` 같은 글자, 키는 그 항목을 가리키는 칸들을 `item_key` 로 굳힌 글자다.
-한 번 읽은 값 전부(Reading)는 (종류, 키) → ItemState(이름, 상태, 필드 → 값) 이다. 상태 `missing` 은 그 항목이 없다는 뜻이다.
+항목 하나 = (종류, 키). 종류는 `price_cell` · `addon_price` 같은 글자, 키는 그 항목을 가리키는 칸들을 `item_key` 로 굳힌 글자다.
+한 번 읽은 값 전부(Reading)는 (종류, 키) → ItemState(이름, 상태, 필드 → 값, 딸린 칸 → 글자) 이다. 상태 `missing` 은 그 항목이 없다는
+뜻이다. 필드는 도우미가 바꿀 수 있는 금액(장부에 필드마다 한 줄), 딸린 칸은 화면이 그 항목과 함께 보이고 저장할 때 그대로 다시 보내는
+나머지 칸(이름 · 시즌 · 설명 …)이다 — 바꾸지 않지만 미리보기 때와 다르면 그 항목은 낡은 것이다. 가격 칸에는 딸린 칸이 없다.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Mapping
 
@@ -34,9 +36,11 @@ class ItemState:
     label: str
     state: str
     fields: Mapping[str, Decimal | None]
+    others: Mapping[str, str] = field(default_factory=dict)
 
     def same_as(self, other: "ItemState | None") -> bool:
-        return other is not None and self.state == other.state and dict(self.fields) == dict(other.fields)
+        return (other is not None and self.state == other.state and dict(self.fields) == dict(other.fields)
+                and dict(self.others) == dict(other.others))
 
 
 Reading = Mapping[tuple[str, str], ItemState]
@@ -65,12 +69,17 @@ def stale_items(then: Reading, now: Reading) -> tuple[Difference, ...]:
 
 
 def encode_state(state: ItemState | None) -> dict | None:
+    """딸린 칸이 없는 항목(가격 칸)은 `others` 를 적지 않는다."""
     if state is None:
         return None
-    return dict(label=state.label, state=state.state, fields={name: money_text(v) for name, v in state.fields.items()})
+    data = dict(label=state.label, state=state.state, fields={name: money_text(v) for name, v in state.fields.items()})
+    if state.others:
+        data["others"] = dict(state.others)
+    return data
 
 
 def decode_state(data: Mapping | None) -> ItemState | None:
     if data is None:
         return None
-    return ItemState(str(data["label"]), str(data["state"]), {name: money(v) for name, v in data["fields"].items()})
+    return ItemState(str(data["label"]), str(data["state"]), {name: money(v) for name, v in data["fields"].items()},
+                     {str(name): str(value) for name, value in (data.get("others") or {}).items()})

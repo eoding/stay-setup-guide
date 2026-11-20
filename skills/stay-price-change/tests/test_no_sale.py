@@ -15,7 +15,8 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 import scene  # noqa: E402
 from browser_replies import reply  # noqa: E402
 from erp_read import PairRead, ParseError, build_snapshot, parse_price_page  # noqa: E402
-from price_browser import BrowserError, pair_reads  # noqa: E402
+from change_core.answers import BrowserError  # noqa: E402
+from price_browser import pair_reads  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, ChangeRequest, Target, TargetTable, decode_plan, decode_snapshot, encode_plan, encode_snapshot,
 )

@@ -267,14 +267,16 @@ def unremovable_table(plan: RollbackPlan, field_labels: Mapping[str, str], unit:
             f'<div class="scroll"><table><tr><th>무엇</th><th>지금 값</th><th>왜</th></tr>{rows}</table></div>')
 
 
-def rollback_ask(plan: RollbackPlan, unit: str = "칸") -> str:
+ROLLBACK_NOTE = "이 되돌리기도 장부에 한 번의 변경으로 적혀서, 다시 되돌릴 수 있습니다."
+
+
+def rollback_ask(plan: RollbackPlan, kind_notes: Iterable[str], unit: str = "칸") -> str:
+    """되돌리기 미리보기의 끝 — 무엇을 말하면 되돌리는지와 알릴 것. `kind_notes` 는 종류마다 되돌려도 그대로인 것(예약 금액 ·
+    판매 마감 · 값의 출처 표시 …), 그 뒤에 모든 종류에 같은 한 줄(ROLLBACK_NOTE)이 붙는다."""
     ask = f'"되돌려"라고 하시면 {len(plan.restored):,}{unit}을 되돌립니다.'
     if plan.kept and not plan.include_kept:
         ask += (f' 그 사이 달라진 {len(plan.kept):,}{unit}도 되돌리려면 "{len(plan.kept):,}{unit}도 포함해서 되돌려"라고 '
                 "해 주세요.")
     if plan.unremovable:
         ask += f" 지울 수 없는 {len(plan.unremovable):,}{unit}은 그대로 남습니다."
-    return (f'<div class="banner blue">{esc(ask)}</div>'
-            + notes(["이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.",
-                     "판매 마감·판매 가능 상태는 되돌리지 않고 값만 되돌립니다.",
-                     "이 되돌리기도 장부에 한 번의 변경으로 적혀서, 다시 되돌릴 수 있습니다."]))
+    return f'<div class="banner blue">{esc(ask)}</div>' + notes([*kind_notes, ROLLBACK_NOTE])

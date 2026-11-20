@@ -21,7 +21,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 import scene  # noqa: E402
 from browser_replies import done_at, reply  # noqa: E402
 from change_core.ledger import now_text  # noqa: E402
-from price_browser import ask_sum  # noqa: E402
+from change_core.answers import ask_sum  # noqa: E402
 from price_model import decode_snapshot, encode_request, encode_snapshot  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"

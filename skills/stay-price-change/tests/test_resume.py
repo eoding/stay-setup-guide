@@ -25,7 +25,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 import scene  # noqa: E402
 from change_core.ledger import DB_NAME, IDLE, Ledger, LedgerError  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
-from price_browser import ask_sum  # noqa: E402
+from change_core.answers import ask_sum  # noqa: E402
 from price_model import encode_request, encode_snapshot, snapshot_reading  # noqa: E402
 from price_pages import render_result  # noqa: E402
 from price_plan import plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402

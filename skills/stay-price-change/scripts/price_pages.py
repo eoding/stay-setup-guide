@@ -45,6 +45,8 @@ ONE_COLUMN_PER_DATE_UP_TO = 7        # 날짜가 이만큼까지는 날짜마다
 # 미리보기 안내 — 그런 칸이 있을 때만 단다
 RESERVED_NOTE = "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다."
 CLOSED_NOTE = "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다."
+# 되돌려도 그대로인 것 — 되돌리기 미리보기의 끝에 단다(chrome.rollback_ask)
+ROLLBACK_KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.", "판매 마감·판매 가능 상태는 되돌리지 않고 값만 되돌립니다.")
 
 
 def _short_day(day: str) -> str:
@@ -745,7 +747,7 @@ def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = ()
             '<h2>되돌리는 칸' + (' <span class="sub">— 예약 있는 날도 포함합니다</span>' if booked else "") + "</h2>",
             grid([*restored, *held], cell, reserved, closed, by_date) if restored or held else
             '<p class="sub">되돌릴 칸이 없습니다.</p>',
-            rollback_ask(plan)]
+            rollback_ask(plan, ROLLBACK_KEEPS)]
     return page(title, "\n".join(body), MAKER)
 
 

@@ -7,11 +7,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Callable, Hashable, Iterable, Mapping
 
 from .items import Refused
 
 BLOCKED, RED = "blocked", "red"
+RED_LINE_SHARE = Decimal("0.30")     # 「너무 큰 변화」 — 지금 값보다 30% 넘게 오르거나 내리면 빨간 줄(결정 10, 모든 종류에 같다)
+
+
+def moved_far(old: Decimal | None, new: Decimal | None) -> bool:
+    """한 필드가 `RED_LINE_SHARE` 넘게 움직였는지. 한쪽이 비었으면(새로 넣음 · 비움) 움직임으로 재지 않는다. 0 에서 움직이면 넘은 것이다."""
+    return old is not None and new is not None and abs(new - old) > abs(old) * RED_LINE_SHARE
 
 
 @dataclass(frozen=True)

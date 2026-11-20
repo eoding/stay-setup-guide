@@ -8,7 +8,7 @@ import json
 import zlib
 from datetime import datetime, timezone
 
-from price_browser import ask_sum, fnv1a
+from change_core.answers import ask_sum, fnv1a
 
 
 def done_at(moment: datetime | None = None) -> str:

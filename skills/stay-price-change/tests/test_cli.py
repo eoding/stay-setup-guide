@@ -21,7 +21,8 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
-from price_browser import PAGE_KEEPS, ask_sum  # noqa: E402
+from change_core.answers import ask_sum  # noqa: E402
+from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import CellKey, Snapshot, decode_snapshot, decode_step, encode_request, encode_snapshot  # noqa: E402
 
 
