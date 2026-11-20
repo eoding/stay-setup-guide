@@ -189,3 +189,41 @@ test('B7 · applyCell — 다른 달의 날짜면 달력을 그 달로 넘긴 �
   assert.equal(page.doc.getElementById('stay_calendar').getAttribute('data-cal-month'), '2026-09');
   page.w.close();
 });
+
+test('U1 · applyBulk — 친 값이 칸에 그대로 남지 않으면(화면이 고쳐 쓰거나 받지 않음) 저장 단추를 누르지 않는다', async () => {
+  for (const [shown, why] of [['1250.00', '화면이 금액을 고쳐 쓴다'], ['', '화면이 글자를 받지 않는다']]) {
+    const page = erpPage();
+    // ERP 화면 스크립트가 친 뒤 한 틱 늦게 칸을 고쳐 쓰는 것처럼 — 칠 때의 확인은 지나고, 저장 직전의 되읽기에서만 드러난다
+    page.doc.addEventListener('change', (e) => {
+      if (/^prices-\d+-price$/.test(e.target.name || '')) page.w.setTimeout(() => { e.target.value = shown; }, 0);
+    });
+    const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
+    assert.equal(r.saved, false, why);
+    assert.equal(r.pressed, false, why);
+    assert.equal(r.refused, true, why);
+    assert.match(r.error, /넣은 값을 다시 읽으니 달라 저장하지 않았습니다/, why);
+    assert.ok(!r.clicks.bulkSave, why);
+    assert.deepEqual(page.log.posts, [], `${why} — 저장 요청이 나가지 않았다`);
+    page.w.close();
+  }
+});
+
+test('U1 · applyBulk — ② 의 숨은 날짜 구간이 단계와 다르면(보이는 날 목록은 맞아도) 칸을 하나도 치지 않는다', async () => {
+  // 서버가 ② 를 다른 구간으로 되싣는다 — 상태 표의 날 목록(7/1)은 물은 그대로인데 저장이 믿는 date_selection_0 만 다르다.
+  // 받침의 [다음] 듣개가 ② 를 그린 바로 뒤(같은 클릭)에 숨은 칸을 바꾼다
+  const page = erpPage();
+  const typed = [];
+  page.doc.addEventListener('input', (e) => { if (/^prices-/.test(e.target.name || '')) typed.push(e.target.name); }, true);
+  page.doc.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-stay-screen="calendar-bulk"]') || !e.target.matches('[data-stay-action="next"]')) return;
+    page.doc.querySelector('[data-stay-screen="calendar-bulk"] input[type="hidden"][name="date_selection_0"]').value = '2026-07-01 ~ 2026-07-02';
+  });
+  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
+  assert.equal(r.saved, false);
+  assert.equal(r.pressed, false);
+  assert.match(r.error, /드로어가 다른 날짜를 골랐습니다/);
+  assert.deepEqual(typed, [], '가격 칸에 아무것도 치지 않았다');
+  assert.ok(!r.clicks.bulkSave);
+  assert.deepEqual(page.log.posts, []);
+  page.w.close();
+});

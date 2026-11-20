@@ -233,6 +233,21 @@ class BodyTest(unittest.TestCase):
         with self.assertRaisesRegex(BrowserError, "스스로 말하는 길이와 다릅니다"):
             attach_bodies([result, takes[0], short, *takes[2:]])
 
+    def test_u1_a_header_whose_second_check_differs_is_refused_here_and_never_lent_by_an_earlier_reading(self):
+        # 글자 수 · 바이트 수 · CRC-32 는 이은 글자와 맞고 FNV-1a 만 다른 머리 — 이 읽기의 쪽이면 거절한다
+        result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=3, body_id="b1")
+        odd = dict(result["body"], fnv="00000000")
+        self.assertNotEqual(odd["fnv"], result["body"]["fnv"])
+        with self.assertRaisesRegex(BrowserError, "CRC-32 · FNV-1a 가 맞지 않습니다"):
+            attach_bodies([dict(result, body=odd), *takes])
+        # 앞선 읽기의 그런 조각은 빌려 주지 않는다 — 같은 머리를 단 이번 답은 그 조각을 받아야 한다
+        again = dict(result, body=dict(odd, id="b2"))
+        with self.assertRaises(CutAnswer) as caught:
+            attach_bodies([again], earlier=[dict(result, body=odd), *takes])
+        self.assertEqual(caught.exception.refetch, [{"id": "b2", "at": 0, "size": 800}])
+        lent, = attach_bodies([dict(result, body=dict(result["body"], id="b2"))], earlier=[result, *takes])
+        self.assertEqual(lent["fragment"], PRICE, "머리가 맞는 조각은 빌려 쓴다")
+
     def test_a_cut_answer_names_the_piece_to_fetch_again_and_a_smaller_size(self):
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=3)
         shown = json.dumps(takes[1], ensure_ascii=False)
