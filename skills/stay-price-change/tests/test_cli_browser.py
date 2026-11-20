@@ -18,6 +18,8 @@ SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
+from browser_replies import reply  # noqa: E402
+from price_browser import ask_sum  # noqa: E402
 from price_model import decode_snapshot, encode_request, encode_snapshot  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"
@@ -56,12 +58,11 @@ class BrowserCommandTest(unittest.TestCase):
         probes = self.write("probes.json", [probe])
         first = self.run_cli("reserved", "--probes", probes)
         self.assertEqual((first["done"], first["ask"], first["answered"]), (False, [probe], 0))
-        pair = self.write("pair.json", {"ok": True, "op": "readPair", "asked": {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함"},
-                                        "fragment": PRICE})
+        pair = self.write("pair.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함"}, {"fragment": PRICE}))
         left = self.run_cli("read", "--hotel", "데모 호텔", "--pair-result", pair, "--reserved-probes", probes, code=2)
         self.assertIn("물음이 1개 남았습니다", left["error"])
 
-        answers = self.write("answers.json", [{"ok": True, "op": "readReserved", "asked": probe, "fragment": REJECTED}])
+        answers = self.write("answers.json", reply("readReserved", probe, {"fragment": REJECTED}))
         self.assertTrue(self.run_cli("reserved", "--probes", probes, "--result", answers)["done"])
         self.run_cli("read", "--hotel", "데모 호텔", "--pair-result", pair, "--reserved-probes", probes, "--reserved-result", answers,
                      "--read-at", "2026-11-20T18:00:00+09:00", "--out", self.dir / "snapshot.json")
@@ -69,8 +70,7 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual((snapshot.offer, snapshot.currency, len(snapshot.cells)), ("샘플 오퍼", "USD", 16))
         self.assertIn(("디럭스", "2026-12-24"), snapshot.reserved)
 
-        wrong = self.write("wrong.json", {"ok": True, "op": "readPair", "asked": {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리"},
-                                          "fragment": PRICE})
+        wrong = self.write("wrong.json", reply("readPair", {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "룸온리"}, {"fragment": PRICE}))
         self.assertIn("물은 것", self.run_cli("read", "--hotel", "H", "--pair-result", wrong, code=2)["error"])
 
     def test_calls_list_unsaved_steps_and_record_result_writes_only_the_step_it_answers(self):
@@ -86,8 +86,7 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual(calls[0]["payload"]["offer"], scene.request().offer)
 
         def result(call, **over):
-            asked = {name: value for name, value in call["payload"].items() if name != "no"}
-            return dict({"ok": True, "op": call["op"], "no": call["no"], "asked": asked, "saved": True, "pressed": True,
+            return dict({"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True,
                          "note": "저장했습니다"}, **over)
 
         saved = self.run_cli("record-result", "--change", change, "--result", self.write("r1.json", result(calls[0])))

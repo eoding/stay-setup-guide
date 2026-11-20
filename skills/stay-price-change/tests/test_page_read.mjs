@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, runFixture, ownFixture, HERE, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, ownFixture, takeAll, bytesOf, HERE, OFFER } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
 const PAIR = { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
@@ -27,7 +27,8 @@ function pythonRead(kind, html) {
 }
 const noSave = (page, r) => {
   assert.deepEqual(page.log.posts, [], '저장 요청이 하나도 나가지 않았다');
-  assert.ok(!r.clicks.some((name) => /Save$/.test(name)), '저장 단추를 누르지 않았다');
+  assert.ok(!Object.keys(r.clicks).some((name) => /Save$/.test(name)), '저장 단추를 누르지 않았다');
+  assert.ok(bytesOf(r) <= 1500, `답이 1,500바이트 안: ${bytesOf(r)}`);
   assert.equal(page.drawerOpen(), false, '드로어가 닫혀 있다');
 };
 
@@ -42,12 +43,15 @@ test('B5 · readPair — 객실 × 요금제 칩을 고르고 ② 를 줄여 돌
   const ok = erpPage();
   const read = plain(await ok.w.stayPrice.readPair(inPage(ok.w, PAIR)));
   assert.equal(read.ok, true, read.error);
-  assert.deepEqual(read.asked, PAIR);
-  assert.deepEqual(read.selected, { chip: '디럭스 · 조식 포함', ranges: ['2026-07-01'], days: 1 });
-  assert.deepEqual(read.clicks.filter((c) => c !== 'bulkDay' && c !== 'tab'), ['bulkOpen', 'bulkNext']);
+  const { body, takes } = takeAll(ok.w, read);
+  assert.deepEqual(body.asked, PAIR);
+  assert.equal(read.what, '디럭스 · 조식 포함 · 2026-07-01');
+  assert.equal(read.days, 1);
+  assert.deepEqual([read.clicks.bulkOpen, read.clicks.bulkNext], [1, 1]);
+  assert.ok(takes.every((t) => t.ok && bytesOf(t) <= 1500));
   assert.deepEqual(read.blocked, []);
   noSave(ok, read);
-  const parsed = pythonRead('price', read.fragment);
+  const parsed = pythonRead('price', body.fragment);
   assert.equal(parsed.page.rate_plan, '조식 포함');
   assert.deepEqual(parsed.page.days, { '2026-07-01': '가격 판매 가능' });
   assert.equal(parsed.page.rows[0].values['2026-07-01'][0], '120000.00');
@@ -58,7 +62,7 @@ test('B5 · readPair — 다른 탭·전체 보기에서 시작하면 [가격 �
   const page = erpPage({ start: 'overview', tab: 'offers' });
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, PAIR)));
   assert.equal(r.ok, true, r.error);
-  assert.deepEqual(r.clicks.slice(0, 2), ['tab', 'view']);
+  assert.deepEqual([r.clicks.tab, r.clicks.view], [1, 1]);
   noSave(page, r);
   page.w.close();
 });
@@ -77,7 +81,7 @@ test('B5 · readPair — 화면이 다른 객실·다른 기간·다른 오퍼�
     const r = plain(await page.w.stayPrice.readPair(inPage(page.w, ask)));
     assert.equal(r.ok, false, name);
     assert.match(r.error, why, name);
-    assert.equal(r.fragment, undefined, `${name}: 조각을 돌려주지 않는다`);
+    assert.equal(r.body, undefined, `${name}: 조각을 남기지 않는다`);
     noSave(page, r);
     page.w.close();
   }
@@ -87,11 +91,12 @@ test('B6 · readReserved — 가감 ① 을 채워 [다음] 만 누르고, ② �
   const page = erpPage();
   const r = plain(await page.w.stayPrice.readReserved(inPage(page.w, RESERVED)));
   assert.equal(r.ok, true, r.error);
-  assert.deepEqual(r.asked, RESERVED);
-  assert.ok(r.clicks.includes('adjustOpen') && r.clicks.includes('adjustNext'));
-  assert.ok(!r.clicks.some((c) => /Save|save/.test(c)), '[가감 적용] 을 누르지 않았다');
+  const { body } = takeAll(page.w, r);
+  assert.deepEqual(body.asked, RESERVED);
+  assert.deepEqual([r.clicks.adjustOpen, r.clicks.adjustNext], [1, 1]);
+  assert.ok(!Object.keys(r.clicks).some((c) => /Save|save/.test(c)), '[가감 적용] 을 누르지 않았다');
   noSave(page, r);
-  const parsed = pythonRead('adjust', r.fragment);
+  const parsed = pythonRead('adjust', body.fragment);
   assert.equal(parsed.page.hidden, 0);
   assert.ok(parsed.page.rejected.some((row) => row.reason === '예약이 있는 날' && row.room === '디럭스'), JSON.stringify(parsed.page.rejected));
   page.w.close();

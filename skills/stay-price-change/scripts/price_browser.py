@@ -2,6 +2,7 @@
 
     read_calls(offer, pairs, dates)       readPair 부를 값 — 객실 × 요금제마다, 고른 날만 덮는 기간·요일로(550일씩)
     reserved_probes(offer, pairs, dates)  readReserved 첫 물음 — 같은 기간마다 객실·요금제 전부
+    attach_bodies(results)                읽기 답에 페이지에 남겨 둔 조각을 붙인다 — 쪽(take 답)을 잇고 바이트 수·CRC-32 를 맞춰 본다
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
     price_pages(results)                  readPair 답 → 가격 수정 확인 단계(물은 오퍼·요금제와 화면이 다르면 거절)
     step_call(no, offer, kind, body)      장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
@@ -10,11 +11,16 @@
 가감 확인 단계는 건너뛰는 칸을 300줄까지만 보이고 나머지는 숨긴 줄 수로 말한다. 숨긴 줄이 있는 답은 쓰지 않고,
 그 물음을 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 다시 묻는다. 쪼갠 물음들은 원래 물음의 칸을 나눠 가지므로, 숨긴 줄이
 없는 답들을 합치면 원래 물음이 다 보였을 때와 같다. 계산은 답 목록만 보고 매번 처음부터 다시 한다(답을 덧붙여 다시 부르면 된다).
+
+브라우저 도구는 답을 2,000바이트쯤에서 자른다. 그래서 페이지는 작업의 답(1,500바이트 안)에 `ask`(물은 값의 지문)와
+`body`(id · 바이트 수 · CRC-32 · 쪽 수)만 싣고, 조각은 `stayPrice.take(id, index)` 로 한 쪽씩 내준다. 이 모듈은 쪽을 이어
+바이트 수와 CRC-32 가 둘 다 맞을 때만 쓴다 — 잘리거나 잘못 옮겨 적은 쪽이 틀린 가격이 되지 않는다.
 """
 
 from __future__ import annotations
 
 import json
+import zlib
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Iterable, Mapping
@@ -30,6 +36,55 @@ OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
 
 class BrowserError(ValueError):
     """브라우저의 답이 물은 것과 맞지 않거나, 더 물어도 답을 얻을 수 없다."""
+
+
+def ask_sum(value: Mapping) -> str:
+    """물은 값의 지문 — `no` 를 뺀 값을 키 정렬 JSON 으로 적은 것의 CRC-32(페이지의 `askedOf`·`canon`·`crc32` 와 같다)."""
+    text = json.dumps({name: item for name, item in value.items() if name != "no"}, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"))
+    return f"{zlib.crc32(text.encode('utf-8')):08x}"
+
+
+def attach_bodies(results: Iterable[Mapping]) -> list[dict]:
+    """답 목록(읽기 답과 take 답이 섞여 있다) → 읽기 답마다 조각을 푼 답. take 답은 빠진다.
+
+    쪽이 하나라도 없거나, 같은 쪽이 서로 다르거나, 이은 글자의 바이트 수·CRC-32 가 답의 body 와 다르면 BrowserError.
+    풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
+    """
+    results = [dict(result) for result in results]
+    pieces: dict[str, dict[int, Mapping]] = {}
+    for result in results:
+        if result.get("op") != "take":
+            continue
+        if not result.get("ok"):
+            raise BrowserError(f"조각 한 쪽을 받지 못했습니다: {result.get('error')}")
+        seen = pieces.setdefault(str(result["id"]), {}).setdefault(int(result["index"]), result)
+        if seen.get("text") != result.get("text"):
+            raise BrowserError(f"조각 {result['id']} 의 {result['index']}번째 쪽이 두 번 왔는데 서로 다릅니다")
+    out = []
+    for result in results:
+        if result.get("op") == "take":
+            continue
+        meta = result.get("body")
+        if not result.get("ok") or meta is None:
+            out.append(result)
+            continue
+        got = pieces.get(str(meta["id"]), {})
+        missing = [index for index in range(int(meta["pieces"])) if index not in got]
+        if missing:
+            raise BrowserError(f"조각 {meta['id']} 의 쪽 {len(missing)}개를 받지 않았습니다(번호 {', '.join(map(str, missing[:5]))})")
+        if any((piece.get("count"), piece.get("bytes"), piece.get("crc32")) != (meta["pieces"], meta["bytes"], meta["crc32"])
+               for piece in got.values()):
+            raise BrowserError(f"조각 {meta['id']} 의 쪽들이 말하는 크기·검사값이 답과 다릅니다")
+        text = "".join(got[index]["text"] for index in range(int(meta["pieces"])))
+        data = text.encode("utf-8")
+        if len(data) != meta["bytes"] or f"{zlib.crc32(data):08x}" != meta["crc32"]:
+            raise BrowserError(f"조각 {meta['id']} 을 이어 보니 바이트 수나 CRC-32 가 맞지 않습니다 — 쪽을 다시 받아야 합니다")
+        body = json.loads(text)
+        if body.get("op") != result.get("op") or ask_sum(body.get("asked") or {}) != result.get("ask"):
+            raise BrowserError(f"조각 {meta['id']} 은 이 답의 물음에서 나온 것이 아닙니다")
+        out.append({**result, **body})
+    return out
 
 
 def selected(first: str, last: str, weekdays: Iterable[str]) -> list[str]:
@@ -87,7 +142,7 @@ def probe_key(probe: Mapping) -> str:
     missing = [name for name in PROBE_FIELDS if name not in probe]
     if missing:
         raise BrowserError(f"readReserved 물음에 칸이 없습니다: {', '.join(missing)}")
-    return json.dumps({name: probe[name] for name in PROBE_FIELDS}, ensure_ascii=False, sort_keys=True)
+    return ask_sum({name: probe[name] for name in PROBE_FIELDS})
 
 
 def split(probe: Mapping) -> list[dict]:
@@ -116,17 +171,18 @@ class Round:
 
 
 def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Round:
+    """`results` 는 readReserved 답과 그 조각의 take 답들(순서 무관). 답은 지문(`ask`)으로 물음에 붙는다."""
     answers: dict[str, AdjustPage] = {}
-    failures: dict[str, dict] = {}
-    for result in results:
+    failures: dict[str, str] = {}
+    for result in attach_bodies(results):
         if result.get("op") != "readReserved":
             raise BrowserError(f"readReserved 의 답이 아닙니다: {result.get('op')}")
-        key = probe_key(result.get("asked") or {})
+        key = str(result.get("ask"))
         if result.get("ok"):
             answers[key] = parse_adjust_page(result["fragment"])
             failures.pop(key, None)
         elif key not in answers:
-            failures[key] = {"asked": result["asked"], "error": result.get("error") or "실패"}
+            failures[key] = result.get("error") or "실패"
     ask, pages, queue = [], [], [dict(probe) for probe in probes]
     while queue:
         probe = queue.pop(0)
@@ -137,13 +193,13 @@ def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Rou
             queue[0:0] = split(probe)
         else:
             pages.append(page)
-    asked = {probe_key(probe) for probe in ask}
-    return Round(ask, pages, [failure for key, failure in failures.items() if key in asked])
+    return Round(ask, pages, [{"asked": probe, "error": failures[probe_key(probe)]} for probe in ask if probe_key(probe) in failures])
 
 
 def price_pages(results: Iterable[Mapping]) -> list[PricePage]:
+    """`results` 는 readPair 답과 그 조각의 take 답들."""
     pages = []
-    for result in results:
+    for result in attach_bodies(results):
         if result.get("op") != "readPair":
             raise BrowserError(f"readPair 의 답이 아닙니다: {result.get('op')}")
         asked = result.get("asked") or {}
@@ -174,8 +230,7 @@ def step_outcome(call: Mapping, result: Mapping) -> tuple[bool, str]:
     """(저장됨, 장부 메모). 다른 작업·다른 번호·다른 값을 물은 답이면 BrowserError — 엉뚱한 단계에 적지 않는다."""
     if result.get("op") != call["op"] or result.get("no") != call["no"]:
         raise BrowserError(f"{call['no']}번 저장({call['op']})의 답이 아닙니다: {result.get('op')} {result.get('no')}번")
-    asked, wanted = result.get("asked") or {}, {name: value for name, value in call["payload"].items() if name != "no"}
-    if {name: asked.get(name) for name in wanted} != wanted:
+    if result.get("ask") != ask_sum(call["payload"]):
         raise BrowserError(f"{call['no']}번 저장의 답이 장부의 그 단계와 다른 값을 물었습니다")
     if result.get("saved") is True:
         note = result.get("note") or "저장했습니다"

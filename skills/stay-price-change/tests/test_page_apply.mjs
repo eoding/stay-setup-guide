@@ -4,7 +4,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, runFixture, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, bytesOf, OFFER } from './page_harness.mjs';
 
 const BULK = { no: 1, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] };
 const CELL = { no: 2, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] };
@@ -22,7 +22,8 @@ test('B7 · applyBulk — 러너의 가격 수정 단계로 넣을 값만 친 �
   assert.equal(r.saved, true);
   assert.equal(r.pressed, true);
   assert.equal(r.no, 1);
-  assert.deepEqual(r.clicks.filter((c) => c === 'bulkSave'), ['bulkSave']);
+  assert.equal(r.clicks.bulkSave, 1);
+  assert.ok(bytesOf(r) <= 1500, `답이 1,500바이트 안: ${bytesOf(r)}`);
   assert.equal(page.log.posts.length, 1);
   const post = page.log.posts[0];
   assert.equal(post['prices-0-price'], '125000.00');
@@ -95,7 +96,7 @@ test('B7 · applyBulk — 이어지지 않은 날짜·금액 없는 줄은 화�
     const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, step)));
     assert.equal(r.ok, false);
     assert.match(r.error, why);
-    assert.deepEqual(r.clicks, []);
+    assert.deepEqual(r.clicks, {});
   }
   assert.deepEqual(page.log.reached, []);
   page.w.close();
@@ -113,7 +114,7 @@ test('B7 · applyCell — 연 셀 창의 날짜가 단계와 다르면 아무것
   assert.match(r.error, /날짜\(2026-07-02\)가 저장할 날짜\(2026-07-01\)와 달라/);
   assert.equal(atClose, '150000.00', '칸에 손대지 않고 닫았다');
   assert.deepEqual(page.log.posts, []);
-  assert.ok(!r.clicks.includes('cellSave') && r.clicks.includes('cellClose'));
+  assert.ok(!r.clicks.cellSave && r.clicks.cellClose === 1);
   assert.equal(page.doc.getElementById('stay_cell_edit'), null, '셀 창을 닫았다');
   page.w.close();
 });
@@ -123,7 +124,7 @@ test('B7 · applyCell — 인원·박수 줄을 찾아 정가를 비우고 그 �
   const r = plain(await page.w.stayPrice.applyCell(inPage(page.w, CELL)));
   assert.equal(r.ok, true, r.error);
   assert.equal(r.saved, true);
-  assert.deepEqual(r.clicks.filter((c) => /^cell/.test(c)), ['cellOpen', 'cellSave', 'cellClose']);
+  assert.deepEqual([r.clicks.cellOpen, r.clicks.cellSave, r.clicks.cellClose], [1, 1, 1]);
   assert.equal(page.log.posts.length, 1);
   assert.equal(page.log.posts[0].row, '501');
   assert.equal(page.log.posts[0].original_price, '');
@@ -167,7 +168,7 @@ test('B7 · applyCell — 다른 달의 날짜면 달력을 그 달로 넘긴 �
   const page = erpPage({ cell: { date: '2026-09-01' } });
   const r = plain(await page.w.stayPrice.applyCell(inPage(page.w, Object.assign({}, CELL, { date: '2026-09-01' }))));
   assert.equal(r.saved, true, r.error);
-  assert.deepEqual(r.clicks.filter((c) => c === 'month'), ['month', 'month']);
+  assert.equal(r.clicks.month, 2);
   assert.equal(page.doc.getElementById('stay_calendar').getAttribute('data-cal-month'), '2026-09');
   page.w.close();
 });

@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, loadJsdom, JSDOM_MISSING, OWN_FIXTURES, HERE } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, bytesOf, runFixture, loadJsdom, JSDOM_MISSING, OWN_FIXTURES, HERE, OFFER } from './page_harness.mjs';
+import { crc32 } from 'node:zlib';
 
 const CSRF = 'q8Zr3VbN0aWkT5yLmP2xC7dJ9eFh4gUs6iO1nRtYvBwXzAcQ'; // 지어낸 64자 꼴 토큰
 const FIXTURES = [
@@ -62,9 +63,9 @@ test('B4 · 줄인 조각에는 태그·글자·data-stay-*·data-calendar-*·co
     <input type="hidden" name="csrfmiddlewaretoken" value="${CSRF}"><button data-stay-action="save">입력한 가격 적용</button><select name="s"><option>보이는 옵션</option></select>
     <textarea name="t">글</textarea><script>var leak = 1;</script><style>.x{}</style><template><b>틀</b></template><a href="/stay/1/?q=1" data-stay-action="goto">링크 글자</a><!-- 주석 --><br></section>`;
   assert.equal(w.stayPrice.reduce(box.firstElementChild),
-    '<section data-stay-summary>\n    <table data-stay-rows="prices" data-calendar-link-base><thead><tr><th colspan="4">머리</th></tr></thead>\n    '
-    + '<tbody data-stay-occupancy-key="A2" data-stay-los-nights="1"><tr data-stay-existing><td rowspan="2">1 &lt; 2 &amp; "3"</td></tr></tbody></table>\n    '
-    + '\n    <a data-stay-action="goto">링크 글자</a><br></section>');
+    '<section data-stay-summary> <table data-stay-rows="prices" data-calendar-link-base><thead><tr><th colspan="4">머리</th></tr></thead>'
+    + '<tbody data-stay-occupancy-key="A2" data-stay-los-nights="1"><tr data-stay-existing><td rowspan="2">1 &lt; 2 &amp; "3"</td></tr></tbody></table>'
+    + ' <a data-stay-action="goto">링크 글자</a><br></section>', '표 뼈대 사이 빈칸은 지우고 다른 빈칸 줄은 한 칸으로');
   w.close();
 });
 
@@ -109,4 +110,33 @@ test('B4 · 가격 수정·가감 조각 다섯 장 모두 줄여도 파이썬 �
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('B9 · 줄인 조각에는 들여쓰기가 남지 않는다(파이썬 읽기는 위 다섯 장 시험에서 같은 결과)', () => {
+  for (const [, name] of FIXTURES) {
+    const { w, doc } = erpPage();
+    doc.body.innerHTML = readFileSync(join(OWN_FIXTURES, name), 'utf8');
+    const reduced = w.stayPrice.reduce(doc.querySelector('[data-stay-screen]'));
+    assert.ok(!/\n/.test(reduced) && !/ {2,}/.test(reduced) && !/> </.test(reduced.replace(/<\/?(section|div|dl|h4|p|span|strong)[^>]*>/g, '')), `${name}: 줄바꿈·겹친 빈칸이 없다`);
+    w.close();
+  }
+});
+
+test('B9 · 큰 조각은 페이지에 남고 1,500바이트 안의 쪽으로 나뉘며, 이으면 바이트 수·CRC-32 가 답과 맞는다', async () => {
+  const long = '아주 긴 객실 이름 칸 '.repeat(400);
+  const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('인원 무관 단일가 · 1박 이상', long) });
+  const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
+  const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK })));
+  assert.equal(r.ok, true, r.error);
+  assert.ok(bytesOf(r) <= 1500, `읽기 답: ${bytesOf(r)}바이트`);
+  assert.equal(r.fragment, undefined, '답에는 조각을 싣지 않는다');
+  const { takes, text, body } = takeAll(page.w, r);
+  assert.ok(takes.length >= 10, `쪽 ${takes.length}개`);
+  for (const t of takes) assert.ok(bytesOf(t) <= 1500 && t.count === takes.length && t.bytes === r.body.bytes && t.crc32 === r.body.crc32, `쪽 ${t.index}: ${bytesOf(t)}바이트`);
+  assert.equal(Buffer.byteLength(text), r.body.bytes);
+  assert.equal(crc32(Buffer.from(text, 'utf8')).toString(16).padStart(8, '0'), r.body.crc32);
+  assert.ok(body.fragment.includes(long.trim()), '이은 조각에 긴 글자가 그대로 있다');
+  assert.equal(plain(page.w.stayPrice.take(r.body.id, takes.length)).ok, false, '없는 쪽 번호');
+  assert.match(plain(page.w.stayPrice.take('없는-id', 0)).error, /페이지에 없습니다/);
+  page.w.close();
 });

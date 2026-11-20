@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
-    read          ERP 화면 조각(HTML) 또는 브라우저 답(readPair · readReserved JSON) → 지금 값(snapshot.json)
+    read          ERP 화면 조각(HTML) 또는 브라우저 답(readPair · readReserved 와 그 조각의 take 답들) → 지금 값(snapshot.json)
     read-calls    요청 → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음
     reserved      readReserved 물음과 답 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan.json). --record 면 장부에 적는다
@@ -254,10 +254,10 @@ def parser() -> argparse.ArgumentParser:
     sub = command("read", cmd_read, "ERP 화면 조각 → 지금 값")
     sub.add_argument("--hotel", required=True)
     sub.add_argument("--price-page", action="append", help="[선택 날짜 가격 수정] 확인 단계 HTML (여러 번)")
-    sub.add_argument("--pair-result", action="append", help="stayPrice.readPair 답 JSON — 답 하나 또는 목록 (여러 번)")
+    sub.add_argument("--pair-result", action="append", help="stayPrice.readPair 답과 그 조각의 take 답들 JSON — 목록 (여러 번)")
     sub.add_argument("--adjust-page", action="append", help="[선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
     sub.add_argument("--reserved-probes", help="read-calls 가 낸 readReserved 첫 물음(reserved 목록) JSON")
-    sub.add_argument("--reserved-result", action="append", help="stayPrice.readReserved 답 JSON — 답 하나 또는 목록 (여러 번)")
+    sub.add_argument("--reserved-result", action="append", help="stayPrice.readReserved 답과 take 답들 JSON — 목록 (여러 번)")
     sub.add_argument("--read-at", help="읽은 시각(ISO). 없으면 지금")
 
     sub = command("read-calls", cmd_read_calls, "요청 → readPair · readReserved 부를 값")
@@ -265,7 +265,7 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
     sub.add_argument("--probes", required=True, help="read-calls 가 낸 reserved 목록 JSON")
-    sub.add_argument("--result", action="append", help="stayPrice.readReserved 답 JSON — 답 하나 또는 목록 (여러 번)")
+    sub.add_argument("--result", action="append", help="stayPrice.readReserved 답과 take 답들 JSON — 목록 (여러 번)")
 
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)

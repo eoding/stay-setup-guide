@@ -15,8 +15,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
+from browser_replies import reply  # noqa: E402
 from price_browser import (  # noqa: E402
-    BrowserError, periods, price_pages, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+    BrowserError, ask_sum, attach_bodies, periods, price_pages, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
 
@@ -28,13 +29,19 @@ CONTRACT = HERE / "fixtures" / "browser" / "calls.json"
 
 
 def answer(probe, hidden=0, ok=True):
-    """readReserved 의 답 — 조각은 손 조각 adjust-rejected 에 숨긴 줄 문장을 붙인 것."""
+    """readReserved 의 답과 조각 쪽들 — 조각은 손 조각 adjust-rejected 에 숨긴 줄 문장을 붙인 것."""
     note = f'<p class="stay-description">목록이 길어 {hidden:,}줄은 줄였습니다. 적용한 뒤 적용 기록에서 모두 볼 수 있습니다.</p>'
     title = '<h4 class="stay-section-title">건너뛰는 칸'
     head, tail = REJECTED.split(title, 1)
     fragment = REJECTED if not hidden else head + title + tail.replace("    </div>\n", "    </div>\n    " + note + "\n", 1)
     assert not hidden or note in fragment
-    return {"ok": ok, "op": "readReserved", "asked": dict(probe), "fragment": fragment, "error": None if ok else "드로어가 열리지 않았습니다"}
+    if not ok:
+        return reply("readReserved", dict(probe), ok=False, error="드로어가 열리지 않았습니다")
+    return reply("readReserved", dict(probe), {"fragment": fragment})
+
+
+def flat(*answers):
+    return [item for group in answers for item in group]
 
 
 class ReadCallsTest(unittest.TestCase):
@@ -66,14 +73,14 @@ class ReadCallsTest(unittest.TestCase):
 
     def test_read_answers_must_be_what_was_asked(self):
         asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함"}
-        page, = price_pages([{"ok": True, "op": "readPair", "asked": asked, "fragment": PRICE}])
+        page, = price_pages(reply("readPair", asked, {"fragment": PRICE}))
         self.assertEqual((page.offer, page.rate_plan, page.currency), ("샘플 오퍼", "조식 포함", "USD"))
         with self.assertRaisesRegex(BrowserError, "물은 것"):
-            price_pages([{"ok": True, "op": "readPair", "asked": dict(asked, ratePlan="룸온리"), "fragment": PRICE}])
+            price_pages(reply("readPair", dict(asked, ratePlan="룸온리"), {"fragment": PRICE}))
         with self.assertRaisesRegex(BrowserError, "읽지 못했습니다: 칩이 없습니다"):
-            price_pages([{"ok": False, "op": "readPair", "asked": asked, "error": "칩이 없습니다"}])
+            price_pages(reply("readPair", asked, ok=False, error="칩이 없습니다"))
         with self.assertRaisesRegex(BrowserError, "readPair 의 답이 아닙니다"):
-            price_pages([{"ok": True, "op": "applyBulk", "asked": asked, "fragment": PRICE}])
+            price_pages(reply("applyBulk", asked, {"fragment": PRICE}))
 
 
 class ReservedRoundTest(unittest.TestCase):
@@ -86,24 +93,24 @@ class ReservedRoundTest(unittest.TestCase):
         self.assertEqual((done.done, done.ask, done.pages), (False, self.start, []))
 
     def test_an_answer_without_hidden_rows_is_used_as_it_is(self):
-        done = reserved_round(self.start, [answer(self.start[0])])
+        done = reserved_round(self.start, answer(self.start[0]))
         self.assertTrue(done.done)
         self.assertEqual(len(done.pages), 1)
         self.assertIn("예약이 있는 날", {row.reason for row in done.pages[0].rejected})
 
     def test_hidden_rows_narrow_by_room_then_rate_plan_then_half_the_days_until_nothing_is_hidden(self):
         probe = self.start[0]
-        rooms = reserved_round([probe], [answer(probe, hidden=120)])
+        rooms = reserved_round([probe], answer(probe, hidden=120))
         self.assertEqual([item["rooms"] for item in rooms.ask], [["디럭스"], ["스위트"]])
         deluxe, suite = rooms.ask
-        plans = reserved_round([probe], [answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8)])
+        plans = reserved_round([probe], flat(answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8)))
         self.assertEqual([(item["rooms"], item["ratePlans"]) for item in plans.ask], [(["스위트"], ["조식 포함"]), (["스위트"], ["룸온리"])])
         suite_bb, suite_ro = plans.ask
-        halves = reserved_round([probe], [answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8),
-                                          answer(suite_bb), answer(suite_ro, hidden=1)])
+        halves = reserved_round([probe], flat(answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8),
+                                              answer(suite_bb), answer(suite_ro, hidden=1)))
         self.assertEqual([(item["from"], item["to"]) for item in halves.ask], [("2026-12-24", "2026-12-25"), ("2026-12-26", "2026-12-27")])
-        results = [answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8), answer(suite_bb), answer(suite_ro, hidden=1)]
-        results += [answer(item) for item in halves.ask]
+        results = flat(answer(probe, hidden=120), answer(deluxe), answer(suite, hidden=8), answer(suite_bb), answer(suite_ro, hidden=1),
+                       *[answer(item) for item in halves.ask])
         done = reserved_round([probe], results)
         self.assertTrue(done.done)
         self.assertEqual(len(done.pages), 4, "디럭스 · 스위트 조식 포함 · 스위트 룸온리 반쪽 둘")
@@ -112,21 +119,23 @@ class ReservedRoundTest(unittest.TestCase):
 
     def test_a_failed_answer_keeps_the_probe_asked_and_says_why_until_it_is_answered(self):
         probe = self.start[0]
-        failed = reserved_round([probe], [answer(probe, ok=False)])
+        failed = reserved_round([probe], answer(probe, ok=False))
         self.assertEqual(failed.ask, [probe])
         self.assertEqual(failed.failed, [{"asked": probe, "error": "드로어가 열리지 않았습니다"}])
-        self.assertTrue(reserved_round([probe], [answer(probe, ok=False), answer(probe)]).done)
+        self.assertTrue(reserved_round([probe], flat(answer(probe, ok=False), answer(probe))).done)
 
     def test_a_single_day_that_still_hides_rows_cannot_be_narrowed(self):
         probe = dict(self.start[0], rooms=["디럭스"], ratePlans=["조식 포함"], **{"from": "2026-12-24", "to": "2026-12-24"})
         with self.assertRaisesRegex(BrowserError, "하루로 좁혀도"):
-            reserved_round([probe], [answer(probe, hidden=3)])
+            reserved_round([probe], answer(probe, hidden=3))
 
-    def test_answers_to_other_operations_or_without_the_probe_are_refused(self):
+    def test_answers_to_other_operations_or_for_another_probe_are_refused_or_left_unused(self):
         with self.assertRaisesRegex(BrowserError, "readReserved 의 답이 아닙니다"):
-            reserved_round(self.start, [dict(answer(self.start[0]), op="readPair")])
+            reserved_round(self.start, reply("readPair", self.start[0], {"fragment": REJECTED}))
         with self.assertRaisesRegex(BrowserError, "칸이 없습니다: occupancy"):
-            reserved_round(self.start, [dict(answer(self.start[0]), asked={k: v for k, v in self.start[0].items() if k != "occupancy"})])
+            reserved_round([{k: v for k, v in self.start[0].items() if k != "occupancy"}], [])
+        other = dict(self.start[0], nights="one")
+        self.assertEqual(reserved_round(self.start, answer(other)).ask, self.start, "다른 물음의 답은 이 물음의 답이 아니다")
 
 
 BULK = BulkStep("디럭스", "조식 포함", ("2026-07-01",), (RowWrite("", 1, D("125000.00")),))
@@ -145,8 +154,7 @@ class StepCallTest(unittest.TestCase):
 
     def test_a_result_is_recorded_only_for_the_step_it_asked_about(self):
         call = step_call(1, OFFER, BULK.kind, encode_step(BULK))
-        asked = {name: value for name, value in call["payload"].items() if name != "no"}
-        saved = {"ok": True, "op": "applyBulk", "no": 1, "asked": asked, "saved": True, "pressed": True, "note": "저장했습니다 · 디럭스"}
+        saved = {"ok": True, "op": "applyBulk", "no": 1, "ask": ask_sum(call["payload"]), "saved": True, "pressed": True, "note": "저장했습니다 · 디럭스"}
         self.assertEqual(step_outcome(call, saved), (True, "저장했습니다 · 디럭스"))
         blocked = dict(saved, ok=False, error="허용 목록에 없는 클릭을 막았습니다: a")
         self.assertEqual(step_outcome(call, blocked), (True, "저장했습니다 · 디럭스 · 허용 목록에 없는 클릭을 막았습니다: a"))
@@ -154,9 +162,51 @@ class StepCallTest(unittest.TestCase):
         self.assertEqual(step_outcome(call, unsure), (False, "저장 단추는 눌렸습니다 — 다시 읽어 값을 확인해야 합니다: 결과를 확인하지 못했습니다"))
         refused = dict(unsure, pressed=False, refused=True, error="드로어 표에 없는 줄")
         self.assertEqual(step_outcome(call, refused), (False, "드로어 표에 없는 줄"))
-        for wrong in (dict(saved, no=2), dict(saved, op="applyCell"), dict(saved, asked=dict(asked, dates=["2026-07-02"]))):
+        other = dict(call["payload"], dates=["2026-07-02"])
+        for wrong in (dict(saved, no=2), dict(saved, op="applyCell"), dict(saved, ask=ask_sum(other))):
             with self.assertRaises(BrowserError):
                 step_outcome(call, wrong)
+
+
+
+class BodyTest(unittest.TestCase):
+    """B9 — 조각은 쪽으로 오고, 바이트 수와 CRC-32 가 둘 다 맞을 때만 쓴다."""
+
+    ASKED = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31",
+             "weekdays": list("월화수목금토일")}
+
+    def test_pieces_in_any_order_join_into_the_fragment(self):
+        result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=4)
+        joined, = attach_bodies([takes[2], result, takes[0], takes[3], takes[1], takes[1]])
+        self.assertEqual((joined["fragment"], joined["asked"]), (PRICE, self.ASKED))
+        self.assertTrue(all(len(json.dumps(take, ensure_ascii=False).encode()) < 2500 for take in takes))
+
+    def test_a_missing_cut_or_mistyped_piece_is_refused_and_never_read(self):
+        result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE}, pieces=4)
+        with self.assertRaisesRegex(BrowserError, "쪽 1개를 받지 않았습니다"):
+            attach_bodies([result, *takes[:3]])
+        cut = dict(takes[1], text=takes[1]["text"][:-5])
+        with self.assertRaisesRegex(BrowserError, "바이트 수나 CRC-32"):
+            attach_bodies([result, takes[0], cut, *takes[2:]])
+        at = next(index for index, take in enumerate(takes) if "140.00" in take["text"])
+        typo = dict(takes[at], text=takes[at]["text"].replace("140.00", "146.00", 1))
+        self.assertEqual(len(typo["text"]), len(takes[at]["text"]), "글자 수가 같은 잘못 옮겨 적기")
+        with self.assertRaisesRegex(BrowserError, "바이트 수나 CRC-32"):
+            attach_bodies([result, *takes[:at], typo, *takes[at + 1:]])
+        with self.assertRaisesRegex(BrowserError, "두 번 왔는데 서로 다릅니다"):
+            attach_bodies([result, *takes, typo])
+        with self.assertRaisesRegex(BrowserError, "크기·검사값이 답과 다릅니다"):
+            attach_bodies([dict(result, body=dict(result["body"], crc32="00000000")), *takes])
+        with self.assertRaisesRegex(BrowserError, "받지 못했습니다: 그 조각이 페이지에 없습니다"):
+            attach_bodies([result, {"ok": False, "op": "take", "id": "x", "error": "그 조각이 페이지에 없습니다"}])
+
+    def test_a_body_from_another_question_is_refused(self):
+        result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE})
+        with self.assertRaisesRegex(BrowserError, "이 답의 물음에서 나온 것이 아닙니다"):
+            attach_bodies([dict(result, ask=ask_sum(dict(self.ASKED, room="스위트"))), *takes])
+
+    def test_the_digest_matches_the_page_rule_for_korean_and_key_order(self):
+        self.assertEqual(ask_sum({"no": 3, "b": [1, None], "a": "디럭스 \"킹\""}), ask_sum({"a": "디럭스 \"킹\"", "b": [1, None]}))
 
 
 if __name__ == "__main__":

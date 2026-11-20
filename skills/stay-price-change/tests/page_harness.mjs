@@ -216,3 +216,13 @@ export function erpPage(opts = {}) {
 // 페이지 안에서 만든 값으로 바꿔 넘긴다(다른 realm 의 객체는 scrub 이 평범한 객체로 보지 않을 수 있다)
 export const inPage = (w, value) => w.JSON.parse(JSON.stringify(value));
 export const plain = (value) => JSON.parse(JSON.stringify(value));
+
+// B9 — 답과 쪽은 JSON 으로 1,500바이트 안이다. 읽기 답의 조각은 take 로 한 쪽씩 받는다
+export const bytesOf = (value) => Buffer.byteLength(JSON.stringify(value));
+export function takeAll(w, result) {
+  const meta = result.body;
+  const takes = [];
+  for (let index = 0; index < meta.pieces; index++) takes.push(plain(w.stayPrice.take(meta.id, index)));
+  const text = takes.map((t) => t.text).join('');
+  return { takes, text, body: JSON.parse(text) };
+}

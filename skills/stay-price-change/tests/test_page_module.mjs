@@ -3,7 +3,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, OFFER, RUNNER_STEPS, RUNNER_CURSOR } from './page_harness.mjs';
+import { erpPage, inPage, plain, bytesOf, OFFER, RUNNER_STEPS, RUNNER_CURSOR } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
 const PAIR = { offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
@@ -29,7 +29,7 @@ test('B1 · window.stayPrice 의 작업 넷은 호출 하나로 끝나고, 결�
     assert.equal(r.ok, true, `${name}: ${r.error}`);
     assert.equal(r.op, name);
     assert.equal(page.w.JSON.stringify(r), JSON.stringify(plain(r)), `${name}: JSON 으로 그대로 오간다`);
-    assert.ok(JSON.stringify(r).length < 20000, `${name}: 결과가 작다`);
+    assert.ok(bytesOf(plain(r)) <= 1500, `${name}: 답이 1,500바이트 안 (${bytesOf(plain(r))})`);
     assert.ok(r.ms < 45000, `${name}: 45초 안`);
   }
   page.w.close();

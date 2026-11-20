@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, HERE, SKILL, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, HERE, SKILL, OFFER } from './page_harness.mjs';
 
 // price_browser 의 함수 하나를 부른다 — 값은 표준 입력 JSON 으로 주고받는다
 function python(fn, args) {
@@ -36,7 +36,7 @@ test('B5 · read_calls 의 부를 값으로 읽은 답을 price_pages 가 받는
   const page = erpPage();
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, call)));
   assert.equal(r.ok, true, r.error);
-  assert.deepEqual(python('[[p.offer, p.room, p.rate_plan, sorted(p.days)] for p in b.price_pages(args)]', [r]),
+  assert.deepEqual(python('[[p.offer, p.room, p.rate_plan, sorted(p.days)] for p in b.price_pages(args)]', [r, ...takeAll(page.w, r).takes]),
     [[OFFER, `${OFFER} · 디럭스`, '조식 포함', ['2026-07-01']]]);
   page.w.close();
 });
@@ -47,7 +47,7 @@ test('B6 · reserved_probes 의 물음을 페이지가 그대로 묻고, 그 답
   const r = plain(await page.w.stayPrice.readReserved(inPage(page.w, probes[0])));
   assert.equal(r.ok, true, r.error);
   const round = python('(lambda r: {"done": r.done, "ask": r.ask, "reserved": sorted({(row.room, d) for p in r.pages for row in p.rejected if row.reason == "예약이 있는 날" for d in row.days})})(b.reserved_round(args["probes"], args["results"]))',
-    { probes, results: [r] });
+    { probes, results: [r, ...takeAll(page.w, r).takes] });
   assert.equal(round.done, true);
   assert.deepEqual(round.ask, []);
   assert.deepEqual(round.reserved, [['디럭스', '2026-12-24'], ['디럭스', '2026-12-25'], ['스위트', '2026-12-28']]);

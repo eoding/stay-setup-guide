@@ -9,6 +9,7 @@
  *   stayPrice.applyBulk({no, offer, room, ratePlan, dates, rows})              [선택 날짜 가격 수정] 저장 한 번
  *   stayPrice.applyCell({no, offer, room, ratePlan, date, occupancy, nights,
  *                        clear, set})                                          셀 창 저장 한 번(정가·공급 원가 비우기·넣기)
+ *   stayPrice.take(id, index)                                                  읽은 조각의 한 쪽 — 읽기 답의 body.pieces 만큼 받는다
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
  *
  * 지키는 것
@@ -18,7 +19,8 @@
  *    하나라도 있으면 그 작업은 실패다. 버튼은 글자가 아니라 화면 뿌리 + `data-stay-*`·`data-calendar-*` 표식으로 찾는다.
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않는다.
  *    러너 함수의 결과는 그대로 넘기지 않는다.
- *  - 화면 조각은 `reduce` 로 줄여 내보낸다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만.
+ *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만. 줄인 조각은
+ *    페이지에 두고 답에는 `body`(id · 바이트 수 · CRC-32 · 쪽 수)만 싣는다. 답 하나·쪽 하나는 1,500바이트 안이다.
  *  - localStorage 는 `stayPrice` 로 시작하는 키만 쓴다(`stayPriceLast`). 러너의 `staySteps`·`stayRunCursor` 는 쓰지 않는다.
  */
 (function () {
@@ -39,9 +41,9 @@
   // 글자 안의 주소·토큰: scheme:// · //host · ?key= 가 붙은 경로 · /a/b 꼴 절대 경로 · www. · JWT · 32자 넘는 토큰
   var ADDRESS_SOURCE = [
     '[a-z][a-z0-9+.-]*:\\/\\/[^\\s"\'<>]*',
-    '(?<=^|[\\s"\'(=])\\/\\/[^\\s"\'<>]+',
+    '(?<=^|[\\s"\'(=>])\\/\\/[^\\s"\'<>]+',
     '[^\\s"\'<>]*\\?[^\\s"\'<>=&]+=[^\\s"\'<>]*',
-    '(?<=^|[\\s"\'(=])\\/[\\w.~%{}:-]+\\/[^\\s"\'<>]*',
+    '(?<=^|[\\s"\'(=>])\\/[\\w.~%{}:-]+\\/[^\\s"\'<>]*',
     '\\bwww\\.[^\\s"\'<>]+',
     '\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]*',
     '[A-Za-z0-9_-]{32,}'
@@ -75,6 +77,8 @@
   /* ───────────── 2. 화면 조각 줄이기 — 파이썬 읽기(erp_read.py)가 받는 모양 ───────────── */
 
   var DROP_TAGS = { input: 1, select: 1, textarea: 1, button: 1, script: 1, style: 1, template: 1 };
+  // 표·목록 뼈대 사이의 빈칸은 뜻이 없다(브라우저도 버린다) — 지운다. 다른 빈칸 줄은 한 칸으로 줄인다(읽기는 빈칸을 한 칸으로 본다)
+  var QUIET_PARENTS = { table: 1, thead: 1, tbody: 1, tfoot: 1, tr: 1, colgroup: 1, dl: 1, ul: 1, ol: 1 };
   var VOID_TAGS = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, link: 1, meta: 1, source: 1, track: 1, wbr: 1 };
   function keepAttr(name) { return /^data-(stay|calendar)-/.test(name) || name === 'colspan' || name === 'rowspan'; }
   function esc(text, quote) {
@@ -84,7 +88,13 @@
   function reduce(node) {
     var out = [];
     (function walk(n) {
-      if (n.nodeType === 3) { out.push(esc(n.nodeValue)); return; }
+      if (n.nodeType === 3) {
+        var text = n.nodeValue.replace(/[ \t\n\r\f]+/g, ' ');
+        if (text === ' ' && n.parentNode && QUIET_PARENTS[n.parentNode.localName]) return;
+        if (text[0] === ' ' && out.length && / $/.test(out[out.length - 1])) text = text.slice(1);   // 지운 칸 양옆의 빈칸이 겹치면 하나만
+        if (text) out.push(esc(text));
+        return;
+      }
       if (n.nodeType !== 1) return;                                          // 주석 등
       var tag = n.localName;
       if (DROP_TAGS[tag]) return;
@@ -97,6 +107,105 @@
     })(node);
     return out.join('');
   }
+
+  /* ───────────── 2b. 답의 크기 — 브라우저 도구는 답을 2,000바이트쯤에서 자른다 ───────────── */
+
+  // 작업의 답은 1,500바이트 안이다. 화면 조각은 페이지에 두고(`keep`) 1,500바이트 안의 쪽으로 나눠 받는다(`take`).
+  // 쪽마다 전체의 바이트 수와 CRC-32 를 같이 싣는다 — 파이썬이 이어 붙인 뒤 둘 다 맞아야 쓴다(`price_browser.attach_bodies`).
+  var RESULT_BYTES = 1500;
+  var PIECE_BYTES = 1200;           // 쪽 하나의 글자(JSON 으로 적었을 때) — 나머지는 봉투(op · id · index · bytes · crc32)
+  var KEEP_BODIES = 40;
+  function utf8(text) {
+    var out = [];
+    for (var i = 0; i < text.length; i++) {
+      var c = text.codePointAt(i);
+      if (c > 0xffff) i++;
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xc0 | c >> 6, 0x80 | c & 63);
+      else if (c < 0x10000) out.push(0xe0 | c >> 12, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+      else out.push(0xf0 | c >> 18, 0x80 | c >> 12 & 63, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+    }
+    return out;
+  }
+  function byteLength(text) { return utf8(text).length; }
+  var CRC_TABLE = (function () {
+    var table = [];
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(text) {
+    var c = 0xffffffff;
+    utf8(text).forEach(function (b) { c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8); });
+    return ('0000000' + ((c ^ 0xffffffff) >>> 0).toString(16)).slice(-8);
+  }
+  // 물은 값의 지문 — `no` 를 뺀 입력을 키 정렬 JSON 으로 적은 것의 CRC-32. 파이썬 `ask_sum` 이 같은 값을 셈한다
+  function canon(value) {
+    if (Array.isArray(value)) return '[' + value.map(canon).join(',') + ']';
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).filter(function (k) { return value[k] !== undefined; }).sort()
+        .map(function (k) { return JSON.stringify(k) + ':' + canon(value[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(value === undefined ? null : value);
+  }
+  function askedOf(input) {
+    var copy = {};
+    Object.keys(input || {}).forEach(function (k) { if (k !== 'no') copy[k] = input[k]; });
+    return copy;
+  }
+
+  var BODIES = window.__stayPriceBodies = window.__stayPriceBodies || { order: [], items: {} };
+  // 쪽 나누기 — 쪽마다 JSON 글자로 PIECE_BYTES 안. 되도록 `>`·`,` 바로 뒤에서 자른다(거르기가 쪽마다 같은 답을 내도록)
+  function pieceCut(text) {
+    var pieces = [], start = 0, cost = 0, cut = -1;
+    var costOf = function (part) { return byteLength(JSON.stringify(part)) - 2; };
+    for (var i = 0; i < text.length; i++) {
+      var size = text.codePointAt(i) > 0xffff ? 2 : 1;
+      var ch = text.substr(i, size), c = costOf(ch);
+      if (cost + c > PIECE_BYTES && i > start) {
+        var at = cut > start ? cut : i;
+        pieces.push(text.slice(start, at));
+        start = at; cut = -1; cost = costOf(text.slice(start, i));
+      }
+      cost += c;
+      i += size - 1;
+      if (ch === '>' || ch === ',') cut = i + 1;
+    }
+    if (start < text.length || !pieces.length) pieces.push(text.slice(start));
+    return pieces;
+  }
+  function keep(body) {
+    var text = JSON.stringify(scrub(body));
+    var pieces = pieceCut(text);
+    if (pieces.some(function (piece) { return scrubText(piece) !== piece; })) fail('읽은 조각을 안전하게 나누지 못했습니다 — 다시 읽어 주세요');
+    var id = 'b' + Date.now().toString(36) + (BODIES.order.length + 1);
+    BODIES.items[id] = { pieces: pieces, bytes: byteLength(text), crc32: crc32(text) };
+    BODIES.order.push(id);
+    while (BODIES.order.length > KEEP_BODIES) delete BODIES.items[BODIES.order.shift()];
+    return { id: id, bytes: BODIES.items[id].bytes, crc32: BODIES.items[id].crc32, pieces: pieces.length };
+  }
+  function take(id, index) {
+    var item = BODIES.items[id];
+    if (!item) return fit({ ok: false, op: 'take', id: String(id), error: '그 조각이 페이지에 없습니다 — 페이지가 바뀌었으면 다시 읽습니다' });
+    if (!(typeof index === 'number' && index >= 0 && index < item.pieces.length && index === Math.floor(index))) {
+      return fit({ ok: false, op: 'take', id: id, error: '쪽 번호는 0 부터 ' + (item.pieces.length - 1) + ' 까지입니다' });
+    }
+    return fit({ ok: true, op: 'take', id: id, index: index, count: item.pieces.length, bytes: item.bytes, crc32: item.crc32, text: item.pieces[index] });
+  }
+  // 거르기를 지나 1,500바이트 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
+  var ESSENTIAL = ['ok', 'op', 'no', 'ask', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'error'];
+  function fit(result) {
+    var out = scrub(result);
+    if (byteLength(JSON.stringify(out)) <= RESULT_BYTES) return out;
+    var small = { cut: true };
+    ESSENTIAL.forEach(function (k) { if (out[k] !== undefined) small[k] = out[k]; });
+    if (typeof small.error === 'string') small.error = small.error.slice(0, 120) + '…';
+    return small;
+  }
+  function clip(text, n) { text = String(text || ''); return text.length > n ? text.slice(0, n) + '…' : text; }
 
   /* ───────────── 3. 클릭 벽 — 작업마다 허용 목록 하나 ───────────── */
 
@@ -159,8 +268,8 @@
   function describe(el) {
     if (!el || el.nodeType !== 1) return '(알 수 없음)';
     var marks = [].slice.call(el.attributes).filter(function (a) { return /^data-(stay|calendar)-/.test(a.name) && !addressLike(a.value); })
-      .slice(0, 3).map(function (a) { return a.name + (a.value ? '=' + a.value.slice(0, 40) : ''); });
-    var text = C(el.textContent).slice(0, 30);
+      .slice(0, 2).map(function (a) { return a.name + (a.value ? '=' + a.value.slice(0, 30) : ''); });
+    var text = C(el.textContent).slice(0, 20);
     return el.localName + (marks.length ? '[' + marks.join(' ') + ']' : '') + (text ? ' "' + text + '"' : '');
   }
 
@@ -222,8 +331,8 @@
   async function run(op, input, body) {
     var missing = NEEDS.filter(function (name) { return typeof window[name] !== 'function'; });
     if (!window.stayRun || typeof window.stayRun.waitFor !== 'function') missing.unshift('stayRun');
-    if (missing.length) return remember(scrub({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
-    if (window.__stayPriceBusy) return scrub({ ok: false, op: op, error: '다른 작업(' + window.__stayPriceBusy + ')이 아직 돌고 있습니다 — 끝난 뒤 stayPrice.last() 로 결과를 봅니다' });
+    if (missing.length) return remember(fit({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
+    if (window.__stayPriceBusy) return fit({ ok: false, op: op, error: '다른 작업(' + window.__stayPriceBusy + ')이 아직 돌고 있습니다 — 끝난 뒤 stayPrice.last() 로 결과를 봅니다' });
     window.__stayPriceBusy = op;
     var started = Date.now();
     var no = input && typeof input.no === 'number' ? input.no : undefined;
@@ -240,6 +349,7 @@
     };
     try {
       out = await body(input || {}, ctx);
+      if (out.keep) { out.body = keep(Object.assign({ op: op, asked: askedOf(input) }, out.keep)); delete out.keep; }
     } catch (e) {
       out = e instanceof Stop ? Object.assign({ ok: false, error: e.message }, e.extra) : { ok: false, error: '페이지 쪽 코드가 멈췄습니다: ' + C(e && e.message) };
     } finally {
@@ -247,18 +357,23 @@
       wall.stop();
       window.__stayPriceBusy = null;
     }
-    if (wall.log.blocked.length) {
+    var blocked = wall.log.blocked;
+    if (blocked.length) {
       out.ok = false;
       out.error = (out.error && out.error.indexOf('허용 목록') < 0 ? out.error + ' · ' : '') + '허용 목록에 없는 클릭을 막았습니다: ' +
-        wall.log.blocked.map(function (b) { return b.control + ' (' + b.why + ')'; }).join(' / ');
+        blocked.slice(0, 2).map(function (b) { return b.control + ' (' + b.why + ')'; }).join(' / ') + (blocked.length > 2 ? ' 외 ' + (blocked.length - 2) + '건' : '');
     }
     if (drawerOpen()) { out.ok = false; out.error = (out.error ? out.error + ' · ' : '') + '드로어를 닫지 못했습니다'; }
     out.op = op;
     if (no !== undefined) out.no = no;
-    out.clicks = wall.log.clicks;
-    out.blocked = wall.log.blocked;
+    out.ask = crc32(canon(askedOf(input)));
+    out.clicks = {};
+    wall.log.clicks.forEach(function (name) { out.clicks[name] = (out.clicks[name] || 0) + 1; });
+    out.blocked = blocked.slice(0, 3);
+    if (blocked.length > 3) out.blockedMore = blocked.length - 3;
+    if (out.error) out.error = clip(out.error, 250);
     out.ms = Date.now() - started;
-    return remember(scrub(out));
+    return remember(fit(out));
   }
 
   /* ───────────── 5. 화면 부품 — 가격 캘린더 · 칩 · 드로어 ───────────── */
@@ -419,7 +534,8 @@
       var fragment = reduce(review);
       await closeDrawer();
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
-      return { ok: true, asked: want, selected: { chip: ctx.pins.chip, ranges: span.ranges, days: span.days.length }, fragment: fragment };
+      return { ok: true, what: clip(ctx.pins.chip + ' · ' + span.ranges[0] + (span.ranges.length > 1 ? ' 외 ' + (span.ranges.length - 1) + '구간' : ''), 120),
+        days: span.days.length, keep: { fragment: fragment } };
     });
   }
 
@@ -515,7 +631,8 @@
       var fragment = reduce(r2);
       await closeDrawer();
       if (drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
-      return { ok: true, asked: want, selected: { ranges: span.ranges, days: span.days.length }, fragment: fragment };
+      return { ok: true, what: clip(want.rooms.length + '객실 · ' + want.ratePlans.length + '요금제 · ' + want.from + ' ~ ' + want.to, 120),
+        days: span.days.length, keep: { fragment: fragment } };
     });
   }
 
@@ -562,14 +679,14 @@
       var r = await window.runCalendarPriceStep(bulkStepFor(Object.assign({ no: p.no }, want)), {});
       var pressed = ctx.wall.pressed('bulkSave');
       var saved = pressed && !!r && r.submitted === true && !r.error && !r.manualAction;
-      var out = { ok: saved, asked: want, saved: saved, pressed: pressed };
-      if (saved) { out.note = '저장했습니다 · ' + want.room + ' · ' + want.ratePlan + ' · ' + span.ranges.join(', '); return out; }
+      var out = { ok: saved, what: clip(want.room + ' · ' + want.ratePlan + ' · ' + span.ranges.join(', '), 120), saved: saved, pressed: pressed };
+      if (saved) { out.note = '저장했습니다'; return out; }
       var reason = r && r.bad && r.bad.length ? '드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다 — ' + r.bad.join(' / ')
         : r && r.stoppedBy === 'mismatch' ? '넣은 값을 다시 읽으니 달라 저장하지 않았습니다 — ' + (r.mismatch || []).join(' / ') : null;
       if (reason && !pressed) out.refused = true;
       out.error = reason || (r && r.error) || '저장하지 못했습니다';
       if (pressed) out.error += ' — 저장 단추는 눌렸습니다. 다시 읽어 값을 확인한 뒤 정합니다(다시 누르지 않았습니다)';
-      if (r && r.errors && r.errors.length) out.errors = r.errors.slice(0, 5);
+      if (r && r.errors && r.errors.length) out.errors = r.errors.slice(0, 3).map(function (e) { return clip(e, 80); });
       return out;
     });
   }
@@ -647,8 +764,8 @@
       var errors = after ? window.calErrors(after) : [];
       var landed = !!row2 && Object.keys(targets).every(function (name) { var el = row2.querySelector('input[name="' + CELL_FIELDS[name] + '"]'); return !!el && el.value === targets[name]; });
       var saved = pressed && landed && !errors.length;
-      var out = { ok: saved, asked: want, saved: saved, pressed: pressed };
-      if (saved) out.note = '저장했습니다 · ' + cellName;
+      var out = { ok: saved, what: clip(cellName, 120), saved: saved, pressed: pressed };
+      if (saved) out.note = '저장했습니다';
       else out.error = (errors.length ? '셀 창이 저장을 거절했습니다 — ' + errors.join(' / ') : '셀 창 저장을 확인하지 못했습니다') + (pressed ? ' — [저장] 은 눌렸습니다. 다시 읽어 값을 확인한 뒤 정합니다(다시 누르지 않았습니다)' : '');
       var x = after && after.querySelector('.stay-modal__head [data-stay-action="close"]');
       if (x) { x.click(); await ctx.wait(function () { return !cellWindow(); }, 5000); }
@@ -664,6 +781,7 @@
     applyBulk: applyBulk,
     applyCell: applyCell,
     last: last,
+    take: take,
     scrub: function (value) { return scrub(value); },
     reduce: reduce,
     ALLOW: ALLOW, CONTROLS: CONTROLS, NEVER: NEVER,
