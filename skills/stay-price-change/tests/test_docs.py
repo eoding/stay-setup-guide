@@ -1,6 +1,9 @@
-"""안내문(SKILL.md · references/commands.md · references/page.md · references/sheet.md)에 적힌 명령 · 플래그 · 페이지 호출이
-코드에 그 이름으로 있고, 새 요금표 길의 예 · 문장 · 읽기 값이 코드와 같다. 새 요금표 길은 sheet.md 에 있고 SKILL.md 는 그곳을
-가리키며 놓치면 안 되는 두 규칙만 둔다.
+"""안내문(SKILL.md 와 references/ 의 파일 전부)에 적힌 명령 · 플래그 · 페이지 호출이 코드에 그 이름으로 있고, 새 요금표 길의
+예 · 문장 · 읽기 값이 코드와 같다. 새 요금표 길은 sheet.md 에 있고 SKILL.md 는 그곳을 가리키며 놓치면 안 되는 두 규칙만 둔다.
+
+SKILL.md 는 담당자의 Claude 가 쓸 때마다 통째로 읽는다(Z9). 그래서 크기를 지키고, 가끔만 필요한 갈래(멈춘 변경 · 빨간 줄 ·
+요금표 · 막힐 때 · 하지 않는 일)는 references/ 에 두고 SKILL.md 의 가리킴이 여는 때와 그때 놓치면 안 되는 규칙을 말한다.
+「반드시 지킬 것」의 규칙 문장은 하나도 빠지지 않는다(시작한 판의 목록 — tests/fixtures/must-keep-rules.txt).
 
 글의 코드 조각(`…` 과 ``` 덩어리)에서 `price_change.py <명령>`, 명령 표의 첫 칸, 명령 뒤의 `--플래그`, `stayPrice.<호출>`,
 `stayPriceLoader.<호출>` 을 모아 명령 파서와 페이지 모듈에 견준다. 글을 고쳐 없는 이름을 적으면 여기서 실패한다.
@@ -26,7 +29,16 @@ from price_model import ERP_MAX_DAYS, GAP_KINDS  # noqa: E402
 from price_pages import SEASON_REFILL_NOTE  # noqa: E402
 from price_sheet import SheetCheck, decode_sheet  # noqa: E402
 
-DOCS = [SKILL / "SKILL.md", SKILL / "references" / "commands.md", SKILL / "references" / "page.md", SKILL / "references" / "sheet.md"]
+REFERENCES = sorted((SKILL / "references").glob("*.md"))
+DOCS = [SKILL / "SKILL.md", *REFERENCES]
+SKILL_BUDGET = 25_000          # SKILL.md 의 바이트 수 상한(UTF-8)
+MUST_KEEP = SKILL / "tests" / "fixtures" / "must-keep-rules.txt"
+# 가리킴이 그 자리에서 다시 말해야 하는 규칙 — 그 파일을 가리키는 줄 가운데 하나에 이 말이 있다
+REMINDERS = {
+    "stopped.md": "다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다",
+    "failures.md": "같은 저장을 두 번 누르지 않는다",
+    "red-lines.md": "\"적용\"이라고만 하면 저장하지 않는다",
+}
 
 
 def required() -> dict[str, set[str]]:
@@ -132,7 +144,7 @@ class DocNamesTest(unittest.TestCase):
 
     def test_the_instructions_say_the_idle_window_and_every_stop_cause_the_code_uses(self):
         minutes = f"{int(IDLE.total_seconds() // 60)}분"
-        for doc in DOCS[:2]:
+        for doc in (SKILL / "references" / "stopped.md", SKILL / "references" / "commands.md"):
             text = doc.read_text(encoding="utf-8")
             self.assertIn(minutes, text, f"{doc.name}: 멈춤으로 보는 시간")
             for cause in CAUSES:
@@ -154,6 +166,48 @@ class DocNamesTest(unittest.TestCase):
                 self.assertIn(name, self.page, f"{doc.name}: stayPrice.{name}")
             for name in re.findall(r"stayPriceLoader\.(\w+)", text):
                 self.assertIn(name, self.loader, f"{doc.name}: stayPriceLoader.{name}")
+
+
+def section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end < 0 else text[start:end]
+
+
+def sentences(line: str) -> list[str]:
+    """규칙 한 줄 → 문장들(「…다.」 로 끝나는 곳에서 자른다)."""
+    return [part for part in re.split(r"(?<=다\.)\s+", line.strip()) if part]
+
+
+class SkillBudgetTest(unittest.TestCase):
+    """Z9 — SKILL.md 는 크기 안이고, 모든 참고 파일을 가리키며, 「반드시 지킬 것」의 규칙 문장을 하나도 잃지 않는다."""
+
+    def setUp(self):
+        self.skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+
+    def test_skill_md_fits_the_budget(self):
+        size = len(self.skill.encode("utf-8"))
+        self.assertLessEqual(size, SKILL_BUDGET, f"SKILL.md 가 {size:,}바이트 — 가끔만 필요한 갈래는 references/ 로 옮긴다")
+
+    def test_every_reference_file_is_pointed_to_from_skill_md(self):
+        self.assertGreaterEqual(len(REFERENCES), 7)
+        for path in REFERENCES:
+            self.assertIn(f"](references/{path.name})", self.skill, f"SKILL.md 가 {path.name} 를 가리키지 않는다")
+
+    def test_the_pointers_repeat_the_rule_that_must_not_be_missed_there(self):
+        lines = self.skill.splitlines()
+        for name, rule in REMINDERS.items():
+            pointing = [line for line in lines if f"](references/{name})" in line]
+            self.assertTrue(pointing, name)
+            self.assertTrue(any(rule in line for line in pointing), f"{name} 를 가리키는 줄이 「{rule}」을 말하지 않는다")
+
+    def test_no_rule_sentence_of_the_must_keep_list_disappeared(self):
+        kept = section(self.skill, "## 반드시 지킬 것")
+        rules = [line for line in MUST_KEEP.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual(len(rules), 14, "시작한 판의 「반드시 지킬 것」은 14줄")
+        for rule in rules:
+            for sentence in sentences(rule):
+                self.assertIn(sentence, kept, f"「반드시 지킬 것」에서 빠진 문장: {sentence}")
 
 
 class SheetDocsTest(unittest.TestCase):
@@ -186,7 +240,8 @@ class SheetDocsTest(unittest.TestCase):
         self.assertGreaterEqual(self.sheet.count(SEASON_REFILL_NOTE), 2, "두 길을 말할 때와 미리보기를 말할 때")
         self.assertIn("(가) 시즌 원판 바꾸기", self.sheet)
         self.assertIn("아직 못 합니다", self.sheet)
-        self.assertIn("(가) 시즌 원판 바꾸기는 도우미가 아직 못 합니다", self.skill, "「하지 않는 것」의 답")
+        self.assertIn("(가) 시즌 원판 바꾸기는 도우미가 아직 못 합니다", (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"),
+                      "「하지 않는 것」의 답")
         self.assertNotIn("새 요금표로 통째 바꾸기는 아직 못 한다", self.skill + self.sheet)
 
     def test_commands_md_names_every_kind_of_gap(self):
