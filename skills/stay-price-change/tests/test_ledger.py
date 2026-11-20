@@ -63,41 +63,18 @@ class LocationTest(unittest.TestCase):
             with self.assertRaises(LedgerError):
                 Ledger(path)
 
-    def test_a_ledger_of_the_first_version_gains_the_hotel_number_reading_and_unknown_columns(self):
+    def test_an_older_layout_is_not_upgraded(self):
+        # 아무것도 내보낸 적이 없어 앞 판 장부는 없다 — 여는 일은 있는 표의 칸을 바꾸지 않는다(옮기는 코드가 없다)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / DB_NAME
             db = sqlite3.connect(path)
-            db.executescript(V1_SCHEMA)
-            db.execute("INSERT INTO meta VALUES ('schema_version', '1')")
-            db.execute("INSERT INTO changes (kind, status, hotel, offer, currency, sentence, read_at, created_at, updated_at)"
-                       " VALUES ('change', 'previewed', 'H', 'O', 'USD', '앞 판', 't', 't', 't')")
-            db.execute("INSERT INTO steps VALUES (1, 1, 'bulk', 'l', '{}', 'failed', 't', '앞 판')")
+            db.execute("CREATE TABLE changes (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL)")
             db.commit()
             db.close()
-            ledger = Ledger(path)
-            record = ledger.change(1)
-            self.assertEqual((record.hotel, record.hotel_id, record.steps[0].unknown), ("H", "", False))
-            with self.assertRaises(LedgerError):
-                ledger.reading(1)
+            Ledger(path)
             db = sqlite3.connect(path)
-            self.assertEqual(db.execute("SELECT value FROM meta WHERE name = 'schema_version'").fetchone()[0], "2")
+            self.assertEqual([row[1] for row in db.execute("PRAGMA table_info(changes)")], ["id", "kind"])
             db.close()
-            Ledger(path)   # 두 번 열어도 칸을 다시 더하지 않는다
-
-
-# 판 1 장부의 표 — 앞 판 도우미가 만든 장부를 열 때 칸이 더해지는지 보려고 그대로 옮겨 둔다
-V1_SCHEMA = """
-CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE changes (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, status TEXT NOT NULL, hotel TEXT NOT NULL,
-  offer TEXT NOT NULL, currency TEXT NOT NULL, sentence TEXT NOT NULL, read_at TEXT NOT NULL, created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL, applied_at TEXT, verified_at TEXT, reverses INTEGER REFERENCES changes(id), request TEXT);
-CREATE TABLE item_values (change_id INTEGER NOT NULL, item_kind TEXT NOT NULL, item_key TEXT NOT NULL, label TEXT NOT NULL,
-  field TEXT NOT NULL, state TEXT NOT NULL, before TEXT, after TEXT, action TEXT, step INTEGER,
-  verified INTEGER NOT NULL DEFAULT 0, seen TEXT, seen_state TEXT, rolled_back_by INTEGER, verdict TEXT,
-  marks TEXT NOT NULL DEFAULT '', PRIMARY KEY (change_id, item_kind, item_key, field));
-CREATE TABLE steps (change_id INTEGER NOT NULL, idx INTEGER NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL,
-  body TEXT NOT NULL, status TEXT NOT NULL, finished_at TEXT, note TEXT, PRIMARY KEY (change_id, idx));
-"""
 
 
 class LifecycleTest(unittest.TestCase):

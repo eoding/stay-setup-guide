@@ -4,7 +4,7 @@
 환경 변수 `STAY_PRICE_LEDGER_DIR` 로 다른 폴더를 줄 수 있다(시험은 임시 폴더를 쓴다). 가격·부과금·프로모션·부가옵션
 도우미가 모두 이 장부 하나에 적는다.
 
-    meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다. 앞 판(1)은 열 때 칸을 더해 올린다
+    meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
     changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied),
                  호텔(페이지가 알아본 번호와 이름), 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON),
                  그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다)
@@ -96,9 +96,6 @@ CREATE TRIGGER IF NOT EXISTS keep_steps BEFORE DELETE ON steps BEGIN SELECT RAIS
 """
 
 ROW = "item_kind = ? AND item_key = ? AND field = ?"
-# 앞 판 장부에 더하는 칸 — (표, 칸, 정의). 판 1 → 2
-ADDED = (("changes", "hotel_id", "TEXT NOT NULL DEFAULT ''"), ("changes", "reading", "TEXT"),
-         ("steps", "unknown", "INTEGER NOT NULL DEFAULT 0"))
 
 
 class LedgerError(ValueError):
@@ -266,9 +263,6 @@ class Ledger:
                 raise LedgerError(f"이 장부는 더 새 판 도우미가 만든 것입니다(장부 판 {found['value']}, 이 도우미는 "
                                   f"{SCHEMA_VERSION}). 도우미를 새로 받아 주세요")
             db.executescript(SCHEMA)
-            for table, column, decl in ADDED:
-                if column not in {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}:
-                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
             db.execute("INSERT INTO meta (name, value) VALUES ('schema_version', ?)"
                        " ON CONFLICT(name) DO UPDATE SET value = excluded.value", (str(SCHEMA_VERSION),))
 

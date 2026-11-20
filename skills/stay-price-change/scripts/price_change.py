@@ -239,8 +239,6 @@ def cmd_begin(args):
 
 def record_hotel(record) -> dict:
     """장부가 적어 둔 호텔 — 페이지가 알아본 번호 · 이름. 부를 값마다 실려 다른 호텔의 탭에서는 페이지가 누르지 않는다."""
-    if not record.hotel_id:
-        raise LedgerError(f"{record.id}번에는 호텔 번호가 적혀 있지 않아 브라우저에서 이어 갈 수 없습니다")
     return encode_hotel(record.hotel, record.hotel_id)
 
 
