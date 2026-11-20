@@ -20,7 +20,7 @@ test('A2 · 저장 단추가 보낼 칸을 [이름, 값] 차례 그대로 읽고
   assert.equal(page.drawerOpen(), false);
   assert.equal(page.doc.getElementById('stay_drawer_body').children.length, 0, '드로어 내용까지 비었다');
   const { body } = takeAll(page.w, r);
-  assert.deepEqual(body.addon, { id: '201', name: '조식 추가 (성인)' });
+  assert.deepEqual(body.addon, { id: '201', name: '조식 추가 (성인)', offer: '데모 오퍼 2027' });
   assert.deepEqual(body.line, LISTED[0].lines[0]);
   assert.deepEqual(body.window, {
     title: '가격 편집 — 비수기 조식', addon: '조식 추가 (성인)',
@@ -32,16 +32,16 @@ test('A2 · 저장 단추가 보낼 칸을 [이름, 값] 차례 그대로 읽고
   page.w.close();
 });
 
-test('A2 · 이름이 같은 부가옵션 둘은 번호로 가른다 — 켜진 적용 범위 체크도 보낼 칸에 든다', async () => {
+test('A2 · 이름이 같은 부가옵션 둘은 번호로 가르고, 읽은 답이 저마다의 오퍼를 싣는다 — 켜진 적용 범위 체크도 보낼 칸에 든다', async () => {
   const page = addonPage();
   const second = takeAll(page.w, plain(await read(page, '204', '305'))).body;
-  assert.deepEqual(second.addon, { id: '204', name: '엑스트라베드' });
+  assert.deepEqual(second.addon, { id: '204', name: '엑스트라베드', offer: '데모 연말 오퍼' });
   assert.equal(second.line.target, '연말 시즌');
   assert.deepEqual(second.window.form, [['name', '엑스트라베드 1개'], ['price', '33.00'], ['net_amount', '27.50'], ['season', '43'], ['date', ''], ['rate_plan', ''],
     ['description', ''], ['scope_rate_plan_mode', '2'], ['scope_rate_plan_include', '53'], ['scope_room_mode', '0']]);
   assert.equal(second.window.labels.scope_rate_plan_mode, '지정한 대상만');
   const first = takeAll(page.w, plain(await read(page, '203', '304'))).body;
-  assert.deepEqual(first.addon, { id: '203', name: '엑스트라베드' });
+  assert.deepEqual(first.addon, { id: '203', name: '엑스트라베드', offer: '데모 오퍼 2027' });
   assert.deepEqual(first.window.form.slice(0, 4), [['name', '엑스트라베드 1개'], ['price', '30.00'], ['net_amount', '25.00'], ['season', '']]);
   assert.deepEqual(page.log.gets, ['/stay/1/addon-prices/305/edit/', '/stay/1/addon-prices/304/edit/']);
   page.w.close();

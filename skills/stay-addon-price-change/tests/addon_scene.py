@@ -40,11 +40,11 @@ START = datetime(2026, 11, 21, 1, 0, tzinfo=timezone.utc)
 
 
 def line(addon, addon_name, line_id, name, sell, supply, target="전체", season="", date="", description="", hidden=False,
-         currency="USD", listed=None):
+         currency="USD", listed=None, offer="데모 오퍼 2027"):
     """줄 하나 — 목록과 편집 창이 같은 값을 보이는 보통 줄. `hidden` 이면 목록의 통화별 금액이 「별도 금액 없음」(값 줄이 안 보임),
     `listed` 를 주면 목록의 통화별 금액이 그 글자들이다(편집 창과 다르게 보이는 줄)."""
     return dict(addon=addon, addon_name=addon_name, line=line_id, name=name, sell=sell, supply=supply, target=target,
-                season=season, date=date, description=description, hidden=hidden, currency=currency, listed=listed)
+                season=season, date=date, description=description, hidden=hidden, currency=currency, listed=listed, offer=offer)
 
 
 def demo_lines():
@@ -100,7 +100,7 @@ class Erp:
         if item is None or item["addon"] != call["addon"]:
             return reply("readLine", asked, None, missing=True, doneAt=self.tick(),
                          note="목록에 그 부가옵션의 그 가격 줄이 없습니다 — 아무것도 열지 않았습니다")
-        keep = {"hotel": HOTEL, "addon": {"id": item["addon"], "name": item["addon_name"]}, "line": row_of(item),
+        keep = {"hotel": HOTEL, "addon": {"id": item["addon"], "name": item["addon_name"], "offer": item["offer"]}, "line": row_of(item),
                 "window": window_of(item)}
         return reply("readLine", asked, keep, pieces=3, body_id=f"b{self.reads}", what=f"{item['addon_name']} · {item['name']}",
                      doneAt=self.tick())
@@ -136,7 +136,7 @@ def look_answer(erp: Erp):
     """look 의 답(작은 답 + take 답들) — 지금 상태의 부가옵션과 줄 전부."""
     addons = {}
     for item in erp.lines.values():
-        entry = addons.setdefault(item["addon"], {"id": item["addon"], "name": item["addon_name"], "offer": "데모 오퍼",
+        entry = addons.setdefault(item["addon"], {"id": item["addon"], "name": item["addon_name"], "offer": item["offer"],
                                                   "lines": []})
         entry["lines"].append(row_of(item))
     keep = {"hotel": HOTEL, "addons": list(addons.values())}

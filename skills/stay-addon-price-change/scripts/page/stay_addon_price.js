@@ -113,7 +113,8 @@
     var td = th && th.nextElementSibling;
     return td ? C(td.textContent) : '';
   }
-  function addonOf(card) { return { id: card.getAttribute('data-stay-entity-id') || '', name: C(card.getAttribute('data-stay-name')) }; }
+  // 카드 하나 — 번호 · 이름 · 오퍼. 오퍼마다 이름이 같은 부가옵션이 있어, 읽기 답도 오퍼를 싣는다(담당자에게 줄을 말할 때 가른다)
+  function addonOf(card) { return { id: card.getAttribute('data-stay-entity-id') || '', name: C(card.getAttribute('data-stay-name')), offer: offerOf(card) }; }
 
   /* ───────────── 3. 편집 창 — 연 창이 그 호텔 · 그 줄의 것인지, 저장 단추가 보낼 칸 ───────────── */
 
@@ -176,10 +177,7 @@
     input = input && typeof input === 'object' ? input : {};
     return K.run('look', input, async function (p, ctx) {
       var root = await toAddons(ctx);
-      var addons = cards(root).map(function (card) {
-        var addon = addonOf(card);
-        return { id: addon.id, name: addon.name, offer: offerOf(card), lines: rowsOf(card).map(lineOf) };
-      });
+      var addons = cards(root).map(function (card) { return Object.assign(addonOf(card), { lines: rowsOf(card).map(lineOf) }); });
       var lines = addons.reduce(function (n, a) { return n + a.lines.length; }, 0);
       return { ok: true, login: false, hotel: ctx.hotel, count: { addons: addons.length, lines: lines }, keep: { hotel: ctx.hotel, addons: addons } };
     }, SPEC);

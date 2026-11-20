@@ -5,10 +5,10 @@
     "what": "조식 추가 (성인) · 비수기 조식",
     "body": {
       "id": "bgoldenread",
-      "chars": 725,
-      "bytes": 939,
-      "crc32": "5acfd195",
-      "fnv": "4dd35b03"
+      "chars": 746,
+      "bytes": 968,
+      "crc32": "4ce5e9c6",
+      "fnv": "2e4544d1"
     },
     "rest": true,
     "ask": "68658ae7",
@@ -25,20 +25,20 @@
     "id": "bgoldenread",
     "at": 0,
     "size": 800,
-    "next": 681,
-    "end": 725,
-    "sum": "512b0e35",
-    "text": "{'op':'readLine','asked':{'hotel':{'id':'1','name':'데모 호텔'},'addon':'201','line':'301'},'hotel':{'id':'1','name':'데모 호텔'},'addon':{'id':'201','name':'조식 추가 (성인)'},'line':{'id':'301','name':'비수기 조식','sell':'20.00 USD','values':['판매가: 20.00 USD','공급 원가: 15.00 USD'],'target':'비수기','scope':'요금제: 기존 범위 그대로 객실: 기존 범위 그대로 부가옵션 범위와 모두 일치하는 대상에만 적용','band':'전체'},'window':{'title':'가격 편집 — 비수기 조식','addon':'조식 추가 (성인)','form':[['name','비수기 조식'],['price','20.00'],['net_amount','15.00'],['season','41'],['date',''],['rate_plan',''],['description',''],['scope_rate_plan_mode','0'],['scope_room_mode','0']],'labels':{'season':'비수기','rate_plan':'---------','scope_rate_plan_mode':'기존 범위 그대로',"
+    "next": 667,
+    "end": 746,
+    "sum": "6d3466a8",
+    "text": "{'op':'readLine','asked':{'hotel':{'id':'1','name':'데모 호텔'},'addon':'201','line':'301'},'hotel':{'id':'1','name':'데모 호텔'},'addon':{'id':'201','name':'조식 추가 (성인)','offer':'데모 오퍼 2027'},'line':{'id':'301','name':'비수기 조식','sell':'20.00 USD','values':['판매가: 20.00 USD','공급 원가: 15.00 USD'],'target':'비수기','scope':'요금제: 기존 범위 그대로 객실: 기존 범위 그대로 부가옵션 범위와 모두 일치하는 대상에만 적용','band':'전체'},'window':{'title':'가격 편집 — 비수기 조식','addon':'조식 추가 (성인)','form':[['name','비수기 조식'],['price','20.00'],['net_amount','15.00'],['season','41'],['date',''],['rate_plan',''],['description',''],['scope_rate_plan_mode','0'],['scope_room_mode','0']],'labels':{'season':'비수기','rate_plan':'---------',"
   },
   {
     "op": "take",
     "ok": true,
     "id": "bgoldenread",
-    "at": 681,
+    "at": 667,
     "size": 800,
-    "next": 725,
-    "end": 725,
-    "sum": "8c5e4616",
-    "text": "'scope_room_mode':'기존 범위 그대로'},'errors':[]}}"
+    "next": 746,
+    "end": 746,
+    "sum": "2036e19b",
+    "text": "'scope_rate_plan_mode':'기존 범위 그대로','scope_room_mode':'기존 범위 그대로'},'errors':[]}}"
   }
 ]
