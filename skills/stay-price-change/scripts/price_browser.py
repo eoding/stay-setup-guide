@@ -38,9 +38,8 @@ from typing import Iterable, Mapping
 
 from change_core.money import money_text
 from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
-from price_model import FIELDS, WEEKDAYS, decode_step, iso_day
+from price_model import ERP_MAX_DAYS, FIELDS, WEEKDAYS, day_windows, decode_step, iso_day
 
-MAX_SPAN = 550                       # ERP 가 한 번에 받는 기간(일)
 READ_SPAN = 186                      # readPair 한 번의 기간 — 달마다 달력 칸을 보므로(판매일 확인) 여섯 달 남짓으로 끊어 45초 안에
 PROBE_FIELDS = ("hotel", "offer", "rooms", "ratePlans", "from", "to", "weekdays", "occupancy", "nights")
 OPS = {"bulk": "applyBulk", "cell_edit": "applyCell"}
@@ -230,7 +229,7 @@ def selected(first: str, last: str, weekdays: Iterable[str]) -> list[str]:
             if (start + timedelta(days=offset)).weekday() in wanted]
 
 
-def periods(dates: Iterable[str], span: int = MAX_SPAN) -> list[tuple[str, str, list[str]]]:
+def periods(dates: Iterable[str], span: int = ERP_MAX_DAYS) -> list[tuple[str, str, list[str]]]:
     """고른 날만 덮는 (시작일, 종료일, 요일) 목록. 「기간 ∩ 요일」 하나로 꼭 그 날들이 되면 하나, 아니면 이어진 날마다 하나.
 
     가격 수정 창은 판매일이 없는 날이 하루라도 끼면 기간을 통째로 거절하므로, 고르지 않은 날을 덮지 않는다.
@@ -238,14 +237,8 @@ def periods(dates: Iterable[str], span: int = MAX_SPAN) -> list[tuple[str, str, 
     days = sorted({iso_day(day) for day in dates})
     if not days:
         raise ValueError("날짜가 없습니다")
-    windows: list[list[str]] = []
-    for day in days:
-        if windows and (date.fromisoformat(day) - date.fromisoformat(windows[-1][0])).days < span:
-            windows[-1].append(day)
-        else:
-            windows.append([day])
     out = []
-    for window in windows:
+    for window in day_windows(days, span):
         weekdays = [WEEKDAYS[index] for index in sorted({date.fromisoformat(day).weekday() for day in window})]
         if selected(window[0], window[-1], weekdays) == window:
             out.append((window[0], window[-1], weekdays))

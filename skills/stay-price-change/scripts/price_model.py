@@ -11,7 +11,7 @@
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
     CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
     CellWrite    칸 하나에 넣을 값(필드마다 새 값 또는 비움)
-    BulkStep     [선택 날짜 가격 수정] 저장 한 번 — 객실 × 요금제 × 이어진 날짜, 줄(RowWrite)마다 바뀌는 칸의 새 값
+    BulkStep     [선택 날짜 가격 수정] 저장 한 번 — 객실 × 요금제 × 줄과 값이 같은 날들(떨어져 있어도), 줄(RowWrite)마다 새 값
     CellEditStep 날짜 칸을 눌러 여는 셀 창 저장 한 번 — 칸 하나의 정가·공급 원가를 비운다
     Plan         미리보기 한 장의 내용
 """
@@ -37,10 +37,24 @@ OPERATIONS = ("amount", "percent", "set", "clear")
 RESERVED, CLOSED, NEW = "reserved", "closed", "new"
 RED_LINE_SHARE = Decimal("0.30")
 WEEKDAYS = "월화수목금토일"
+# ERP 가 날짜 고르기 한 번에 받는 날 — basecamp `stay/date_selection.py` 의 MAX_DAYS(구간 하나의 길이도, 고른 날 수도 550일까지).
+# 드로어 ① 의 시작일 ~ 종료일도 이 길이까지다(러너 `CAL_MAX_DAYS`). 구간 줄의 수 자체는 정해 두지 않았다(글자 12,000자 칸).
+ERP_MAX_DAYS = 550
 
 
 def iso_day(text: str) -> str:
     return date.fromisoformat(text).isoformat()
+
+
+def day_windows(days, span: int) -> list[list[str]]:
+    """오름차순 날짜 → 첫 날부터 끝 날까지가 `span` 일을 넘지 않게 앞에서부터 나눈 묶음들."""
+    windows: list[list[str]] = []
+    for day in days:
+        if windows and (date.fromisoformat(day) - date.fromisoformat(windows[-1][0])).days < span:
+            windows[-1].append(day)
+        else:
+            windows.append([day])
+    return windows
 
 
 def same_hotel(name: str, hotel_id: str, other_name: str, other_id: str) -> bool:
@@ -349,7 +363,8 @@ class RowWrite:
 
 @dataclass(frozen=True)
 class BulkStep:
-    """[선택 날짜 가격 수정] 저장 한 번 — 객실 하나 × 요금제 하나 × 이어진 날짜, 줄마다 같은 값."""
+    """[선택 날짜 가격 수정] 저장 한 번 — 객실 하나 × 요금제 하나 × 쓰는 줄과 값이 같은 날들(떨어져 있어도 된다 — 드로어가
+    날짜 구간을 여럿 받는다), 줄마다 같은 값."""
     room: str
     rate_plan: str
     dates: tuple[str, ...]

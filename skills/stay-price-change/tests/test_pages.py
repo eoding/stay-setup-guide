@@ -56,6 +56,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("정가도 같은 만큼 올림 / 정가 지움 / 이 칸은 안 바꿈", text)
         self.assertIn("건너뛰는 칸의 까닭: 가격 없음 6칸", text)
         self.assertIn("ERP 에 8번 나눠 저장합니다", text)
+        self.assertIn("객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번", text, "T7 — 저장 묶음을 말하는 글")
         for heading in ("디럭스 · 조식 포함", "디럭스 · 룸온리", "스위트 · 조식 포함", "스위트 · 룸온리"):
             self.assertIn(heading, text)
         self.assertIn("12/26 토 판매 마감", text)

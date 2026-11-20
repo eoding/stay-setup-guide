@@ -75,15 +75,15 @@ test('B15 · 저장 요청이 끝나지 않으면 천장에서 돌려주고 "unk
 test('B15 · 천장 뒤에 러너가 이어서 누르려 해도 아무것도 눌리지 않고, 저장 전이었으면 "저장 안 됨"이다', async () => {
   const page = erpPage();
   page.w.stayPrice.config({ hardMs: 1200, restMs: 300 });
-  const runner = page.w.runCalendarPriceStep;
-  page.w.runCalendarPriceStep = (step, opt) => new page.w.Promise((resolve) => page.w.setTimeout(() => resolve(runner(step, opt)), 1600));
+  const fill = page.w.stayRun.fill;   // 칸 치기가 늦어져 천장을 넘긴다 — 그 뒤의 [입력한 가격 적용] 클릭은 화면에 닿지 않아야 한다
+  page.w.stayRun.fill = (fields) => new page.w.Promise((resolve) => page.w.setTimeout(() => resolve(fill(fields)), 1600));
   const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
   assert.equal(r.saved, false);
   assert.equal(r.pressed, false);
   assert.match(r.error, /안에 끝나지 않아 멈췄습니다/);
   const reached = page.log.reached.length;
   await pause(2500);
-  assert.equal(page.log.reached.length, reached, '천장 뒤 러너의 클릭(탭·열기·다음·저장)은 화면에 닿지 않았다');
+  assert.equal(page.log.reached.length, reached, '천장 뒤 남은 코드의 클릭(저장)은 화면에 닿지 않았다');
   assert.deepEqual(page.log.posts, []);
   page.w.close();
 });

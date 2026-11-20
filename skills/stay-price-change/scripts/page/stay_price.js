@@ -1,7 +1,7 @@
 /* stay_price.js — 가격 변경 도우미의 페이지 쪽 (stay-price-change). `window.stayPrice` 를 만든다.
  *
  * 러너의 도우미(`stay-setup-run/scripts/stay_helper.js`)와 부트(`stay_boot.js`)를 먼저 올리고 이 파일을 올린다.
- * 러너 파일은 고치지 않는다 — 화면을 모는 부품(cal*, runCalendarPriceStep, stayRun.waitFor)을 빌려 쓴다.
+ * 러너 파일은 고치지 않는다 — 화면을 모는 부품(cal*, stayRun.waitFor · fill · readback · submit)을 빌려 쓴다.
  *
  *   stayPrice.look({offer})                                                    이 탭이 어디인지 — 로그인 화면 · 호텔(번호 · 이름) ·
  *                                                                              오퍼 · 그 오퍼의 객실 × 요금제 칩. 저장하지 않는다
@@ -9,7 +9,8 @@
  *                                                                              읽지 않고 「판매일 없음」으로 알린다
  *   stayPrice.readReserved({offer, rooms, ratePlans, from, to, weekdays,
  *                           occupancy, nights})                                예약 있는 날 읽기 — [가감 적용] 은 누르지 않는다
- *   stayPrice.applyBulk({no, offer, room, ratePlan, dates, rows})              [선택 날짜 가격 수정] 저장 한 번
+ *   stayPrice.applyBulk({no, offer, room, ratePlan, dates, rows})              [선택 날짜 가격 수정] 저장 한 번 — 고른 날들이
+ *                                                                              떨어져 있어도 그 날들만 고른다
  *   stayPrice.applyCell({no, offer, room, ratePlan, date, occupancy, nights,
  *                        clear, set})                                          셀 창 저장 한 번(정가·공급 원가 비우기·넣기)
  *   stayPrice.take(id, at, size)                                               읽은 조각의 한 쪽 — at=0 부터 next 를 따라 end 까지
@@ -377,7 +378,7 @@
   /* ───────────── 4. 작업 틀 — 벽 세우기 · 시간 · 결과 남기기 ───────────── */
 
   var NEEDS = ['calDayRanges', 'calSetPeriod', 'calSet', 'calCheck', 'calSelectOffer', 'calEnsureCoord', 'calSelectChip',
-    'calRedraw', 'calErrors', 'runCalendarPriceStep'];
+    'calRedraw', 'calErrors'];
   function Stop(message, extra) { this.message = message; this.extra = extra || {}; }
   function fail(message, extra) { throw new Stop(message, extra); }
 
@@ -459,6 +460,11 @@
       out = e instanceof Stop ? Object.assign({ ok: false, error: e.message }, e.extra) : { ok: false, error: '페이지 쪽 코드가 멈췄습니다: ' + C(e && e.message) };
     } else {
       out = first.value;
+    }
+    // 저장 작업의 답에는 언제나 saved · pressed 가 있다 — 누르기 전에 멈췄으면 저장 안 됨, 누른 뒤에 멈췄으면 「알 수 없음」
+    if (SAVES[op] && out.saved === undefined) {
+      out.pressed = wall.pressed(SAVES[op]);
+      out.saved = out.pressed ? 'unknown' : false;
     }
     // 정리는 restMs 안에서(늦어도 endAt 까지) — 쉬지 않는 화면 때문에 답을 더 붙잡지 않는다
     var restUntil = Math.min(endAt, Date.now() + limits.restMs);
@@ -872,31 +878,48 @@
   var BULK_COLS = [{ key: 'sell', col: 'price', label: '판매가' }, { key: 'list', col: 'original_price', label: '정가' }, { key: 'supply', col: 'net_amount', label: '공급 원가' }];
   function nextDay(day) { return new Date(new Date(day + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10); }
 
-  // 러너의 `runCalendarPriceStep` 이 받는 단계 객체 — 연동 방식은 「조합마다 직접 입력」, 줄마다 넣을 값만 적는다
-  function bulkStepFor(p) {
-    var F = function (label, kind, value, extra) {
-      var f = { label: label, kind: kind, raw_value: value };
-      if (kind === 'multi') f.values = value; else f.value = value;
-      return Object.assign(f, extra || {});
-    };
-    var fields = [F('오퍼', 'select', p.offer), F('객실', 'select', p.room), F('요금제', 'select', p.ratePlan),
-      F('시작일', 'typed', p.dates[0]), F('종료일', 'typed', p.dates[p.dates.length - 1]), F('요일', 'multi', WEEK.split('')),
-      F('연동 방식', 'select', MANUAL)];
-    p.rows.forEach(function (row) {
+  // 저장할 날짜 목록 → 그 날들만 고르는 구간 줄(`date_selection_0` 이 날을 정한다)과 드로어 ① 의 바깥 테두리(시작일 · 종료일 ·
+  // 그 날들의 요일). 날은 떨어져 있어도 된다 — 읽기(readPair)도 판매일 없는 날을 빼고 같은 길로 고른다
+  function spanOf(dates) {
+    var first = dates[0], last = dates[dates.length - 1];
+    var length = Math.round((Date.parse(last + 'T00:00:00Z') - Date.parse(first + 'T00:00:00Z')) / 86400000) + 1;
+    if (length > window.CAL_MAX_DAYS) fail('`dates` 가 ' + length + '일에 걸칩니다 — 한 번에 ' + window.CAL_MAX_DAYS + '일까지입니다');
+    var weekdays = WEEK.split('').filter(function (w, i) { return dates.some(function (d) { return (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7 === i; }); });
+    return { from: first, to: last, weekdays: weekdays, ranges: runsOf(dates), days: dates.slice() };
+  }
+
+  // ② 에서 「조합마다 직접 입력」 으로 줄마다 넣을 값만 치고 되읽은 뒤 [입력한 가격 적용] 을 누른다 — 러너의 가격 수정 단계 ② 와
+  // 같은 부품(calRedraw · stayRun.fill · readback · submit)이다. 누르기 전에 멈추면 refused(저장 안 됨)
+  async function saveRows(ctx, review, rows) {
+    var root = function () { return document.querySelector('[data-stay-screen="calendar-bulk"]'); };
+    var modeOf = function (r) { var h = r.querySelector('input[type="hidden"][name="link_mode"]'); return h ? h.value : ''; };
+    var pick = review.querySelector('select[name="link_mode_pick"]');
+    if (pick && modeOf(review) !== 'manual') {
+      var redrawn = await window.calRedraw(pick, 'manual', root, function (r) { return modeOf(r) === 'manual' && !!r.querySelector('[data-stay-action="save"]'); });
+      ctx.check();
+      if (!redrawn) fail('`연동 방식` 을 「' + MANUAL + '」 으로 바꾸지 못했습니다 — 저장하지 않았습니다', { refused: true, saved: false, pressed: false });
+    }
+    var fields = [];
+    rows.forEach(function (row) {
       BULK_COLS.forEach(function (c) {
         if (row[c.key] === null || row[c.key] === undefined) return;
-        fields.push(F((row.occupancy || '인원 무관') + ' · ' + row.nights + '박 이상 · ' + c.label, 'typed', String(row[c.key]),
-          { field: 'prices', occupancy_key: row.occupancy, los_nights: row.nights, field_col: c.col }));
+        fields.push({ label: (row.occupancy || '인원 무관') + ' · ' + row.nights + '박 이상 · ' + c.label, kind: 'typed', value: String(row[c.key]),
+          field: 'prices', occupancy_key: row.occupancy, los_nights: row.nights, field_col: c.col });
       });
     });
-    return { no: p.no, kind: '선택 날짜 가격 수정', title: '가격 변경 도우미 저장 ' + p.no, fields: fields };
+    var bad = (await window.stayRun.fill(fields)).filter(function (x) { return x.status !== 'ok'; }).map(function (x) { return x.label + ': ' + x.status + ' ' + (x.detail || ''); });
+    ctx.check();
+    if (bad.length) fail('드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다 — ' + bad.join(' / '), { refused: true, saved: false, pressed: false });
+    var back = window.stayRun.readback(fields);
+    if (back.mismatch.length) fail('넣은 값을 다시 읽으니 달라 저장하지 않았습니다 — ' + back.mismatch.join(' / '), { refused: true, saved: false, pressed: false });
+    return window.stayRun.submit('입력한 가격 적용', { action: 'save' });
   }
 
   function applyBulk(input) {
     return run('applyBulk', input, async function (p, ctx) {
       var want = { offer: text(p.offer, 'offer'), room: text(p.room, 'room'), ratePlan: text(p.ratePlan, 'ratePlan'), dates: p.dates, rows: p.rows };
-      if (!Array.isArray(want.dates) || !want.dates.length || want.dates.some(function (d, i) { return !/^\d{4}-\d{2}-\d{2}$/.test(d) || (i && nextDay(want.dates[i - 1]) !== d); })) {
-        fail('`dates` 는 이어진 날짜 목록이어야 합니다');
+      if (!Array.isArray(want.dates) || !want.dates.length || want.dates.some(function (d, i) { return !/^\d{4}-\d{2}-\d{2}$/.test(d) || (i && d <= want.dates[i - 1]); })) {
+        fail('`dates` 는 겹치지 않는 오름차순 날짜 목록이어야 합니다');
       }
       if (!Array.isArray(want.rows) || !want.rows.length) fail('`rows` 가 비었습니다');
       want.rows.forEach(function (row) {
@@ -904,24 +927,24 @@
         var values = BULK_COLS.filter(function (c) { return row[c.key] !== null && row[c.key] !== undefined; });
         if (!values.length || values.some(function (c) { return !AMOUNT.test(String(row[c.key])); })) fail('줄 ' + (row.occupancy || '인원 무관') + ' · ' + row.nights + '박 에 넣을 금액이 없거나 숫자가 아닙니다');
       });
-      var span = period(want.dates[0], want.dates[want.dates.length - 1], WEEK.split(''));
-      if (span.days.join(',') !== want.dates.join(',')) fail('`dates` 를 기간으로 바꾸지 못했습니다');
+      var span = spanOf(want.dates);
       await toPair(ctx, want.offer, want.room, want.ratePlan);
       ctx.pins.ranges = span.ranges;   // 저장 단추는 드로어가 이 날짜·이 칩일 때만 눌린다(WHEN.bulkTarget)
-      var r = await window.runCalendarPriceStep(bulkStepFor(Object.assign({ no: p.no }, want)), {});
+      // 읽기와 같은 길로 연다 — ② 가 그 오퍼 · 요금제 · 그 날들인지 본 뒤에만 칸을 친다
+      var review = await openBulkReview(ctx, { offer: want.offer, ratePlan: want.ratePlan, from: span.from, to: span.to, weekdays: span.weekdays }, span);
+      var sub = await saveRows(ctx, review, want.rows);
       var pressed = ctx.wall.pressed('bulkSave');
-      var confirmed = pressed && !!r && r.submitted === true && !r.error && !r.manualAction;
+      var still = document.querySelector('[data-stay-screen="calendar-bulk"]');
+      var errors = (sub.errors || []).concat(still ? window.calErrors(still) : []);
+      var confirmed = pressed && window.SUBMIT_OK.indexOf(String(sub.status)) >= 0 && !errors.length;
       // 눌렀는데 드로어가 오류를 보이며 남았으면 서버가 거절한 것(저장 안 됨). 그 밖에 확인 못 한 것은 「알 수 없음」이다
-      var refusedByServer = pressed && !!r && r.submit === 'stayed' && (r.errors || []).length > 0;
+      var refusedByServer = pressed && sub.status === 'stayed' && errors.length > 0;
       var saved = confirmed ? true : (pressed && !refusedByServer ? 'unknown' : false);
       var out = { ok: saved === true, what: clip(want.room + ' · ' + want.ratePlan + ' · ' + span.ranges.join(', '), 120), saved: saved, pressed: pressed };
       if (saved === true) { out.note = '저장했습니다'; return out; }
-      var reason = r && r.bad && r.bad.length ? '드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다 — ' + r.bad.join(' / ')
-        : r && r.stoppedBy === 'mismatch' ? '넣은 값을 다시 읽으니 달라 저장하지 않았습니다 — ' + (r.mismatch || []).join(' / ') : null;
-      if (reason && !pressed) out.refused = true;
-      out.error = reason || (r && r.error) || '저장하지 못했습니다';
+      out.error = pressed ? '[입력한 가격 적용] 을 저장하지 못했습니다' : '저장 단추를 누르지 못했습니다';
       if (saved === 'unknown') out.error += ' — 저장 단추는 눌렸고 저장됐는지 알 수 없습니다. 다시 읽어 확인합니다(다시 누르지 않았습니다)';
-      if (r && r.errors && r.errors.length) out.errors = r.errors.slice(0, 2).map(function (e) { return clip(e, 60); });
+      if (errors.length) out.errors = errors.slice(0, 2).map(function (e) { return clip(e, 60); });
       return out;
     });
   }

@@ -5,7 +5,7 @@
     plan_change(snapshot, request)      → Plan          칸마다 전 → 후, 표시, 판정
     plan_targets(snapshot, table)       → Plan          목표 값 표 — 다른 칸만, 새로 생기는 칸 포함. 인원·박수가 없는 줄은 하나뿐인 줄로
     resolve(plan, resolutions)          → (writes, unresolved)   빨간 줄을 고른 뒤 넣을 값
-    save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 이어진 날짜(줄마다 같은 값)
+    save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 줄과 값이 같은 날들(떨어져 있어도 한 번, 550일까지)
     stale_cells(then, now)              → 다른 항목들   (change_core.items.stale_items)
     plan_cell_rollback(recorded, …)     → RollbackPlan (change_core.rollback.plan_rollback) — cell_filter 로 일부만
     preview_rows · snapshot_rows · rollback_rows · step_plans   장부(change_core.ledger)에 넘길 공통 모양
@@ -25,9 +25,9 @@ from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_
 from change_core.rules import BLOCKED, RED, Resolution, decide
 
 from price_model import (
-    CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
+    CELL_RULES, CLOSED, ERP_MAX_DAYS, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    cell_state, day_label, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
+    cell_state, day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, occupancy_label, occupancy_order, same_hotel,
     snapshot_reading, split_occupancy, value_of,
 )
 
@@ -283,8 +283,10 @@ def _next_day(day: str) -> str:
 def save_steps(writes: Iterable[CellWrite]) -> tuple[BulkStep | CellEditStep, ...]:
     """넣을 값 → 저장 단계. 새 값은 [선택 날짜 가격 수정] 묶음 저장, 비우기는 셀 창 저장(칸 하나씩)으로 간다.
 
-    묶음 저장 한 번에 들어가는 날짜는 서로 이어지고, 그 날들에 쓰는 줄과 값이 모두 같다(값을 넣지 않는 줄도 같아야 한다).
-    객실·요금제마다 셀 창 저장을 묶음 저장보다 먼저 둔다 — 묶음 저장은 남은 정가보다 비싼 판매가를 거절한다.
+    묶음 저장 한 번은 객실 · 요금제 하나에서 쓰는 줄과 값이 모두 같은 날들이다(값을 넣지 않는 줄도 같아야 한다). 날이 떨어져
+    있어도 한 번이다 — 드로어가 날짜 구간 여럿을 한 번에 받는다("12월 금·토"는 쌍마다 한 번). 첫 날부터 끝 날까지가 ERP 가
+    한 번에 받는 ERP_MAX_DAYS(550일)를 넘으면 거기서 나눈다. 객실·요금제마다 셀 창 저장을 묶음 저장보다 먼저 두고, 묶음 저장은
+    첫 날 차례다 — 묶음 저장은 남은 정가보다 비싼 판매가를 거절한다.
     """
     grid: dict[tuple[str, str], dict[str, set[RowWrite]]] = {}
     edits: dict[tuple[str, str], list[CellEditStep]] = {}
@@ -305,14 +307,13 @@ def save_steps(writes: Iterable[CellWrite]) -> tuple[BulkStep | CellEditStep, ..
     steps: list[BulkStep | CellEditStep] = []
     for (room, plan), by_day in grid.items():
         steps += edits.get((room, plan), [])
-        runs: list[list[str]] = []
+        same: dict[frozenset[RowWrite], list[str]] = {}
         for day in sorted(by_day):
-            if runs and _next_day(runs[-1][-1]) == day and by_day[day] == by_day[runs[-1][-1]]:
-                runs[-1].append(day)
-            else:
-                runs.append([day])
-        steps += [BulkStep(room, plan, tuple(run), tuple(sorted(by_day[run[0]], key=lambda r: (
-            occupancy_order(r.occupancy), r.nights)))) for run in runs]
+            same.setdefault(frozenset(by_day[day]), []).append(day)
+        groups = sorted(((tuple(days), rows) for rows, group in same.items() for days in day_windows(group, ERP_MAX_DAYS)),
+                        key=lambda item: item[0][0])
+        steps += [BulkStep(room, plan, days, tuple(sorted(rows, key=lambda r: (occupancy_order(r.occupancy), r.nights))))
+                  for days, rows in groups]
     return tuple(steps)
 
 

@@ -133,6 +133,13 @@ test('B2 · 저장 단추는 그 객실·날짜일 때 한 번만 지나간다',
     assert.match(other.blocked[0].why, /고른 대상이 아닙니다/);
   }
   assert.equal(page.log.posts.length, 1, '다른 객실·날짜를 연 드로어에서는 저장이 나가지 않았다');
+  // T7 — 떨어진 날들을 고른 저장도 같다: 드로어의 구간 줄이 단계의 구간 줄과 꼭 같을 때만
+  const apart = runFixture('calendar-bulk--price-step2.html').replace('name="date_selection_0" value="2026-07-01"', 'name="date_selection_0" value="2026-07-01\n2026-07-03"');
+  for (const [ranges, passes] of [[['2026-07-01', '2026-07-03'], true], [['2026-07-01'], false], [['2026-07-01 ~ 2026-07-03'], false]]) {
+    const seen = plain(await page.w.stayPrice.guard('applyBulk', async () => { page.render(apart); save(); }, Object.assign({}, pins, { ranges })));
+    assert.deepEqual(seen.clicks, passes ? ['bulkSave'] : [], JSON.stringify(ranges));
+  }
+  assert.equal(page.log.posts.length, 2);
   page.w.close();
 });
 

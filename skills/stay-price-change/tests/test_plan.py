@@ -5,6 +5,7 @@
 
 import sys
 import unittest
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -357,8 +358,23 @@ class SaveStepTest(unittest.TestCase):
         self.assertEqual(steps[0].dates, (DAY, NEXT))
         self.assertEqual([(r.occupancy, r.sell) for r in steps[0].rows], [("A2", D("10")), ("A3", D("12"))])
 
-    def test_a_gap_a_different_value_a_missing_row_or_a_different_list_price_splits_the_save(self):
-        self.assertEqual(len(save_steps([self.write(DAY, "A2", "10"), self.write(LATER, "A2", "10")])), 2)
+    def test_t7_days_apart_with_the_same_rows_share_one_save_ordered_by_their_first_day(self):
+        steps = save_steps([self.write(DAY, "A2", "10"), self.write(NEXT, "A2", "11"), self.write(LATER, "A2", "10")])
+        self.assertEqual([(s.dates, s.rows[0].sell) for s in steps], [((DAY, LATER), D("10")), ((NEXT,), D("11"))])
+        # 2026년 12월의 금·토 여덟 날 — 값이 같으면 쌍마다 저장 한 번(전에는 이어진 날마다라 주마다 한 번, 네 번)
+        weekend = [f"2026-12-{day:02d}" for day in (4, 5, 11, 12, 18, 19, 25, 26)]
+        self.assertEqual([s.dates for s in save_steps([self.write(day, "A2", "10") for day in weekend])], [tuple(weekend)])
+
+    def test_t7_one_save_spans_at_most_the_550_days_erp_takes_at_once(self):
+        first = date.fromisoformat(DAY)
+        last_in = (first + timedelta(days=549)).isoformat()      # 첫 날부터 550일째
+        steps = save_steps([self.write(DAY, "A2", "10"), self.write(last_in, "A2", "10")])
+        self.assertEqual([s.dates for s in steps], [(DAY, last_in)])
+        past = (first + timedelta(days=550)).isoformat()
+        steps = save_steps([self.write(DAY, "A2", "10"), self.write(last_in, "A2", "10"), self.write(past, "A2", "10")])
+        self.assertEqual([s.dates for s in steps], [(DAY, last_in), (past,)])
+
+    def test_a_different_value_a_missing_row_or_a_different_list_price_splits_the_save(self):
         self.assertEqual(len(save_steps([self.write(DAY, "A2", "10"), self.write(NEXT, "A2", "11")])), 2)
         self.assertEqual(len(save_steps([self.write(DAY, "A2", "10"), self.write(DAY, "A3", "12"),
                                          self.write(NEXT, "A2", "10")])), 2)

@@ -154,7 +154,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
             _skip_line(plan)]
     if steps:
         edits = sum(step.kind == "cell_edit" for step in steps)
-        body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제 · 값이 같은 이어진 날마다 한 번'
+        body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번'
                     f'{f", 그중 정가·원가를 비우는 셀 창 저장 {edits}번" if edits else ""}).</p>')
     body += ["<h2>칸마다 바뀌는 값</h2>", grid(list(by_key) + list(skipped), cell, reserved, closed),
              _flagged_section(plan, currency), _new_section(plan, currency)]

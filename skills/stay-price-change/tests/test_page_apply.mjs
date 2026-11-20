@@ -78,20 +78,37 @@ test('B7 · applyBulk — 저장을 다시 누르지 않는다(러너의 CSRF �
   page.w.close();
 });
 
-test('B7 · applyBulk — 드로어가 다른 객실·날짜를 열었으면 저장 단추가 눌리지 않는다', async () => {
-  const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('name="rate_plan" value="{rate_plan:1}"', 'name="rate_plan" value="{rate_plan:2}"') });
-  page.w.stayRun.config({ waitMs: 1000 });
-  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
-  assert.equal(r.saved, false);
-  assert.equal(r.pressed, false);
-  assert.deepEqual(page.log.posts, []);
-  assert.ok(r.blocked.some((b) => /고른 대상이 아닙니다/.test(b.why)));
+test('B7 · applyBulk — 드로어가 다른 객실·날짜를 열었으면 칸을 치기 전에 멈추고 저장 단추를 누르지 않는다', async () => {
+  for (const review of [runFixture('calendar-bulk--price-step2.html').replace('name="rate_plan" value="{rate_plan:1}"', 'name="rate_plan" value="{rate_plan:2}"'),
+    runFixture('calendar-bulk--price-step2.html').replace('<tbody><tr><td>2026-07-01</td>', '<tbody><tr><td>2026-07-02</td>')]) {
+    const page = erpPage({ bulkReview: review });
+    page.w.stayRun.config({ waitMs: 1000 });
+    const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
+    assert.equal(r.saved, false);
+    assert.equal(r.pressed, false);
+    assert.ok(!r.clicks.bulkSave);
+    assert.deepEqual(page.log.posts, []);
+    assert.match(r.error, /다른 객실·요금제|드로어의 날짜/);
+    page.w.close();
+  }
+});
+
+test('T7 · applyBulk — 떨어진 날들도 그 날들만 골라 한 번에 저장한다(날은 숨은 구간 줄이 정한다)', async () => {
+  const page = erpPage({ echoDays: true });
+  const step = Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-03', '2026-07-04', '2026-07-10'] });
+  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, step)));
+  assert.equal(r.saved, true, r.error);
+  assert.equal(r.clicks.bulkSave, 1);
+  assert.equal(page.log.posts.length, 1, '저장 한 번');
+  assert.equal(page.log.posts[0].date_selection_0, '2026-07-01\n2026-07-03 ~ 2026-07-04\n2026-07-10', '고른 날만 — 7/2 · 7/5~9 는 고르지 않았다');
+  assert.equal(page.log.posts[0]['prices-0-price'], '125000.00');
   page.w.close();
 });
 
-test('B7 · applyBulk — 이어지지 않은 날짜·금액 없는 줄은 화면을 만지기 전에 거절한다', async () => {
+test('B7 · applyBulk — 차례가 어긋나거나 겹친 날짜 · 금액 없는 줄은 화면을 만지기 전에 거절한다', async () => {
   const page = erpPage();
-  for (const [step, why] of [[Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-03'] }), /이어진 날짜/],
+  for (const [step, why] of [[Object.assign({}, BULK, { dates: ['2026-07-03', '2026-07-01'] }), /겹치지 않는 오름차순/],
+    [Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-01'] }), /겹치지 않는 오름차순/],
     [Object.assign({}, BULK, { rows: [{ occupancy: '', nights: 1 }] }), /넣을 금액이 없거나/], [Object.assign({}, BULK, { rows: [{ occupancy: '', nights: 1, sell: '1,000' }] }), /숫자가 아닙니다/]]) {
     const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, step)));
     assert.equal(r.ok, false);
