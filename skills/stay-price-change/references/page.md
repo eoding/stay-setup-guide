@@ -7,10 +7,12 @@
 | 부르는 것 | 답 |
 |---|---|
 | `scripts/page/stay_price_loader.js` 전체 실행 | `{ok: true, bridge: "stay_price_bridge", label: "stay price file bridge", want: ["stay_helper.js", "stay_boot.js", "stay_price.js"]}`. 파일 칸은 1px · 거의 투명이라 화면에 안 보이지만 접근성 트리에 그 이름으로 있다 |
-| (파일 올리기 도구) 그 칸에 세 파일 | 한 번에 셋이든 하나씩이든 모인다. `.min.js` 도 받는다 |
-| `await stayPriceLoader.load()` | `{ok, label, helper, price, stored, loaded}`. 세 파일을 도우미 → 부트 → 가격 도우미 차례로 실행하고 `stayPrice…` 키 셋에만 적어 둔다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 |
-| `stayPriceLoader.again()` | 이동 뒤에 적어 둔 원본을 같은 차례로 다시 실행한다. 원본이 없으면 `적어 둔 원본이 없습니다` |
+| (파일 올리기 도구) 그 칸에 세 파일 | 한 번에 셋이든 하나씩이든 모인다. 이름이 `stay_helper.js`·`stay_boot.js`·`stay_price.js` 인 파일만 고른다 |
+| `await stayPriceLoader.load()` | `{ok, label, helper, price, stored, loaded}`. 세 파일을 도우미 → 부트 → 가격 도우미 차례로 실행하고 `stayPrice…` 키 셋에만 적어 둔다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다. 올라온 파일이 설치된 것과 다르면 아무것도 실행하지도 적지도 않고 `{ok: false, wrong: ["stay_price.js"], error: "올라온 파일이 설치된 도우미의 것과 다릅니다: stay_price.js — 올린 폴더에 남은 예전 복사본일 수 있습니다. …"}` |
+| `stayPriceLoader.again()` | 이동 뒤에 적어 둔 원본을 같은 차례로 다시 실행한다. 원본이 없으면 `적어 둔 원본이 없습니다`. 적어 둔 원본이 설치된 것과 다르면(도우미를 새로 깔기 전에 적어 둔 예전 판) 아무것도 실행하지 않고 `{ok: false, wrong, error: "적어 둔 원본이 설치된 도우미와 다릅니다: … — … 세 파일을 다시 올립니다(load)"}` |
 | `stayPriceLoader.status()` | `{ok, label, helper, price, stored}`. 올라 있는지 볼 때 |
+
+**예전 판은 올리지 않는다.** 올리개는 설치된 세 파일의 알아볼 값(줄 끝을 맞춘 UTF-8 의 바이트 수 · CRC-32 · FNV-1a)을 안다. 도우미는 올리개를 늘 설치된 스킬에서 새로 붙여 넣으므로, 그 값과 다른 글자는 예전 판이다. 플러그인을 새로 깐 뒤에도 예전 탭이 예전 코드를 되살리지 않는다.
 
 **페이지에 남기는 것.** 이 탭의 출처(ERP 주소)의 localStorage 에 `stayPrice` 로 시작하는 키 넷만 쓴다. 올리개가 적어 두는 원본 셋 `stayPriceHelperSrc`(러너의 도우미) · `stayPriceBootSrc`(러너의 부트) · `stayPriceSrc`(가격 도우미) — `again()` 이 다시 실행한다. 그리고 가격 도우미가 적는 `stayPriceLast`(마지막 작업의 답 · 도는 중이면 `{running}`) — `last()` 가 읽는다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다.
 

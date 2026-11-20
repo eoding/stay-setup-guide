@@ -46,8 +46,8 @@ metadata:
 2. **도우미 올리기.** 탭마다 한 번.
    1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체를 실행한다. 답은 `{ok: true, label: "stay price file bridge", …}`.
    2. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸(`input#stay_price_bridge`)에 세 파일을 올린다: 러너의 `../stay-setup-run/scripts/stay_helper.js`, `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 파일 올리기 도구는 Claude 를 연 폴더(처음 작업 폴더, `pwd`) 아래의 파일만 읽어서 스킬 폴더의 경로를 거절할 수 있다. 그러면 그 폴더에 `stay-price-upload/` 를 만들어 세 파일을 복사하고 거기서 올린다.
-   3. `await stayPriceLoader.load()` 를 실행한다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다. 복사본을 썼으면 이제 `stay-price-upload/` 폴더를 지운다(페이지가 원본을 적어 두어 다시 쓰지 않는다). `올라온 파일에 없는 것` 이면 빠진 파일을 같은 칸에 올리고 다시 부른다.
-   4. **이동 뒤**(새로 고침·로그인·다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`): 1 을 다시 하고 `stayPriceLoader.again()`. `적어 둔 원본이 없습니다` 면 2·3.
+   3. `await stayPriceLoader.load()` 를 실행한다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다. 복사본을 썼으면 이제 `stay-price-upload/` 폴더를 지운다(페이지가 원본을 적어 두어 다시 쓰지 않는다). `올라온 파일에 없는 것` 이면 빠진 파일을 같은 칸에 올리고 다시 부른다. `올라온 파일이 설치된 도우미의 것과 다릅니다: <파일>` 이면 그 파일은 예전 판이고(대개 `stay-price-upload/` 에 남은 예전 복사본) 아무것도 실행되지 않았다. 스킬 폴더의 그 파일을 다시 복사해(복사본 폴더의 것은 덮어) 같은 칸에 올리고 다시 부른다.
+   4. **이동 뒤**(새로 고침·로그인·다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`): 1 을 다시 하고 `stayPriceLoader.again()`. `적어 둔 원본이 없습니다` 나 `적어 둔 원본이 설치된 도우미와 다릅니다`(도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판 — 아무것도 실행되지 않았다) 면 2·3.
 3. **어디인지 보기.** `await stayPrice.look()`.
    - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 의 「이동 뒤」와 3.
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.

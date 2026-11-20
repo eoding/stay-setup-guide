@@ -4,10 +4,13 @@
  *   1. JS 실행 도구로 이 파일 전체를 실행한다 → 파일 칸 `input#stay_price_bridge`(접근성 이름 `stay price file bridge`)가 생기고
  *      `window.stayPriceLoader` 가 선다. 칸은 1px · 거의 투명이라 보이지 않지만 접근성 트리에는 남아 도구가 이름으로 찾는다.
  *   2. 업로드 도구로 **그 이름의** 칸에 세 파일을 올린다(ERP 의 사진 올리기 칸과 헷갈리지 않게 — 한 번에 셋이든 하나씩이든):
- *      러너의 `stay_helper.js`·`stay_boot.js`, 그리고
- *      `stay_price.js`(`.min.js` 도 받는다).
+ *      러너의 `stay_helper.js`·`stay_boot.js`, 그리고 `stay_price.js`.
  *   3. `await stayPriceLoader.load()` → 이름으로 골라 도우미 → 부트 → 가격 도우미 차례로 실행하고 작은 상태를 돌려준다.
  *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()` — 적어 둔 원본을 같은 차례로 다시 실행한다.
+ *
+ * 이 파일은 설치된 세 파일의 알아볼 값(`INSTALLED`)을 안다. 도우미는 이 파일을 설치된 스킬에서 늘 새로 붙여 넣으므로, 그 값과 다른
+ * 글자는 예전 판이다 — `load()` 는 올라온 파일이, `again()` 은 적어 둔 원본이 그 값과 다르면 아무것도 실행하지 않고 어느 파일인지
+ * 말한다. 플러그인을 새로 깐 뒤 예전 탭이 예전 코드를 되살리지 않는다.
  *
  * localStorage 에는 원본 셋만, `stayPrice` 로 시작하는 제 키에만 적는다(`stayPriceHelperSrc`·`stayPriceBootSrc`·`stayPriceSrc`).
  * 러너가 쓰는 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다 — 탭에 예전 러너 실행의
@@ -24,9 +27,16 @@
     { name: 'stay_boot.js', key: 'stayPriceBootSrc' },
     { name: 'stay_price.js', key: 'stayPriceSrc' }
   ];
+  // 설치된 세 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
+  // 세 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
+  var INSTALLED = {
+    'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
+    'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
+    'stay_price.js': { bytes: 83090, crc32: 'ee2c2742', fnv: 'afa9b026' }
+  };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
 
-  function baseName(name) { return String(name || '').split(/[\\/]/).pop().replace(/\.min\.js$/, '.js'); }
+  function baseName(name) { return String(name || '').split(/[\\/]/).pop(); }
   function readText(file) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
@@ -41,6 +51,40 @@
       if (FILES.some(function (f) { return f.name === name; })) picked[name] = readText(file);
     });
   }
+
+  var CRC_TABLE = (function () {
+    var table = [];
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  // 글자의 알아볼 값. 줄 끝을 \n 으로 맞춘다 — 윈도에서 받은 플러그인은 파일 줄 끝이 \r\n 일 수 있다
+  function identity(text) {
+    text = String(text).replace(/\r\n/g, '\n');
+    var crc = 0xffffffff, fnv = 0x811c9dc5, bytes = 0;
+    var add = function (b) { crc = CRC_TABLE[(crc ^ b) & 0xff] ^ (crc >>> 8); fnv = Math.imul(fnv ^ b, 0x01000193) >>> 0; bytes++; };
+    for (var i = 0; i < text.length; i++) {
+      var c = text.codePointAt(i);
+      if (c > 0xffff) i++;
+      if (c < 0x80) add(c);
+      else if (c < 0x800) { add(0xc0 | c >> 6); add(0x80 | c & 63); }
+      else if (c < 0x10000) { add(0xe0 | c >> 12); add(0x80 | c >> 6 & 63); add(0x80 | c & 63); }
+      else { add(0xf0 | c >> 18); add(0x80 | c >> 12 & 63); add(0x80 | c >> 6 & 63); add(0x80 | c & 63); }
+    }
+    var hex = function (n) { return ('0000000' + (n >>> 0).toString(16)).slice(-8); };
+    return { bytes: bytes, crc32: hex(crc ^ 0xffffffff), fnv: hex(fnv) };
+  }
+  // 설치된 것과 다른 파일의 이름들 — texts 는 FILES 차례
+  function notInstalled(texts) {
+    return FILES.filter(function (f, i) {
+      var seen = identity(texts[i]), want = INSTALLED[f.name];
+      return seen.bytes !== want.bytes || seen.crc32 !== want.crc32 || seen.fnv !== want.fnv;
+    }).map(function (f) { return f.name; });
+  }
+
   function bridge() {
     var input = document.getElementById(BRIDGE);
     if (!input) {
@@ -102,6 +146,11 @@
     try { texts = await Promise.all(FILES.map(function (f) { return picked[f.name]; })); } catch (e) {
       return clean({ ok: false, error: '올라온 파일을 읽지 못했습니다: ' + String(e && e.message || e).slice(0, 160) });
     }
+    var wrong = notInstalled(texts);
+    if (wrong.length) {
+      return clean({ ok: false, label: LABEL, wrong: wrong, error: '올라온 파일이 설치된 도우미의 것과 다릅니다: ' + wrong.join(', ') +
+        ' — 올린 폴더에 남은 예전 복사본일 수 있습니다. 설치된 스킬 폴더의 그 파일을 「' + LABEL + '」 칸에 다시 올린 뒤 다시 부릅니다' });
+    }
     if (input) input.value = '';
     picked = {};
     return evaluate(texts, true);
@@ -110,6 +159,11 @@
     var texts = FILES.map(function (f) { return localStorage.getItem(f.key); });
     var missing = FILES.filter(function (f, i) { return !texts[i]; }).map(function (f) { return f.key; });
     if (missing.length) return clean({ ok: false, error: '적어 둔 원본이 없습니다: ' + missing.join(', ') + ' — 세 파일을 다시 올립니다(load)' });
+    var wrong = notInstalled(texts);
+    if (wrong.length) {
+      return clean({ ok: false, wrong: wrong, error: '적어 둔 원본이 설치된 도우미와 다릅니다: ' + wrong.join(', ') +
+        ' — 도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판입니다. 세 파일을 다시 올립니다(load)' });
+    }
     return evaluate(texts, false);
   }
 
