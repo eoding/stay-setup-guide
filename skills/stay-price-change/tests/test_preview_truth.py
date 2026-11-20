@@ -233,12 +233,12 @@ class PreviewTruthTest(CommandCase):
         planned, page = self.check("trial-words", trial_scene.snapshot(), trial_scene.request(),
                                    [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
         text = " ".join(re.sub(r"<[^>]+>", " ", re.sub(r"<style>.*?</style>", " ", page, flags=re.S)).split())
-        self.assertIn("고르신 빨간 줄 · 24칸 (정가보다 비싸집니다) 정가도 같은 만큼 올림 · 24칸 판매가와 같은 만큼 정가도 올려 저장합니다. "
-                      "예: 12/7 월 · 스탠다드 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 100.00 → 112.00 정가 110.00 → 122.00", text)
+        self.assertIn("고르신 빨간 줄 · 24칸 (정가보다 비싸집니다) 정가도 12% 올림 (아동이 있는 칸은 아동 추가분은 그대로) · 24칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
+                      "예: 12/7 월 · 스탠다드 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 100.00 → 112.00 정가 110.00 → 123.20", text)
         cell = read_grid(page)[("스탠다드 · 조식 포함", "12/7 월", "성인 2 · 1박 이상")]
         self.assertEqual([text for _tag, _cls, text in cell],
-                         ["100.00", "→", "112.00", "정가 110.00 → 122.00", "정가도 같은 만큼 올림", "정가보다 비싸집니다 · 고르신 대로"])
-        self.assertEqual(planned["plan"]["changes"][0]["after"]["list"], "122.00", "plan.json 의 칸도 올린 정가를 갖는다")
+                         ["100.00", "→", "112.00", "정가 110.00 → 123.20", "정가도 12% 올림", "정가보다 비싸집니다 · 고르신 대로"])
+        self.assertEqual(planned["plan"]["changes"][0]["after"]["list"], "123.20", "plan.json 의 칸도 올린 정가를 갖는다")
         self.assertEqual(planned["plan"]["changes"][0]["choice"], "raise_list")
 
 
@@ -289,12 +289,12 @@ class ChosenListThroughLedgerTest(CommandCase):
 
     def test_raise_list_is_written_shown_and_rolled_back(self):
         before, over, after, rows, result, restored, undone = self.round_trip("raise_list")
-        self.assertEqual(after.cells[over].list, Decimal("548.00"))
+        self.assertEqual(after.cells[over].list, Decimal("550.00"))
         self.assertEqual({name: (row["after"], row["action"], row["choice"]) for name, row in rows.items()},
-                         {"sell": ("528.00", "set", "raise_list"), "list": ("548.00", "set", "raise_list"),
+                         {"sell": ("528.00", "set", "raise_list"), "list": ("550.00", "set", "raise_list"),
                           "supply": (None, None, "raise_list")})
         self.assertIsNotNone(rows["list"]["step"], "올린 정가는 저장 단계가 넣은 값으로 적힌다")
-        self.assertIn("정가 500.00 → 548.00", result)
+        self.assertIn("정가 500.00 → 550.00", result)
         self.assertEqual(restored["targets"], {"sell": "480.00", "list": "500.00"})
         self.assertEqual(undone.cells[over], before.cells[over], "되돌리면 판매가와 정가가 모두 원래 값")
 

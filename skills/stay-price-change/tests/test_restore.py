@@ -113,7 +113,7 @@ class RestoreTest(unittest.TestCase):
         self.assertIn("90 되돌리는 칸 0 그대로 두는 칸 1 지울 수 없는 칸", text)
         self.assertIn("지울 수 없는 칸 — ERP 에 지우는 길이 없어 지금 값 그대로 남습니다", text)
         self.assertIn("1/2 토 · 스위트 · 룸온리 · 성인 2 · 1박 이상 판매가 450.00", text)
-        self.assertIn("528.00 → 480.00 정가 548.00 → 500.00", text)
+        self.assertIn("528.00 → 480.00 정가 550.00 → 500.00", text)
         folder = Path(self.tmp.name)
         (folder / "now.json").write_text(json.dumps(encode_snapshot(self.now), ensure_ascii=False), encoding="utf-8")
         env = {**os.environ, "STAY_PRICE_LEDGER_DIR": str(folder / "cli")}

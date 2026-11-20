@@ -252,7 +252,7 @@ class ListChoiceTest(unittest.TestCase):
         step = next(s for s in steps if s.kind == "bulk" and s.room == "스위트" and s.rate_plan == "조식 포함"
                     and "2027-01-01" in s.dates)
         row = next(r for r in step.rows if (r.occupancy, r.nights) == ("A2", 1))
-        self.assertEqual((row.sell, row.list, row.supply), (D("528.00"), D("548.00"), None))
+        self.assertEqual((row.sell, row.list, row.supply), (D("528.00"), D("550.00"), None))
 
     def test_clear_list_adds_a_cell_window_save_before_the_bulk_saves_of_that_room_and_plan(self):
         steps = plan_steps(resolve(self.plan, [Resolution("ABOVE_LIST", "clear_list")]))

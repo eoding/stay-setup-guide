@@ -176,7 +176,7 @@ class LifecycleTest(unittest.TestCase):
     def test_v1_begin_takes_only_the_values_the_preview_showed_and_all_of_them(self):
         rows = {(row.label, row.field): row for row in self.ledger.change(self.change_id).rows}
         raised = rows[("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상", "list")]
-        self.assertEqual((raised.after, raised.action, raised.choice), (D("548.00"), "set", "raise_list"),
+        self.assertEqual((raised.after, raised.action, raised.choice), (D("550.00"), "set", "raise_list"),
                          "미리보기 줄에 올린 정가가 넣는 값으로 적힌다")
         cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
         with self.assertRaises(LedgerError) as caught:

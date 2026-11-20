@@ -32,7 +32,7 @@ from change_core.rules import BLOCKED, RED
 from price_model import (
     CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
     CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, key_of_item, line_label, nights_label, occupancy_label,
-    occupancy_order, value_of,
+    encode_key, occupancy_order, split_occupancy, value_of,
 )
 from price_plan import counts, day_runs, days_summary
 from price_sheet import SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
@@ -146,9 +146,35 @@ def _value_moves(before: CellValue, after: CellValue, currency: str, name: str) 
     return f"{'새로' if old is None else fmt_money(old, currency)} → {'비움' if new is None else fmt_money(new, currency)}"
 
 
-def _chosen_tag(change: CellChange) -> str:
+def follows_erp(request: ChangeRequest | TargetTable) -> bool:
+    """「정가도 같이 올림」에 ERP 의 짝(「정가도 같이 조정」)이 있는 요청인가 — 판매가를 금액이나 퍼센트로 옮길 때."""
+    return isinstance(request, ChangeRequest) and request.field == "sell" and request.operation in ("amount", "percent")
+
+
+def choice_words(request: ChangeRequest | TargetTable, choice: str, currency: str, keys: Iterable[CellKey] = ()) -> str:
+    """고름의 이름. 「정가도 같이 올림」은 이 요청에서 정가가 어떻게 되는지까지 말한다 — 퍼센트면 "정가도 12% 올림", 금액이면
+    "정가도 10.00 올림"(ERP 「정가도 같이 조정」과 같은 규칙), ERP 에 짝이 없는 새 값 · 목표 값이면 "정가도 판매가가 오른 만큼 올림".
+    아동이 있는 칸(`keys`)을 퍼센트로 올리며 아동 추가분은 그대로 두면 그렇게 덧붙인다."""
+    if choice != "raise_list":
+        return CHOICE_LABELS[choice]
+    if not follows_erp(request):
+        return "정가도 판매가가 오른 만큼 올림"
+    value = request.value
+    way = "올림" if value > 0 else "내림"
+    if request.operation == "amount":
+        return f"정가도 {fmt_money(abs(value), currency)} {way}"
+    children = not request.scale_child_surcharge and any(split_occupancy(key.occupancy)[1] for key in keys)
+    return f"정가도 {abs(value).normalize():f}% {way}" + (" (아동이 있는 칸은 아동 추가분은 그대로)" if children else "")
+
+
+def follow_move(change: CellChange, currency: str) -> str:
+    """「정가도 같이 올림」이면 정가가 어떻게 되는지 — "61.18 → 68.52"."""
+    return f"{fmt_money(change.before.list, currency)} → {fmt_money(change.list_follow, currency)}"
+
+
+def _chosen_tag(change: CellChange, request: ChangeRequest | TargetTable, currency: str) -> str:
     """고른 빨간 줄 칸의 꼬리표 — 고른 것과 걸렸던 규칙."""
-    return (f'<span class="tag chosen">{esc(CHOICE_LABELS[change.choice])}</span>'
+    return (f'<span class="tag chosen">{esc(choice_words(request, change.choice, currency, [change.key]))}</span>'
             f'<small class="more">{esc(CELL_RULES.by_code[change.verdict].label)} · 고르신 대로</small>')
 
 
@@ -193,11 +219,11 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         if change.choice == "keep":
             was = "가격 없음" if change.before.sell is None else fmt_money(change.before.sell, currency)
             return "chosen", (f'<span class="was">{was}</span>'
-                              f'<small class="more">그대로</small>{_chosen_tag(change)}')
+                              f'<small class="more">그대로</small>{_chosen_tag(change, request, currency)}')
 
         moved = _move(change.before, change.after, currency)
         if change.choice:
-            return "chosen", moved + _chosen_tag(change)
+            return "chosen", moved + _chosen_tag(change, request, currency)
         if severity == RED:
             return "red", f'{moved}<span class="tag red">{esc(_flag(change.verdict, change.after, currency))}</span>'
         if NEW in change.marks:
@@ -335,9 +361,50 @@ def _request_box(request: ChangeRequest | TargetTable, currency: str, absent: It
 CHOSEN_WORDS = {   # 고른 빨간 줄 띠 — 고른 것마다 저장이 그 칸에 하는 일
     "include": "계산한 값 그대로 바꿉니다.",
     "keep": "그 칸은 바꾸지 않습니다.",
-    "raise_list": "판매가와 같은 만큼 정가도 올려 저장합니다.",
+    "raise_list": "정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산).",
     "clear_list": "정가를 지워 저장합니다(손님 화면에 줄 그은 값이 없어집니다).",
 }
+RAISE_WITHOUT_ERP = "ERP 에는 이런 바꾸기의 정가 규칙이 없어, 판매가가 오른 만큼 정가도 올려 저장합니다."
+
+
+def red_lines(plan: Plan) -> list[dict]:
+    """아직 고르지 않은 빨간 줄 — 규칙마다 칸 수, 고를 것(담당자에게 말하는 이름, 「정가도 같이 올림」은 첫 칸의 예와 함께), 칸의 예
+    몇. 미리보기의 띠와 plan 의 답이 같은 말을 쓴다(도우미는 이 말을 그대로 전한다)."""
+    out = []
+    for rule in CELL_RULES.rules:
+        waiting = [change for change in plan.changes if change.verdict == rule.code and change.waiting]
+        if rule.severity != RED or not waiting:
+            continue
+        choices = []
+        for choice in rule.choices:
+            item = dict(choice=choice, words=choice_words(plan.request, choice, plan.currency, [c.key for c in waiting]))
+            if choice == "raise_list":
+                item["example"] = f"{cell_name(waiting[0].key)} — 정가 {follow_move(waiting[0], plan.currency)}"
+            choices.append(item)
+        out.append(dict(rule=rule.code, label=rule.label, cells=len(waiting), choices=choices,
+                        examples=[encode_key(change.key) for change in waiting[:EXAMPLES]]))
+    return out
+
+
+def chosen_lines(plan: Plan) -> list[dict]:
+    """고른 빨간 줄 — 규칙 · 고름마다 칸 수, 그 고름의 이름, 저장이 하는 일, 첫 칸의 예(바뀌는 값)."""
+    out = []
+    for rule in CELL_RULES.rules:
+        for choice in rule.choices:
+            picked = [change for change in plan.changes if change.verdict == rule.code and change.choice == choice]
+            if not picked:
+                continue
+            example = picked[0]
+            shown = "".join(f" {FIELD_LABELS[name]} {_value_moves(example.before, example.after, plan.currency, name)}"
+                            for name in FIELDS if name in example.changed)
+            does = RAISE_WITHOUT_ERP if choice == "raise_list" and not follows_erp(plan.request) else CHOSEN_WORDS[choice]
+            out.append(dict(rule=rule.code, choice=choice, cells=len(picked), does=does,
+                            words=choice_words(plan.request, choice, plan.currency, [c.key for c in picked]),
+                            example=f"{cell_name(example.key)} —{shown}" if shown else ""))
+    return out
+
+
+EXAMPLES = 3   # 빨간 줄마다 plan 의 답에 싣는 칸의 예
 
 
 def _preview_banners(plan: Plan, tally: Mapping) -> str:
@@ -349,35 +416,23 @@ def _preview_banners(plan: Plan, tally: Mapping) -> str:
         out.append(f'<div class="banner amber"><b>적용할 수 없음 · {tally["blocked"]}칸</b> ERP 가 받지 않는 값이라 이 칸은 '
                    f'바꾸지 않습니다. ({esc(reasons)})</div>')
     messages = {
-        "ABOVE_LIST": ("정가(줄 그은 값)를 넘습니다.", "ERP 는 판매가가 정가보다 비싼 것을 받지 않습니다. 이 칸은 골라 주세요: "
-                       + " / ".join(CHOICE_LABELS[choice] for choice in CELL_RULES.by_code["ABOVE_LIST"].choices) + "."),
-        "BELOW_COST": ("공급 원가보다 싸집니다.", "맞으면 그 칸을 짚어 다시 말씀해 주세요."),
+        "ABOVE_LIST": ("정가(줄 그은 값)를 넘습니다.", "ERP 는 판매가가 정가보다 비싼 것을 받지 않습니다. 이 칸은 골라 주세요: "),
+        "BELOW_COST": ("공급 원가보다 싸집니다.", "맞으면 그 칸을 짚어 다시 말씀해 주세요. 고를 것: "),
         "OVER_30": ("지금 값보다 30% 넘게 바뀝니다.", "금액을 잘못 말씀하신 것은 아닌지 확인해 주세요. "
-                    "맞으면 그 칸을 짚어 다시 말씀해 주세요."),
+                    "맞으면 그 칸을 짚어 다시 말씀해 주세요. 고를 것: "),
     }
-    currency = plan.currency
-    for rule in CELL_RULES.rules:
-        if rule.severity != RED:
-            continue
-        waiting = sum(change.waiting for change in plan.changes if change.verdict == rule.code)
-        if waiting:
-            headline, detail = messages[rule.code]
-            out.append(f'<div class="banner red"><b>빨간 줄 · {waiting:,}칸이 {esc(headline)}</b> {esc(detail)}</div>')
-        chosen = [change for change in plan.changes if change.verdict == rule.code and change.choice]
-        if not chosen:
-            continue
-        parts = []
-        for choice in rule.choices:
-            picked = [change for change in chosen if change.choice == choice]
-            if not picked:
-                continue
-            example = picked[0]
-            shown = "".join(f" {FIELD_LABELS[name]} {_value_moves(example.before, example.after, currency, name)}"
-                            for name in FIELDS if name in example.changed)
-            parts.append(f"<li><b>{esc(CHOICE_LABELS[choice])} · {len(picked):,}칸</b> {esc(CHOSEN_WORDS[choice])}"
-                         + (f' <span class="sub">예: {esc(cell_name(example.key))} —{esc(shown)}</span>' if shown else "") + "</li>")
-        out.append(f'<div class="banner amber"><b>고르신 빨간 줄 · {len(chosen):,}칸 ({esc(rule.label)})</b>'
-                   f'<ul class="notes">{"".join(parts)}</ul></div>')
+    for line in red_lines(plan):
+        headline, detail = messages[line["rule"]]
+        offered = " / ".join(item["words"] + (f" (예: {item['example']})" if "example" in item else "") for item in line["choices"])
+        out.append(f'<div class="banner red"><b>빨간 줄 · {line["cells"]:,}칸이 {esc(headline)}</b> {esc(detail + offered)}.</div>')
+    by_rule: dict[str, list[dict]] = {}
+    for line in chosen_lines(plan):
+        by_rule.setdefault(line["rule"], []).append(line)
+    for code, lines in by_rule.items():
+        parts = [f"<li><b>{esc(line['words'])} · {line['cells']:,}칸</b> {esc(line['does'])}"
+                 + (f' <span class="sub">예: {esc(line["example"])}</span>' if line["example"] else "") + "</li>" for line in lines]
+        out.append(f'<div class="banner amber"><b>고르신 빨간 줄 · {sum(line["cells"] for line in lines):,}칸 '
+                   f'({esc(CELL_RULES.by_code[code].label)})</b><ul class="notes">{"".join(parts)}</ul></div>')
     if not tally["red"] and not tally["blocked"]:
         out.append('<div class="banner ok">' + ("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다." if tally["chosen"] else
                                                "빨간 줄이 없습니다.") + "</div>")
@@ -397,10 +452,13 @@ def _flagged_section(plan: Plan, currency: str) -> str:
         else:
             moved = "—" if change.after is None else _move(change.before, change.after, currency)
         if change.choice:
-            kind, word, choices = "chosen", "고름", f"고르신 것: {CHOICE_LABELS[change.choice]}"
+            kind, word = "chosen", "고름"
+            choices = f"고르신 것: {choice_words(plan.request, change.choice, currency, [change.key])}"
         else:
             kind, word = ("blocked", "적용할 수 없음") if rule.severity == BLOCKED else ("red", "빨간 줄")
-            choices = " / ".join(CHOICE_LABELS[choice] for choice in rule.choices) if rule.choices else "바꾸지 않음"
+            choices = " / ".join(choice_words(plan.request, choice, currency, [change.key])
+                                 + (f": {follow_move(change, currency)}" if choice == "raise_list" else "")
+                                 for choice in rule.choices) if rule.choices else "바꾸지 않음"
         rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(change.before.sell, currency)}</td>'
                     f'<td>{moved}</td><td>{_value_moves(change.before, after, currency, "list")}</td>'
                     f'<td>{_value_moves(change.before, after, currency, "supply")}</td>'

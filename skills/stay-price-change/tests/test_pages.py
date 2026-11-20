@@ -54,7 +54,9 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
             self.assertIn(f"{number} {label}", text)
         self.assertNotIn("고른 빨간 줄", text)
         self.assertIn("빨간 줄 · 2칸이 정가(줄 그은 값)를 넘습니다.", text)
-        self.assertIn("정가도 같은 만큼 올림 / 정가 지움 / 이 칸은 안 바꿈", text)
+        self.assertIn("이 칸은 골라 주세요: 정가도 10% 올림 (예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 — 정가 500.00 → 550.00) / "
+                      "정가 지움 / 그 칸은 안 바꿈.", text, "Y1 — 고를 것이 정가가 어떻게 되는지 숫자로 말한다")
+        self.assertIn("정가도 10% 올림: 500.00 → 550.00 / 정가 지움 / 그 칸은 안 바꿈", text, "칸마다 그 칸의 숫자")
         self.assertIn("빨간 줄 2칸을 어떻게 할지 고르시면 ERP 에 몇 번 나눠 저장하는지 정해집니다", text, "V4 — 고르기 전에는 저장 횟수가 없다")
         self.assertNotIn("나눠 저장합니다", text)
         self.assertIn("건너뛰는 칸의 까닭: 가격 없음 6칸", text)
@@ -77,10 +79,10 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
             self.assertIn(f"{number} {label}", text)
         self.assertNotIn("골라 주세요", text)
         self.assertNotIn("넘음", text, "고른 칸은 「정가 넘음」이 아니라 고른 것으로 보인다")
-        self.assertIn("고르신 빨간 줄 · 2칸 (정가보다 비싸집니다) 정가도 같은 만큼 올림 · 2칸 판매가와 같은 만큼 정가도 올려 저장합니다. "
-                      "예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 480.00 → 528.00 정가 500.00 → 548.00", text)
-        self.assertIn("480.00 → 528.00 정가 500.00 → 548.00 정가도 같은 만큼 올림 정가보다 비싸집니다 · 고르신 대로", text)
-        self.assertIn("500.00 → 548.00 없음 고름 정가보다 비싸집니다 고르신 것: 정가도 같은 만큼 올림", text)
+        self.assertIn("고르신 빨간 줄 · 2칸 (정가보다 비싸집니다) 정가도 10% 올림 · 2칸 정가도 그렇게 옮겨 저장합니다(ERP 「정가도 같이 조정」과 같은 계산). "
+                      "예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 480.00 → 528.00 정가 500.00 → 550.00", text)
+        self.assertIn("480.00 → 528.00 정가 500.00 → 550.00 정가도 10% 올림 정가보다 비싸집니다 · 고르신 대로", text)
+        self.assertIn("500.00 → 550.00 없음 고름 정가보다 비싸집니다 고르신 것: 정가도 10% 올림", text)
         self.assertIn("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다.", text)
         self.assertIn("ERP 에 8번 나눠 저장합니다", text)
         self.assertIn("객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번", text, "T7 — 저장 묶음을 말하는 글")
@@ -89,7 +91,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         kept = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "keep")])
         text = visible(render_preview(kept, steps=plan_steps(kept)))
         self.assertIn("88 바뀌는 칸", text, "안 바꾸기로 고른 칸은 바뀌는 칸에서 빠진다")
-        self.assertIn("480.00 그대로 이 칸은 안 바꿈", text)
+        self.assertIn("480.00 그대로 그 칸은 안 바꿈", text)
         self.assertNotIn("480.00 → 528.00", text)
 
     def test_v5_notes_about_reserved_and_closed_days_only_when_the_plan_has_such_cells(self):
@@ -188,7 +190,7 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
         text = visible(render_result(self.ledger.change(self.id), ledger_path="/기록/가격장부.sqlite3"))
         self.assertIn("적용했고, 다시 읽어 확인했습니다. 90칸 모두 넣은 값과 같습니다.", text)
         self.assertIn("기록: /기록/가격장부.sqlite3", text)
-        self.assertIn("480.00 → 528.00 정가 500.00 → 548.00 확인", text)
+        self.assertIn("480.00 → 528.00 정가 500.00 → 550.00 확인", text)
         odd = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 1)
         self.ledger.verify(self.id, snapshot_reading(scene.with_cells(after, {odd: replace(after.cells[odd], sell=D("1.00"))})))
         text = visible(render_result(self.ledger.change(self.id)))

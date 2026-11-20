@@ -95,6 +95,27 @@ def _after_value(snapshot: Snapshot, request: ChangeRequest, key: CellKey, befor
     return round_money(adult * factor, currency) + (current - adult), None
 
 
+def _list_follow(snapshot: Snapshot, request: ChangeRequest | TargetTable, key: CellKey, before: CellValue,
+                 after: CellValue) -> Decimal | None:
+    """「정가도 같이 올림」이면 정가가 될 값 — ERP [선택 날짜 가격 가감]의 「정가도 같이 조정」과 같은 규칙
+    (basecamp `stay/services/bulk_price_adjust.py` build_preview): 판매가를 금액으로 옮기면 정가도 같은 금액, 퍼센트면 같은 비율이다.
+    아동이 있는 칸의 퍼센트는 판매가처럼 성인 몫에만 곱한다 — 정가의 아동 추가분은 판매가의 추가분(칸 − 성인만 있는 칸)과 같다고
+    보고 `반올림((정가 − 추가분) × 비율) + 추가분`(아동 추가분도 같이 바꾸면 칸 전체). 반올림은 판매가와 같다(통화 최소 단위, 반 올림).
+    새 값 지정 · 목표 값처럼 ERP 에 짝이 없는 것은 판매가가 옮긴 만큼 정가도 옮긴다. 정가가 없는 칸은 None."""
+    if before.list is None or before.sell is None:
+        return None
+    if isinstance(request, ChangeRequest) and request.field == "sell" and request.operation == "amount":
+        return round_money(before.list + request.value, snapshot.currency)
+    if isinstance(request, ChangeRequest) and request.field == "sell" and request.operation == "percent":
+        factor = (100 + request.value) / 100
+        adult_key, has_children = (key.occupancy, False) if request.scale_child_surcharge else split_occupancy(key.occupancy)
+        if not has_children:
+            return round_money(before.list * factor, snapshot.currency)
+        extra = before.sell - snapshot.cells[replace(key, occupancy=adult_key)].sell
+        return round_money((before.list - extra) * factor, snapshot.currency) + extra
+    return before.list + (after.sell - before.sell)
+
+
 def _skip_reason(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue) -> str | None:
     if before.state == "missing":
         return "no_price"
@@ -164,9 +185,16 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
         if after == before:
             skipped.append(Skipped(key, "same"))
             continue
-        changes.append(CellChange(key, before, after, _marks(snapshot, key, before),
-                                  CELL_RULES.verdict(before, after, lacking)))
+        changes.append(_change(snapshot, request, key, before, after, lacking))
     return Plan(request, snapshot.currency, snapshot.read_at, tuple(changes), tuple(skipped), empty, absent, no_sale)
+
+
+def _change(snapshot: Snapshot, request: ChangeRequest | TargetTable, key: CellKey, before: CellValue,
+            after: CellValue | None, lacking: str | None) -> CellChange:
+    """칸 하나의 판정 — 정가보다 비싸지는 칸이면 「정가도 같이 올림」일 때의 정가도 셈해 둔다."""
+    verdict = CELL_RULES.verdict(before, after, lacking)
+    follow = _list_follow(snapshot, request, key, before, after) if verdict == "ABOVE_LIST" else None
+    return CellChange(key, before, after, _marks(snapshot, key, before), verdict, list_follow=follow)
 
 
 def fill_lines(snapshot: Snapshot, table: TargetTable) -> TargetTable:
@@ -221,7 +249,7 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
                                                "open" if before.state == "missing" else before.state)
         if after == before:
             continue
-        changes.append(CellChange(key, before, after, _marks(snapshot, key, before), CELL_RULES.verdict(before, after, lacking)))
+        changes.append(_change(snapshot, table, key, before, after, lacking))
     return Plan(table, snapshot.currency, snapshot.read_at, tuple(changes), (), no_sale=tuple(sorted(no_sale)))
 
 
@@ -253,8 +281,9 @@ def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
 def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     """빨간 줄 고름을 칸에 단 미리보기. 칸을 짚은 고름이 규칙 전체 고름보다 앞선다. 고르지 않은 빨간 줄 칸은 그대로 둔다.
 
-    고른 칸의 후 값은 고른 대로다 — include 계산한 값 그대로 · keep 전 값 그대로 · raise_list 정가도 판매가와 같은 만큼
-    옮김(정가 − 판매가 차이 유지) · clear_list 정가를 비움. 저장 단계(plan_steps)와 장부의 줄(preview_rows)이 이 값에서 나온다.
+    고른 칸의 후 값은 고른 대로다 — include 계산한 값 그대로 · keep 전 값 그대로 · raise_list 정가를 계산 때 셈해 둔 값으로
+    (CellChange.list_follow — ERP 「정가도 같이 조정」의 규칙) · clear_list 정가를 비움. 저장 단계(plan_steps)와 장부의
+    줄(preview_rows)이 이 값에서 나온다.
     """
     flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
     chosen, _waiting = decide(CELL_RULES, flagged, resolutions, cell_name)
@@ -268,9 +297,12 @@ def _choose(change: CellChange, choice: str | None) -> CellChange:
     if choice == "keep":
         after = change.before
     elif choice == "raise_list":
-        if change.before.list is None or change.before.sell is None:
-            raise PlanError(f"정가를 같은 만큼 올릴 수 없는 칸입니다(전 정가가 없음): {cell_name(change.key)}")
-        after = replace(after, list=after.sell + (change.before.list - change.before.sell))
+        if change.list_follow is None:
+            raise PlanError(f"정가를 같이 올릴 수 없는 칸입니다(전 정가가 없음): {cell_name(change.key)}")
+        if change.list_follow < after.sell:   # ERP 도 이 칸은 건너뛴다(정가보다 비싸짐) — 지금도 정가가 판매가보다 낮은 칸이다
+            raise PlanError(f"정가를 같이 올려도 판매가보다 낮은 칸입니다(지금도 정가가 판매가보다 낮음): {cell_name(change.key)} — "
+                            "정가 지움이나 그 칸은 안 바꿈을 고릅니다")
+        after = replace(after, list=change.list_follow)
     elif choice == "clear_list":
         after = replace(after, list=None)
     return replace(change, after=after, choice=choice)

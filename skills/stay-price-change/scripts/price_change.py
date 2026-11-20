@@ -64,7 +64,7 @@ from price_model import (
     encode_change, encode_hotel, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, iso_day, request_range,
     same_hotel, snapshot_reading,
 )
-from price_pages import render_prices, render_preview, render_result, render_rollback, render_sheet
+from price_pages import chosen_lines, red_lines, render_prices, render_preview, render_result, render_rollback, render_sheet
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
     PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows,
@@ -251,6 +251,7 @@ def cmd_plan(args):
                                         request=encode_request(plan.request), reading=encode_snapshot(snapshot),
                                         replaces=args.replaces) if args.record else None
     result = dict(change_id=change_id, replaces=args.replaces, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
+                  red=red_lines(plan), chosen=chosen_lines(plan),
                   unresolved=[encode_change(change) for change in unresolved(plan)],
                   steps=None if steps is None else [encode_step(step) for step in steps])
     if isinstance(request, TargetTable) and request.from_sheet:
