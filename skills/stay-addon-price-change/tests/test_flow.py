@@ -185,11 +185,32 @@ class RollbackKeepsTest(Flow):
         page = self.cli("render", "rollback", "--plan", self.work / "rollback-1.json", "--text")
         self.assertIn(f"되돌리는 범위: {short['scope']}", page["text"])
 
+    def test_g4_the_words_said_with_a_red_line_choice_are_kept_and_shown_next_to_the_choice(self):
+        said = "엑스트라베드는 45달러 맞아요, 그대로 바꿔 주세요"
+        request = self.request("request-2.json", lines=BOTH[1:], value="45.00")
+        first, _plan = self.preview(request)
+        snapshot = self.read(request=request)
+        refused = self.cli("plan", "--snapshot", snapshot, "--request", request, "--record", "--replaces", first, "--resolutions",
+                           self.file("bare.json", [{"rule": "OVER_30", "choice": "include"}]), "--out", self.work / "plan-2.json", code=2)
+        self.assertIn("(said)", refused["error"], "담당자의 말이 없는 고름은 받지 않는다")
+        short = self.cli("plan", "--snapshot", snapshot, "--request", request, "--record", "--replaces", first, "--resolutions",
+                         self.file("choices.json", [{"rule": "OVER_30", "choice": "include", "said": said}]),
+                         "--out", self.work / "plan-2.json")
+        self.assertEqual([(item["label"], item["said"]) for item in short["chosen"]], [("이대로 바꿈", said)])
+        db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")
+        kept = set(db.execute("SELECT DISTINCT choice, said FROM item_values WHERE change_id = ? AND choice IS NOT NULL",
+                              (short["change_id"],)))
+        db.close()
+        self.assertEqual(kept, {("include", said)}, "장부가 고른 줄에 그 말을 적는다")
+        self.apply(short["change_id"], self.work / "plan-2.json")
+        text = self.cli("render", "result", "--change", short["change_id"], "--text")["text"].splitlines()
+        self.assertIn(f"30% 넘게 바뀝니다 | 이대로 바꿈 | 1 | “{said}”", text, "고른 것 옆에 담당자의 말")
+
     def test_a_later_change_by_the_helper_is_named_as_the_cause(self):
         first, plan = self.preview(self.request())
         self.apply(first, plan)
         second, plan2 = self.preview(self.request("request-2.json", lines=BOTH[1:], value="45.00"), "plan-2.json",
-                                     resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include"}]))
+                                     resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include", "said": "그대로 바꿔"}]))
         self.apply(second, plan2)
         short = self.cli("rollback", "--change", first, "--snapshot", self.read(record=first), "--out", self.work / "rollback-1.json")
         self.assertEqual([(item["change_id"], item["outside"]) for item in short["kept_why"]], [(second, False)])
@@ -272,7 +293,7 @@ class NothingToSaveTest(Flow):
         snapshot = self.read(request=request)
         plan = self.work / "plan-2.json"
         short = self.cli("plan", "--snapshot", snapshot, "--request", request, "--record", "--replaces", first,
-                         "--resolutions", self.file("고름.json", [{"rule": "BELOW_COST", "choice": "keep"}]), "--out", plan)
+                         "--resolutions", self.file("고름.json", [{"rule": "BELOW_COST", "choice": "keep", "said": "그 칸은 그냥 둬"}]), "--out", plan)
         self.assertEqual((short["saves"], short["counts"]["will_change"], short["counts"]["red"], short["counts"]["unchanged"]),
                          (0, 0, 0, 1))
 

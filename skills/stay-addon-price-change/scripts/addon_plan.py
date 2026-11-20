@@ -56,11 +56,13 @@ class PlanError(ModelError):
 
 @dataclass(frozen=True)
 class LineChange:
-    """고른 줄 하나의 계산. `after` 는 셈한 후 값(셈하지 못했으면 None), `choice` 는 빨간 줄에 고른 것."""
+    """고른 줄 하나의 계산. `after` 는 셈한 후 값(셈하지 못했으면 None), `choice` 는 빨간 줄에 고른 것, `said` 는 그렇게
+    고르며 담당자가 한 말."""
     line: Line
     after: Values | None
     verdict: str | None
     choice: str | None = None
+    said: str | None = None
 
     @property
     def key(self) -> LineKey:
@@ -149,7 +151,7 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     """빨간 줄 고름을 줄에 단다. 고름의 `items` 는 가격 줄 번호(글자)다 — 그 규칙의 줄이 아니면 거절한다."""
     by_line = {change.key.line: change.key for change in plan.changes}
     keyed = [Resolution(item.rule, item.choice, None if item.items is None else tuple(by_line.get(str(line), str(line))
-                                                                                    for line in item.items))
+                                                                                    for line in item.items), item.said)
              for item in resolutions]
     flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
     chosen, _waiting = decide(LINE_RULES, flagged, keyed, lambda key: f"가격 줄 {getattr(key, 'line', key)}번")
@@ -157,11 +159,11 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
 
 
 def _choose(change: LineChange, resolution: Resolution | None) -> LineChange:
-    """고른 것을 단다 — 「그 줄은 안 바꿈」이면 후 값이 전 값이 된다(가격 캘린더 도우미와 같다)."""
+    """고른 것과 그렇게 고르며 한 말을 단다 — 「그 줄은 안 바꿈」이면 후 값이 전 값이 된다(가격 캘린더 도우미와 같다)."""
     if resolution is None:
         return change
     keep = resolution.choice == "keep"
-    return replace(change, choice=resolution.choice, after=change.before if keep else change.after)
+    return replace(change, choice=resolution.choice, said=resolution.said or None, after=change.before if keep else change.after)
 
 
 def unresolved(plan: Plan) -> tuple[LineChange, ...]:
@@ -256,21 +258,21 @@ def step_call(no: int, hotel: str, hotel_id: str, step: LineStep) -> dict:
 
 # ───────────── 장부 줄 ─────────────
 
-def _rows(line: Line, after: Values | None, writes: Values, verdict=None, choice=None) -> list[ValueRow]:
+def _rows(line: Line, after: Values | None, writes: Values, verdict=None, choice=None, said=None) -> list[ValueRow]:
     rows = []
     for name in FIELDS:
         old = line.fields()[name]
         new = None if after is None else after[name]
         action = None if name not in writes else "clear" if writes[name] is None else "set"
         rows.append(ValueRow(ITEM_KIND, line_item_key(line.key), line.label, name, PRESENT, old,
-                             None if new == old else new, verdict, (), action, choice))
+                             None if new == old else new, verdict, (), action, choice, said))
     return rows
 
 
 def preview_rows(plan: Plan) -> list[ValueRow]:
     """고른 줄 전부(바뀌지 않는 줄도) — 필드마다 전 값 · 후 값 · 넣는지 · 판정 · 고른 것."""
     return [row for change in plan.changes
-            for row in _rows(change.line, change.after, change.writes, change.verdict, change.choice)]
+            for row in _rows(change.line, change.after, change.writes, change.verdict, change.choice, change.said)]
 
 
 # ───────────── 되돌리기 ─────────────

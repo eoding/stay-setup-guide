@@ -60,7 +60,7 @@ from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, ledger_dir
 from change_core.money import money, money_text
 from change_core.rollback import decode_rollback, encode_rollback
-from change_core.rules import Resolution
+from change_core.rules import Resolution, said_in
 
 PAGE_OBJECT = "stayAddonPrice"      # 이 도우미의 페이지 모듈 — 조각을 다시 받으라는 글이 이 이름의 take 를 부르라고 한다
 PREFIXES = ("look-", "line-", "take-")
@@ -169,12 +169,13 @@ def cmd_read(args):
 def encode_change(change: LineChange) -> dict:
     return dict(line=encode_line(change.line), after=None if change.after is None else
                 {name: money_text(value) for name, value in change.after.items()},
-                verdict=change.verdict, choice=change.choice)
+                verdict=change.verdict, choice=change.choice, said=change.said)
 
 
 def decode_change(data) -> LineChange:
     return LineChange(decode_line(data["line"]), None if data["after"] is None else
-                      {name: money(value) for name, value in data["after"].items()}, data["verdict"], data["choice"])
+                      {name: money(value) for name, value in data["after"].items()}, data["verdict"], data["choice"],
+                      data.get("said"))
 
 
 def encode_plan(plan: Plan) -> dict:
@@ -197,7 +198,7 @@ def cmd_plan(args):
     snapshot, request = decode_snapshot(load(args.snapshot)), decode_request(load(args.request))
     plan = plan_change(snapshot, request)
     resolutions = [Resolution(str(item["rule"]), str(item["choice"]), None if item.get("lines") is None else
-                              tuple(str(line) for line in item["lines"]))
+                              tuple(str(line) for line in item["lines"]), said_in(item))
                    for item in load(args.resolutions)] if args.resolutions else []
     plan = resolve(plan, resolutions)
     steps = plan_steps(plan)
@@ -472,7 +473,8 @@ def parser() -> argparse.ArgumentParser:
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)
     sub.add_argument("--request", required=True, help="바꾸기 요청 파일(kind addon_change)")
-    sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "OVER_30", "choice": "include", "lines": ["301"]}]')
+    sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "OVER_30", "choice": "include", "lines": ["301"], '
+                     '"said": "<담당자 말>"}]')
     sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
     sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 미리보기의 장부 번호(빨간 줄을 고른 뒤 · 적용 직전에 값이 달라 다시 계산함)")
     sub = command("render", cmd_render, "페이지 만들기")

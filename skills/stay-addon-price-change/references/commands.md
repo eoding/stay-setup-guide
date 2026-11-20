@@ -51,13 +51,13 @@
 | `BELOW_COST` | 빨간 줄 | 바꾼 뒤 판매가가 공급 원가보다 싸다 | 고름: `include` 이대로 바꿈 · `keep` 그 줄은 안 바꿈 |
 | `OVER_30` | 빨간 줄 | 바꾸는 값이 지금보다 30% 넘게 오르거나 내린다(0 에서 움직이면 넘은 것) | 고름: `include` 이대로 바꿈 · `keep` 그 줄은 안 바꿈 |
 
-고름은 `--resolutions "<작업>/resolutions.json"` 의 목록으로 준다: `[{"rule": "OVER_30", "choice": "include"}]`(그 규칙의 줄 전부) 또는 `[{"rule": "BELOW_COST", "choice": "keep", "lines": ["301"]}]`(그 줄만, 줄 번호 글자). 그 규칙의 줄이 아니거나 바꿀 수 없음 규칙이면 거절한다. 고른 뒤 `plan` 을 새 이름 · `--replaces <앞 번호>` 로 다시 한다.
+고름은 `--resolutions "<작업>/resolutions.json"` 의 목록으로 준다: `[{"rule": "OVER_30", "choice": "include", "said": "그대로 올려 주세요"}]`(그 규칙의 줄 전부) 또는 `[{"rule": "BELOW_COST", "choice": "keep", "lines": ["301"], "said": "비수기 조식은 그냥 둬"}]`(그 줄만, 줄 번호 글자). `said` 는 그렇게 고르며 담당자가 한 말 그대로다 — 없으면 거절한다. 장부가 고른 줄마다 적고 결과 페이지의 「고르신 빨간 줄」이 고른 것 옆에 보인다. 그 규칙의 줄이 아니거나 바꿀 수 없음 규칙이면 거절한다. 고른 뒤 `plan` 을 새 이름 · `--replaces <앞 번호>` 로 다시 한다.
 
 ## 짧은 답
 
 - `look`: `hotel` · `currency` · `read_at` · `addons`(수) · `lines`(수).
 - `read`: `hotel` · `currency` · `read_at`(ERP 에서 읽은 시각 — 15분 창도 여기서 잰다) · `asked` · `found` · `missing`(목록에 없는 줄 번호) · `doubt`(목록과 편집 창이 다른 줄 번호).
-- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` 바뀌는 줄 · `unchanged` 그대로인 줄(안 바꾸기로 고른 줄 포함) · `blocked` · `red` 고를 줄 · `missing` · `chosen` 고른 줄과 판정 코드마다의 수 — 앞의 넷이 고른 줄을 빠짐없이 나눈다) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄과 그 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`) · `scope_card`(저장할 줄 — 바뀌는 줄 · 고를 빨간 줄 — 가운데 편집 창에 적용 범위 카드가 있는 줄이 있으면 true. 그때만 적용 범위 기록 한 문장을 말한다).
+- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` 바뀌는 줄 · `unchanged` 그대로인 줄(안 바꾸기로 고른 줄 포함) · `blocked` · `red` 고를 줄 · `missing` · `chosen` 고른 줄과 판정 코드마다의 수 — 앞의 넷이 고른 줄을 빠짐없이 나눈다) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄마다 고름의 이름 `label` 과 담당자의 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`) · `scope_card`(저장할 줄 — 바뀌는 줄 · 고를 빨간 줄 — 가운데 편집 창에 적용 범위 카드가 있는 줄이 있으면 true. 그때만 적용 범위 기록 한 문장을 말한다).
 - `rollback`: `change_id` · `replaces` · `scope`(범위 한 줄 — 장부에 적었으면 `list` 의 그 번호 줄과 같다: 몇 줄 · 처음 줄 · "N번 되돌리기", 줄을 골랐으면 "(가격 줄 …번만)") · `restore_to`(적어 둔 시각) · `restored` · `kept` · `kept_why`(까닭마다 — 이 장부의 나중 변경 `change_id` · `at` · `sentence`, 아니면 `outside: true` 도우미 밖) · `saves`.
 
 ## 장부

@@ -14,8 +14,8 @@ from addon_model import (
 )
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
-    esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list,
-    stopped_choices, unremovable_table,
+    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
+    stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -100,8 +100,9 @@ def red_lines(plan: Plan) -> list[dict]:
 
 
 def chosen_lines(plan: Plan) -> list[dict]:
+    """고른 줄마다 — 고른 것의 이름(`label`)과 그렇게 고르며 담당자가 한 말(`said`)."""
     return [dict(line=change.key.line, name=change.line.label, rule=change.verdict, choice=change.choice,
-                 said=CHOICE_LABELS[change.choice]) for change in plan.changes if change.choice]
+                 label=CHOICE_LABELS[change.choice], said=change.said) for change in plan.changes if change.choice]
 
 
 def blocked_lines(plan: Plan) -> list[dict]:
@@ -201,7 +202,9 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     if moved:
         body.append('<div class="banner red"><b>그대로여야 할 칸이 달라졌습니다.</b> '
                     + esc(" · ".join(f"{item['label']} {item['what']}" for item in moved)) + "</div>")
-    body += [steps_list(record.steps, {step.index: 1 for step in record.steps}, UNIT), stopped_choices(record, len(waiting), UNIT)]
+    body += [steps_list(record.steps, {step.index: 1 for step in record.steps}, UNIT), stopped_choices(record, len(waiting), UNIT),
+             chosen_table([(LINE_RULES.by_code[verdict].label if verdict in LINE_RULES.by_code else str(verdict), CHOICE_LABELS[choice],
+                            len(keys), said) for verdict, choice, said, keys in chosen_groups(record.rows)], UNIT)]
     rows = []
     for key, entry in lines.items():
         cells = []
