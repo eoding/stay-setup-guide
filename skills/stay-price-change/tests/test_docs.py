@@ -1,5 +1,6 @@
-"""안내문(SKILL.md · references/commands.md · references/page.md)에 적힌 명령 · 플래그 · 페이지 호출이 코드에 그 이름으로 있고,
-새 요금표 길의 예 · 문장 · 읽기 값이 코드와 같다.
+"""안내문(SKILL.md · references/commands.md · references/page.md · references/sheet.md)에 적힌 명령 · 플래그 · 페이지 호출이
+코드에 그 이름으로 있고, 새 요금표 길의 예 · 문장 · 읽기 값이 코드와 같다. 새 요금표 길은 sheet.md 에 있고 SKILL.md 는 그곳을
+가리키며 놓치면 안 되는 두 규칙만 둔다.
 
 글의 코드 조각(`…` 과 ``` 덩어리)에서 `price_change.py <명령>`, 명령 표의 첫 칸, 명령 뒤의 `--플래그`, `stayPrice.<호출>`,
 `stayPriceLoader.<호출>` 을 모아 명령 파서와 페이지 모듈에 견준다. 글을 고쳐 없는 이름을 적으면 여기서 실패한다.
@@ -25,7 +26,7 @@ from price_model import ERP_MAX_DAYS, GAP_KINDS  # noqa: E402
 from price_pages import SEASON_REFILL_NOTE  # noqa: E402
 from price_sheet import SheetCheck, decode_sheet  # noqa: E402
 
-DOCS = [SKILL / "SKILL.md", SKILL / "references" / "commands.md", SKILL / "references" / "page.md"]
+DOCS = [SKILL / "SKILL.md", SKILL / "references" / "commands.md", SKILL / "references" / "page.md", SKILL / "references" / "sheet.md"]
 
 
 def required() -> dict[str, set[str]]:
@@ -147,11 +148,23 @@ class DocNamesTest(unittest.TestCase):
 
 
 class SheetDocsTest(unittest.TestCase):
-    """새 요금표 길(S7) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
+    """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
 
     def setUp(self):
         self.skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         self.commands = (SKILL / "references" / "commands.md").read_text(encoding="utf-8")
+        self.sheet = (SKILL / "references" / "sheet.md").read_text(encoding="utf-8")
+
+    def test_v6_the_sheet_flow_lives_in_sheet_md_and_skill_md_keeps_a_pointer_and_the_two_rules(self):
+        section = self.skill[self.skill.index("## 5. 새 요금표로 맞추기"):]
+        section = section[:section.index("\n## ", 1)]
+        self.assertIn("[references/sheet.md](references/sheet.md)", section)
+        self.assertIn("셈은 명령이 한다", section, "도우미는 셈하지 않는다")
+        self.assertIn(SEASON_REFILL_NOTE, section, "시즌 [가격] 덮기 한 문장")
+        self.assertLess(len(section), 1500, "SKILL.md 에는 언제 여는지와 두 규칙만")
+        for step in ("**요금표 파일 쓰기.**", "**읽을 범위 · 나누기.**", "sheet --sheet"):
+            self.assertNotIn(step, self.skill)
+            self.assertIn(step, self.sheet)
 
     def test_the_sheet_example_in_commands_md_is_a_sheet_the_command_takes(self):
         section = self.commands[self.commands.index("### 요금표 (`kind: sheet`)"):]
@@ -161,10 +174,11 @@ class SheetDocsTest(unittest.TestCase):
         self.assertEqual({row.occupancy for line in sheet.lines for row in line.rows}, {"A2", "A3", "A2C1_CHD"})
 
     def test_the_instructions_say_the_season_refill_sentence_the_pages_say(self):
-        self.assertGreaterEqual(self.skill.count(SEASON_REFILL_NOTE), 2, "두 길을 말할 때와 미리보기를 말할 때")
-        self.assertIn("(가) 시즌 원판 바꾸기", self.skill)
-        self.assertIn("아직 못 합니다", self.skill)
-        self.assertNotIn("새 요금표로 통째 바꾸기는 아직 못 한다", self.skill)
+        self.assertGreaterEqual(self.sheet.count(SEASON_REFILL_NOTE), 2, "두 길을 말할 때와 미리보기를 말할 때")
+        self.assertIn("(가) 시즌 원판 바꾸기", self.sheet)
+        self.assertIn("아직 못 합니다", self.sheet)
+        self.assertIn("(가) 시즌 원판 바꾸기는 도우미가 아직 못 합니다", self.skill, "「하지 않는 것」의 답")
+        self.assertNotIn("새 요금표로 통째 바꾸기는 아직 못 한다", self.skill + self.sheet)
 
     def test_commands_md_names_every_kind_of_gap(self):
         table = self.commands[self.commands.index("## 넣지 않는 것"):]
@@ -177,10 +191,10 @@ class SheetDocsTest(unittest.TestCase):
         probes = len(reserved_probes(hotel, "오퍼", [("객실", "요금제")], year))
         most = max(n for n in range(1, PAGE_KEEPS + 1) if n * per_pair + probes <= PAGE_KEEPS)
         self.assertEqual((per_pair, probes, most), (2, 1, 19))
-        self.assertIn(f"가격 읽기(`readPair`) {per_pair}번({READ_SPAN}일에 한 번)", self.skill)
-        self.assertIn(f"예약 있는 날 읽기(`readReserved`) {probes}번({ERP_MAX_DAYS}일에 한 번", self.skill)
-        self.assertIn(f"합쳐 {PAGE_KEEPS}번까지", self.skill)
-        self.assertIn(f"객실 · 요금제 {most}개까지", self.skill)
+        self.assertIn(f"가격 읽기(`readPair`) {per_pair}번({READ_SPAN}일에 한 번)", self.sheet)
+        self.assertIn(f"예약 있는 날 읽기(`readReserved`) {probes}번({ERP_MAX_DAYS}일에 한 번", self.sheet)
+        self.assertIn(f"합쳐 {PAGE_KEEPS}번까지", self.sheet)
+        self.assertIn(f"객실 · 요금제 {most}개까지", self.sheet)
         for words in (f"{READ_SPAN}일에 한 번", f"{ERP_MAX_DAYS}일에 한 번", f"합쳐 {PAGE_KEEPS}번까지", "`KEEP_BODIES`"):
             self.assertIn(words, self.commands)
 
