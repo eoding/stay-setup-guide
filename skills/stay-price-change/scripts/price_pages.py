@@ -5,6 +5,8 @@
     render_result(record)      적용 결과 — 장부의 변경 하나: 저장 단계마다 된 것·멈춘 것, 다시 읽어 맞았는지
     render_rollback(plan)      되돌리기 미리보기 — 되돌리는 날짜, 그대로 두는 칸의 세 값과 까닭, 되돌리는 칸
     render_prices(snapshot)    지금 가격 보기 — 바꾸지 않고 표로만
+    render_compare(comparison) 저장해 둔 상태와 견주기 — 저장해 둔 값 → 지금 값을 칸마다, 바뀐 · 새로 생긴 · 없어진 칸의 수(시즌
+                               [가격]을 다시 채운 뒤). 바꾸지 않는다
     render_sheet(check)        요금표를 이렇게 읽었습니다 — 요금표의 모양(객실이 줄, 기간이 열, 칸 안에 인원 · 박수)으로, 셈한 값은
                                셈과 함께. ERP 를 읽기 전에 담당자가 종이와 견준다
 
@@ -34,6 +36,7 @@ from price_model import (
     CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, decode_request, key_of_item, line_label, nights_label,
     occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
+from price_compare import Comparison, compare_counts
 from price_plan import counts, day_runs, days_summary
 from price_sheet import CHILD_READINGS, SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
 
@@ -51,6 +54,11 @@ ROLLBACK_KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않�
 # 결과 페이지의 값 출처 표시 — 도우미가 넣은 칸은 ERP 가 「손입력」으로 단다. 도우미는 그 표시를 읽지도 되돌리지도 못한다
 MARK = "이 칸들은 ERP 에서 '손입력'으로 표시됩니다."
 MARK_ON_ROLLBACK = "되돌린 칸도 ERP 에서 '손입력'으로 표시됩니다. 이 표시는 도우미가 읽지도 되돌리지도 못해, 넣기 전의 표시로 돌아가지 않습니다."
+# 저장해 둔 상태로 되돌리기가 더 다는 것 — 시즌 [가격]을 다시 채운 뒤에 되돌릴 때 담당자가 알아야 할 것(sheet.md (가))
+SEASON_SCREEN_NOTE = ("ERP 시즌 화면은 건드리지 않습니다. 그 사이 시즌의 [가격]을 다시 채웠다면 시즌 창에는 다시 채운 입력값이 그대로 "
+                      "보이고, 캘린더의 날짜별 값만 저장해 둔 값으로 돌아갑니다.")
+# 저장해 둔 상태와 견주기 — 읽은 값이 가려내지 못하는 것
+HAND_EDITS = "ERP 의 '손입력' 표시는 도우미가 읽지 못해, ERP 화면에서 사람이 직접 고쳤던 칸이 덮였는지는 가려내지 못합니다."
 
 
 def _short_day(day: str) -> str:
@@ -778,7 +786,7 @@ def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = ()
             '<h2>되돌리는 칸' + (' <span class="sub">— 예약 있는 날도 포함합니다</span>' if booked else "") + "</h2>",
             grid([*restored, *held], cell, reserved, closed, by_date) if restored or held else
             '<p class="sub">되돌릴 칸이 없습니다.</p>',
-            rollback_ask(plan, ROLLBACK_KEEPS)]
+            rollback_ask(plan, ROLLBACK_KEEPS + ((SEASON_SCREEN_NOTE,) if plan.mode == "restore" else ()))]
     return page(title, "\n".join(body), MAKER)
 
 
@@ -815,6 +823,57 @@ def render_prices(snapshot: Snapshot, by_date: bool = False) -> str:
                                 for room in sorted({r for r, _ in snapshot.no_sale}))) + "</p>"] if snapshot.no_sale else []),
             notes(["판매가는 굵게, 정가(손님 화면에 줄 그어 보이는 값)와 공급 원가는 작게 보입니다.",
                    '바꾸고 싶으면 대화창에서 "12월 디럭스 +10,000" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.'])]
+    return page(title, "\n".join(body), MAKER)
+
+
+def render_compare(comparison: Comparison, scope: str = "", by_date: bool = False) -> str:
+    """저장해 둔 상태와 견주기 — 칸마다 저장해 둔 값 → 지금 값(미리보기와 같은 칸 표)과 종류마다의 수. 아무것도 바꾸지 않았다."""
+    currency, tally = comparison.currency, compare_counts(comparison)
+    by_key = {item.key: item for item in comparison.cells}
+    closed = {item.key for item in comparison.cells if item.now.state == "closed"}
+
+    def cell(key: CellKey) -> tuple[str, str]:
+        item = by_key[key]
+        edited = f'<span class="tag chosen">날짜별로 바꿔 둔 값 · 장부 {item.edited_by}번</span>' if item.edited_by else ""
+        if item.kind == "same":
+            shown = "가격 없음" if item.now.sell is None else fmt_money(item.now.sell, currency)
+            return "same", f'<span class="was">{shown}</span><small class="more">그대로</small>'
+        if item.kind == "new":
+            return "new", _move(item.then, item.now, currency) + '<span class="tag new">새로 생김</span>'
+        if item.kind == "gone":
+            return "red", (f'<span class="was">{fmt_money(item.then.sell, currency)}</span><span class="tag red">없어짐</span>'
+                           + edited)
+        if item.kind == "closed":
+            was, now = ("판매 가능", "판매 마감") if item.now.state == "closed" else ("판매 마감", "판매 가능")
+            return "", f'<span class="now">{fmt_money(item.now.sell, currency)}</span><small class="more">{was} → {now}</small>'
+        return "", _move(item.then, item.now, currency) + edited
+
+    moved = tally["changed"] + tally["new"] + tally["gone"] + tally["closed"]
+    title = f"저장해 둔 상태와 견주기 · {comparison.hotel} · {comparison.offer}"
+    body = [f"<h1>{esc(title)}</h1>",
+            f'<p class="sub"><b>아무것도 바꾸지 않았습니다.</b> 장부 {comparison.saved}번에 저장해 둔 값({esc(fmt_time(comparison.saved_at))} 에 '
+            f"ERP 에서 읽음)과 {esc(fmt_time(comparison.read_at))} 에 다시 읽은 값을 칸마다 견줍니다. 통화 {esc(currency)}.</p>",
+            f'<div class="banner blue">저장할 때 하신 말: “{esc(comparison.sentence)}” (장부 {comparison.saved}번)'
+            f'{f"<br>견주는 범위: {esc(scope)}" if scope else ""}</div>',
+            stats([(tally["changed"], "바뀐 칸")]
+                  + ([(tally["edited"], "날짜별로 바꿔 두었다가 바뀌거나 없어진 칸")] if tally["edited"] else [])
+                  + ([(tally["reserved"], "바뀐 칸 중 예약 있는 날의 칸")] if tally["reserved"] else [])
+                  + [(tally["new"], "새로 생긴 칸"), (tally["gone"], "없어진 칸")]
+                  + ([(tally["closed"], "판매 마감 · 판매 가능만 바뀐 칸")] if tally["closed"] else [])
+                  + [(tally["same"], "그대로인 칸")]),
+            "<h2>칸마다 저장해 둔 값 → 지금 값</h2>",
+            grid(list(by_key), cell, set(comparison.reserved), closed, by_date)]
+    lines = [HAND_EDITS + (" 「날짜별로 바꿔 둔 값」은 이 컴퓨터의 장부에 적힌 도우미의 변경만입니다." if tally["edited"] else "")]
+    if tally["reserved"]:
+        lines.append("예약 있는 날의 칸도 바뀌었습니다. 이미 받은 예약의 금액은 바뀌지 않습니다.")
+    if tally["new"]:
+        lines.append("새로 생긴 칸은 저장해 둔 상태로 되돌려도 지울 수 없습니다. ERP 에 칸을 지우는 길이 없어서입니다.")
+    if tally["closed"]:
+        lines.append("판매 마감 · 판매 가능은 저장해 둔 상태로 되돌려도 돌아가지 않습니다.")
+    body.append(notes(lines))
+    body.append(f'<div class="banner blue">저장해 둔 값으로 되돌리려면 대화창에서 "{comparison.saved}번 상태로 되돌려"라고 하세요. 바로 '
+                "바꾸지 않고, 무엇이 돌아가고 무엇이 돌아가지 않는지 미리보기로 먼저 보여 드립니다.</div>" if moved else
+                '<div class="banner blue">저장해 둔 때와 모든 칸이 같습니다.</div>')
     return page(title, "\n".join(body), MAKER)
 
 

@@ -25,11 +25,13 @@
     rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다.
                   다시 계산하면 새 파일(rollback-2.json)에 쓰고 --replaces 로 앞 번호를 댄다(plan 과 같다)
     restore       지금 상태 저장으로 적어 둔 상태로 되돌리는 계산(rollback 과 같은 모양 · 같은 두 규칙). --record 면 변경으로 적는다
+    compare       지금 상태 저장으로 적어 둔 상태와 같은 범위를 방금 읽은 값 견주기 — 바뀐 · 새로 생긴 · 없어진 칸, 날짜별로 바꿔
+                  두었다가 바뀐 칸, 예약 있는 날(ERP 시즌 [가격]을 다시 채운 뒤에 쓴다). 아무것도 바꾸지 않고 장부에도 적지 않는다
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록
 
-결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 여섯(read-calls · read · sheet · plan ·
-rollback · restore)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 일곱(read-calls · read · sheet · plan ·
+rollback · restore · compare)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일
 자리이고, 칸 목록은 싣지 않는다(SHORT). 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
@@ -57,7 +59,7 @@ from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, now_text
 from change_core.money import money_text
-from change_core.rollback import decode_rollback, encode_rollback
+from change_core.rollback import decode_rollback, encode_rollback, holds
 from change_core.rules import Resolution, said_in
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
@@ -65,13 +67,14 @@ from price_browser import (
 )
 from change_core.rules import BLOCKED
 from price_model import (
-    CELL_RULES, ITEM_KIND, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step,
-    encode_change, encode_hotel, encode_key, encode_plan, encode_request, encode_snapshot, encode_step, hotel_label, iso_day,
-    key_of_item, line_label, request_range, same_hotel, snapshot_reading,
+    CELL_RULES, ITEM_KIND, CellKey, ReadRange, Snapshot, TargetTable, cell_state, decode_hotel, decode_plan, decode_request,
+    decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_key, encode_plan, encode_request,
+    encode_snapshot, encode_step, hotel_label, iso_day, key_of_item, line_label, request_range, same_hotel, snapshot_reading,
 )
+from price_compare import Comparison, compare_counts, compare_saved, decode_comparison, encode_comparison
 from price_pages import (
-    EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, render_prices, render_preview, render_result,
-    render_rollback, render_sheet, result_name,
+    EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, render_compare, render_prices, render_preview,
+    render_result, render_rollback, render_sheet, result_name,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
@@ -85,7 +88,7 @@ def open_ledger() -> Ledger:
 
 
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
-              "sheet": "요금표 읽은 것"}   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
+              "sheet": "요금표 읽은 것", "compare": "저장해 둔 상태와 견주기"}   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
 
 
 ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
@@ -259,6 +262,10 @@ def cmd_render(args):
     elif args.kind == "sheet":
         check = decode_check(load(args.plan))
         html, hotel = render_sheet(check), check.sheet.hotel
+    elif args.kind == "compare":
+        data = load(args.plan)
+        comparison = decode_comparison(data)
+        html, hotel = render_compare(comparison, data.get("scope") or "", args.by_date), comparison.hotel
     else:
         ledger = open_ledger()
         record = ledger.change(args.change)
@@ -419,6 +426,33 @@ def cmd_restore(args):
     return rollback_answer(change_id, args, rollback_scope(ledger, change_id, "change", request, None, plan), plan, snapshot)
 
 
+def edited_cells(ledger: Ledger, saved_id: int, saved: Snapshot) -> dict[CellKey, int]:
+    """저장해 둔 때 이 장부의 앞선 변경(같은 호텔 · 오퍼)이 날짜별로 넣은 값을 그대로 갖고 있던 칸 → 그 값을 넣은 장부 번호(가장
+    나중 것). 되돌린 값은 넣은 값으로 치지 않는다(그 되돌리기가 넣은 값이 된다)."""
+    found: dict[CellKey, int] = {}
+    for entry in sorted(ledger.list_changes(), key=lambda item: item["id"]):
+        if (entry["id"] >= saved_id or entry["kind"] == "snapshot" or not entry["written"] or entry["offer"] != saved.offer
+                or not same_hotel(entry["hotel"], entry["hotel_id"], saved.hotel, saved.hotel_id)):
+            continue
+        for item in ledger.recorded_change(entry["id"]).items:
+            key = key_of_item(item.key)
+            value = saved.cells.get(key)
+            if value is not None and holds(cell_state(key, value), item.written):
+                found[key] = entry["id"]
+    return found
+
+
+def cmd_compare(args):
+    """지금 상태 저장(`--saved`)과 그 범위를 방금 읽은 값(`--snapshot`, read-calls --record S 로 읽은 것)을 칸마다 견준다."""
+    files.fresh_record(args.out, None, False, "compare")
+    ledger = open_ledger()
+    record = ledger.recorded_snapshot(args.saved)   # 저장해 둔 상태가 아니면 거절한다
+    saved = recorded_reading(ledger, args.saved)
+    comparison = compare_saved(args.saved, record.sentence, saved, decode_snapshot(load(args.snapshot)),
+                               edited_cells(ledger, args.saved, saved))
+    return dict(encode_comparison(comparison), scope=listed(ledger, args.saved)[0]["scope"], counts=compare_counts(comparison))
+
+
 def cmd_save_snapshot(args):
     snapshot = decode_snapshot(load(args.snapshot))
     return dict(change_id=open_ledger().record_snapshot(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer,
@@ -507,8 +541,22 @@ def short_rollback(result: dict) -> dict:
                 undone=result["undone"])
 
 
+def short_compare(result: dict) -> dict:
+    """견준 것을 말하는 데 필요한 것 — 저장해 둔 때와 지금 읽은 때, 범위, 종류마다의 칸 수, 날짜별로 바꿔 두었다가 바뀐 칸을 넣은
+    장부 번호들, 바뀐 칸의 예 하나."""
+    comparison: Comparison = decode_comparison(result)
+    changed = comparison.of("changed")
+    example = None
+    if changed:
+        cell = changed[0]
+        example = dict(key=encode_key(cell.key), then=money_text(cell.then.sell), now=money_text(cell.now.sell))
+    return dict(saved=comparison.saved, saved_at=comparison.saved_at, read_at=comparison.read_at, scope=result["scope"],
+                counts=result["counts"], edited_by=sorted({cell.edited_by for cell in comparison.cells if cell.edited_by}),
+                example=example)
+
+
 SHORT = {"read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,
-         "rollback": short_rollback, "restore": short_rollback}
+         "rollback": short_rollback, "restore": short_rollback, "compare": short_compare}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -563,7 +611,8 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("render", cmd_render, "페이지 만들기")
     sub.add_argument("kind", choices=sorted(PAGE_NAMES))
-    sub.add_argument("--plan", help="preview 는 plan-<k>.json, rollback 은 rollback-<k>.json, sheet 는 sheet 가 낸 파일")
+    sub.add_argument("--plan", help="preview 는 plan-<k>.json, rollback 은 rollback-<k>.json, sheet 는 sheet 가 낸 파일, "
+                     "compare 는 compare-<k>.json")
     sub.add_argument("--snapshot", help="prices 의 지금 값")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
     sub.add_argument("--by-date", action="store_true",
@@ -623,6 +672,10 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--to", dest="date_to", help="이 날짜까지(ISO)")
     sub.add_argument("--occupancy", action="append", help="이 인원 조합 키의 칸만 (여러 번)")
 
+    sub = command("compare", cmd_compare, "저장해 둔 상태와 지금 견주기 — 아무것도 바꾸지 않는다")
+    sub.add_argument("--saved", type=int, required=True, help="지금 상태 저장(save-snapshot)으로 적은 장부 번호")
+    sub.add_argument("--snapshot", required=True, help="그 범위를 방금 읽은 값(read-calls --record <그 번호> 로 읽는다)")
+
     sub = command("save-snapshot", cmd_save_snapshot, "지금 값을 장부에만 적기")
     sub.add_argument("--snapshot", required=True)
     sub.add_argument("--sentence", default="지금 상태 저장")
@@ -634,7 +687,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     if args.command == "render":
-        needed = {"preview": "plan", "rollback": "plan", "prices": "snapshot", "result": "change", "sheet": "plan"}[args.kind]
+        needed = {"preview": "plan", "rollback": "plan", "prices": "snapshot", "result": "change", "sheet": "plan",
+                  "compare": "plan"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
     try:
