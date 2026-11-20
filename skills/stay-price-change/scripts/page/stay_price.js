@@ -3,6 +3,8 @@
  * 러너의 도우미(`stay-setup-run/scripts/stay_helper.js`)와 부트(`stay_boot.js`)를 먼저 올리고 이 파일을 올린다.
  * 러너 파일은 고치지 않는다 — 화면을 모는 부품(cal*, runCalendarPriceStep, stayRun.waitFor)을 빌려 쓴다.
  *
+ *   stayPrice.look({offer})                                                    이 탭이 어디인지 — 로그인 화면 · 호텔(번호 · 이름) ·
+ *                                                                              오퍼 · 그 오퍼의 객실 × 요금제 칩. 저장하지 않는다
  *   stayPrice.readPair({offer, room, ratePlan, from, to, weekdays})            지금 값 읽기 — 저장하지 않는다. 판매일 없는 날은
  *                                                                              읽지 않고 「판매일 없음」으로 알린다
  *   stayPrice.readReserved({offer, rooms, ratePlans, from, to, weekdays,
@@ -263,6 +265,7 @@
   };
   // 작업별 허용 목록 — 여기 없는 클릭은 모두 막는다(ERP 가 나중에 더한 버튼도). 읽는 작업에는 저장 단추가 없다
   var ALLOW = {
+    look: ['tab', 'view', 'offer'],
     readPair: ['tab', 'offer', 'view', 'chip', 'month', 'bulkOpen', 'bulkDay', 'bulkNext'],
     readReserved: ['tab', 'view', 'adjustOpen', 'adjustPick', 'adjustNext'],
     applyBulk: ['tab', 'offer', 'view', 'chip', 'bulkOpen', 'bulkDay', 'bulkNext', 'bulkSave'],
@@ -471,6 +474,34 @@
     return remember(fit(out));
   }
 
+  /* ───────────── 4b. 이 탭은 어느 호텔인가 · 로그인 화면인가 ───────────── */
+
+  // 호텔은 페이지가 스스로 적어 둔 번호로 안다. 두 곳을 본다 —
+  //  · fit 기본정보 폼의 숨은 칸 `input#master_id`(fit/master_form.html 의 form 블록, Stay 편집 화면이 그대로 물려받는다)
+  //  · [에이전트에 복사] 모달의 붙여 넣기 문구 `#stay_agent_resume [data-agent-text]`(_agent_resume_modal.html — 자동화가 잡는
+  //    이름으로 약속된 자리). 문구는 "ERP 호텔 <번호> (<이름>) 편집 화면" 이다.
+  // 둘 다 있으면 번호가 같아야 한다. 이름은 그 문구에서, 없으면 기본정보 상품명 칸의 저장된 값(`#id_title` 의 value 속성)에서 —
+  // 이름은 보여 주기만 하고, 같은 호텔인지는 번호로만 정한다(이름이 같은 호텔이 있을 수 있다).
+  var RESUME_TEXT = /ERP 호텔 (\S+) \((.*)\) 편집 화면/;
+  function loginShown() {
+    if (window.stayRun && typeof window.stayRun.state === 'function') {
+      try { return !!window.stayRun.state().loginPage; } catch (e) { /* 아래 길로 */ }
+    }
+    var p = document.querySelector('input[type=password],input[name=password]');
+    return !!p && !p.disabled;
+  }
+  function pageHotel() {
+    var idEl = document.getElementById('master_id');
+    var id = idEl ? C(idEl.value) : '';
+    var area = document.querySelector('#stay_agent_resume [data-agent-text="verify"]') || document.querySelector('#stay_agent_resume [data-agent-text="resume"]');
+    var said = area ? RESUME_TEXT.exec(C(typeof area.value === 'string' ? area.value : area.textContent)) : null;
+    var title = document.getElementById('id_title');
+    var name = said ? C(said[2]) : (title ? C(title.getAttribute('value') || '') : '');
+    if (!id) return { error: loginShown() ? '탭이 로그인 화면입니다 — 담당자가 직접 로그인한 뒤 다시 부릅니다' : '이 탭에서 호텔 번호를 찾지 못했습니다 — 호텔의 Stay 편집 화면이 아닙니다' };
+    if (said && C(said[1]) !== id) return { error: '이 탭의 호텔 번호가 화면 두 곳에서 다릅니다(' + id + ' · ' + C(said[1]) + ') — 새로 고친 뒤 다시 부릅니다' };
+    return { id: id, name: name };
+  }
+
   /* ───────────── 5. 화면 부품 — 가격 캘린더 · 칩 · 드로어 ───────────── */
 
   function drawerOpen() { return !!document.querySelector('.stay-drawer.is-open'); }
@@ -621,7 +652,51 @@
     return r2;
   }
 
-  /* ───────────── 6. 작업 넷 ───────────── */
+  /* ───────────── 6. 보기 하나와 작업 넷 ───────────── */
+
+  // 캘린더의 오퍼 — 오퍼가 둘 이상이면 칩(`data-stay-name`), 하나면 칩 대신 고정 글자(`.stay-offer-label .stay-card__title`).
+  // 둘 다 오퍼 이름(offer.name)이라 드로어의 「오퍼」 와 같은 글자다
+  function offersShown() {
+    var chips = all('#stay_calendar [data-stay-entity="offer"][data-stay-action="goto"]');
+    if (chips.length) {
+      var on = chips.filter(function (c) { return /\bstay-btn--primary\b/.test(c.className); })[0];
+      return { names: chips.map(function (c) { return C(c.getAttribute('data-stay-name')); }), picked: on ? C(on.getAttribute('data-stay-name')) : '' };
+    }
+    var label = document.querySelector('#stay_calendar .stay-offer-label .stay-card__title');
+    var name = label ? C(label.textContent) : '';
+    return { names: name ? [name] : [], picked: name };
+  }
+  // 칩 이름은 「객실 · 요금제」 다(ERP CalendarCoord.label). 객실 이름에 ` · ` 가 든 호텔이 있어 마지막 ` · ` 에서 가른다 —
+  // 잘못 갈라도 readPair 가 드로어의 요금제와 견주어 읽지 않고 거절한다
+  function pairOf(label) {
+    var at = label.lastIndexOf(' · ');
+    return at < 0 ? { room: label, rate_plan: '' } : { room: label.slice(0, at), rate_plan: label.slice(at + 3) };
+  }
+
+  // 이 탭이 어디인지 — 로그인 화면인지, 어느 호텔인지(페이지가 말하는 번호·이름), 캘린더의 오퍼, 그리고 한 오퍼의 객실 × 요금제
+  // 칩 이름. 저장하지 않는다. 누르는 것은 [가격 캘린더] 탭 · [룸별 입력] · (offer 를 주면) 그 오퍼 칩뿐이다 — 캘린더는 고른 오퍼의
+  // 칩만 그린다. 목록이 길면 `body` 로 두고 take 로 받는다
+  function look(input) {
+    input = input && typeof input === 'object' ? input : {};
+    var ask = crc32(canon(askedOf(input)));
+    if (loginShown()) return remember(fit({ op: 'look', ok: true, login: true, ask: ask, note: '탭이 로그인 화면입니다 — 담당자가 직접 로그인해야 합니다', clicks: {} }));
+    var hotel = pageHotel();
+    if (hotel.error) return remember(fit({ op: 'look', ok: false, login: false, ask: ask, error: hotel.error, clicks: {} }));
+    return run('look', input, async function (p, ctx) {
+      var offer = p.offer === undefined || p.offer === null ? null : text(p.offer, 'offer');
+      await toCalendar(ctx);
+      await coordView(ctx);
+      if (offer) await pickOffer(ctx, offer);
+      var shown = offersShown();
+      if (offer && shown.picked !== offer) fail('캘린더에 오퍼 `' + offer + '` 이 없습니다 (보이는 오퍼: ' + shown.names.join(' / ') + ')');
+      var pairs = all('#stay_calendar [data-stay-entity="rate_plan"][data-stay-action="goto"]').map(function (c) { return pairOf(C(c.getAttribute('data-stay-name'))); });
+      var whole = { ok: true, login: false, hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs };
+      // 답의 나머지 칸(ask · clicks · rest · ms …)이 200자 안팎이다 — 목록까지 800자에 들면 그대로, 아니면 조각으로
+      if (shownLength(whole) <= RESULT_CHARS - 260) return whole;
+      return { ok: true, login: false, hotel: hotel, offer: shown.picked, count: { offers: shown.names.length, pairs: pairs.length },
+        keep: { hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs } };
+    });
+  }
 
   function runsOf(days) {
     var runs = [];
@@ -907,6 +982,7 @@
 
   window.stayPrice = {
     version: VERSION,
+    look: look,
     readPair: readPair,
     readReserved: readReserved,
     applyBulk: applyBulk,

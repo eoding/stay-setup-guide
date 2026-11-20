@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
+    look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제(답이 길 때)
     read          ERP 화면 조각(HTML) 또는 브라우저 답(readPair · readReserved 와 그 조각의 take 답들) → 지금 값(snapshot.json)
     read-calls    요청 → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음
     reserved      readReserved 물음과 답 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
@@ -41,7 +42,9 @@ from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution
 from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
-from price_browser import BrowserError, pair_reads, read_calls, reserved_probes, reserved_round, step_call, step_outcome
+from price_browser import (
+    BrowserError, attach_bodies, pair_reads, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+)
 from price_model import (
     decode_plan, decode_request, decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_plan,
     TargetTable, encode_request, encode_snapshot, encode_step, snapshot_reading,
@@ -73,11 +76,26 @@ def page_path(hotel: str, kind: str) -> Path:
     return path
 
 
+ANSWER_PREFIXES = ("look-", "pair-", "resv-", "take-")
+
+
+def answer_files(paths) -> list[Path]:
+    """답 파일 목록 — 파일은 그대로, 폴더는 그 안에서 이름이 look-·pair-·resv-·take- 로 시작하는 .json·.txt 파일(이름순)."""
+    files = []
+    for path in map(Path, paths or ()):
+        if path.is_dir():
+            files += sorted(item for item in path.iterdir() if item.is_file() and item.name.startswith(ANSWER_PREFIXES)
+                            and item.suffix in (".json", ".txt"))
+        else:
+            files.append(path)
+    return files
+
+
 def load_results(paths) -> list:
-    """브라우저 답 파일들 — 파일 하나에 답 하나(객체) 또는 여럿(목록). 목록의 글자 항목, 그리고 JSON 이 아닌 파일은 도구가 보인
-    그대로의 답이다(잘린 답일 수 있다 — price_browser.answers 가 알아본다)."""
+    """브라우저 답 파일들(폴더도 된다 — answer_files) — 파일 하나에 답 하나(객체) 또는 여럿(목록). 목록의 글자 항목, 그리고
+    JSON 이 아닌 파일은 도구가 보인 그대로의 답이다(잘린 답일 수 있다 — price_browser.answers 가 알아본다)."""
     results = []
-    for path in paths or ():
+    for path in answer_files(paths):
         try:
             text = Path(path).read_text(encoding="utf-8")
         except FileNotFoundError:
@@ -96,6 +114,16 @@ def price_page_arg(text: str) -> PairRead:
     if not sep or not room.strip() or not path:
         raise ValueError(f"--price-page 는 '캘린더의 객실 이름=파일' 로 적습니다: {text}")
     return PairRead.of(room.strip(), parse_price_page(Path(path).read_text(encoding="utf-8")))
+
+
+def cmd_look(args):
+    looks = [result for result in attach_bodies(load_results(args.answers)) if result.get("op") == "look"]
+    if len(looks) != 1:
+        raise BrowserError(f"stayPrice.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
+    look = looks[0]
+    if not look.get("ok"):
+        raise BrowserError(f"stayPrice.look() 이 실패했습니다: {look.get('error')}")
+    return {name: look.get(name) for name in ("login", "hotel", "offer", "offers", "pairs")}
 
 
 def cmd_read(args):
@@ -270,6 +298,9 @@ def parser() -> argparse.ArgumentParser:
         sub.set_defaults(handler=handler)
         sub.add_argument("--out", help="결과(JSON, render 는 HTML)를 쓸 파일")
         return sub
+
+    sub = command("look", cmd_look, "stayPrice.look() 의 답(과 그 조각) → 호텔 · 오퍼 · 객실 × 요금제")
+    sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
 
     sub = command("read", cmd_read, "ERP 화면 조각 → 지금 값")
     sub.add_argument("--hotel", required=True)

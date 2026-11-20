@@ -157,9 +157,10 @@ test('B2 · 폼 제출도 허용된 단추가 보낸 것이 아니면 막고, �
 test('B2 · 허용 목록은 작업마다 표 한 장이고, 금지 목록은 브리프의 단추를 모두 덮는다', () => {
   const page = erpPage();
   const sp = page.w.stayPrice;
-  assert.deepEqual(Object.keys(sp.ALLOW).sort(), OPS.slice().sort());
-  for (const op of OPS) for (const name of sp.ALLOW[op]) assert.ok(sp.CONTROLS[name], `${op}: ${name} 이 표에 있다`);
-  for (const op of ['readPair', 'readReserved']) assert.ok(!sp.ALLOW[op].some((name) => /Save$/.test(name)), `${op} 에는 저장이 없다`);
+  assert.deepEqual(Object.keys(sp.ALLOW).sort(), OPS.concat('look').sort());
+  for (const op of Object.keys(sp.ALLOW)) for (const name of sp.ALLOW[op]) assert.ok(sp.CONTROLS[name], `${op}: ${name} 이 표에 있다`);
+  for (const op of ['look', 'readPair', 'readReserved']) assert.ok(!sp.ALLOW[op].some((name) => /Save$/.test(name)), `${op} 에는 저장이 없다`);
+  assert.deepEqual([...sp.ALLOW.look], ['tab', 'view', 'offer'], 'G1 — look 은 탭 · 룸별 입력 · 오퍼 칩만 누른다');
   for (const name of Object.keys(sp.CONTROLS)) assert.ok(!/[가-힣]/.test(sp.CONTROLS[name].sel), `${name}: 고르개에 글자가 없다`);
   page.w.close();
 });

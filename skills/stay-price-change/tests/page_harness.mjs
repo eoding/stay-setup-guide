@@ -32,6 +32,21 @@ export const ownFixture = (name) => readFileSync(join(SKILL, 'tests', 'fixtures'
 export const OWN_FIXTURES = join(SKILL, 'tests', 'fixtures', 'erp');
 
 export const OFFER = '〈오퍼 관리용 이름〉';
+// 시험 호텔 — 지어낸 번호와 이름. 페이지는 `#master_id` 와 [에이전트에 복사] 문구로 이 호텔을 알아본다
+export const HOTEL = Object.freeze({ id: '1', name: '데모 호텔' });
+
+// 편집 화면이 호텔을 스스로 말하는 두 곳 — fit 기본정보의 숨은 칸(`fit/master_form.html`)과 [에이전트에 복사] 모달의 붙여 넣기
+// 문구(`stay/_agent_resume_modal.html`, 자동화 약속 이름 그대로)
+export function hotelMarks({ id = HOTEL.id, name = HOTEL.name, said = id } = {}) {
+  return `<input type="hidden" id="master_id" value="${id}">
+  <input type="text" id="id_title" name="title" value="${name}">
+  <div class="stay-root" data-stay-screen="agent-resume"><div id="stay_agent_resume" class="stay-modal stay-modal--page stay-agent-modal" hidden>
+    <textarea class="stay-agent__text" data-agent-text="resume" readonly>
+/stay-setup:stay-setup-run Chrome 에 열려 있는 ERP 호텔 ${said} (${name}) 편집 화면에, 산출물 폴더의 입력 지시서를 이어서 깔아줘.</textarea>
+    <textarea class="stay-agent__text" data-agent-text="verify" readonly>
+/stay-setup:stay-setup-run Chrome 에 열려 있는 ERP 호텔 ${said} (${name}) 편집 화면을 입력 지시서와 대조해서 다른 값·빠진 단계만 표로 알려줘. 아무것도 고치지 마.</textarea>
+  </div></div>`;
+}
 export const RUNNER_STEPS = JSON.stringify({ steps: [{ no: 1, kind: '러너가 올려 둔 단계' }] });
 export const RUNNER_CURSOR = JSON.stringify({ at: 7 });
 
@@ -123,6 +138,7 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   echoDays     true 면 가격 수정 ② 의 상태 표·기존 값 줄을 받은 날짜 구간대로 다시 그린다
  *   panelEdit · adjustSelectEdit  캘린더 판 · 가감 ① 조각을 바꾸는 함수(객실 이름 변형 등)
  *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다 · bare 면 아무것도 올리지 않는다(올리개 시험)
+ *   hotel        호텔 표식 `hotelMarks` 의 값({id, name, said}) · null 이면 표식이 없다 · login true 면 로그인 화면(비밀번호 칸만)
  */
 export function erpPage(opts = {}) {
   const o = Object.assign({ start: 'coord', bulkReview: runFixture('calendar-bulk--price-step2.html'), adjustReview: ownFixture('adjust-rejected.html'),
@@ -133,7 +149,9 @@ export function erpPage(opts = {}) {
   const panelOf = (start, month = '2026-07') => edit(start === 'overview' ? runFixture('panel--calendar--1.html')
     : runFixture('panel--calendar--2.html').replaceAll('2026-06', '@prev').replaceAll('2026-08', '@next').replaceAll('2026-07', month)
       .replaceAll('@prev', shift(month, -1)).replaceAll('@next', shift(month, 1)));
-  const html = `<ul class="tab_style1 tab-container">
+  const marks = o.hotel === null ? '' : hotelMarks(o.hotel || {});
+  const html = o.login ? `<form method="post" action="/accounts/login/"><input type="text" name="username"><input type="password" name="password"><button type="submit">로그인</button></form>`
+    : `${marks}<ul class="tab_style1 tab-container">
     <li class="tab"><a href="#stay_tab_offers" data-stay-tab="offers"${o.tab === 'offers' ? ' class="active"' : ''}><span>오퍼</span></a></li>
     <li class="tab"><a href="#stay_tab_sale_days" data-stay-tab="sale_days"><span>판매일</span></a></li>
     <li class="tab"><a href="#stay_tab_calendar" data-stay-tab="calendar"${o.tab === 'offers' ? '' : ' class="active"'}><span>가격 캘린더</span></a></li>
