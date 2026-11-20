@@ -105,7 +105,7 @@ class TargetLinesTest(unittest.TestCase):
 
     def setUp(self):
         whole = scene.snapshot()
-        # 디럭스 조식 포함은 성인 2 · 1박 줄 하나만 읽힌 호텔처럼
+        # 디럭스 조식 포함은 성인 2 · 1박 이상 줄 하나만 읽힌 호텔처럼
         self.snapshot = replace(whole, cells={k: v for k, v in whole.cells.items()
                                               if (k.room, k.rate_plan) != (ROOM, PLAN) or (k.occupancy, k.nights) == ("A2", 1)})
 
@@ -115,19 +115,19 @@ class TargetLinesTest(unittest.TestCase):
         self.assertEqual([(c.key.occupancy, c.key.nights, c.after.sell) for c in plan.changes], [("A2", 1, D("210.00"))])
         self.assertEqual(plan.request.targets[0].key, key("2026-12-25"), "미리보기 · 장부의 요청은 채운 줄이다")
         text = visible(render_preview(plan))
-        self.assertIn("칸 성인 2 · 1박", text, "미리보기 머리가 어느 줄인지 말한다")
+        self.assertIn("칸 성인 2 · 1박 이상", text, "미리보기 머리가 어느 줄인지 말한다")
 
     def test_several_lines_are_refused_with_the_lines_to_choose_from(self):
         with self.assertRaises(Refused) as caught:
             plan_targets(scene.snapshot(), table((key("2026-12-25", occupancy=None, nights=None), {"sell": "210.00"})))
         message = str(caught.exception)
-        for line in ("성인 2 · 1박(A2 · 1)", "성인 2 · 3박 이상(A2 · 3)", "성인 2 + 아동 1 · 3박 이상(A2C1_CHD · 3)"):
+        for line in ("성인 2 · 1박 이상(A2 · 1)", "성인 2 · 3박 이상(A2 · 3)", "성인 2 + 아동 1 · 3박 이상(A2C1_CHD · 3)"):
             self.assertIn(line, message)
         self.assertIn("인원 조합(occupancy)과 박수(nights)를 적습니다", message)
         # 인원 조합만 적고 박수가 없으면 그 인원 조합의 박수 층이 하나일 때만
         with self.assertRaises(Refused) as caught:
             plan_targets(scene.snapshot(), table((key("2026-12-25", nights=None), {"sell": "210.00"})))
-        self.assertIn("성인 2 · 1박(A2 · 1) / 성인 2 · 3박 이상(A2 · 3)", str(caught.exception))
+        self.assertIn("성인 2 · 1박 이상(A2 · 1) / 성인 2 · 3박 이상(A2 · 3)", str(caught.exception))
         one_tier = replace(scene.snapshot(), cells={k: v for k, v in scene.snapshot().cells.items() if k.nights == 1})
         plan = plan_targets(one_tier, table((key("2026-12-25", occupancy="A3", nights=None), {"sell": "300.00"})))
         self.assertEqual([(c.key.occupancy, c.key.nights) for c in plan.changes], [("A3", 1)])

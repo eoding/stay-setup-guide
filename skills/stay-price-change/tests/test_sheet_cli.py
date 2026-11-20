@@ -81,7 +81,7 @@ class SheetCommandTest(unittest.TestCase):
 
         preview = visible(Path(self.run_cli("render", "preview", "--plan", self.dir / "plan.json")["page"]).read_text(encoding="utf-8"))
         self.assertIn(SEASON_REFILL_NOTE, preview)
-        self.assertIn("스위트 · 조식 포함 성인 1 · 1박 1/4 ~ 1/12, 1/14 ~ 1/17 (13일)", preview)
+        self.assertIn("스위트 · 조식 포함 성인 1 · 1박 이상 1/4 ~ 1/12, 1/14 ~ 1/17 (13일)", preview)
 
         change = planned["change_id"]
         self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", snapshot)["status"],

@@ -41,10 +41,10 @@ class SheetPageTest(SelfContainedMixin, unittest.TestCase):
 
     def test_each_cell_shows_its_line_and_every_row_with_calculated_values_marked(self):
         first = visible(re.search(r"<tr><td class=\"text\">디럭스.*?</tr>", self.page).group(0))
-        self.assertIn("1번째 줄 성인 2 · 1박 200.00 성인 3 · 1박 260.00 계산 판매가 = 성인 2 · 1박 200.00 + 60 "
-                      "성인 2 + 아동 1 · 1박 230.00 계산 판매가 = 성인 2 · 1박 200.00 + 30 "
-                      "성인 2 · 3박 이상 180.00 계산 판매가 = 성인 2 · 1박 200.00 - 10%", first)
-        self.assertIn("2번째 줄 성인 2 · 1박 240.00", first)
+        self.assertIn("1번째 줄 성인 2 · 1박 이상 200.00 성인 3 · 1박 이상 260.00 계산 판매가 = 성인 2 · 1박 이상 200.00 + 60 "
+                      "성인 2 + 아동 1 · 1박 이상 230.00 계산 판매가 = 성인 2 · 1박 이상 200.00 + 30 "
+                      "성인 2 · 3박 이상 180.00 계산 판매가 = 성인 2 · 1박 이상 200.00 - 10%", first)
+        self.assertIn("2번째 줄 성인 2 · 1박 이상 240.00", first)
 
     def test_it_says_nothing_was_read_and_what_will_be_read_after_yes(self):
         self.assertIn("요금표를 이렇게 읽었습니다 · 데모 호텔 · 기본 오퍼", self.text)
@@ -72,7 +72,7 @@ class SheetPreviewTest(unittest.TestCase):
         self.assertIn(SEASON_REFILL_NOTE, text)
         self.assertIn("요금표가 넣지 않는 것", text)
         self.assertIn("요금표에 없는 칸 — 그대로 둡니다 · 13칸 객실 · 요금제 인원 · 박수 날짜 요금표 줄 "
-                      "스위트 · 조식 포함 성인 1 · 1박 1/4 ~ 1/12, 1/14 ~ 1/17 (13일)", text)
+                      "스위트 · 조식 포함 성인 1 · 1박 이상 1/4 ~ 1/12, 1/14 ~ 1/17 (13일)", text)
         self.assertIn("판매일 없는 날 — 이 길로는 넣을 수 없습니다 · 1일", text)
         self.assertIn("요금표에 없는 객실 · 요금제 — 그대로 둡니다 · 1개", text)
         self.assertNotIn("이 객실 · 요금제에 없는 인원 조합", text)

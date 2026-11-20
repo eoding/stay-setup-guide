@@ -187,13 +187,13 @@ class ReadRange:
 class ChangeRequest:
     """범위 안의 칸에서 값 하나(`field`: 판매가 sell · 정가 list · 공급 원가 supply)를 바꾸는 요청.
 
-    amount ±금액 · percent ±% · set 기준 인원 1박 칸을 그 값으로(나머지는 같은 만큼) · clear 비움(정가·공급 원가만).
+    amount ±금액 · percent ±% · set 기준 인원 · 1박 이상 칸을 그 값으로(나머지는 같은 만큼) · clear 비움(정가·공급 원가만).
 
     범위는 (객실, 요금제) 쌍 `pairs` 다. 객실과 요금제를 따로 주면 "적은 객실마다 그 객실에 있는 적은 요금제"이고,
     계산(`plan_change`)이 읽은 쌍으로 풀어 `pairs` 를 채운다. 쌍만 주면 객실·요금제는 쌍에서 나온 차례로 채운다.
 
     칸은 따로 말하지 않으면 모든 인원 조합 · 모든 박수 층이다(결정 14). `occupancies`(인원 조합 키) · `nights`(박수 층의 시작
-    박수)를 적으면 그 칸만 움직인다. 새 값 지정의 기준 칸(기준 인원 · 1박)은 적은 칸 안에 있어야 한다.
+    박수)를 적으면 그 칸만 움직인다. 새 값 지정의 기준 칸(기준 인원 · 1박 이상)은 적은 칸 안에 있어야 한다.
     """
     hotel: str
     offer: str
@@ -220,7 +220,7 @@ class ChangeRequest:
             raise ValueError("박수 층은 1 이상의 시작 박수로 적습니다(1, 3 …)")
         if self.operation == "set" and ((self.occupancies and self.base_occupancy not in self.occupancies)
                                         or (self.nights and 1 not in self.nights)):
-            raise ValueError(f"새 값 지정의 기준 칸({occupancy_label(self.base_occupancy or '')} · 1박)이 고른 칸에 없습니다 — "
+            raise ValueError(f"새 값 지정의 기준 칸({occupancy_label(self.base_occupancy or '')} · 1박 이상)이 고른 칸에 없습니다 — "
                              "기준 칸을 고른 칸에 넣거나, 고른 칸을 금액(amount)이나 퍼센트(percent)로 바꿉니다")
         pairs = tuple((str(room), str(plan)) for room, plan in self.pairs)
         if len(set(pairs)) != len(pairs):
@@ -334,7 +334,7 @@ CHOICE_LABELS = {
 }
 
 # 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산하지 못한 까닭 또는 None) 을 받는다. 까닭은 "adult"(성인만 있는 칸이
-# 없음) · "base"(새 값 지정에서 그날 기준 인원 1박 칸에 값이 없음) · "sell"(새로 생기는 칸에 판매가가 없음) ·
+# 없음) · "base"(새 값 지정에서 그날 기준 인원 · 1박 이상 칸에 값이 없음) · "sell"(새로 생기는 칸에 판매가가 없음) ·
 # "row"(읽은 값에 없는 인원 조합·박수라 칸을 새로 만들지 않음).
 # 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다.
 CELL_RULES = RuleTable(
@@ -344,7 +344,7 @@ CELL_RULES = RuleTable(
          lambda before, after, lacking: after is not None and after.supply is not None and after.supply < 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "adult"),
-    Rule("NO_BASE_CELL", "그날 기준 인원 1박 칸에 값이 없습니다", BLOCKED, (),
+    Rule("NO_BASE_CELL", "그날 기준 인원 · 1박 이상 칸에 값이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "base"),
     Rule("NEW_WITHOUT_SELL", "새로 생기는 칸에 판매가가 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "sell"),
@@ -489,7 +489,8 @@ def occupancy_label(key: str) -> str:
 
 
 def nights_label(nights: int) -> str:
-    return "1박" if nights == 1 else f"{nights}박 이상"
+    """박수 층의 이름 — ERP 가 부르는 그대로(`Labels.nights`: "1박 이상", "3박 이상"). 층은 그 박수 이상의 숙박을 덮는다."""
+    return f"{nights}박 이상"
 
 
 def line_label(occupancy: str | None, nights: int | None) -> str:

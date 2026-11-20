@@ -100,25 +100,25 @@ class SheetDifferenceTest(unittest.TestCase):
         sheet = one_line(S.rows("240"))
         found = line_figures(sheet.lines[0], "USD")
         self.assertIsNone(found[("A2", 1)]["sell"].formula)
-        self.assertEqual(found[("A3", 1)]["sell"].formula, "성인 2 · 1박 240.00 + 60")
-        self.assertEqual(found[("A2", 3)]["sell"].formula, "성인 2 · 1박 240.00 - 10%")
+        self.assertEqual(found[("A3", 1)]["sell"].formula, "성인 2 · 1박 이상 240.00 + 60")
+        self.assertEqual(found[("A2", 3)]["sell"].formula, "성인 2 · 1박 이상 240.00 - 10%")
 
     def test_a_missing_row_or_field_is_refused_by_name(self):
         with self.assertRaises(Refused) as caught:
             figures([{"occupancy": "A3", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "60"}}])
         self.assertIn("1번째 줄(디럭스 · 조식 포함 · 1/4)", str(caught.exception))
-        self.assertIn("성인 3 · 1박 판매가가 가리키는 성인 2 · 1박 판매가가 그 줄에 없습니다", str(caught.exception))
+        self.assertIn("성인 3 · 1박 이상 판매가가 가리키는 성인 2 · 1박 이상 판매가가 그 줄에 없습니다", str(caught.exception))
         with self.assertRaises(Refused) as caught:   # 줄은 있어도 그 필드가 없다
             figures([{"occupancy": "A2", "nights": 1, "sell": "240"},
                      {"occupancy": "A3", "nights": 1, "sell": "300", "list": {"from": {"occupancy": "A2"}, "add": "60"}}])
-        self.assertIn("성인 2 · 1박 정가가 그 줄에 없습니다", str(caught.exception))
+        self.assertIn("성인 2 · 1박 이상 정가가 그 줄에 없습니다", str(caught.exception))
 
     def test_a_cycle_is_refused_with_the_rows_in_it(self):
         with self.assertRaises(Refused) as caught:
             figures([{"occupancy": "A2", "nights": 1, "sell": {"from": {"occupancy": "A3"}, "add": "-60"}},
                      {"occupancy": "A3", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "60"}}])
         self.assertIn("고리", str(caught.exception))
-        self.assertIn("성인 2 · 1박 → 성인 3 · 1박 → 성인 2 · 1박", str(caught.exception))
+        self.assertIn("성인 2 · 1박 이상 → 성인 3 · 1박 이상 → 성인 2 · 1박 이상", str(caught.exception))
         with self.assertRaises(Refused):
             figures([{"occupancy": "A2", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "1"}}])
 
@@ -144,7 +144,7 @@ class SheetExpandTest(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("1번째 줄(디럭스 · 조식 포함 · 비수기 · 1/4 ~ 1/10 월·화·수·목·일)", message)
         self.assertIn("9번째 줄(디럭스 · 조식 포함 · 연초 · 1/6 ~ 1/7)", message)
-        self.assertIn("2027-01-06 · 성인 2 · 1박 칸에 다른 값을 줍니다(판매가 200.00 / 판매가 205.00)", message)
+        self.assertIn("2027-01-06 · 성인 2 · 1박 이상 칸에 다른 값을 줍니다(판매가 200.00 / 판매가 205.00)", message)
         # 같은 값이면 겹쳐도 된다
         data["lines"][-1]["rows"][0]["sell"] = "200.00"
         self.assertEqual(len(SheetCheck(decode_sheet(data), PAIRS).cells), 2 * 14 * 4)

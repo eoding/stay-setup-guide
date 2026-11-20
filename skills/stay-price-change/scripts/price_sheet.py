@@ -90,7 +90,7 @@ class Sheet:
 
 @dataclass(frozen=True)
 class Figure:
-    """셈한 값 하나. `formula` 는 셈한 값이면 그 셈("성인 2 · 1박 240.00 + 60"), 옮긴 숫자면 None."""
+    """셈한 값 하나. `formula` 는 셈한 값이면 그 셈("성인 2 · 1박 이상 240.00 + 60"), 옮긴 숫자면 None."""
     value: Decimal
     formula: str | None = None
 
@@ -176,7 +176,7 @@ def _period(data: Mapping, where: str) -> Period:
 
 def _nights(value, where: str) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, str)) or not str(value).strip().isdigit() or int(value) < 1:
-        raise ValueError(f"{where}: 박수(nights)는 1 이상의 정수입니다(1박 1, 3박 이상 3) — {value!r}")
+        raise ValueError(f"{where}: 박수(nights)는 1 이상의 정수입니다(1박 이상 1, 3박 이상 3) — {value!r}")
     return int(value)
 
 

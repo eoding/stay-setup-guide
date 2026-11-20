@@ -140,7 +140,7 @@ class LifecycleTest(unittest.TestCase):
         changed = scene.with_cells(after, {odd: replace(after.cells[odd], sell=D("1.00"))})
         mismatches = self.ledger.verify(self.change_id, snapshot_reading(changed))
         self.assertEqual([(m.label, m.field, m.after, m.seen) for m in mismatches],
-                         [("12/25 금 · 디럭스 · 조식 포함 · 성인 2 · 1박", "sell", D("220.00"), D("1.00"))])
+                         [("12/25 금 · 디럭스 · 조식 포함 · 성인 2 · 1박 이상", "sell", D("220.00"), D("1.00"))])
 
     def test_clearing_is_recorded_as_its_own_action_and_verified_as_empty(self):
         cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
@@ -150,8 +150,8 @@ class LifecycleTest(unittest.TestCase):
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
         cleared = [(row.label, row.after) for row in self.ledger.change(change).rows if row.action == "clear"]
-        self.assertEqual(cleared, [("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박", None),
-                                   ("1/2 토 · 스위트 · 조식 포함 · 성인 2 · 1박", None)])
+        self.assertEqual(cleared, [("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상", None),
+                                   ("1/2 토 · 스위트 · 조식 포함 · 성인 2 · 1박 이상", None)])
         self.assertEqual(self.ledger.verify(change, snapshot_reading(scene.applied(self.before, steps))), [])
         unchanged = snapshot_reading(scene.applied(self.before, [s for s in steps if s.kind == "bulk"]))
         self.assertEqual([(m.field, m.seen) for m in self.ledger.verify(change, unchanged)],
@@ -175,13 +175,13 @@ class LifecycleTest(unittest.TestCase):
 
     def test_v1_begin_takes_only_the_values_the_preview_showed_and_all_of_them(self):
         rows = {(row.label, row.field): row for row in self.ledger.change(self.change_id).rows}
-        raised = rows[("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박", "list")]
+        raised = rows[("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상", "list")]
         self.assertEqual((raised.after, raised.action, raised.choice), (D("548.00"), "set", "raise_list"),
                          "미리보기 줄에 올린 정가가 넣는 값으로 적힌다")
         cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
         with self.assertRaises(LedgerError) as caught:
             self.ledger.begin(self.change_id, step_plans(plan_steps(cleared)), read_at=now_text())
-        self.assertIn("미리보기와 다른 값입니다: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 · list", str(caught.exception))
+        self.assertIn("미리보기와 다른 값입니다: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 · list", str(caught.exception))
         with self.assertRaises(LedgerError) as caught:
             self.ledger.begin(self.change_id, step_plans(self.steps[:-1]), read_at=now_text())
         self.assertIn("어느 저장 단계도 넣지 않습니다", str(caught.exception))
@@ -263,7 +263,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
     def test_kept_cells_name_the_later_change_or_say_outside(self):
         rollback = plan_cell_rollback(self.ledger.recorded_change(self.a), self.ledger.later_writes(self.a), self.now)
         causes = {item.label: item.cause for item in rollback.kept}
-        self.assertTrue(causes.pop("1/1 금 · 스위트 · 조식 포함 · 성인 3 · 1박").outside)
+        self.assertTrue(causes.pop("1/1 금 · 스위트 · 조식 포함 · 성인 3 · 1박 이상").outside)
         self.assertEqual({cause.change_id for cause in causes.values()}, {self.b})
         self.assertEqual({cause.sentence for cause in causes.values()}, {"1/2 디럭스 룸온리 310 으로"})
         self.assertEqual(len(causes), 6)

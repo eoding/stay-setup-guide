@@ -67,8 +67,8 @@ def _check_scope(snapshot: Snapshot, request: ChangeRequest | TargetTable, pairs
 def _after_value(snapshot: Snapshot, request: ChangeRequest, key: CellKey, before: CellValue):
     """`(바꾸는 값의 새 값, 없는 칸)` — 계산에 필요한 성인만 있는 칸(그 값)이 없으면 새 값 대신 "adult".
 
-    새 값 지정(set)은 그날 기준 인원 1박 칸이 그 값이 되는 만큼(차이)을 그 객실·요금제·날짜의 모든 인원·박수 칸에 더한다.
-    박수 층의 할인 차이가 그대로 남는다. 기준 1박 칸에 값이 없는 날은 "base"(적용할 수 없음)다. 퍼센트는 ERP 가감과 같이
+    새 값 지정(set)은 그날 기준 인원 · 1박 이상 칸이 그 값이 되는 만큼(차이)을 그 객실·요금제·날짜의 모든 인원·박수 칸에 더한다.
+    박수 층의 할인 차이가 그대로 남는다. 기준 칸에 값이 없는 날은 "base"(적용할 수 없음)다. 퍼센트는 ERP 가감과 같이
     아동이 있는 칸이면 같은 성인 수의 성인만 있는 칸에만 곱하고 아동 추가분을 그대로 더한다(바꾸는 값마다 같은 규칙).
     """
     name, currency, current = request.field, snapshot.currency, getattr(before, request.field)

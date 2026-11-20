@@ -66,7 +66,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("230.00 → 250.00", text)
         self.assertIn("480.00 → 528.00 정가 500.00 넘음", text)
         self.assertIn("따로 확인할 칸", text)
-        self.assertIn("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박", text)
+        self.assertIn("1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상", text)
         self.assertIn("성인 몫에만 곱하고 아동 추가분은 그대로", text)
         self.assertIn("성인 2 + 아동 1 · 3박 이상", text)
 
@@ -78,7 +78,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertNotIn("골라 주세요", text)
         self.assertNotIn("넘음", text, "고른 칸은 「정가 넘음」이 아니라 고른 것으로 보인다")
         self.assertIn("고르신 빨간 줄 · 2칸 (정가보다 비싸집니다) 정가도 같은 만큼 올림 · 2칸 판매가와 같은 만큼 정가도 올려 저장합니다. "
-                      "예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 — 판매가 480.00 → 528.00 정가 500.00 → 548.00", text)
+                      "예: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 — 판매가 480.00 → 528.00 정가 500.00 → 548.00", text)
         self.assertIn("480.00 → 528.00 정가 500.00 → 548.00 정가도 같은 만큼 올림 정가보다 비싸집니다 · 고르신 대로", text)
         self.assertIn("500.00 → 548.00 없음 고름 정가보다 비싸집니다 고르신 것: 정가도 같은 만큼 올림", text)
         self.assertIn("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다.", text)
@@ -219,9 +219,9 @@ class RollbackPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertIn("2026-11-20 14:02 에 적어 둔 값으로 되돌립니다.", text)
         self.assertIn(f"그때 한 일: “{scene.SENTENCE}” (2026-11-20 14:05 적용, 장부 4번)", text)
         self.assertIn("1 되돌리는 칸 2 그대로 두는 칸 0 지울 수 없는 칸 1 되돌리는 칸 중 예약 있는 날", text)
-        self.assertIn("1/1 금 · 디럭스 · 룸온리 · 성인 2 · 1박 판매가 480.00 판매가 528.00 판매가 550.00 도우미 밖에서 바뀜",
+        self.assertIn("1/1 금 · 디럭스 · 룸온리 · 성인 2 · 1박 이상 판매가 480.00 판매가 528.00 판매가 550.00 도우미 밖에서 바뀜",
                       text)
-        self.assertIn("1/2 토 · 디럭스 · 룸온리 · 성인 2 · 1박 판매가 270.00 판매가 297.00 판매가 310.00 이 컴퓨터의 다른 변경 "
+        self.assertIn("1/2 토 · 디럭스 · 룸온리 · 성인 2 · 1박 이상 판매가 270.00 판매가 297.00 판매가 310.00 이 컴퓨터의 다른 변경 "
                       "(2026-11-24 10:30 “1/2 디럭스 룸온리 310 으로”, 장부 6번)", text)
         self.assertIn("12/25 금 예약 있는 날", text)
         self.assertIn("187.00 → 170.00", text)

@@ -51,7 +51,7 @@ class NamedCellsTest(unittest.TestCase):
         self.assertEqual((cell.before.sell, cell.after.sell), (D("230.00"), D("250.00")), "성인 2 칸(200)에만 10%, 아동 추가 30 그대로")
 
     def test_set_needs_its_base_cell_among_the_named_cells(self):
-        with self.assertRaisesRegex(ValueError, "기준 칸\\(성인 2 · 1박\\)이 고른 칸에 없습니다"):
+        with self.assertRaisesRegex(ValueError, "기준 칸\\(성인 2 · 1박 이상\\)이 고른 칸에 없습니다"):
             scene.request(operation="set", value=D("350"), base_occupancy="A2", occupancies=("A3",))
         with self.assertRaisesRegex(ValueError, "기준 칸"):
             scene.request(operation="set", value=D("350"), base_occupancy="A2", nights=(3,))
@@ -74,7 +74,7 @@ class NamedCellsTest(unittest.TestCase):
         request = scene.request(occupancies=("A2",), nights=(1,))
         self.assertEqual(decode_request(encode_request(request)), request)
         text = visible(render_preview(plan_change(scene.snapshot(), request)))
-        self.assertIn("칸 성인 2 / 1박", text)
+        self.assertIn("칸 성인 2 / 1박 이상", text)
         self.assertIn("칸 모든 인원 조합 · 모든 박수", visible(render_preview(plan_change(scene.snapshot(), scene.request()))))
 
     def test_the_command_plans_a_request_with_named_cells(self):
