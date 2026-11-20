@@ -130,6 +130,14 @@ class PartialRollbackTest(unittest.TestCase):
         self.assertIn(f"장부 {rid}번 “일부 되돌려”", text)
         self.assertIn("42 되돌리는 칸", text)
 
+        # 되돌리기의 결과 페이지는 이름도 제목도 「되돌리기 결과」다(Z8)
+        made = subprocess.run([sys.executable, script, "render", "result", "--change", str(rid)], capture_output=True, text=True, env=env)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        result = Path(json.loads(made.stdout)["page"])
+        self.assertTrue(result.name.endswith(f" · {scene.HOTEL} · 되돌리기 결과.html"), result.name)
+        self.assertIn(f"되돌리기 결과 · {scene.HOTEL} · {scene.OFFER} 장부 {rid}번 · 요청 “일부 되돌려” · {self.change}번 변경을 되돌림",
+                      visible(result.read_text(encoding="utf-8")))
+
         rest, _ = self.plan()
         second, _ = self.apply(rest)
         whole = entry(self.change)

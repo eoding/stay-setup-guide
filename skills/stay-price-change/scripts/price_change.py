@@ -71,7 +71,7 @@ from price_model import (
 )
 from price_pages import (
     EXAMPLES, cells_scope, chosen_lines, record_scope, red_lines, render_prices, render_preview, render_result, render_rollback,
-    render_sheet,
+    render_sheet, result_name,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
@@ -80,7 +80,7 @@ from price_plan import (
 )
 
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
-              "sheet": "요금표 읽은 것"}
+              "sheet": "요금표 읽은 것"}   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
 
 
 def load(path: str):
@@ -92,9 +92,9 @@ def load(path: str):
         raise ValueError(f"JSON 을 읽지 못했습니다: {path} ({error})") from None
 
 
-def page_path(hotel: str, kind: str) -> Path:
+def page_path(hotel: str, name: str) -> Path:
     safe = re.sub(r'[\\/:*?"<>|]', "_", hotel).strip() or "호텔"
-    base = f"{datetime.now().strftime('%Y-%m-%d %H시%M분')} · {safe} · {PAGE_NAMES[kind]}"
+    base = f"{datetime.now().strftime('%Y-%m-%d %H시%M분')} · {safe} · {name}"
     path, number = ledger_dir() / f"{base}.html", 2
     while path.exists():
         path, number = ledger_dir() / f"{base} ({number}).html", number + 1
@@ -304,6 +304,7 @@ def cmd_plan(args):
 
 
 def cmd_render(args):
+    name = PAGE_NAMES[args.kind]
     if args.kind == "preview":
         data = load(args.plan)
         plan = decode_plan(data["plan"])
@@ -324,8 +325,8 @@ def cmd_render(args):
     else:
         ledger = Ledger()
         record = ledger.change(args.change)
-        html, hotel = render_result(record, str(ledger.path), args.by_date), record.hotel
-    path = Path(args.out) if args.out else page_path(hotel, args.kind)
+        html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
+    path = Path(args.out) if args.out else page_path(hotel, name)
     path.write_text(html, encoding="utf-8")
     return dict(page=str(path.resolve()), **({"text": page_text(html)} if args.text else {}))
 

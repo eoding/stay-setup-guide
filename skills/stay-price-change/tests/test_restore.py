@@ -23,7 +23,7 @@ from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, Snapshot, Target, TargetTable, cell_item_key, encode_request, encode_snapshot, snapshot_reading,
 )
-from price_pages import render_preview, render_rollback  # noqa: E402
+from price_pages import render_preview, render_result, render_rollback  # noqa: E402
 from price_plan import (  # noqa: E402
     cell_filter, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows, resolve,
     rollback_rows, rollback_writes, save_steps, snapshot_rows, step_plans,
@@ -85,6 +85,8 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual(self.ledger.verify(restore, snapshot_reading(restored)), [])
         record = self.ledger.change(restore)
         self.assertEqual((record.kind, record.status, record.request["kind"]), ("change", "applied", "restore_snapshot"))
+        self.assertIn(f"되돌리기 결과 · {scene.HOTEL} · {scene.OFFER} 장부 {restore}번 · 요청 “저장해 둔 상태로” · "
+                      f"{self.saved}번에 저장해 둔 상태로 되돌림", visible(render_result(record)), "Z8 — 저장 상태로 되돌린 결과도 되돌리기 결과")
         back = plan_cell_rollback(self.ledger.recorded_change(restore), self.ledger.later_writes(restore), restored)
         self.assertEqual((len(back.restored), len(back.kept), back.unremovable), (90, 0, ()))
         self.assertEqual(scene.applied(restored, save_steps(rollback_writes(back))).cells, self.now.cells)

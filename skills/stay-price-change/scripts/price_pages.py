@@ -622,6 +622,12 @@ def _waiting_tag(view: CellView, steps: Mapping) -> str:
     return f'<span class="tag wait">{"저장됐는지 모름" if unknown else "아직 저장 안 함"}{where}</span>'
 
 
+def result_name(record: ChangeRecord) -> str:
+    """결과 페이지의 이름 — 되돌리기(변경 되돌리기 · 저장해 둔 상태로 되돌리기)면 「되돌리기 결과」, 아니면 「적용 결과」."""
+    restore = (record.request or {}).get("kind") == "restore_snapshot"
+    return "되돌리기 결과" if record.kind == "rollback" or restore else "적용 결과"
+
+
 def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False) -> str:
     """장부의 변경 하나의 결과. 칸마다 — 저장한 칸은 `전 → 넣은 값`, 아직 저장하지 않은 칸은 `지금 값 → 이어서 하면 넣을 값`과
     「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만 「그대로」. 멈춘 변경을 이어서 할지 고르는 담당자가 보는 페이지다."""
@@ -633,11 +639,12 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
     undone = sorted({view.rolled_back_by for view in views.values() if view.rolled_back_by})
     undone_count = sum(1 for view in views.values() if view.rolled_back_by)
     mismatched = [view for view in written if record.verified_at and not view.verified]
-    kind = "되돌리기 결과" if record.kind == "rollback" else "적용 결과"
-    title = f"{kind} · {record.hotel} · {record.offer}"
+    title = f"{result_name(record)} · {record.hotel} · {record.offer}"
+    restored = (record.request or {}).get("snapshot") if (record.request or {}).get("kind") == "restore_snapshot" else None
+    did = (f" · {record.reverses}번 변경을 되돌림" if record.reverses else
+           f" · {restored}번에 저장해 둔 상태로 되돌림" if restored is not None else "")
     body = [f"<h1>{esc(title)}</h1>",
-            f'<p class="sub">장부 {record.id}번 · 요청 “{esc(record.sentence)}”'
-            f'{f" · {record.reverses}번 변경을 되돌림" if record.reverses else ""} · 통화 {esc(currency)}</p>',
+            f'<p class="sub">장부 {record.id}번 · 요청 “{esc(record.sentence)}”{did} · 통화 {esc(currency)}</p>',
             result_banner(record, len(written), len(mismatched))]
     if undone:
         body.append(f'<p class="sub">이 변경의 {undone_count:,}칸은 뒤에 되돌렸습니다(장부 '
