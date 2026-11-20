@@ -2,7 +2,8 @@
 
 자리는 어느 폴더에서 Claude 를 열어도 같은 한 곳이다: `~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3`.
 환경 변수 `STAY_PRICE_LEDGER_DIR` 로 다른 폴더를 줄 수 있다(시험은 임시 폴더를 쓴다). 가격·부과금·프로모션·부가옵션
-도우미가 모두 이 장부 하나에 적는다.
+도우미가 모두 이 장부 하나에 적는다. 시험은 `STAY_PRICE_TEST_NOW`(ISO 시각)로 장부의 시계를 그 시각에 세운다 — 명령을 부르는
+시험이 이 컴퓨터의 시계에 기대지 않게(clock).
 
     meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
     changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied,
@@ -45,6 +46,7 @@ from .money import money, money_text
 from .rollback import LaterWrite, RecordedChange, RecordedItem
 
 LEDGER_ENV = "STAY_PRICE_LEDGER_DIR"
+CLOCK_ENV = "STAY_PRICE_TEST_NOW"   # 시험용 — 주면 장부의 시계가 그 시각(ISO)에 서 있다
 FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
 SCHEMA_VERSION = 2
@@ -126,13 +128,22 @@ def ledger_dir() -> Path:
     return folder
 
 
-def now_text() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
-
-
 def _moment(text: str) -> datetime:
     moment = datetime.fromisoformat(text)
     return moment if moment.tzinfo else moment.astimezone()
+
+
+def clock():
+    """지금 시각을 주는 함수 — 이 컴퓨터의 시계. `STAY_PRICE_TEST_NOW` 가 있으면 그 시각에 서 있는 시계다."""
+    fixed = os.environ.get(CLOCK_ENV)
+    if fixed:
+        moment = _moment(fixed)
+        return lambda: moment
+    return lambda: datetime.now().astimezone()
+
+
+def now_text() -> str:
+    return clock()().isoformat(timespec="seconds")
 
 
 def _minutes(span: timedelta) -> int:
@@ -302,7 +313,7 @@ class Ledger:
         """`now` 는 지금 시각을 주는 함수(시험이 시계를 옮겨 본다). 장부가 적는 시각과, 멈춤 · 읽은 값의 나이를 이것으로 셈한다.
         `kind` 를 주면 그 항목 종류의 장부로 연다 — 목록은 그 종류의 번호만, 다른 종류의 번호는 거절한다."""
         self.path = Path(path) if path else ledger_dir() / DB_NAME
-        self._now = now or (lambda: datetime.now().astimezone())
+        self._now = now or clock()
         self.kind = kind
         with self._db() as db:
             has_meta = db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone()
