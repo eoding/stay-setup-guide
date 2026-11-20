@@ -8,9 +8,11 @@ import unittest
 from decimal import Decimal
 
 import addon_scene as scene
-from addon_model import LineKey, ModelError, Snapshot, decode_request, line_of
+from addon_model import Line, LineKey, Listed, ModelError, Snapshot, decode_request, line_of
+from addon_pages import render_preview
 from addon_plan import LineStep, PlanError, counts, plan_change, plan_steps, preview_rows, resolve
 from change_core.answers import attach_bodies
+from change_core.chrome import page_text
 from change_core.items import Refused
 from change_core.rules import Resolution
 
@@ -128,6 +130,23 @@ class StepTest(unittest.TestCase):
         snap = snapshot(scene.line("201", "조식", "1", "a", "20.00", "15.00"))
         rows = {row.field: row for row in preview_rows(plan(snap, field="supply", clear=True))}
         self.assertEqual((rows["supply"].action, rows["supply"].after, rows["sell"].action), ("clear", None, None))
+
+
+class SentFieldsTest(unittest.TestCase):
+    def test_the_preview_shows_each_scope_axis_with_its_mode_and_how_many_targets_are_picked(self):
+        listed = Listed(LineKey("204", "305"), "엑스트라베드", "엑스트라베드 1개", "33.00 USD", ("판매가: 33.00 USD", "공급 원가: 27.50 USD"),
+                        "연말 시즌", offer="데모 연말 오퍼")
+        form = (("name", "엑스트라베드 1개"), ("price", "33.00"), ("net_amount", "27.50"), ("season", "43"), ("date", ""),
+                ("rate_plan", ""), ("description", ""), ("scope_rate_plan_mode", "2"), ("scope_rate_plan_include", "53"),
+                ("scope_room_mode", "0"))
+        labels = {"season": "연말 시즌", "rate_plan": "---------", "scope_rate_plan_mode": "지정한 대상만",
+                  "scope_room_mode": "기존 범위 그대로"}
+        line = Line(listed, form, labels)
+        snap = Snapshot(scene.HOTEL["name"], scene.HOTEL["id"], "2026-11-21T10:00:00+09:00", (line.key,), {line.key: line})
+        result = plan_change(snap, request(percent="1"))
+        text = page_text(render_preview(result, 1, plan_steps(result)))
+        self.assertIn("시즌 연말 시즌 · 날짜 비어 있음 · 요금제 비어 있음 · 설명 비어 있음 · "
+                      "적용 범위 요금제 지정한 대상만(포함 1개) · 객실 기존 범위 그대로", text)
 
 
 class RequestTest(unittest.TestCase):

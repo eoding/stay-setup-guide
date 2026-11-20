@@ -278,6 +278,32 @@ class NothingToSaveTest(Flow):
         self.assertIn('"적용"을 청하지 않는다', step)
 
 
+class ScopeCardTest(Flow):
+    """F8 — 짧은 답이 편집 창에 적용 범위 카드가 있는지 말하고(`scope_card` — 도우미가 적용 범위 기록 한 문장을 말할 때), 미리보기의
+    「그대로 다시 보내는 칸」은 적용 범위를 그 값으로 보인다."""
+
+    def plan(self, lines, k):
+        change, plan = self.preview(self.request(f"request-{k}.json", lines=lines), f"plan-{k}.json")
+        return json.loads(plan.read_text(encoding="utf-8")), self.cli("render", "preview", "--plan", plan, "--text",
+                                                                      "--out", self.work / f"미리보기-{k}.html")["text"]
+
+    def test_the_short_answer_says_whether_a_saved_line_has_a_scope_card_and_the_page_shows_its_values(self):
+        self.erp = scene.Erp(scene.demo_lines() + [scene.line("205", "늦은 체크아웃", "306", "18시까지", "50.00", "40.00", scope=False)])
+        data, text = self.plan(BOTH[:1], 1)
+        self.assertIs(data["scope_card"], True)
+        self.assertIn("설명 비어 있음 · 적용 범위 요금제 기존 범위 그대로 · 객실 기존 범위 그대로", text)
+        self.assertIn("적용 범위 기록이 없으면 하나 만듭니다", text)
+        request = self.work / "request-1.json"
+        short = self.cli("plan", "--snapshot", self.read(request=request), "--request", request, "--out", self.work / "짧은.json")
+        self.assertIs(short["scope_card"], True, "짧은 답에도 있다")
+
+        data, text = self.plan([{"addon": "205", "line": "306"}], 2)
+        self.assertIs(data["scope_card"], False)
+        row, = [line for line in text.splitlines() if "가격 줄 306번" in line]
+        self.assertTrue(row.endswith("설명 비어 있음"), f"카드가 없는 줄은 적용 범위를 보내지 않는다: {row}")
+        self.assertNotIn("적용 범위 기록", text, "적용 범위 기록을 만들 수 있다는 말도 없다")
+
+
 class SameNameTest(Flow):
     """F6 — 오퍼마다 이름 · 줄 이름 · 적용 대상이 같은 부가옵션이 있다(첫 실호텔 시험의 모양). 담당자에게 줄을 말하는 곳마다 오퍼로
     가른다: 빨간 줄의 예, 미리보기, 결과, 장부 목록(범위 · 오퍼), 되돌리기 미리보기."""

@@ -57,7 +57,7 @@
 
 - `look`: `hotel` · `currency` · `read_at` · `addons`(수) · `lines`(수).
 - `read`: `hotel` · `currency` · `read_at`(ERP 에서 읽은 시각 — 15분 창도 여기서 잰다) · `asked` · `found` · `missing`(목록에 없는 줄 번호) · `doubt`(목록과 편집 창이 다른 줄 번호).
-- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` 바뀌는 줄 · `unchanged` 그대로인 줄(안 바꾸기로 고른 줄 포함) · `blocked` · `red` 고를 줄 · `missing` · `chosen` 고른 줄과 판정 코드마다의 수 — 앞의 넷이 고른 줄을 빠짐없이 나눈다) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄과 그 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`).
+- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` 바뀌는 줄 · `unchanged` 그대로인 줄(안 바꾸기로 고른 줄 포함) · `blocked` · `red` 고를 줄 · `missing` · `chosen` 고른 줄과 판정 코드마다의 수 — 앞의 넷이 고른 줄을 빠짐없이 나눈다) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄과 그 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`) · `scope_card`(저장할 줄 — 바뀌는 줄 · 고를 빨간 줄 — 가운데 편집 창에 적용 범위 카드가 있는 줄이 있으면 true. 그때만 적용 범위 기록 한 문장을 말한다).
 - `rollback`: `change_id` · `replaces` · `scope` · `restore_to`(적어 둔 시각) · `restored` · `kept` · `kept_why`(까닭마다 — 이 장부의 나중 변경 `change_id` · `at` · `sentence`, 아니면 `outside: true` 도우미 밖) · `saves`.
 
 ## 장부

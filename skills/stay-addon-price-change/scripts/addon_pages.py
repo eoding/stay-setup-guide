@@ -32,6 +32,8 @@ HIDDEN_NOTE = ("목록과 편집 창이 모두 공급 원가를 '없음'으로 �
                "통화별 금액이 「별도 금액 없음」으로 보여 도우미가 바꾸지 않습니다.")
 KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.", "금액의 출처 표시('ERP 손입력')는 되돌리지 않습니다.")
 SENT_LABELS = {"name": "이름", "season": "시즌", "date": "날짜", "rate_plan": "요금제", "description": "설명"}
+SCOPE_AXES = {"rate_plan": "요금제", "room": "객실"}            # 적용 범위 카드의 축 — `scope_<축>_mode` · `_include` · `_exclude`
+SCOPE_PICKS = {"include": "포함", "exclude": "제외"}
 
 
 def _money(value: Decimal | None, currency: str) -> str:
@@ -45,20 +47,40 @@ def _move(before: Decimal | None, after: Decimal | None, currency: str) -> str:
             f'<span class="now">{"비움" if after is None else fmt_money(after, currency)}</span>')
 
 
+def _scope_sent(line: Line) -> str:
+    """적용 범위 카드가 보내는 것 — 축마다 모드(화면의 글자)와 고른 대상 수, 「범위를 비운 채 저장」이 켜졌는지. 카드가 없으면 빈 글자."""
+    names = [name for name, _value in line.form]
+    parts = []
+    for axis, word in SCOPE_AXES.items():
+        mode = f"scope_{axis}_mode"
+        if mode in names:
+            picked = [f"{said} {names.count(f'scope_{axis}_{kind}')}개" for kind, said in SCOPE_PICKS.items()
+                      if f"scope_{axis}_{kind}" in names]
+            shown = line.labels.get(mode) or dict(line.form)[mode]
+            parts.append(f"{word} {shown}" + (f"({' · '.join(picked)})" if picked else ""))
+    if "scope_confirm_deny_all" in names:
+        parts.append("범위를 비운 채 저장 켜짐")
+    if not parts:
+        return "적용 범위 칸 그대로" if any(name.startswith("scope_") for name in names) else ""
+    return "적용 범위 " + " · ".join(parts)
+
+
 def _kept_fields(line: Line) -> str:
-    """저장할 때 편집 창이 보인 그대로 다시 보내는 칸 — 고르는 칸은 화면의 글자로."""
+    """저장할 때 편집 창이 보인 그대로 다시 보내는 칸 — 고르는 칸은 화면의 글자로, 적용 범위는 축마다 그 값으로."""
     parts = []
     for name, value in line.form:
         if name in FORM_NAMES.values():
             continue
         if name in SENT_LABELS:
             parts.append(f"{SENT_LABELS[name]} {line.labels.get(name, value) if value else '비어 있음'}")
-    scope = any(name.startswith("scope_") for name, _value in line.form)
-    return " · ".join(parts) + (" · 적용 범위" if scope else "")
+    return " · ".join(part for part in (*parts, _scope_sent(line)) if part)
 
 
-def _scope_card(plan_lines: Sequence[Line]) -> bool:
-    return any(name.startswith("scope_") for line in plan_lines for name, _value in line.form)
+def scope_card(plan: Plan) -> bool:
+    """저장할 수 있는 줄(바뀌는 줄 · 아직 고르지 않은 빨간 줄) 가운데 편집 창에 적용 범위 카드가 있는 줄이 있는지 — 있으면 저장할 때
+    ERP 가 그 줄의 적용 범위 기록을 만들 수 있다(SCOPE_NOTE). 짧은 답의 `scope_card` 가 이것이라 도우미가 그 말을 할 때를 안다."""
+    return any(name.startswith("scope_") for change in plan.changes if change.writes or change.waiting
+               for name, _value in change.line.form)
 
 
 def red_lines(plan: Plan) -> list[dict]:
@@ -137,11 +159,10 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
     body += ["<h2>줄마다 전 → 후</h2>",
              '<div class="scroll"><table><tr><th>가격 줄</th><th>판매가</th><th>공급 원가</th><th>판정</th>'
              f'<th>그대로 다시 보내는 칸</th></tr>{"".join(rows)}</table></div>']
-    lines = [change.line for change in plan.changes]
     said = [SOURCE_NOTE, "저장은 줄마다 한 번이고, 편집 창의 다른 칸(이름 · 시즌 · 날짜 · 요금제 · 설명 · 적용 범위)은 창이 보인 그대로 "
             "보냅니다. 공급 원가는 바꾸라고 하지 않으면 지금 값 그대로 보냅니다.",
             "손님 화면에는 저장하면 곧(길어야 몇 분) 새 금액이 보입니다. 이미 받은 예약의 금액은 바뀌지 않습니다.", HIDDEN_NOTE]
-    if _scope_card(lines):
+    if scope_card(plan):
         said.insert(1, SCOPE_NOTE)
     if steps is None:
         body += [notes(said), '<div class="banner red">아직 적용할 수 없습니다. 먼저 빨간 줄을 골라 주세요.</div>']

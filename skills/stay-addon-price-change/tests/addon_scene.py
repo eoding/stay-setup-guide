@@ -40,11 +40,12 @@ START = datetime(2026, 11, 21, 1, 0, tzinfo=timezone.utc)
 
 
 def line(addon, addon_name, line_id, name, sell, supply, target="전체", season="", date="", description="", hidden=False,
-         currency="USD", listed=None, offer="데모 오퍼 2027"):
+         currency="USD", listed=None, offer="데모 오퍼 2027", scope=True):
     """줄 하나 — 목록과 편집 창이 같은 값을 보이는 보통 줄. `hidden` 이면 목록의 통화별 금액이 「별도 금액 없음」(값 줄이 안 보임),
-    `listed` 를 주면 목록의 통화별 금액이 그 글자들이다(편집 창과 다르게 보이는 줄)."""
+    `listed` 를 주면 목록의 통화별 금액이 그 글자들이다(편집 창과 다르게 보이는 줄). `scope` 가 False 면 편집 창에 적용 범위 카드가 없다."""
     return dict(addon=addon, addon_name=addon_name, line=line_id, name=name, sell=sell, supply=supply, target=target,
-                season=season, date=date, description=description, hidden=hidden, currency=currency, listed=listed, offer=offer)
+                season=season, date=date, description=description, hidden=hidden, currency=currency, listed=listed, offer=offer,
+                scope=scope)
 
 
 def demo_lines():
@@ -58,8 +59,8 @@ def demo_lines():
 
 def form_of(item):
     return [["name", item["name"]], ["price", item["sell"]], ["net_amount", item["supply"]], ["season", item["season"]],
-            ["date", item["date"]], ["rate_plan", ""], ["description", item["description"]],
-            ["scope_rate_plan_mode", "0"], ["scope_room_mode", "0"]]
+            ["date", item["date"]], ["rate_plan", ""], ["description", item["description"]]] + (
+        [["scope_rate_plan_mode", "0"], ["scope_room_mode", "0"]] if item["scope"] else [])
 
 
 def row_of(item):
@@ -74,7 +75,7 @@ def row_of(item):
 
 def window_of(item):
     labels = {"season": "비수기" if item["season"] else "---------", "rate_plan": "---------",
-              "scope_rate_plan_mode": "기존 범위 그대로", "scope_room_mode": "기존 범위 그대로"}
+              **({"scope_rate_plan_mode": "기존 범위 그대로", "scope_room_mode": "기존 범위 그대로"} if item["scope"] else {})}
     return {"title": f"가격 편집 — {item['name']}", "addon": item["addon_name"], "form": form_of(item), "labels": labels,
             "errors": []}
 

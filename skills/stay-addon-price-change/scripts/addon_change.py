@@ -45,6 +45,7 @@ from addon_model import (
 )
 from addon_pages import (
     blocked_lines, chosen_lines as chosen_said, red_lines, render_preview, render_prices, render_result, render_rollback,
+    scope_card,
 )
 from addon_plan import (
     LineChange, Plan, PlanError, counts, decode_step, encode_step, line_filter, plan_change, plan_line_rollback, plan_steps,
@@ -185,7 +186,7 @@ def cmd_plan(args):
         read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(request), reading=encode_snapshot(snapshot),
         replaces=args.replaces) if args.record else None
     return dict(change_id=change_id, replaces=args.replaces, counts=counts(plan), plan=encode_plan(plan), red=red_lines(plan),
-                chosen=chosen_said(plan), blocked=blocked_lines(plan),
+                chosen=chosen_said(plan), blocked=blocked_lines(plan), scope_card=scope_card(plan),
                 steps=None if steps is None else [encode_step(step) for step in steps])
 
 
@@ -390,7 +391,7 @@ def short_read(result: dict) -> dict:
 def short_plan(result: dict) -> dict:
     return dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
                 saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
-                blocked=result["blocked"])
+                blocked=result["blocked"], scope_card=result["scope_card"])
 
 
 def short_rollback(result: dict) -> dict:
