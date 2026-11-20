@@ -1,0 +1,55 @@
+<!-- 손으로 만든 조각: ERP _calendar_bulk_form.html(가격 수정 ② 확인)의 마크업을 따른다. 이어진 구간 이름, 판매 마감 날,
+     가격 없는 날, 정가가 「없음」인 줄, 정가 칸이 비어 있고 공급 원가만 있는 줄(실제 읽기에서 숫자 둘만 보인 모양)을 담는다.
+     오퍼·객실·금액은 지어낸 값이다. -->
+<div id="stay_calendar_bulk_00000000" class="stay-root stay-readable" data-stay-screen="calendar-bulk">
+  <input type="hidden" name="option" value="{room:1}" id="id_stay_option"><input type="hidden" name="rate_plan" value="{rate_plan:1}" id="id_stay_rate_plan"><input type="hidden" name="operation" value="price" id="id_stay_operation"><input type="hidden" name="month" value="2026-12" id="id_stay_month">
+  <section class="stay-card" data-stay-summary>
+    <h4 class="stay-section-title">적용 대상</h4>
+    <dl class="stay-facts">
+      <dt>오퍼</dt><dd>샘플 오퍼</dd>
+      <dt>객실</dt><dd>샘플 오퍼 · 디럭스</dd>
+      <dt>요금제</dt><dd>조식 포함</dd>
+    </dl>
+  </section>
+  <input type="hidden" name="scope" value="plan">
+  <input type="hidden" name="date_selection_0" value="2026-12-24 ~ 2026-12-31">
+  <input type="hidden" name="date_selection_1" value="">
+  <input type="hidden" name="period_from" value="2026-12-24">
+  <input type="hidden" name="period_to" value="2026-12-31">
+  <section class="stay-card">
+    <h4 class="stay-section-title">적용 내용 · 8일</h4>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <thead><tr><th>숙박일</th><th>현재 가격·마감 상태</th></tr></thead>
+        <tbody><tr><td>2026-12-24 ~ 2026-12-25 (2일)</td><td>가격 판매 가능</td></tr><tr><td>2026-12-26</td><td>요금제 마감</td></tr><tr><td>2026-12-27 ~ 2026-12-30 (4일)</td><td>가격 없음</td></tr><tr><td>2026-12-31</td><td>가격 판매 가능</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="stay-card">
+    <h4 class="stay-section-title" data-stay-label-for="prices">선택 날짜의 가격</h4>
+    <p class="stay-description">입력한 칸만 바뀝니다. 비운 칸과 마감 상태는 그대로입니다.</p>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table stay-calendar-bulk-prices" data-stay-field="prices" data-stay-kind="rows" data-stay-rows="prices">
+        <thead><tr><th>기존</th><th class="stay-numeric">판매가 (USD)</th><th class="stay-numeric">정가 (USD)</th><th class="stay-numeric">공급 원가 (USD)</th></tr></thead>
+        <tbody class="stay-calendar-bulk-line" data-stay-occupancy-key="A2" data-stay-los-nights="1">
+          <tr class="stay-calendar-bulk-line__head"><th colspan="4" scope="rowgroup"><input type="hidden" name="prices-0-occupancy_key" value="A2" id="id_stay_prices-0-occupancy_key"><input type="hidden" name="prices-0-los_nights" value="1" id="id_stay_prices-0-los_nights">A2 · 성인 2 · 1박 이상</th></tr>
+          <tr data-stay-existing><td>2026-12-24 ~ 2026-12-25 (2일)</td><td class="stay-numeric">140.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">110.00</td></tr>
+          <tr data-stay-existing><td>2026-12-26</td><td class="stay-numeric">150.00</td><td class="stay-numeric">180.00</td><td class="stay-numeric">없음</td></tr>
+          <tr data-stay-existing><td>2026-12-27 ~ 2026-12-30 (4일)</td><td class="stay-numeric">가격 없음</td><td></td><td></td></tr>
+          <tr data-stay-existing><td>2026-12-31</td><td class="stay-numeric">160.00</td><td class="stay-numeric"></td><td class="stay-numeric">120.00</td></tr>
+          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="text" name="prices-0-price" data-stay-col="price" inputmode="decimal" id="id_stay_prices-0-price"></td><td class="stay-numeric"><input type="text" name="prices-0-original_price" data-stay-col="original_price" inputmode="decimal" id="id_stay_prices-0-original_price"></td><td class="stay-numeric"><input type="text" name="prices-0-net_amount" data-stay-col="net_amount" inputmode="decimal" id="id_stay_prices-0-net_amount"></td></tr>
+        </tbody>
+        <tbody class="stay-calendar-bulk-line" data-stay-occupancy-key="A2C1_CHD" data-stay-los-nights="3">
+          <tr class="stay-calendar-bulk-line__head"><th colspan="4" scope="rowgroup"><input type="hidden" name="prices-1-occupancy_key" value="A2C1_CHD" id="id_stay_prices-1-occupancy_key"><input type="hidden" name="prices-1-los_nights" value="3" id="id_stay_prices-1-los_nights">A2C1_CHD · 소아 1 · 3박 이상</th></tr>
+          <tr data-stay-existing><td>2026-12-24 ~ 2026-12-26 (3일)</td><td class="stay-numeric">120.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>
+          <tr data-stay-existing><td>2026-12-27 ~ 2026-12-30 (4일)</td><td class="stay-numeric">가격 없음</td><td></td><td></td></tr>
+          <tr data-stay-existing><td>2026-12-31</td><td class="stay-numeric">125.50</td><td class="stay-numeric">130.00</td><td class="stay-numeric">90.00</td></tr>
+          <tr class="stay-calendar-bulk-line__new"><td>새 값</td><td class="stay-numeric"><input type="text" name="prices-1-price" data-stay-col="price" inputmode="decimal" id="id_stay_prices-1-price"></td><td class="stay-numeric"><input type="text" name="prices-1-original_price" data-stay-col="original_price" inputmode="decimal" id="id_stay_prices-1-original_price"></td><td class="stay-numeric"><input type="text" name="prices-1-net_amount" data-stay-col="net_amount" inputmode="decimal" id="id_stay_prices-1-net_amount"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save">입력한 가격 적용</button>
+  </div>
+</div>
