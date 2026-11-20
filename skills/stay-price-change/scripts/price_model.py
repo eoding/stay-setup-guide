@@ -4,7 +4,7 @@
     CellKey      칸 하나의 자리 — 객실 · 요금제 · 날짜 · 인원 조합 · 박수 층
     CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
     Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜)
-    Skipped      건너뛰는 칸과 까닭(가격 없음 · 기준 인원 1박 값 없음 · 바꿀 값 없음)
+    Skipped      건너뛰는 칸과 까닭(가격 없음 · 바꿀 값 없음)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
     TargetTable  칸마다 목표 값을 적은 표(새 요금표가 이 모양으로 들어온다) — 지금 값과 다른 칸만 바뀐다
     CellChange   칸 하나의 전 → 후 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나
@@ -201,7 +201,8 @@ CHOICE_LABELS = {
 }
 
 # 판정 함수는 (전 값, 계산한 후 값 또는 None, 계산하지 못한 까닭 또는 None) 을 받는다. 까닭은 "adult"(성인만 있는 칸이
-# 없음) · "sell"(새로 생기는 칸에 판매가가 없음) · "row"(읽은 값에 없는 인원 조합·박수라 칸을 새로 만들지 않음).
+# 없음) · "base"(새 값 지정에서 그날 기준 인원 1박 칸에 값이 없음) · "sell"(새로 생기는 칸에 판매가가 없음) ·
+# "row"(읽은 값에 없는 인원 조합·박수라 칸을 새로 만들지 않음).
 # 정가·원가 규칙은 계산 뒤의 칸(후 값의 판매가·정가·원가)끼리 견준다.
 CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
@@ -210,6 +211,8 @@ CELL_RULES = RuleTable(
          lambda before, after, lacking: after is not None and after.supply is not None and after.supply < 0),
     Rule("NO_ADULT_CELL", "같은 날 성인만 있는 칸이 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "adult"),
+    Rule("NO_BASE_CELL", "그날 기준 인원 1박 칸에 값이 없습니다", BLOCKED, (),
+         lambda before, after, lacking: lacking == "base"),
     Rule("NEW_WITHOUT_SELL", "새로 생기는 칸에 판매가가 없습니다", BLOCKED, (),
          lambda before, after, lacking: lacking == "sell"),
     Rule("NEW_NOT_SHOWN", "이 객실·요금제에 없는 인원 조합·박수라 칸을 새로 만들지 않습니다", BLOCKED, (),
@@ -267,8 +270,7 @@ class CellEditStep:
     kind = "cell_edit"
 
 
-SKIP_LABELS = {"no_price": "가격 없음", "no_base": "그날 기준 인원 1박 값 없음", "no_list": "정가 없음",
-               "no_supply": "공급 원가 없음"}
+SKIP_LABELS = {"no_price": "가격 없음", "no_list": "정가 없음", "no_supply": "공급 원가 없음"}
 
 
 @dataclass(frozen=True)

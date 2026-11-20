@@ -57,7 +57,7 @@ def _after_value(snapshot: Snapshot, request: ChangeRequest, key: CellKey, befor
     """`(바꾸는 값의 새 값, 없는 칸)` — 계산에 필요한 성인만 있는 칸(그 값)이 없으면 새 값 대신 "adult".
 
     새 값 지정(set)은 그날 기준 인원 1박 칸이 그 값이 되는 만큼(차이)을 그 객실·요금제·날짜의 모든 인원·박수 칸에 더한다.
-    박수 층의 할인 차이가 그대로 남는다. 기준 1박 칸이 없는 날은 `plan_change` 가 미리 건너뛴다. 퍼센트는 ERP 가감과 같이
+    박수 층의 할인 차이가 그대로 남는다. 기준 1박 칸에 값이 없는 날은 "base"(적용할 수 없음)다. 퍼센트는 ERP 가감과 같이
     아동이 있는 칸이면 같은 성인 수의 성인만 있는 칸에만 곱하고 아동 추가분을 그대로 더한다(바꾸는 값마다 같은 규칙).
     """
     name, currency, current = request.field, snapshot.currency, getattr(before, request.field)
@@ -68,7 +68,10 @@ def _after_value(snapshot: Snapshot, request: ChangeRequest, key: CellKey, befor
     if request.operation == "amount":
         return round_money(current + request.value, currency), None
     if request.operation == "set":
-        return current + (round_money(request.value, currency) - value_at(request.base_occupancy, 1)), None
+        base = value_at(request.base_occupancy, 1)
+        if base is None:
+            return None, "base"
+        return current + (round_money(request.value, currency) - base), None
     factor = (100 + request.value) / 100
     adult_key, has_children = (key.occupancy, False) if request.scale_child_surcharge else split_occupancy(key.occupancy)
     if has_children is None:
@@ -86,9 +89,6 @@ def _skip_reason(snapshot: Snapshot, request: ChangeRequest, key: CellKey, befor
         return "no_price"
     if getattr(before, request.field) is None:
         return f"no_{request.field}"
-    base = snapshot.cells.get(replace(key, occupancy=request.base_occupancy or "", nights=1), MISSING)
-    if request.operation == "set" and getattr(base, request.field) is None:
-        return "no_base"
     return None
 
 

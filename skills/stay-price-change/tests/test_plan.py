@@ -75,6 +75,16 @@ class SceneTest(unittest.TestCase):
         self.assertEqual((tally["red"], tally["OVER_30"], tally["ABOVE_LIST"]), (90, 88, 2))
 
 
+class RuleOrderTest(unittest.TestCase):
+    def test_verdict_order_is_kept(self):
+        from price_model import CELL_RULES
+        codes = [rule.code for rule in CELL_RULES.rules]
+        kept = ["NOT_POSITIVE", "NO_ADULT_CELL", "NO_BASE_CELL", "ABOVE_LIST", "BELOW_COST", "OVER_30"]
+        self.assertEqual([code for code in codes if code in kept], kept)
+        self.assertEqual({rule.code for rule in CELL_RULES.rules if rule.severity == "blocked"},
+                         {"NOT_POSITIVE", "NEGATIVE_SUPPLY", "NO_ADULT_CELL", "NO_BASE_CELL", "NEW_WITHOUT_SELL", "NEW_NOT_SHOWN"})
+
+
 class OperationTest(unittest.TestCase):
     def test_flat_amount_moves_every_occupancy_and_nights_tier_by_the_same_amount(self):
         snapshot = snap({(DAY, "A2", 1): open_("100000"), (DAY, "A3", 1): open_("130000"),
@@ -96,13 +106,15 @@ class OperationTest(unittest.TestCase):
         })
         self.assertEqual(after[(DAY, "A2", 1)] - after[(DAY, "A2", 3)], D("30.00"))
 
-    def test_set_skips_a_day_without_a_base_one_night_price_and_says_why(self):
+    def test_set_cannot_apply_a_day_without_a_base_one_night_value_and_says_why(self):
         snapshot = snap({(DAY, "A2", 1): MISSING, (DAY, "A3", 1): open_("360.00"), (DAY, "A2", 3): open_("270.00"),
                          (NEXT, "A2", 1): open_("300.00")})
         plan = plan_change(snapshot, ask("set", "350", dates=(DAY, NEXT), base_occupancy="A2"))
-        self.assertEqual(after_of(plan), {(NEXT, "A2", 1): D("350.00")})
-        self.assertEqual(sorted((item.key.occupancy, item.key.nights, item.reason) for item in plan.skipped),
-                         [("A2", 1, "no_price"), ("A2", 3, "no_base"), ("A3", 1, "no_base")])
+        self.assertEqual(verdicts(plan), {(DAY, "A3", 1): "NO_BASE_CELL", (DAY, "A2", 3): "NO_BASE_CELL",
+                                          (NEXT, "A2", 1): None})
+        self.assertEqual(after_of(plan)[(NEXT, "A2", 1)], D("350.00"))
+        self.assertEqual([(item.key.occupancy, item.reason) for item in plan.skipped], [("A2", "no_price")])
+        self.assertEqual([(w.key.date, w.sell) for w in resolve(plan, [])[0]], [(NEXT, D("350.00"))])
 
     def test_percent_multiplies_adults_only_cells(self):
         plan = plan_change(snap({(DAY, "A2", 1): open_("200.00"), (DAY, "", 1): open_("150.00")}), ask("percent", "-10"))
