@@ -423,9 +423,11 @@
     } else {
       out = first.value;
     }
-    try { await closeAll(op, endAt); } catch (e) { /* 닫기 실패는 아래 결과에 남는다 */ }
+    // 정리는 restMs 안에서(늦어도 endAt 까지) — 쉬지 않는 화면 때문에 답을 더 붙잡지 않는다
+    var restUntil = Math.min(endAt, Date.now() + limits.restMs);
+    try { await closeAll(op, restUntil); } catch (e) { /* 닫기 실패는 아래 결과에 남는다 */ }
     // 화면이 쉴 때 돌려준다 — 드로어가 다 닫히고(내용까지 비고) 셀 창이 없고 도는 요청이 없을 때
-    out.rest = !!(await window.stayRun.waitFor(atRest, Math.max(1, endAt - Date.now())));
+    out.rest = !!(await window.stayRun.waitFor(atRest, Math.max(1, restUntil - Date.now())));
     if (!out.rest) out.warn = '화면이 아직 정리되지 않았습니다(드로어·셀 창·요청) — 다음 작업은 정리된 뒤에 시작합니다';
     if (!late) { wall.stop(); window.__stayPriceBusy = null; }
     var blocked = wall.log.blocked;

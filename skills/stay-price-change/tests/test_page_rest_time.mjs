@@ -30,6 +30,7 @@ test('B14 · 드로어가 끝내 비지 않으면 결과에 그렇게 적고, �
   const r = plain(await page.w.stayPrice.readPair(inPage(page.w, PAIR)));
   assert.equal(r.ok, true, '읽은 값은 그대로 쓸 수 있다');
   assert.equal(r.rest, false);
+  assert.ok(r.ms < 3000, `정리는 restMs 만큼만 기다린다: ${r.ms}ms`);
   assert.match(r.warn, /화면이 아직 정리되지 않았습니다/);
   const next = plain(await page.w.stayPrice.readPair(inPage(page.w, PAIR)));
   assert.equal(next.ok, false);
