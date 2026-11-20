@@ -127,6 +127,18 @@ class SeasonRefillSafetyNetTest(unittest.TestCase):
         self.assertIn("저장해 둔 상태가 아닙니다", self.cli("compare", "--saved", plan, "--snapshot", self.dir / "saved.json",
                                                          code=2)["error"])
 
+    def test_a_cell_the_saved_state_never_had_is_new_and_cannot_be_removed_by_a_restore(self):
+        before = scene.fresh(scene.snapshot())
+        saved = self.cli("save-snapshot", "--snapshot", self.write("saved.json", encode_snapshot(before)))["change_id"]
+        tier = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 5)   # 시즌을 다시 채우며 생긴 5박 이상 층 — 저장할 때는 없던 줄
+        now = self.write("now.json", encode_snapshot(scene.with_cells(before, {tier: CellValue(D("170.00"), None, None, "open")})))
+        short = self.cli("compare", "--saved", saved, "--snapshot", now, "--out", self.dir / "compare-1.json")
+        self.assertEqual((short["counts"]["new"], short["counts"]["changed"]), (1, 0))
+        self.assertIn("성인 2 · 5박 이상 | 새로 → 170.00 새로 생김 | — | — | —",
+                      self.cli("render", "compare", "--plan", self.dir / "compare-1.json", "--text")["text"].splitlines())
+        restore = self.cli("restore", "--saved", saved, "--snapshot", now, "--out", self.dir / "rollback-1.json")
+        self.assertEqual((restore["restored"], restore["unremovable"]), (0, 1), "되돌려도 지울 수 없는 칸으로 댄다")
+
     def test_a_cell_gone_since_the_save_is_counted_and_restored(self):
         before = scene.fresh(scene.snapshot())
         saved = self.cli("save-snapshot", "--snapshot", self.write("saved.json", encode_snapshot(before)))["change_id"]
