@@ -50,11 +50,12 @@ def answer_files(paths, prefixes: tuple[str, ...]) -> list[Path]:
 
 def load_results(paths, prefixes: tuple[str, ...]) -> list:
     """브라우저 답 파일들(폴더도 된다 — answer_files) — 파일 하나에 답 하나(객체) 또는 여럿(목록). 목록의 글자 항목, 그리고
-    JSON 이 아닌 파일은 도구가 보인 그대로의 답이다(잘린 답일 수 있다 — change_core.answers.answers 가 알아본다)."""
+    JSON 이 아닌 파일은 도구가 보인 그대로의 답이다(잘린 답일 수 있다 — change_core.answers.answers 가 알아본다). UTF-8 로 읽히지
+    않는 바이트는 대체 글자로 읽는다 — 그런 파일은 답이 되지 못할 뿐 읽기를 막지 않는다."""
     results = []
     for path in answer_files(paths, prefixes):
         try:
-            text = Path(path).read_text(encoding="utf-8")
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
         except FileNotFoundError:
             raise ValueError(f"파일이 없습니다: {path}") from None
         try:

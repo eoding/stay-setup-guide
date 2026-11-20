@@ -132,6 +132,51 @@ def _identity(meta: Mapping) -> tuple:
     return int(meta["chars"]), int(meta["bytes"]), str(meta["crc32"]), str(meta.get("fnv"))
 
 
+def _units(text: str) -> int:
+    """페이지(JS)가 세는 글자 수 — UTF-16 단위. 자리(at · next · end)와 머리의 chars 가 이 수다."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _identity_of(text: str) -> tuple:
+    """이은 글자 자체의 알아볼 값 — 머리(`_identity`)와 같은 모양."""
+    data = text.encode("utf-8")
+    return _units(text), len(data), f"{zlib.crc32(data):08x}", fnv1a(data)
+
+
+def _usable(result: Mapping) -> tuple | None:
+    """take 답 하나가 쓸 만한 쪽이면 (id, at, next, end, text), 아니면 None — 칸이 빠졌거나 스스로 말하는 길이와 다르다."""
+    if result.get("op") != "take" or not result.get("ok"):
+        return None
+    try:
+        at, next_, end, text = int(result["at"]), int(result["next"]), int(result["end"]), result["text"]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not isinstance(text, str) or next_ != at + _units(text) or not 0 <= at < next_ <= end:
+        return None
+    return str(result["id"]), at, next_, end, text
+
+
+def _lent(earlier: Iterable) -> dict[tuple, str]:
+    """앞선 읽기의 쪽들로 처음부터 끝까지 이어지는 조각 — 이은 글자의 알아볼 값 → 글자. 앞선 읽기의 머리는 보지 않는다:
+    이번 답의 머리와 알아볼 값 넷이 같은 글자만 빌리므로 그것이 검사다. 쓸 수 없는 쪽 · 빈 자리 · 읽지 못한 파일은 말없이
+    건너뛴다 — 앞선 읽기는 빌려 줄 뿐, 그 안의 어긋난 것이 이번 읽기를 막지 않는다."""
+    by_id: dict[str, dict[int, tuple]] = {}
+    for result in answers(earlier)[0]:
+        page = _usable(result)
+        if page is not None:
+            by_id.setdefault(page[0], {}).setdefault(page[1], page)
+    held = {}
+    for pages in by_id.values():
+        parts, pos, end = [], 0, None
+        while pos in pages and (end is None or pages[pos][3] == end):
+            _id, _at, pos, end, text = pages[pos]
+            parts.append(text)
+        if parts and pos == end:
+            text = "".join(parts)
+            held[_identity_of(text)] = text
+    return held
+
+
 def _body_meta(result: Mapping) -> Mapping | None:
     return result.get("body") if result.get("op") != "take" and result.get("ok") else None
 
@@ -183,22 +228,12 @@ def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
 
     조각의 글자는 (1) 그 조각의 쪽을 이은 것, 아니면 (2) 알아볼 값 넷이 같은 다 받은 조각 — 이번 답들이나 앞선 읽기의 답들
     (`earlier`)에서 — 이다. 어디에도 없으면 CutAnswer 로 그 조각의 빈 자리와 크기를 댄다(그 자리의 쪽이 잘려 왔으면 더 작은
-    크기). 이번 조각의 쪽이 서로 어긋나거나 이은 글자가 알아볼 값과 다르면 BrowserError. 앞선 읽기에서 그렇게 어긋난 조각은
-    빌리지 않을 뿐이다. 풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
+    크기). 이번 조각의 쪽이 서로 어긋나거나 이은 글자가 알아볼 값과 다르면 BrowserError. 앞선 읽기에서는 처음부터 끝까지 이어지는
+    쪽들만 빌려 주고(_lent), 그 밖의 것은 오류가 아니다. 풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
     """
     whole, cuts = answers(results, latest=True)
-    before = answers(earlier)[0]
-    pieces = _pieces(whole + before)
-    held: dict[tuple, str] = {}
-    for result in before:
-        meta = _body_meta(result)
-        if meta is not None:
-            try:
-                text, _end = _join(meta, pieces.get(str(meta["id"]), {}))
-            except BrowserError:
-                continue
-            if text is not None:
-                held[_identity(meta)] = text
+    pieces = _pieces(whole)
+    held = _lent(earlier)
     joined: dict[int, tuple[str | None, int]] = {}
     for index, result in enumerate(whole):
         meta = _body_meta(result)
