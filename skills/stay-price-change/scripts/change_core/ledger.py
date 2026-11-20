@@ -329,11 +329,11 @@ class Ledger:
             (change_id,)).fetchall()
 
     def verify(self, change_id: int, reading: Reading) -> list[Mismatch]:
-        """저장된 값을 방금 읽은 값과 견준다. 맞는 값은 확인됨으로 적고, 다른 값을 돌려준다."""
+        """저장된 값을 방금 읽은 값과 견준다. 맞는 값은 확인됨으로 적고, 다른 값을 돌려준다. 되돌린 값은 보지 않는다."""
         mismatches = []
         with self._db() as db:
             self._header(db, change_id)
-            for row in self._written(db, change_id):
+            for row in self._written(db, change_id, still_ours=True):
                 item = reading.get((row["item_kind"], row["item_key"]))
                 seen = None if item is None else item.fields.get(row["field"])
                 after = money(row["after"])

@@ -276,6 +276,7 @@ class CellView:
     verified: bool = True
     seen: dict = field(default_factory=dict)
     reserved: bool = False
+    rolled_back_by: int | None = None
 
 
 def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
@@ -288,11 +289,15 @@ def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
         view = CellView(CellValue(*(before.get(name) for name in FIELDS), rows[0].state),
                         reserved=RESERVED in rows[0].marks)
         for row in rows:
-            if row.written:
-                view.written = True
-                view.after[row.field] = row.after
-                view.verified = view.verified and row.verified
-                view.seen[row.field] = row.seen
+            if not row.written:
+                continue
+            view.written = True
+            view.after[row.field] = row.after
+            if row.rolled_back_by is not None:
+                view.rolled_back_by = row.rolled_back_by
+                continue
+            view.verified = view.verified and row.verified
+            view.seen[row.field] = row.seen
         views[key_of_item(item_key)] = view
     return views
 
@@ -300,14 +305,20 @@ def cell_views(record: ChangeRecord) -> dict[CellKey, CellView]:
 def render_result(record: ChangeRecord, ledger_path: str | None = None) -> str:
     currency = record.currency
     views = cell_views(record)
-    written = [view for view in views.values() if view.written]
+    written = [view for view in views.values() if view.written and not view.rolled_back_by]
+    undone = sorted({view.rolled_back_by for view in views.values() if view.rolled_back_by})
+    undone_count = sum(1 for view in views.values() if view.rolled_back_by)
     mismatched = [view for view in written if record.verified_at and not view.verified]
     kind = "되돌리기 결과" if record.kind == "rollback" else "적용 결과"
     title = f"{kind} · {record.hotel} · {record.offer}"
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub">장부 {record.id}번 · 요청 “{esc(record.sentence)}”'
             f'{f" · {record.reverses}번 변경을 되돌림" if record.reverses else ""} · 통화 {esc(currency)}</p>',
-            result_banner(record, len(written), len(mismatched)), steps_list(record.steps), stopped_choices(record)]
+            result_banner(record, len(written), len(mismatched))]
+    if undone:
+        body.append(f'<p class="sub">이 변경의 {undone_count:,}칸은 뒤에 되돌렸습니다(장부 '
+                    f'{", ".join(f"{number}번" for number in undone)}).</p>')
+    body += [steps_list(record.steps), stopped_choices(record)]
     closed = {key for key, view in views.items() if view.before.state == "closed"}
     reserved = {(key.room, key.date) for key, view in views.items() if view.reserved}
 
@@ -316,6 +327,8 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None) -> str:
         if not view.written:
             return "same", f'<span class="was">{fmt_money(view.before.sell, currency)}</span><small class="more">그대로</small>'
         moved = _move(view.before, _with(view.before, view.after), currency)
+        if view.rolled_back_by:
+            return "same", f'{moved}<span class="tag closed">되돌림 · 장부 {view.rolled_back_by}번</span>'
         if record.verified_at and not view.verified:
             seen = " · ".join(f"{FIELD_LABELS[name]} {'읽지 못함' if value is None else fmt_money(value, currency)}"
                               for name, value in view.seen.items())

@@ -7,7 +7,7 @@
     resolve(plan, resolutions)          → (writes, unresolved)   빨간 줄을 고른 뒤 넣을 값
     save_steps(writes)                  → 저장 단계들   객실 × 요금제 × 이어진 날짜(줄마다 같은 값)
     stale_cells(then, now)              → 다른 항목들   (change_core.items.stale_items)
-    plan_cell_rollback(recorded, …)     → RollbackPlan (change_core.rollback.plan_rollback)
+    plan_cell_rollback(recorded, …)     → RollbackPlan (change_core.rollback.plan_rollback) — cell_filter 로 일부만
     preview_rows · snapshot_rows · rollback_rows · step_plans   장부(change_core.ledger)에 넘길 공통 모양
 """
 
@@ -26,7 +26,7 @@ from change_core.rules import BLOCKED, RED, Resolution, decide
 from price_model import (
     CELL_RULES, CLOSED, FIELD_LABELS, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, BulkStep, CellChange, CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
-    cell_state, day_label, encode_step, key_of_item, occupancy_order, snapshot_reading, split_occupancy,
+    cell_state, day_label, occupancy_label, encode_step, key_of_item, occupancy_order, snapshot_reading, split_occupancy,
 )
 
 
@@ -278,6 +278,25 @@ def snapshot_rows(snapshot: Snapshot) -> list[ValueRow]:
 def stale_cells(then: Snapshot, now: Snapshot) -> tuple[Difference, ...]:
     """미리보기 때 읽은 값과 방금 읽은 값이 다른 칸 전부. 한쪽에만 있는 칸도 다른 칸이다."""
     return stale_items(snapshot_reading(then), snapshot_reading(now))
+
+
+def cell_filter(rooms: Iterable[str] = (), rate_plans: Iterable[str] = (), date_from: str | None = None,
+                date_to: str | None = None, occupancies: Iterable[str] = ()) -> tuple[Callable[[CellKey], bool] | None, str]:
+    """일부만 되돌릴 때 칸을 고르는 조건과 그 범위를 사람이 읽는 글. 아무것도 주지 않으면 `(None, "")` — 변경 전체다."""
+    rooms, rate_plans, occupancies = set(rooms), set(rate_plans), set(occupancies)
+    if not (rooms or rate_plans or date_from or date_to or occupancies):
+        return None, ""
+    first, last = (date.fromisoformat(day).isoformat() if day else None for day in (date_from, date_to))
+
+    def select(key: CellKey) -> bool:
+        return ((not rooms or key.room in rooms) and (not rate_plans or key.rate_plan in rate_plans)
+                and (first is None or key.date >= first) and (last is None or key.date <= last)
+                and (not occupancies or key.occupancy in occupancies))
+
+    parts = [" · ".join(sorted(rooms)), " · ".join(sorted(rate_plans)),
+             f"{day_label(first) if first else '처음'} ~ {day_label(last) if last else '끝'}" if first or last else "",
+             " · ".join(occupancy_label(occupancy) for occupancy in sorted(occupancies))]
+    return select, " / ".join(part for part in parts if part)
 
 
 def plan_cell_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequence[LaterWrite]], now: Snapshot,

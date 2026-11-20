@@ -8,7 +8,7 @@
     record-step   저장 한 번이 끝날 때마다 — 됨(--saved) 또는 멈춤(--failed)
     verify        적용 뒤 다시 읽은 값과 견주기
     stale         미리보기 때 값과 방금 읽은 값 견주기 — 다르면 종료 코드 1
-    rollback      장부의 변경 하나를 되돌리는 계산(rollback.json). --record 면 장부에 적는다
+    rollback      장부의 변경 하나(또는 객실·요금제·날짜·인원으로 고른 일부)를 되돌리는 계산. --record 면 장부에 적는다
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록
 
@@ -42,7 +42,7 @@ from price_model import (
 )
 from price_pages import render_prices, render_preview, render_result, render_rollback
 from price_plan import (
-    PlanError, counts, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    PlanError, cell_filter, counts, plan_cell_rollback, plan_change, plan_targets, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
     snapshot_rows, stale_cells, step_plans,
 )
 
@@ -144,12 +144,13 @@ def cmd_stale(args):
 def cmd_rollback(args):
     ledger = Ledger()
     snapshot = decode_snapshot(load(args.snapshot))
+    select, scope = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
     plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
-                              args.include_kept)
+                              args.include_kept, select)
     change_id = ledger.record_preview(hotel=plan.hotel, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
                                       read_at=plan.read_at, rows=rollback_rows(plan),
                                       reverses=args.change) if args.record else None
-    return dict(change_id=change_id, rollback=encode_rollback(plan),
+    return dict(change_id=change_id, scope=scope, rollback=encode_rollback(plan),
                 steps=[encode_step(step) for step in save_steps(rollback_writes(plan))],
                 reserved=[dict(room=room, date=day) for room, day in sorted(snapshot.reserved)])
 
@@ -219,6 +220,11 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--snapshot", required=True, help="지금 읽은 값")
     sub.add_argument("--include-kept", action="store_true", help="그 사이 달라진 칸도 되돌린다")
+    sub.add_argument("--room", action="append", help="이 객실의 칸만 (여러 번)")
+    sub.add_argument("--rate-plan", action="append", help="이 요금제의 칸만 (여러 번)")
+    sub.add_argument("--from", dest="date_from", help="이 날짜부터(ISO)")
+    sub.add_argument("--to", dest="date_to", help="이 날짜까지(ISO)")
+    sub.add_argument("--occupancy", action="append", help="이 인원 조합 키의 칸만 (여러 번, 인원 무관은 빈 글자)")
     sub.add_argument("--record", action="store_true", help="장부에 되돌리기 미리보기로 적는다")
     sub.add_argument("--sentence", default="되돌리기", help="담당자가 한 말")
 
