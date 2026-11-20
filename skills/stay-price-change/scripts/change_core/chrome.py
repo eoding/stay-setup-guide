@@ -267,6 +267,26 @@ def unremovable_table(plan: RollbackPlan, field_labels: Mapping[str, str], unit:
             f'<div class="scroll"><table><tr><th>무엇</th><th>지금 값</th><th>왜</th></tr>{rows}</table></div>')
 
 
+def chosen_groups(rows) -> list[tuple[str, str, str | None, tuple[str, ...]]]:
+    """장부의 줄(필드마다 하나 — RowRecord)에서 고른 빨간 줄마다 `(판정, 고른 것, 고르며 한 말, 그 항목 키들)`. 같은 판정 · 고름 ·
+    말이면 한 묶음이다(처음 나온 차례)."""
+    groups: dict[tuple, dict[str, None]] = {}
+    for row in rows:
+        if row.choice:
+            groups.setdefault((row.verdict, row.choice, row.said), {})[row.item_key] = None
+    return [(verdict, choice, said, tuple(keys)) for (verdict, choice, said), keys in groups.items()]
+
+
+def chosen_table(entries: Iterable[tuple[str, str, int, str | None]], unit: str = "칸") -> str:
+    """고르신 빨간 줄 — 줄마다 `(빨간 줄 이름, 고르신 것, 그 수, 고르실 때 하신 말)`. 고른 것이 없으면 빈 글자."""
+    rows = "".join(f'<tr><td class="text">{esc(rule)}</td><td class="text">{esc(choice)}</td><td>{count:,}</td>'
+                   f'<td class="text">{f"“{esc(said)}”" if said else "—"}</td></tr>' for rule, choice, count, said in entries)
+    if not rows:
+        return ""
+    return (f'<h2>고르신 빨간 줄</h2><div class="scroll"><table><tr><th>빨간 줄</th><th>고르신 것</th><th>{esc(unit)} 수</th>'
+            f'<th>고르실 때 하신 말</th></tr>{rows}</table></div>')
+
+
 ROLLBACK_NOTE = "이 되돌리기도 장부에 한 번의 변경으로 적혀서, 다시 되돌릴 수 있습니다."
 
 

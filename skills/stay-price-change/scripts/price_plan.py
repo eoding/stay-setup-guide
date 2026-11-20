@@ -373,7 +373,7 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     for _round in range(len(first) + 1):    # 「이대로 바꿈」으로 바꾼 값이 다른 칸의 견줌을 바꾼다 — 고름이 더 늘지 않을 때까지
         breaks = _tier_breaks(plan, first, included)
         picked, _waiting = decide(CELL_RULES, dict.fromkeys(breaks, TIER_RULE), tier_choices, cell_name)
-        now = {key for key, choice in picked.items() if choice == "include"}
+        now = {key for key, picked_one in picked.items() if picked_one.choice == "include"}
         if now == included:
             break
         included = now
@@ -449,9 +449,10 @@ def _tier_breaks(plan: Plan, cells: Mapping[CellKey, CellChange], included: set[
             return flagged
 
 
-def _choose(change: CellChange, choice: str | None) -> CellChange:
-    if choice is None:
+def _choose(change: CellChange, resolution: Resolution | None) -> CellChange:
+    if resolution is None:
         return change
+    choice = resolution.choice
     after = change.after
     if choice == "keep":
         after = change.before

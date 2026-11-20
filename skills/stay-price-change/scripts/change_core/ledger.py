@@ -14,7 +14,8 @@
                  읽은 값의 시각)
     item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 후 값,
                  넣는 방법(set / clear, 넣지 않으면 비어 있음 — 미리보기 때 정해지고 begin 은 저장 단계가 이것과 같은지 본다),
-                 판정 · 표시 · 빨간 줄에 고른 것, 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값, 되돌린 되돌리기 번호
+                 판정 · 표시 · 빨간 줄에 고른 것과 그렇게 고르며 담당자가 한 말, 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값,
+                 되돌린 되돌리기 번호
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS item_values (
   verdict TEXT,
   marks TEXT NOT NULL DEFAULT '',
   choice TEXT,
+  said TEXT,
   PRIMARY KEY (change_id, item_kind, item_key, field)
 );
 CREATE TABLE IF NOT EXISTS steps (
@@ -153,8 +155,8 @@ def _minutes(span: timedelta) -> int:
 @dataclass(frozen=True)
 class ValueRow:
     """미리보기 때 적는 한 줄 — 미리보기가 보인 그 항목의 그 필드. `after` 는 후 값(바뀌지 않는 필드는 None), `action` 은
-    저장이 그 필드에 하는 일(`set` 넣음 · `clear` 비움 · None 넣지 않음), `choice` 는 그 항목의 빨간 줄에 고른 것.
-    `begin` 은 저장 단계가 쓰는 값이 이 줄들과 꼭 같을 때만 시작한다."""
+    저장이 그 필드에 하는 일(`set` 넣음 · `clear` 비움 · None 넣지 않음), `choice` 는 그 항목의 빨간 줄에 고른 것, `said` 는
+    그렇게 고르며 담당자가 한 말. `begin` 은 저장 단계가 쓰는 값이 이 줄들과 꼭 같을 때만 시작한다."""
     item_kind: str
     item_key: str
     label: str
@@ -166,6 +168,7 @@ class ValueRow:
     marks: tuple[str, ...] = ()
     action: str | None = None
     choice: str | None = None
+    said: str | None = None
 
     def __post_init__(self):
         if (self.action not in (None, "set", "clear") or (self.action == "set" and self.after is None)
@@ -221,6 +224,7 @@ class RowRecord:
     verdict: str | None
     marks: tuple[str, ...]
     choice: str | None = None
+    said: str | None = None
 
 
 @dataclass(frozen=True)
@@ -347,9 +351,9 @@ class Ledger:
              None if reading is None else _body(reading))).lastrowid
         db.executemany(
             "INSERT INTO item_values (change_id, item_kind, item_key, label, field, state, before, after, action, verdict, marks,"
-            " choice) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " choice, said) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(change_id, row.item_kind, row.item_key, row.label, row.field, row.state, money_text(row.before),
-              money_text(row.after), row.action, row.verdict, ",".join(row.marks), row.choice) for row in rows])
+              money_text(row.after), row.action, row.verdict, ",".join(row.marks), row.choice, row.said) for row in rows])
         return change_id
 
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
@@ -727,7 +731,7 @@ class Ledger:
                 RowRecord(row["item_kind"], row["item_key"], row["label"], row["field"], row["state"], money(row["before"]),
                           money(row["after"]), row["action"], row["step"], row["step"] in saved, bool(row["verified"]),
                           money(row["seen"]), row["seen_state"], row["rolled_back_by"], row["verdict"],
-                          tuple(mark for mark in row["marks"].split(",") if mark), row["choice"])
+                          tuple(mark for mark in row["marks"].split(",") if mark), row["choice"], row["said"])
                 for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
         cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps])
         return ChangeRecord(header["id"], header["kind"], self._status(header), header["hotel"], header["hotel_id"],

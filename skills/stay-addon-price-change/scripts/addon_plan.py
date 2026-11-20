@@ -156,11 +156,12 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     return replace(plan, changes=tuple(_choose(change, chosen.get(change.key)) for change in plan.changes))
 
 
-def _choose(change: LineChange, choice: str | None) -> LineChange:
+def _choose(change: LineChange, resolution: Resolution | None) -> LineChange:
     """고른 것을 단다 — 「그 줄은 안 바꿈」이면 후 값이 전 값이 된다(가격 캘린더 도우미와 같다)."""
-    if choice is None:
+    if resolution is None:
         return change
-    return replace(change, choice=choice, after=change.before if choice == "keep" else change.after)
+    keep = resolution.choice == "keep"
+    return replace(change, choice=resolution.choice, after=change.before if keep else change.after)
 
 
 def unresolved(plan: Plan) -> tuple[LineChange, ...]:

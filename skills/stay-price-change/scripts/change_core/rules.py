@@ -45,15 +45,26 @@ class RuleTable:
 
 @dataclass(frozen=True)
 class Resolution:
-    """빨간 줄 규칙 하나에 대한 고름. `items` 가 None 이면 그 규칙의 모든 항목, 있으면 짚은 항목만."""
+    """빨간 줄 규칙 하나에 대한 고름. `items` 가 None 이면 그 규칙의 모든 항목, 있으면 짚은 항목만. `said` 는 그렇게 고르며
+    담당자가 한 말 그대로다 — 장부가 고른 것과 함께 적고, 결과 페이지가 고른 것 옆에 보인다."""
     rule: str
     choice: str
     items: tuple[Hashable, ...] | None = None
+    said: str = ""
+
+
+def said_in(entry: Mapping) -> str:
+    """고름 파일의 고름 하나에 적힌 담당자의 말(`said`). 없으면 거절한다 — 빨간 줄의 고름은 담당자의 말에서만 나온다."""
+    said = str(entry.get("said") or "").strip()
+    if not said:
+        raise Refused(f"고름마다 담당자가 그렇게 고르며 한 말을 그대로 적습니다(said): {entry.get('rule')} · {entry.get('choice')}")
+    return said
 
 
 def decide(table: RuleTable, flagged: Mapping[Hashable, str], resolutions: Iterable[Resolution],
            describe: Callable[[Hashable], str] = str) -> tuple[dict, tuple]:
-    """빨간 줄 항목마다 고른 것 — `(항목 → 고름, 아직 고르지 않은 항목)`. 항목을 짚은 고름이 규칙 전체 고름보다 앞선다."""
+    """빨간 줄 항목마다 고른 것 — `(항목 → 그 항목에 맞은 고름(Resolution), 아직 고르지 않은 항목)`. 항목을 짚은 고름이 규칙
+    전체 고름보다 앞선다."""
     by_rule, by_item = {}, {}
     for resolution in resolutions:
         rule = table.by_code.get(resolution.rule)
@@ -62,12 +73,12 @@ def decide(table: RuleTable, flagged: Mapping[Hashable, str], resolutions: Itera
         if resolution.choice not in rule.choices:
             raise Refused(f"{rule.label} — 고를 수 있는 것: {', '.join(rule.choices)} (받은 값 {resolution.choice!r})")
         if resolution.items is None:
-            by_rule[rule.code] = resolution.choice
+            by_rule[rule.code] = resolution
             continue
         for item in resolution.items:
             if flagged.get(item) != rule.code:
                 raise Refused(f"「{rule.label}」 항목이 아닙니다: {describe(item)}")
-            by_item[item] = resolution.choice
+            by_item[item] = resolution
     chosen, waiting = {}, []
     for item, code in flagged.items():
         if table.severity(code) != RED:
