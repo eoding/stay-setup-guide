@@ -239,11 +239,20 @@ class SheetDocsTest(unittest.TestCase):
 
     def test_the_instructions_say_the_season_refill_sentence_the_pages_say(self):
         self.assertGreaterEqual(self.sheet.count(SEASON_REFILL_NOTE), 2, "두 길을 말할 때와 미리보기를 말할 때")
-        self.assertIn("(가) 시즌 원판 바꾸기", self.sheet)
-        self.assertIn("아직 못 합니다", self.sheet)
-        self.assertIn("(가) 시즌 원판 바꾸기는 도우미가 아직 못 합니다", (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"),
-                      "「하지 않는 것」의 답")
+        self.assertNotIn("아직 못 합니다", self.sheet + (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"),
+                         "(가)는 「아직 못 함」이 아니라 저장 · 견주기 · 되돌리기의 안전망이다(G1)")
         self.assertNotIn("새 요금표로 통째 바꾸기는 아직 못 한다", self.skill + self.sheet)
+
+    def test_g1_the_season_refill_way_saves_compares_and_restores_and_says_why_the_helper_does_not_fill(self):
+        way = section(self.sheet, "## (가) 시즌 원판 바꾸기")
+        why = re.search(r"도우미는 시즌을 직접 채우지 않습니다 — [^\"]+때문입니다\.", way)
+        self.assertIsNotNone(why, "시즌을 채우지 않는다는 것과 그 까닭을 한 문장으로")
+        self.assertIn(why.group(0), (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"), "「하지 않는 것」도 같은 문장")
+        steps = ["「2. 지금 상태만 저장」", "read-calls --record S", "compare --saved S", "render compare", "restore --saved S"]
+        self.assertEqual([step for step in steps if step in way], steps, "저장 → 다시 읽기 → 견주기 → 되돌리기")
+        self.assertLess(way.index(steps[0]), way.index(steps[2]))
+        self.assertLess(way.index(steps[2]), way.index(steps[4]))
+        self.assertIn("시즌 창에는 다시 채운 입력값이 그대로 보이고, 캘린더의 날짜별 값만 저장해 둔 값으로 돌아갑니다", way)
 
     def test_commands_md_names_every_kind_of_gap(self):
         table = self.commands[self.commands.index("## 넣지 않는 것"):]
