@@ -316,6 +316,33 @@ class StoppedTest(Flow):
         self.assertEqual(len(self.erp.posts), 1)
 
 
+class AnswersTest(Flow):
+    def test_a_missing_piece_is_asked_for_by_this_helpers_take(self):
+        request = self.request(LATE_BAND, value="60")
+        folder = self.work / "읽기-x"
+        folder.mkdir()
+        self.cli("read-calls", "--request", request, "--out", folder / "calls.json")
+        call, = json.loads((folder / "calls.json").read_text(encoding="utf-8"))["charges"]
+        answer, *pieces = self.erp.read_charge(call)
+        scene.write_answers(folder, "charge", [[answer, *pieces[1:]]])
+        refused = self.cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json", code=2)
+        self.assertIn("stayCharge.take(", refused["error"])
+        self.assertNotIn("stayPrice.take(", refused["error"])
+        self.assertEqual(refused["refetch"][0]["at"], 0)
+
+    def test_render_text_only_reads_the_page_and_refuses_an_out_file(self):
+        _change, plan = self.preview(self.request(GALA, value="95"))
+        self.assertIn("text", self.cli("render", "preview", "--plan", plan, "--text"))
+        self.cli("render", "preview", "--plan", plan, "--text", "--out", self.work / "x.html", code=2)
+        self.assertFalse((self.work / "x.html").exists())
+
+    def test_the_scope_line_counts_the_charges_a_change_writes(self):
+        change, _plan = self.preview(self.request(GALA, {"offer": "602", "charge": "706", "field": "amount"}, value="95",
+                                                  sentence="갈라 디너 95"))
+        entry, = [item for item in self.cli("list")["changes"] if item["id"] == change]
+        self.assertTrue(entry["scope"].startswith("부과금 1개 (데모 오퍼 2027 · 크리스마스 갈라 디너"), entry["scope"])
+
+
 class OneLedgerTest(Flow):
     def test_the_other_helpers_neither_list_nor_touch_a_charge_change_in_the_same_ledger(self):
         change, plan = self.preview(self.request(LATE_BAND, value="60"))

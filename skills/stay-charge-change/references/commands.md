@@ -12,14 +12,14 @@
 | `read-calls` | `--request` 또는 `--record` · `--look` · `--out` | 읽을 부과금 → `readCharge` 부를 값 `{charges: [{hotel, offer, charge}]}`. `--look` 을 주면 요청의 오퍼 · 부과금 번호가 목록에 있는지 본다. 한 번에 200개까지 |
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readCharge` 답과 조각 → 지금 값(`kind: charge_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
-| `render` | `preview` · `result` · `rollback` · `prices` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다. `--text` 만 주면 파일을 만들지 않고 페이지의 글(`text`)만 낸다 |
+| `render` | `preview` · `result` · `rollback` · `prices` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다. `--text` 면 파일을 만들지 않고 페이지의 글(`text`)만 낸다(`--out` 과 같이 주면 거절) |
 | `begin` | `--change` · `--plan` · `--snapshot` | 적용 시작. 방금 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 칸이라도(딸린 칸 · 다른 시간대 줄 · 다른 연령별 단가까지) 다르면 아무것도 시작하지 않는다(종료 1, `differences`). 15분보다 오래된 읽은 값은 받지 않는다. 저장할 것이 없는 미리보기는 받지 않는다 |
 | `calls` | `--change` | 아직 저장되지 않은 단계 → `applyCharge` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다 |
 | `record-result` | `--change` · `--result` | `applyCharge` 답 하나 → 장부에 됨 · 멈춤. 다른 단계 · 다른 값을 물은 답이면 거절한다. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |
 | `check` | `--change` · `--snapshot` | 멈춘 변경을 방금 읽은 값으로 본다(stopped.md). 남은 저장의 부과금은 그 안의 모든 금액 칸을 본다 |
 | `verify` | `--change` · `--snapshot` | 적용 뒤 견주기. `mismatches` 넣은 값과 다른 칸, `moved` 저장한 부과금에서 그대로여야 할 금액(다른 시간대 줄 · 연령별 단가 포함) · 칸이 달라졌거나 없던 줄이 생긴 것. 하나라도 있으면 종료 1 |
 | `rollback` | `--change` · `--snapshot` · `--include-kept` · `--charge` (여러 번) · `--record` · `--replaces` · `--sentence` · `--out` | 되돌리기 계산. 그 변경이 넣은 값이 지금도 그대로인 칸만 적어 둔 값으로 돌리고, 그 사이 달라진 칸은 그대로 두며 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다 |
-| `list` | 없음 | 장부의 부과금 변경 목록. 줄마다 `scope`(부과금 몇 개 · 처음 부과금 · 한 일 · 멈췄으면 어디까지) |
+| `list` | 없음 | 장부의 부과금 변경 목록. 줄마다 `scope`(저장이 값을 넣는 부과금 몇 개 · 처음 부과금 · 한 일 · 멈췄으면 어디까지) |
 
 ## 요청 파일
 

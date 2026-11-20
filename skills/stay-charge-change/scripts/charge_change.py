@@ -10,7 +10,7 @@
     read          calls.json + readCharge 답과 조각(폴더째) → 지금 값(snapshot.json). 읽은 시각은 그 답들이 끝난 시각 가운데 가장
                   이른 것. 기록 폴더의 앞선 읽기 폴더(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다
-    render        preview | result | rollback | prices 페이지(HTML). --text 면 파일을 만들지 않고 페이지의 글만 낸다
+    render        preview | result | rollback | prices 페이지(HTML). --text 면 파일을 만들지 않고 페이지의 글만 낸다(--out 과 같이 주지 않는다)
     begin         적용 시작 — 적용 직전에 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 칸이라도(딸린 칸까지)
                   다르면 아무것도 시작하지 않고 다른 것을 댄다(종료 1). 같으면 저장 단계를 장부에 적는다
     calls         아직 저장되지 않은 단계 → applyCharge 부를 값. 멈춘 변경은 다시 읽어 check 가 이어서 해도 된다고 한 뒤에만 낸다
@@ -62,6 +62,7 @@ from change_core.rules import Resolution
 from change_core.window import moved_since as window_moved
 
 PREFIXES = ("look-", "charge-", "take-")
+PAGE_OBJECT = "stayCharge"          # 조각을 다시 받으라고 할 때 부르라고 말하는 페이지 모듈
 READS = ("readCharge",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readCharge 하나가 조각 하나다
 PAGE_NAMES = {"preview": "부과금 미리보기", "result": "부과금 적용 결과", "rollback": "부과금 되돌리기 미리보기",
@@ -81,7 +82,7 @@ def load_results(paths) -> list:
 
 def cmd_look(args):
     results = load_results(args.answers)
-    looks = [result for result in attach_bodies(answers_for(results, "look")) if result.get("op") == "look"]
+    looks = [result for result in attach_bodies(answers_for(results, "look"), page=PAGE_OBJECT) if result.get("op") == "look"]
     if len(looks) != 1:
         raise BrowserError(f"stayCharge.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
     look = looks[0]
@@ -127,7 +128,8 @@ def cmd_read(args):
                            f"부과금 {missing[0]['charge']}. 그 값으로 readCharge 를 부릅니다(불렀는데 답이 끊겼거나 잘렸으면 "
                            "stayCharge.last() 의 답을 새 파일로 저장해도 됩니다)")
     read_at = reading_time(results, READS)
-    joined = attach_bodies(answers_for(results, "readCharge"), files.lent_answers(args.calls, args.answers, calls, PREFIXES))
+    joined = attach_bodies(answers_for(results, "readCharge"), files.lent_answers(args.calls, args.answers, calls, PREFIXES),
+                           PAGE_OBJECT)
     asked = [(str(call["offer"]), str(call["charge"])) for call in calls["charges"]]
     hotel, hotel_id = decode_hotel(calls["charges"][0]["hotel"]) if calls["charges"] else ("", "")
     charges = {}
@@ -176,6 +178,8 @@ def moved_since(ledger: Ledger, change_id: int, now: Snapshot) -> list[dict]:
 
 
 def cmd_render(args):
+    if args.text and args.out:
+        raise ValueError("--text 는 글만 내고 파일을 만들지 않습니다 — --out 과 같이 주지 않습니다")
     name = PAGE_NAMES[args.kind]
     if args.kind == "preview":
         data = load(args.plan)
@@ -194,11 +198,11 @@ def cmd_render(args):
         moved = moved_since(ledger, args.change, decode_snapshot(load(args.snapshot))) if args.snapshot else ()
         html, hotel = render_result(record, moved, str(ledger.path)), record.hotel
         name = "부과금 되돌리기 결과" if record.kind == "rollback" else name
-    if args.text and not args.out:
+    if args.text:           # 글만 옮길 때 — 페이지 파일을 하나 더 만들지 않는다
         return dict(text=page_text(html))
     path = Path(args.out) if args.out else page_path(hotel, name)
     path.write_text(html, encoding="utf-8")
-    return dict(page=str(path.resolve()), **({"text": page_text(html)} if args.text else {}))
+    return dict(page=str(path.resolve()))
 
 
 # ───────────── 적용 ─────────────
@@ -303,7 +307,7 @@ def cmd_rollback(args):
 
 
 def record_scope(entry: dict, labels: list[str]) -> str:
-    """장부 한 줄의 범위 — 몇 개의 부과금인지와 처음 부과금 이름, 한 일, 멈췄으면 어디까지."""
+    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일, 멈췄으면 어디까지."""
     names = list(dict.fromkeys(labels))
     head = f"부과금 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
     request = entry.get("request") or {}
@@ -323,7 +327,9 @@ def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
     out = []
     for entry in ledger.list_changes(change_id):
         rows = ledger.change(entry["id"]).rows
-        labels = [row.label for row in rows if part_of_key(row.item_key)[1] == "main" and row.field == "amount"]
+        touched = {charge_of_key(row.item_key) for row in rows if row.action} or {charge_of_key(row.item_key) for row in rows}
+        labels = [row.label for row in rows if part_of_key(row.item_key)[1] == "main" and row.field == "amount"
+                  and charge_of_key(row.item_key) in touched]
         entry["scope"] = record_scope(entry, labels)
         del entry["request"]
         out.append(entry)
@@ -405,7 +411,7 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--look", help="prices 의 look 파일")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
     sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값(그대로여야 할 칸이 달라졌는지도 보인다)")
-    sub.add_argument("--text", action="store_true", help="페이지에 보이는 글을 답의 text 로 낸다(--out 이 없으면 파일을 만들지 않는다)")
+    sub.add_argument("--text", action="store_true", help="페이지를 만들지 않고 페이지에 보이는 글만 답의 text 로 낸다(--out 과 같이 주지 않는다)")
     sub = command("begin", cmd_begin, "적용 시작")
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--plan", required=True, help="steps 가 든 plan-<k>.json 또는 rollback-<k>.json")
