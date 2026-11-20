@@ -19,7 +19,7 @@ from browser_replies import reply, take as browser_take  # noqa: E402
 from erp_read import ParseError  # noqa: E402
 from price_browser import (  # noqa: E402
     BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, fnv1a, page_hotel, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call,
-    step_outcome,
+    step_outcome, unanswered,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
 
@@ -273,10 +273,15 @@ class BodyTest(unittest.TestCase):
         joined, = attach_bodies([result, takes[0], cut, *again, takes[2]])
         self.assertEqual(joined["fragment"], PRICE)
 
-    def test_a_cut_operation_answer_is_named(self):
-        result, *_ = reply("readPair", self.ASKED, {"fragment": PRICE})
-        with self.assertRaisesRegex(BrowserError, "readPair 의 답이 잘렸습니다"):
-            attach_bodies([json.dumps(result, ensure_ascii=False)[:60] + "[TRUNCATED]"])
+    def test_z4_a_cut_reading_answer_is_no_answer_and_the_whole_one_from_last_or_a_new_call_is_used(self):
+        result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE})
+        cut = json.dumps(result, ensure_ascii=False)[:60] + "[TRUNCATED]"
+        self.assertEqual(attach_bodies([cut]), [], "어느 물음의 답인지 모르는 잘린 답은 답이 아니다")
+        self.assertEqual(unanswered([self.ASKED], [cut], "readPair"), [self.ASKED], "그 물음은 답이 없는 것으로 남는다")
+        running = {"running": {"op": "readPair", "at": "2026-11-21T01:00:00.000Z"}}
+        self.assertEqual(unanswered([self.ASKED], [cut, running], "readPair"), [self.ASKED], "돌던 중에 받은 last() 도 답이 아니다")
+        joined, = attach_bodies([cut, running, result, *takes])
+        self.assertEqual(joined["fragment"], PRICE)
 
     def test_a_body_from_another_question_is_refused(self):
         result, *takes = reply("readPair", self.ASKED, {"fragment": PRICE})

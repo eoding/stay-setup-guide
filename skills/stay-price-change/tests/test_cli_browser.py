@@ -113,6 +113,58 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertIn("끝난 시각", self.run_cli("read", "--calls", calls, "--answers", self.write("timeless.json", timeless),
                                             code=2)["error"], "시각이 없는 답으로 모은 읽기는 거절한다")
 
+    def test_z4_a_reading_whose_answer_was_lost_is_taken_from_last_or_from_calling_the_read_again(self):
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        resv = reply("readReserved", probe, {"fragment": REJECTED}, doneAt=done_at(now - timedelta(minutes=1)))
+        first = reply("readPair", asked, {"fragment": PRICE}, body_id="p1", doneAt=done_at(now - timedelta(minutes=4)))
+        cut = json.dumps(first[0], ensure_ascii=False)[:120] + "[TRUNCATED]"   # 도구가 보인 그대로 저장한 잘린 답
+
+        def reading(name, files):
+            folder = self.dir / name
+            folder.mkdir()
+            calls = self.write(f"{name}/calls.json", {"pairs": [asked], "reserved": [probe]})
+            for index, item in enumerate(resv):
+                self.write(f"{name}/resv-1{'' if index == 0 else '-' + str(index)}.json", item)
+            for file, item in files.items():
+                (folder / file).write_text(item if isinstance(item, str) else json.dumps(item, ensure_ascii=False), encoding="utf-8")
+            return calls, folder
+
+        # (1) stayPrice.last() — 너무 일찍 받으면 아직 도는 중({running})이고, 그 뒤에 받은 것이 끝난 답이다. 잘린 답 파일은 남아 있다
+        calls, folder = reading("읽기-1", {"pair-1.txt": cut, "pair-1-last.json": {"running": {"op": "readPair", "at": first[0]["doneAt"]}}})
+        lost = self.run_cli("read", "--calls", calls, "--answers", folder, code=2)["error"]
+        self.assertIn("readPair 답이 없는 부를 값이 1개", lost)
+        self.assertIn("stayPrice.last()", lost)
+        self.write("읽기-1/pair-1-last-2.json", first[0])
+        for index, item in enumerate(first[1:], 1):
+            self.write(f"읽기-1/take-p1-{index}.json", item)
+        from_last = self.run_cli("read", "--calls", calls, "--answers", folder)
+        self.assertEqual(datetime.fromisoformat(from_last["read_at"]), now - timedelta(minutes=4))
+
+        # (2) 같은 값으로 다시 부름 — 새 조각 id 로 온 둘째 답만 받았다. 잘린 첫 답은 답이 아니다
+        second = reply("readPair", asked, {"fragment": PRICE}, body_id="p2", doneAt=done_at(now - timedelta(minutes=2)))
+        calls, folder = reading("읽기-2", {"pair-1.txt": cut, **{f"pair-2{'' if i == 0 else '-' + str(i)}.json": item
+                                                                 for i, item in enumerate(second)}})
+        again = self.run_cli("read", "--calls", calls, "--answers", folder)
+        self.assertEqual((again["cells"], datetime.fromisoformat(again["read_at"])), (from_last["cells"], now - timedelta(minutes=2)),
+                         "같은 지금 값, 읽은 시각은 다시 부른 답에서")
+
+        # (3) 둘 다 온전히 저장됨 — last() 로 받은 첫 답(조각은 받지 않음)과 그 사이 값이 바뀐 뒤 다시 부른 답. 늦게 끝난 답 하나로 읽는다
+        changed = PRICE.replace('stay-numeric">140.00<', 'stay-numeric">150.00<', 1)
+        later = reply("readPair", asked, {"fragment": changed}, body_id="p3", doneAt=done_at(now - timedelta(minutes=2)))
+        calls, folder = reading("읽기-3", {"pair-1.json": first[0], **{f"pair-2{'' if i == 0 else '-' + str(i)}.json": item
+                                                                     for i, item in enumerate(later)}})
+        both = self.run_cli("read", "--calls", calls, "--answers", folder, "--out", folder / "snapshot.json")
+        self.assertEqual(datetime.fromisoformat(both["read_at"]), now - timedelta(minutes=2))
+        cells = json.loads((folder / "snapshot.json").read_text(encoding="utf-8"))["cells"]
+        first_cell = [(cell["date"], cell["occupancy"], cell["sell"]) for cell in cells][0]
+        self.assertEqual(first_cell, ("2026-12-24", "A2", "150.00"), "다시 부른 답의 값(첫 답은 140.00)")
+        self.assertEqual(from_last["cells"][0]["sell"], "140.00")
+        self.assertTrue(self.run_cli("reserved", "--calls", calls, "--answers", folder)["done"])
+
     def test_g4_a_range_with_no_operation_gives_the_calls_and_g5_a_record_number_gives_them_again(self):
         range_ = {"kind": "range", "hotel": scene.HOTEL_REF, "offer": scene.OFFER,
                   "pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}, {"room": "스위트", "rate_plan": "룸온리"}],

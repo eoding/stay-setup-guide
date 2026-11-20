@@ -83,26 +83,54 @@ def _clue(text: str) -> dict:
             "size": None if size is None else int(size)}
 
 
-def answers(results: Iterable) -> tuple[list[dict], list[dict]]:
-    """답 목록 → (온전한 답, 잘린 답의 단서). 글자로 들어온 답은 도구가 보인 그대로다 — `[TRUNCATED]` 가 붙었거나
-    JSON 이 닫히지 않았으면 잘린 것이다. 시작하지 않은 답(`started: false` — 아무것도 하지 않았다)은 없는 답으로 친다."""
+ASKED = ("look", "readPair", "readReserved")   # 읽는 작업 — 답을 잃으면 stayPrice.last() 로 받아도, 같은 값으로 다시 불러도 된다
+
+
+def _finished(result: Mapping) -> tuple:
+    """답의 끝난 시각(`doneAt`)으로 견줄 값 — 시각이 없거나 읽지 못하면 가장 이른 것으로 친다."""
+    try:
+        return 1, datetime.fromisoformat(str(result["doneAt"]).replace("Z", "+00:00")).timestamp()
+    except (KeyError, TypeError, ValueError):
+        return (0,)
+
+
+def _latest(whole: list[dict]) -> list[dict]:
+    """같은 읽는 작업 · 같은 물음(지문 `ask`)의 온전한 답이 둘 이상이면 끝난 시각이 가장 늦은 것 하나만(같으면 뒤의 것) — 답을 잃어
+    stayPrice.last() 로 받은 답과 다시 불러 받은 답이 함께 저장돼도 읽기는 한 번의 답으로 묶인다."""
+    chosen: dict[tuple, int] = {}
+    for index, result in enumerate(whole):
+        if result.get("op") in ASKED:
+            key = (result["op"], result.get("ask"))
+            if key not in chosen or _finished(result) >= _finished(whole[chosen[key]]):
+                chosen[key] = index
+    return [result for index, result in enumerate(whole)
+            if result.get("op") not in ASKED or chosen[(result["op"], result.get("ask"))] == index]
+
+
+def answers(results: Iterable, latest: bool = False) -> tuple[list[dict], list[dict]]:
+    """답 목록 → (온전한 답, 잘린 쪽의 단서). 글자로 들어온 답은 도구가 보인 그대로다 — `[TRUNCATED]` 가 붙었거나
+    JSON 이 닫히지 않았으면 잘린 것이다. 답이 아닌 것은 뺀다: 시작하지 않은 답(`started: false` — 아무것도 하지 않았다),
+    작업이 도는 중에 받은 stayPrice.last()(`{running}`), 그리고 잘린 읽는 작업의 답(어느 물음의 답인지 모른다 — 그 물음은 답이
+    없는 것으로 남아 last() 로 받거나 다시 부르라는 말이 나온다). 잘린 take 답은 다시 받을 쪽의 단서가 된다. `latest` 면 같은
+    물음의 답이 여럿일 때 가장 늦게 끝난 것만 남긴다(_latest — 이번 읽기의 답. 앞선 읽기의 답은 조각만 빌려 주므로 모두 둔다)."""
     whole, cut = [], []
     for item in results:
         if isinstance(item, Mapping):
-            if item.get("started") is not False:
-                whole.append(dict(item))
-            continue
-        text = str(item)
-        try:
-            data = json.loads(text)
-        except ValueError:
-            data = None
-        if isinstance(data, dict) and "[TRUNCATED]" not in text:
-            if data.get("started") is not False:
-                whole.append(data)
+            data, text = dict(item), None
         else:
-            cut.append(_clue(text))
-    return whole, cut
+            text = str(item)
+            try:
+                data = json.loads(text)
+            except ValueError:
+                data = None
+        if isinstance(data, dict) and (text is None or "[TRUNCATED]" not in text):
+            if data.get("started") is not False and not ("running" in data and "op" not in data):
+                whole.append(data)
+            continue
+        clue = _clue(text)
+        if clue["op"] == "take" or (clue["op"] is None and clue["id"] is not None):
+            cut.append(clue)
+    return (_latest(whole) if latest else whole), cut
 
 
 def _smaller(size: int | None) -> int:
@@ -176,11 +204,7 @@ def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
     크기). 이번 조각의 쪽이 서로 어긋나거나 이은 글자가 알아볼 값과 다르면 BrowserError. 앞선 읽기에서 그렇게 어긋난 조각은
     빌리지 않을 뿐이다. 풀린 body 의 물음(`asked`)은 답의 지문(`ask`)과 맞아야 한다.
     """
-    whole, cuts = answers(results)
-    for clue in cuts:
-        if clue["op"] not in ("take", None) or (clue["op"] is None and clue["id"] is None):
-            raise BrowserError(f"{clue['op'] or '어떤 작업'} 의 답이 잘렸습니다(도구는 1,000자쯤에서 자릅니다) — "
-                               f"stayPrice.last() 로 다시 받거나 같은 작업을 다시 부릅니다")
+    whole, cuts = answers(results, latest=True)
     before = answers(earlier)[0]
     pieces = _pieces(whole + before)
     held: dict[tuple, str] = {}
@@ -334,7 +358,7 @@ def reading_time(results: Iterable) -> str:
     적은 끝난 시각(`doneAt`) 가운데 가장 이른 것. 명령을 부른 때가 아니다(읽기가 끝나고 몇 분 뒤에 부를 수 있다). 15분 창도 이
     시각에서 잰다. 끝난 시각이 없는 답(예전 판 페이지의 답)이 하나라도 있으면 언제 읽었는지 모르므로 거절한다."""
     moments = []
-    for result in answers(results)[0]:
+    for result in answers(results, latest=True)[0]:
         if result.get("op") not in READS or not result.get("ok"):
             continue
         if not result.get("doneAt"):

@@ -167,7 +167,8 @@ def cmd_read(args):
         missing = unanswered(calls["pairs"], results, "readPair")
         if missing:
             raise BrowserError(f"readPair 답이 없는 부를 값이 {len(missing)}개 있습니다 — 처음 것: {missing[0]['room']} · "
-                               f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다")
+                               f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다"
+                               " (불렀는데 답이 끊겼거나 잘렸으면 stayPrice.last() 의 답을 새 파일로 저장해도 됩니다)")
         read_at = reading_time(results)
         results = attach_bodies(results, load_results(args.earlier))
         pair_answers, reserved_answers = answers_for(results, "readPair"), answers_for(results, "readReserved")
