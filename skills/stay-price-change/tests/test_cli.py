@@ -125,9 +125,14 @@ class CommandTest(unittest.TestCase):
         self.assertEqual((short["mode"], short["restored"]), ("restore", len(whole["rollback"]["restored"])))
         self.assertNotIn('"targets"', text)
 
-    def test_render_text_gives_the_words_the_page_shows(self):
+    def test_render_text_gives_the_words_the_page_shows_and_writes_no_file(self):
         self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--out", self.dir / "plan-1.json")
-        shown = self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text", "--out", self.dir / "미리 보기 · 1.html")
+        page = Path(self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json")["page"])
+        before = sorted(page.parent.iterdir())
+        shown = self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text")
+        self.assertEqual(sorted(page.parent.iterdir()), before, "F9 — 글을 읽는 것은 「… (2).html」 같은 새 파일을 만들지 않는다")
+        self.assertEqual(set(shown), {"text"})
+        self.assertEqual(shown["text"], self.run_cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text")["text"])
         lines = shown["text"].splitlines()
         self.assertEqual(lines[0], "미리보기 · 데모 호텔 · 기본 오퍼 · 판매가 +10%")
         self.assertIn("빨간 줄 · 2칸이 정가(줄 그은 값)를 넘습니다.", shown["text"])

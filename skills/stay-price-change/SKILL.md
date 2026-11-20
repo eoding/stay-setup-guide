@@ -38,7 +38,7 @@ metadata:
 ## 담당자에게 말할 때
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
-- 도우미는 자기가 만든 페이지(이 컴퓨터의 HTML 파일)를 브라우저 도구로 열지 못한다. 브라우저 도구는 ERP 탭만 다룬다. 그래서 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 를 `--text` 를 붙여 다시 하고 답의 `text`(페이지에 보이는 글)에서 옮긴다.
+- 도우미는 자기가 만든 페이지(이 컴퓨터의 HTML 파일)를 브라우저 도구로 열지 못한다. 브라우저 도구는 ERP 탭만 다룬다. 그래서 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text`(페이지에 보이는 글)에서 옮긴다. 파일은 새로 생기지 않는다.
 - 8일 넘는 표는 같은 날끼리 열 하나로 묶여 나온다(commands.md `render`). 담당자가 "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다.
 
 ## 준비

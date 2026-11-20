@@ -261,9 +261,11 @@ def cmd_render(args):
         ledger = open_ledger()
         record = ledger.change(args.change)
         html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
+    if args.text:   # 페이지의 글을 읽기만 한다 — 파일을 쓰지 않는다(같은 페이지가 「… (2).html」로 또 생기지 않게)
+        return dict(text=page_text(html))
     path = Path(args.out) if args.out else page_path(hotel, name)
     path.write_text(html, encoding="utf-8")
-    return dict(page=str(path.resolve()), **({"text": page_text(html)} if args.text else {}))
+    return dict(page=str(path.resolve()))
 
 
 def reading_since(ledger: Ledger, change_id: int, now):
@@ -559,8 +561,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--by-date", action="store_true",
                      help="날짜마다 열 하나 — 기본은 8일 넘는 표에서 칸이 모두 같은 날끼리 열 하나(\"날짜별로 펼쳐 줘\")")
     sub.add_argument("--text", action="store_true",
-                     help="답에 페이지에 보이는 글(text)도 싣는다 — 도우미는 자기 페이지를 브라우저 도구로 열지 못하니, 페이지의 글을 "
-                          "그대로 옮겨야 할 때 이것으로 읽는다")
+                     help="파일을 쓰지 않고 페이지에 보이는 글(text)만 답한다 — 도우미는 자기 페이지를 브라우저 도구로 열지 못하니, "
+                          "이미 연 페이지의 글을 그대로 옮겨야 할 때 이것으로 읽는다")
 
     sub = command("begin", cmd_begin, "적용 시작 — 적용 직전에 읽은 값이 미리보기 때와 같을 때만")
     sub.add_argument("--change", type=int, required=True)
@@ -627,6 +629,8 @@ def main(argv=None) -> int:
         needed = {"preview": "plan", "rollback": "plan", "prices": "snapshot", "result": "change", "sheet": "plan"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
+        if args.text and args.out:
+            parser().error("--text 는 페이지의 글만 답하고 파일을 쓰지 않습니다 — --out 과 같이 주지 않습니다")
     try:
         result = args.handler(args)
     except (ParseError, PlanError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:
