@@ -198,9 +198,12 @@ def cmd_record_result(args):
     step = next((step for step in record.steps if step.index == result.get("no")), None)
     if step is None:
         raise LedgerError(f"{args.change}번 변경에 {result.get('no')}번째 저장이 없습니다")
-    saved, note = step_outcome(step_call(step.index, record.offer, step.kind, step.body), result)
-    return dict(change_id=record.id, step=step.index, saved=saved, note=note,
-                status=ledger.record_step(record.id, step.index, saved, note))
+    outcome = step_outcome(step_call(step.index, record.offer, step.kind, step.body), result)
+    if not outcome.started:
+        return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note,
+                    status=record.status)
+    return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note,
+                status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note))
 
 
 def cmd_verify(args):

@@ -18,7 +18,8 @@ import scene  # noqa: E402
 from browser_replies import reply, take as browser_take  # noqa: E402
 from erp_read import ParseError  # noqa: E402
 from price_browser import (  # noqa: E402
-    BrowserError, CutAnswer, ask_sum, attach_bodies, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call, step_outcome,
+    BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call,
+    step_outcome,
 )
 from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
 
@@ -163,15 +164,20 @@ class StepCallTest(unittest.TestCase):
     def test_a_result_is_recorded_only_for_the_step_it_asked_about(self):
         call = step_call(1, OFFER, BULK.kind, encode_step(BULK))
         saved = {"ok": True, "op": "applyBulk", "no": 1, "ask": ask_sum(call["payload"]), "saved": True, "pressed": True, "note": "저장했습니다 · 디럭스"}
-        self.assertEqual(step_outcome(call, saved), (True, "저장했습니다 · 디럭스"))
+        self.assertEqual(step_outcome(call, saved), Outcome(True, "저장했습니다 · 디럭스"))
         blocked = dict(saved, ok=False, error="허용 목록에 없는 클릭을 막았습니다: a")
-        self.assertEqual(step_outcome(call, blocked), (True, "저장했습니다 · 디럭스 · 허용 목록에 없는 클릭을 막았습니다: a"))
+        self.assertEqual(step_outcome(call, blocked), Outcome(True, "저장했습니다 · 디럭스 · 허용 목록에 없는 클릭을 막았습니다: a"))
         unsure = dict(saved, ok=False, saved="unknown", error="결과를 확인하지 못했습니다")
-        self.assertEqual(step_outcome(call, unsure), (False, "저장됐는지 알 수 없습니다 — 다시 읽어 값을 확인해야 합니다: 결과를 확인하지 못했습니다"))
+        self.assertEqual(step_outcome(call, unsure), Outcome("unknown", "저장됐는지 알 수 없습니다 — 다시 읽어 값을 확인해야 합니다: 결과를 확인하지 못했습니다"))
         rejected = dict(saved, ok=False, saved=False, error="셀 창이 저장을 거절했습니다")
-        self.assertEqual(step_outcome(call, rejected), (False, "셀 창이 저장을 거절했습니다"))
+        self.assertEqual(step_outcome(call, rejected), Outcome(False, "셀 창이 저장을 거절했습니다"))
         refused = dict(unsure, saved=False, pressed=False, refused=True, error="드로어 표에 없는 줄")
-        self.assertEqual(step_outcome(call, refused), (False, "드로어 표에 없는 줄"))
+        self.assertEqual(step_outcome(call, refused), Outcome(False, "드로어 표에 없는 줄"))
+        later = dict(refused, refused=None, started=False, wait=10, error="앞 작업(readPair)이 아직 끝나지 않았습니다")
+        self.assertEqual(step_outcome(call, later), Outcome(None, "앞 작업(readPair)이 아직 끝나지 않았습니다", 10))
+        self.assertFalse(step_outcome(call, later).started, "G7 — 시작하지 않은 저장")
+        self.assertEqual(step_outcome(call, dict(later, pressed=True, saved="unknown")).saved, "unknown",
+                         "눌린 저장은 시작하지 않은 것으로 보지 않는다")
         other = dict(call["payload"], dates=["2026-07-02"])
         for wrong in (dict(saved, no=2), dict(saved, op="applyCell"), dict(saved, ask=ask_sum(other))):
             with self.assertRaises(BrowserError):

@@ -6,7 +6,7 @@
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
     pair_reads(results)                   readPair 답 → PairRead — 객실은 물은(캘린더 칩의) 이름, 화면의 오퍼·요금제가 다르면 거절
     step_call(no, offer, kind, body)      장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
-    step_outcome(call, result)            브라우저 답 → (저장됨, 메모). 그 단계를 물은 답이 아니면 거절. 「알 수 없음」은 저장됨이 아니다
+    step_outcome(call, result)            브라우저 답 → Outcome(저장됨 · 안 됨 · 모름 · 시작 안 함). 그 단계를 물은 답이 아니면 거절
 
 가감 확인 단계는 건너뛰는 칸을 300줄까지만 보이고 나머지는 숨긴 줄 수로 말한다. 숨긴 줄이 있는 답은 쓰지 않고,
 그 물음을 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 다시 묻는다. 쪼갠 물음들은 원래 물음의 칸을 나눠 가지므로, 숨긴 줄이
@@ -302,16 +302,31 @@ def step_call(no: int, offer: str, kind: str, body: Mapping) -> dict:
     return {"no": no, "op": OPS[step.kind], "payload": payload}
 
 
-def step_outcome(call: Mapping, result: Mapping) -> tuple[bool, str]:
-    """(저장됨, 장부 메모). 다른 작업·다른 번호·다른 값을 물은 답이면 BrowserError — 엉뚱한 단계에 적지 않는다."""
+@dataclass(frozen=True)
+class Outcome:
+    """저장 작업 답 하나의 뜻. `saved` 는 True 저장됨 · False 저장 안 됨 · "unknown" 단추는 눌렸고 저장됐는지 모름 ·
+    None 시작하지 않음(지나가는 까닭으로 아무것도 누르기 전에 멈췄다 — `wait` 초 뒤 같은 값으로 다시 부른다)."""
+    saved: bool | str | None
+    note: str
+    wait: int | None = None
+
+    @property
+    def started(self) -> bool:
+        return self.saved is not None
+
+
+def step_outcome(call: Mapping, result: Mapping) -> Outcome:
+    """다른 작업·다른 번호·다른 값을 물은 답이면 BrowserError — 엉뚱한 단계에 적지 않는다."""
     if result.get("op") != call["op"] or result.get("no") != call["no"]:
         raise BrowserError(f"{call['no']}번 저장({call['op']})의 답이 아닙니다: {result.get('op')} {result.get('no')}번")
     if result.get("ask") != ask_sum(call["payload"]):
         raise BrowserError(f"{call['no']}번 저장의 답이 장부의 그 단계와 다른 값을 물었습니다")
+    reason = result.get("error") or "저장하지 못했습니다"
+    if result.get("started") is False and not result.get("pressed") and result.get("saved") in (None, False):
+        return Outcome(None, reason, int(result.get("wait") or 5))
     if result.get("saved") is True:
         note = result.get("note") or "저장했습니다"
-        return True, note if result.get("ok") else f"{note} · {result.get('error')}"
-    reason = result.get("error") or "저장하지 못했습니다"
+        return Outcome(True, note if result.get("ok") else f"{note} · {result.get('error')}")
     if result.get("saved") == "unknown":
-        return False, f"저장됐는지 알 수 없습니다 — 다시 읽어 값을 확인해야 합니다: {reason}"
-    return False, reason
+        return Outcome("unknown", f"저장됐는지 알 수 없습니다 — 다시 읽어 값을 확인해야 합니다: {reason}")
+    return Outcome(False, reason)

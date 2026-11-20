@@ -58,6 +58,8 @@ test('B1 · 작업이 도는 동안에는 다음 작업을 받지 않고, 도는
   const second = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
   assert.equal(second.ok, false);
   assert.match(second.error, /앞 작업\(readPair\)이 아직 끝나지 않았습니다/);
+  // G7 — 시작하지 않은 작업은 실패가 아니다: started false · 기다릴 초 · 그 단계의 번호와 지문을 싣는다
+  assert.deepEqual([second.started, second.wait, second.no, typeof second.ask], [false, 10, 1, 'string']);
   assert.equal((plain(await first)).ok, true);
   assert.deepEqual(page.log.posts, [], '두 번째 작업은 아무것도 누르지 않았다');
   const third = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));

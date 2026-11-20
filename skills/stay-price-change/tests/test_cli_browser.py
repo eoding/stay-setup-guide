@@ -103,6 +103,29 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual([call["no"] for call in self.run_cli("calls", "--change", change)["calls"]], list(range(2, 9)),
                          "멈춘 단계는 이어서 할 목록에 남는다")
 
+    def test_g7_a_save_that_never_started_is_not_recorded_and_the_run_goes_on(self):
+        snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
+        request = self.write("request.json", encode_request(scene.request()))
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list"}])
+        change = self.run_cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
+                              "--out", self.dir / "plan.json")["change_id"]
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json")
+        call = self.run_cli("calls", "--change", change)["calls"][0]
+        later = {"ok": False, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "started": False, "wait": 5,
+                 "clicks": {}, "error": "앞 화면(드로어·요청)이 아직 정리되지 않았습니다"}
+        waited = self.run_cli("record-result", "--change", change, "--result", self.write("later.json", later))
+        self.assertEqual((waited["started"], waited["wait"], waited["status"]), (False, 5, "applying"))
+        self.assertNotIn("saved", waited)
+        self.assertEqual(self.run_cli("calls", "--change", change)["calls"][0]["no"], call["no"], "그 단계는 그대로 남는다")
+        self.assertEqual(self.run_cli("list")["changes"][0]["status"], "applying", "멈추지 않았다")
+        saved = dict(later, ok=True, started=None, wait=None, saved=True, pressed=True, note="저장했습니다", error=None)
+        self.assertEqual(self.run_cli("record-result", "--change", change, "--result", self.write("saved.json", saved))["saved"],
+                         True, "기다린 뒤 같은 단계를 다시 불러 저장한다")
+        pressed = dict(later, no=2, ask=ask_sum(self.run_cli("calls", "--change", change)["calls"][0]["payload"]),
+                       op="applyBulk", pressed=True, saved="unknown")
+        self.assertEqual(self.run_cli("record-result", "--change", change, "--result", self.write("pressed.json", pressed)
+                                      )["status"], "stopped", "저장 단추가 눌린 답은 시작하지 않은 것이 아니다")
+
 
     def test_a_cut_piece_makes_read_say_which_piece_to_fetch_again_and_at_what_size(self):
         asked = {"offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24", "to": "2026-12-31",

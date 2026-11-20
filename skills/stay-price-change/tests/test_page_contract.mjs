@@ -27,9 +27,22 @@ test('B7 · 장부의 저장 단계로 만든 부를 값을 페이지가 받아 
     assert.equal(r.saved, true, r.error);
     if (call.op === 'applyBulk') assert.equal(page.log.posts[0]['prices-0-price'], call.payload.rows[0].sell);
     else assert.equal(page.log.posts[0].original_price, '');
-    assert.deepEqual(python('list(b.step_outcome(args["call"], args["result"]))', { call, result: r }), [true, r.note]);
+    assert.deepEqual(python('(lambda o: [o.saved, o.note])(b.step_outcome(args["call"], args["result"]))', { call, result: r }), [true, r.note]);
     page.w.close();
   }
+});
+
+test('G7 · 앞 화면이 아직 정리 중이면 저장 작업은 아무것도 누르지 않고 시작하지 않은 것으로 답하고, 파이썬은 그것을 실패로 셈하지 않는다', async () => {
+  const [call] = JSON.parse(readFileSync(join(HERE, 'fixtures', 'browser', 'calls.json'), 'utf8')).filter((c) => c.op === 'applyBulk');
+  const page = erpPage({ drawerStuck: true });
+  page.w.stayPrice.config({ restMs: 600 });
+  page.render('<div data-stay-screen="calendar-bulk">닫히는 중</div>');
+  page.closeDrawer();
+  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, call.payload)));
+  assert.deepEqual([r.ok, r.started, r.wait, r.no], [false, false, 5, call.no], r.error);
+  assert.deepEqual(page.log.posts, [], '저장 단추를 누르지 않았다');
+  assert.deepEqual(python('(lambda o: [o.saved, o.started, o.wait])(b.step_outcome(args["call"], args["result"]))', { call, result: r }), [null, false, 5]);
+  page.w.close();
 });
 
 test('B5 · read_calls 의 부를 값으로 읽은 답을 pair_reads 가 받는다(객실은 칩의 이름, 드로어 이름은 옆에)', async () => {

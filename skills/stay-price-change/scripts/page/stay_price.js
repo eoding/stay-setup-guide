@@ -213,7 +213,7 @@
     return out;
   }
   // 거르기를 지나 800자 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
-  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'error'];
+  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'error'];
   function fit(result) {
     var out = scrub(result);
     if (shownLength(out) <= RESULT_CHARS) return out;
@@ -381,12 +381,23 @@
   var SAVES = { applyBulk: 'bulkSave', applyCell: 'cellSave' };
   function at(ms) { var wait = Math.max(1, ms - Date.now()); return window.stayRun.sleep ? window.stayRun.sleep(wait) : new Promise(function (r) { setTimeout(r, wait); }); }
 
+  // 시작하지 않은 작업 — 아무것도 누르기 전에 지나가는 까닭(앞 작업이 아직 끝나는 중, 앞 화면이 아직 정리 중)으로 멈췄다.
+  // `started: false` 와 기다릴 초(`wait`)를 싣는다. 실패가 아니다 — 명령은 장부에 적지 않고, 그만큼 기다린 뒤 같은 값으로 다시 부른다
+  var BUSY_WAIT = 10, REST_WAIT = 5;
+  function notStarted(op, input, message, wait) {
+    var no = input && typeof input.no === 'number' ? input.no : undefined;
+    return fit(Object.assign({ op: op }, no !== undefined ? { no: no } : {}, {
+      ok: false, started: false, wait: wait, ask: crc32(canon(askedOf(input))), clicks: {},
+      error: message + ' — 아무것도 누르지 않았습니다. ' + wait + '초 뒤 같은 값으로 다시 부릅니다'
+    }));
+  }
+
   async function run(op, input, body) {
     var missing = NEEDS.filter(function (name) { return typeof window[name] !== 'function'; });
     if (!window.stayRun || typeof window.stayRun.waitFor !== 'function') missing.unshift('stayRun');
     if (missing.length) return remember(fit({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
     var busy = window.__stayPriceBusy;
-    if (busy) return fit({ ok: false, op: op, error: '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다 — 잠시 뒤 다시 부르거나 stayPrice.last() 로 결과를 봅니다' });
+    if (busy) return notStarted(op, input, '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다', BUSY_WAIT);
     var token = window.__stayPriceBusy = { op: op };
     var started = Date.now(), limits = Object.assign({}, LIMITS);
     var hardAt = started + limits.hardMs, endAt = hardAt + limits.restMs;
@@ -408,7 +419,9 @@
       // 앞 화면이 쉬고 있을 때만 시작한다 — 닫히는 중인 드로어의 조각을 새 화면으로 읽지 않게
       await closeDrawer(started + limits.restMs);
       if (!await window.stayRun.waitFor(atRest, Math.max(1, Math.min(limits.restMs, ctx.left())))) {
-        fail(cellWindow() ? '셀 창이 열려 있습니다 — 사람이 닫은 뒤 다시 부릅니다' : '앞 화면(드로어·요청)이 아직 정리되지 않았습니다 — 잠시 뒤 다시 부릅니다');
+        if (cellWindow()) fail('셀 창이 열려 있습니다 — 사람이 닫은 뒤 다시 부릅니다');
+        fail('앞 화면(드로어·요청)이 아직 정리되지 않았습니다 — 아무것도 누르지 않았습니다. ' + REST_WAIT + '초 뒤 같은 값으로 다시 부릅니다',
+          { started: false, wait: REST_WAIT });
       }
       var result = await body(input || {}, ctx);
       if (result.keep) { result.body = keep(Object.assign({ op: op, asked: askedOf(input) }, result.keep)); delete result.keep; }

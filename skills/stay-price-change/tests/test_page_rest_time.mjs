@@ -36,6 +36,7 @@ test('B14 · 드로어가 끝내 비지 않으면 결과에 그렇게 적고, �
   assert.equal(next.ok, false);
   assert.match(next.error, /앞 화면\(드로어·요청\)이 아직 정리되지 않았습니다/);
   assert.deepEqual(next.clicks, {}, '아무것도 누르지 않았다');
+  assert.deepEqual([next.started, next.wait], [false, 5], 'G7 — 지나가는 까닭이라 시작하지 않은 작업으로 알린다');
   page.w.close();
 });
 
