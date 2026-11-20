@@ -16,7 +16,7 @@
     ask_sum(value)                        물은 값의 지문(페이지와 같은 셈)
     unpack(text) · page_sum(...)          페이지가 둔 조각 글자(따옴표 없는 JSON) → 값 · 쪽 하나의 검사값
     answers(results, latest)              답 목록 → 온전한 답과 잘린 쪽의 단서
-    attach_bodies(results, earlier)       읽기 답에 페이지에 남겨 둔 조각을 붙인다
+    attach_bodies(results, earlier, page) 읽기 답에 페이지에 남겨 둔 조각을 붙인다(`page` 는 다시 받으라고 말할 페이지 모듈)
     answers_for(results, op) · unanswered(calls, results, op)   한 작업의 답 · 답이 없는 부를 값
     reading_time(results, reads)          읽기 한 번이 ERP 를 읽은 시각
     step_outcome(call, result)            저장 작업 답 → Outcome(저장됨 · 안 됨 · 모름 · 시작 안 함)
@@ -48,7 +48,7 @@ MIN_SIZE = 200
 
 
 class CutAnswer(BrowserError):
-    """도구가 잘라 버린 답이 있다. `refetch` 는 다시 받을 쪽 — `stayPrice.take(id, at, size)` 에 그대로 넣는다."""
+    """도구가 잘라 버린 답이 있다. `refetch` 는 다시 받을 쪽 — 페이지 모듈의 `take(id, at, size)` 에 그대로 넣는다."""
 
     def __init__(self, message: str, refetch: list[dict]):
         super().__init__(message)
@@ -352,9 +352,9 @@ def _retake(meta: Mapping, joined: _Joined | None, bad: Mapping[str, list[_Bad]]
             "bad": [{"file": item.file, "at": item.at, "why": f"{item.why} — {RETAKE}"} for item in named_]}
 
 
-def _say(item: Mapping) -> str:
-    """받을 쪽 하나를 말로 — 부를 것 · 저장할 파일 · 이어 받을 데까지 · 다시 받는 까닭."""
-    words = (f"stayPrice.take('{item['id']}', {item['at']}, {item['size']}) 의 답을 {item['save']}{item['at']}.json 에"
+def _say(item: Mapping, page: str) -> str:
+    """받을 쪽 하나를 말로 — 부를 것(그 도우미의 페이지 모듈 `page` 의 take) · 저장할 파일 · 이어 받을 데까지 · 다시 받는 까닭."""
+    words = (f"{page}.take('{item['id']}', {item['at']}, {item['size']}) 의 답을 {item['save']}{item['at']}.json 에"
              f"(답의 next 가 {item['until']} 보다 작으면 take('{item['id']}', next) 를 {item['save']}<next>.json 에 이어서)")
     return words + "".join(f" [{bad['file'] or str(bad['at']) + '번째 자리 쪽'}: {bad['why']}]" for bad in item["bad"])
 
@@ -378,7 +378,7 @@ def _body_text(result: Mapping, meta: Mapping, joined: Mapping[str, _Joined], he
     return text
 
 
-def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
+def attach_bodies(results: Iterable, earlier: Iterable = (), page: str = "stayPrice") -> list[dict]:
     """답 목록(읽기 답과 take 답, 잘린 답의 글자가 섞여 있다) → 읽기 답마다 조각을 푼 답. take 답은 빠진다. 푼 답에는 `body`
     가 남지 않아 한 번 더 지나도 그대로다.
 
@@ -386,7 +386,8 @@ def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
     (1) 그 조각의 맞는 쪽을 처음부터 끝까지 이은 것, 아니면 (2) 알아볼 값 넷이 같은 다 받은 조각 — 이번 답들이나 앞선 읽기의
     답들(`earlier`, _lent)에서 — 이다. 어디에도 없으면 CutAnswer 로 받을 쪽(_retake)을 댄다: 빈 곳의 자리 · 크기 · 어디까지 이어
     받을지 · 새 파일 이름 · 그 사이의 맞지 않는 쪽과 까닭. 그래서 어떤 쪽을 몇 번 잘못 옮겨 적어도 그 쪽을 다시 받으면 읽기가
-    끝난다. 답의 머리(body)가 맞는 쪽들과 다르면 BrowserError(그 답을 다시 받는다). 풀린 body 가 다른 물음(`asked` 의 지문이
+    끝난다. 받을 쪽을 말하는 글은 `page`(그 도우미의 페이지 모듈 이름)의 take 를 부르라고 한다. 답의 머리(body)가 맞는 쪽들과
+    다르면 BrowserError(그 답을 다시 받는다). 풀린 body 가 다른 물음(`asked` 의 지문이
     답의 `ask` 와 다름)의 것이면 그 답은 옮겨 적다 지문이 틀린 것이라 쓰지 않는다 — 그 물음은 답이 없는 것으로 남는다.
     """
     results = list(results)
@@ -418,7 +419,8 @@ def attach_bodies(results: Iterable, earlier: Iterable = ()) -> list[dict]:
         merged.pop("body", None)
         out.append(merged)
     if refetch:
-        raise CutAnswer("받지 못했거나 잘렸거나 잘못 옮겨 적은 쪽이 있습니다 — " + " · ".join(map(_say, refetch)), refetch)
+        raise CutAnswer("받지 못했거나 잘렸거나 잘못 옮겨 적은 쪽이 있습니다 — " + " · ".join(_say(item, page) for item in refetch),
+                        refetch)
     return out
 
 
