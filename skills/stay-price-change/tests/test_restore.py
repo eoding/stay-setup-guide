@@ -72,7 +72,7 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual({k: v for k, v in after.cells.items() if k != CREATED},
                          {k: v for k, v in self.saved_state.cells.items() if k != CREATED})
 
-    def test_a_restore_is_recorded_as_a_change_and_can_itself_be_rolled_back(self):
+    def test_a_restore_is_recorded_as_a_change_and_is_not_rolled_back_again(self):
         plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, self.now)
         restore = self.ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
@@ -87,9 +87,11 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual((record.kind, record.status, record.request["kind"]), ("change", "applied", "restore_snapshot"))
         self.assertIn(f"되돌리기 결과 · {scene.HOTEL} · {scene.OFFER} 장부 {restore}번 · 요청 “저장해 둔 상태로” · "
                       f"{self.saved}번에 저장해 둔 상태로 되돌림", visible(render_result(record)), "Z8 — 저장 상태로 되돌린 결과도 되돌리기 결과")
-        back = plan_cell_rollback(self.ledger.recorded_change(restore), self.ledger.later_writes(restore), restored)
-        self.assertEqual((len(back.restored), len(back.kept), back.unremovable), (90, 0, ()))
-        self.assertEqual(scene.applied(restored, save_steps(rollback_writes(back))).cells, self.now.cells)
+        with self.assertRaisesRegex(LedgerError, f"{restore}번은 {self.saved}번 저장 상태로 되돌리기입니다 — 되돌리기는 다시 되돌리지 않습니다"):
+            self.ledger.undoable(restore)
+        with self.assertRaisesRegex(LedgerError, "다시 되돌리지 않습니다"):
+            self.ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
+                                       sentence="되돌려", read_at=restored.read_at, rows=[], reverses=restore, empty=True)
 
     def test_a_cell_the_saved_state_never_had_is_unremovable_and_a_cell_outside_its_range_is_not_named(self):
         tier = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 5)        # 5박 이상 — 저장할 때는 없던 박수 층(시즌을 다시 채워 생김)

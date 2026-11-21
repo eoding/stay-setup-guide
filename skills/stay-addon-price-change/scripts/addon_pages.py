@@ -14,8 +14,8 @@ from addon_model import (
 )
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
-    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner, rollback_ask,
-    rollback_head, stats, steps_list, stopped_choices, unremovable_table,
+    UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner,
+    rollback_ask, rollback_head, stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.money import example_step
@@ -243,7 +243,7 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     if record.status in ("applied", "stopped"):
         said = ["손님 화면에는 곧(길어야 몇 분) 새 금액이 보입니다. 이미 받은 예약의 금액은 그대로입니다.",
                 "이 줄들의 금액 출처는 ERP 에서 'ERP 손입력'으로 표시됩니다.",
-                f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+                UNDO_ONCE if record.kind == "rollback" else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
         if ledger_path:
             said.insert(2, f"기록: {ledger_path}")
         body.append(notes(said))

@@ -483,7 +483,7 @@ def cmd_rollback(args):
     ledger = open_ledger()
     snapshot = decode_snapshot(load(args.snapshot))
     select, picked = cell_filter(args.room or (), args.rate_plan or (), args.date_from, args.date_to, args.occupancy or ())
-    plan = plan_cell_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), snapshot,
+    plan = plan_cell_rollback(ledger.undoable(args.change), ledger.later_writes(args.change), snapshot,
                               args.include_kept, select)
     undone = undone_before(ledger, args.change)
     request = dict(kind="rollback", scope=picked) if picked else None   # 고른 칸 — 장부 목록의 범위 한 줄이 말한다
@@ -769,7 +769,7 @@ def parser() -> argparse.ArgumentParser:
     sub = command("restore", cmd_restore, "저장해 둔 상태로 되돌리는 계산")
     sub.add_argument("--saved", type=int, required=True, help="지금 상태 저장(save-snapshot)으로 적은 장부 번호")
     sub.add_argument("--snapshot", required=True, help="지금 읽은 값")
-    sub.add_argument("--record", action="store_true", help="장부에 변경 미리보기로 적는다(적용하면 이것도 되돌릴 수 있다)")
+    sub.add_argument("--record", action="store_true", help="장부에 변경 미리보기로 적는다(되돌리기처럼 다시 되돌리지는 않는다)")
     sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 미리보기(같은 저장 상태로 되돌리는 것)의 장부 번호"
                      "(적용 직전에 값이 달라 다시 계산할 때). 그 번호는 replaced 가 되고 begin 이 받지 않는다")
     sub.add_argument("--sentence", default="저장해 둔 상태로 되돌리기", help="담당자가 한 말")

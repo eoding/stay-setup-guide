@@ -23,8 +23,8 @@ from decimal import Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
-    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
-    stats, steps_list, stopped_choices, unremovable_table,
+    UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask,
+    rollback_head, stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.files import record_progress
 from change_core.ledger import ChangeRecord
@@ -711,7 +711,7 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
         lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
                  "이미 받은 예약의 금액은 그대로입니다.",
                  MARK_ON_ROLLBACK if result_name(record) == "되돌리기 결과" else MARK,
-                 f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+                 UNDO_ONCE if result_name(record) == "되돌리기 결과" else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
         if ledger_path:
             lines.insert(3, f"기록: {ledger_path}")
         body.append(notes(lines))

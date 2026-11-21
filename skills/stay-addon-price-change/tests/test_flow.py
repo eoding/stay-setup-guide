@@ -629,5 +629,26 @@ class ReadAgainTest(Flow):
         self.assertEqual(self.cli("check", "--change", change, "--snapshot", self.read(record=change))["cause"], "failed")
 
 
+class UndoOnceTest(Flow):
+    """검토 3 — 되돌리기는 다시 되돌리지 않는다(change_core.ledger 의 _undoable). 거절하고 아무것도 적지 않으며, 목록의 「모두 되돌림」과
+    「되돌릴 것이 없습니다」는 ERP 에 살아 있는 값(바꾸기 전 값)과 같다."""
+
+    def test_a_rollback_is_not_rolled_back_again_and_the_list_stays_true(self):
+        change, plan = self.preview(self.request())
+        self.apply(change, plan)
+        back = self.work / "rollback-1.json"
+        rollback = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--record", "--out", back)["change_id"]
+        self.apply(rollback, back)
+        again = self.work / "rollback-2.json"
+        refused = self.cli("rollback", "--change", rollback, "--snapshot", self.read(record=rollback), "--record", "--out", again,
+                           code=2)["error"]
+        self.assertIn(f"{rollback}번은 {change}번 되돌리기입니다 — 되돌리기는 다시 되돌리지 않습니다", refused)
+        self.assertFalse(again.exists())
+        rows = {entry["id"]: entry for entry in self.cli("list", "--all")["changes"]}
+        self.assertEqual((sorted(rows), rows[change]["status"], rows[change]["undone_by"]), ([change, rollback], "rolled_back", [rollback]))
+        self.assertIn("아직 되돌리지 않은 것이 없습니다",
+                      self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), code=2)["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

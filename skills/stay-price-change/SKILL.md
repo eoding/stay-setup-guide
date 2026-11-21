@@ -152,7 +152,7 @@ metadata:
    - 답이 `started: false` 이거나, 호출이 답 없이 끊겼거나 잘렸으면 [references/failures.md](references/failures.md) 「적용」. 어느 때든 같은 저장을 두 번 누르지 않는다 — 한 번 부른 저장은 다시 부르지 않고, 답을 잃었으면 `stayPrice.last()` 로 받는다.
 3. **뒤에 다시 읽기.** 다 저장되면 `read-calls --record N` 으로 「읽기」 → S3. `verify --change N --snapshot "<S3>"`.
 4. `render result --change N` → `page` 를 연다.
-   - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."
+   - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."(되돌리기면 끝 문장 없이)
    - `same: false`(종료 1)면 "적용했지만 다시 읽었더니 <`mismatches` 의 수>칸이 넣은 값과 다릅니다. 페이지의 빨간 칸을 ERP 에서 확인해 주세요." 다시 저장하지 않는다.
 
 ## 중간에 멈췄을 때

@@ -12,8 +12,8 @@ from typing import Sequence
 from charge_model import AGE, FIELD_LABELS, Charge, Listing, Place, Snapshot, part_of_key
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
-    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner, rollback_ask,
-    rollback_head, stats, steps_list, stopped_choices, unremovable_table,
+    UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner,
+    rollback_ask, rollback_head, stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -228,7 +228,8 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     body += ["<h2>칸마다 넣은 값</h2>",
              f'<div class="scroll"><table><tr><th>금액 칸</th><th>전 → 후</th></tr>{"".join(rows)}</table></div>']
     if record.status in ("applied", "stopped"):
-        said = [GUEST_NOTE, f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+        said = [GUEST_NOTE, UNDO_ONCE if record.kind == "rollback"
+                else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
         if ledger_path:
             said.insert(1, f"기록: {ledger_path}")
         body.append(notes(said))

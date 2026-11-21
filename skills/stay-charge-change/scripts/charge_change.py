@@ -333,7 +333,7 @@ def cmd_rollback(args):
     ledger = open_ledger()
     now = decode_snapshot(load(args.snapshot))
     select, scope = charge_filter(args.charge or ())
-    plan = plan_charge_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept,
+    plan = plan_charge_rollback(ledger.undoable(args.change), ledger.later_writes(args.change), now, args.include_kept,
                                 select)
     steps = rollback_steps(plan, now)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
