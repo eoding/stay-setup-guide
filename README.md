@@ -182,10 +182,14 @@ computer's ledger recorded.
 **What has run on a real ERP.** On a local ERP, not on production: price calendar changes by amount and by percent with
 reserved days, closed days, child rows and nights tiers; the three kinds of red line; a change cut off between saves and
 picked up by a new session; partial and full rollback; matching a short rate sheet by per-date prices; add-on price lines;
-charge amounts including a time band and a pay-at-property amount. Not yet run on a real ERP: creating new cells, the
-failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real rate-sheet file from a hotel,
-and the season-refill comparison. What changed after the last trial (the note on names that state the old amount, a work
-folder per request, the ledger list by hotel, the edit-window view) has run in the test suites only.
+charge amounts including a time band and a pay-at-property amount; a page answer miscopied on purpose and recovered with
+one retake; the new piece form in a real browser tool; a rate sheet whose child rows were matched by the command and whose
+percentage on child rows was asked; comparing a saved state with the present and restoring it. Not yet run on a real ERP:
+creating new cells, the failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real
+rate-sheet file from a hotel, and a comparison after an actual season refill in the ERP. What changed after the fifth trial
+has run in the test suites only: the note on names that state the old amount, a work folder per request, the ledger list
+by hotel, the edit-window view, the comparison naming the ledger record that changed each cell, a restore counting the
+changes it undid as rolled back, room names taken from earlier readings, and the one-line confirmations.
 
 ## Optional room inventory
 
