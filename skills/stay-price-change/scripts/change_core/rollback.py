@@ -2,7 +2,8 @@
 
 되돌리기는 항목마다 본다: 그 변경이 쓴 필드가 지금도 모두 그때 넣은 값이면 적어 둔 값으로 돌리고, 하나라도 다르면 그대로 둔다.
 그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다. 까닭은 이 장부의 나중 변경 가운데 지금 값을
-넣은 가장 최근 것, 없으면 도우미 밖이다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 「지울 수 없는 것」이다.
+넣은 가장 최근 것, 없으면 도우미 밖이다. 도우미가 그 항목을 지금 저장하면 안 된다고 본 것(부가옵션 줄의 금액이 목록과 편집 창에서
+다르게 보임 같은 것 — `Cause.why`)은 같이 되돌리라고 해도 그대로 둔다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 「지울 수 없는 것」이다.
 
 저장해 둔 상태로 돌리기는 그 범위의 모든 항목을 저장해 둔 값으로 맞춘다. 그때 없던 항목(없음으로 적었거나 아예 적지 않은 것 —
 그 뒤에 새로 생긴 줄 · 박수 층 같은)이 지금 있으면 「지울 수 없는 것」이다.
@@ -58,13 +59,16 @@ class LaterWrite:
 
 @dataclass(frozen=True)
 class Cause:
+    """그대로 두는 까닭 — 이 장부의 나중 변경(`change_id` · `at` · `sentence`), 지금 저장하면 안 되는 까닭(`why` — 담당자에게 보일
+    문장, 같이 되돌리라고 해도 넣지 않는다), 둘 다 없으면 도우미 밖."""
     change_id: int | None = None
     at: str | None = None
     sentence: str | None = None
+    why: str | None = None
 
     @property
     def outside(self) -> bool:
-        return self.change_id is None
+        return self.change_id is None and self.why is None
 
 
 @dataclass(frozen=True)
@@ -187,7 +191,7 @@ def _read_fields(data: Mapping) -> dict:
 def _encode_kept(item: KeptItem) -> dict:
     return dict(kind=item.kind, key=item.key, label=item.label, recorded=_fields(item.recorded),
                 written=_fields(item.written), now=encode_state(item.now),
-                cause=dict(change_id=item.cause.change_id, at=item.cause.at, sentence=item.cause.sentence))
+                cause=dict(change_id=item.cause.change_id, at=item.cause.at, sentence=item.cause.sentence, why=item.cause.why))
 
 
 def _decode_kept(item: Mapping) -> KeptItem:
