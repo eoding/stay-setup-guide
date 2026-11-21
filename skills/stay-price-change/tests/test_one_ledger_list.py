@@ -45,6 +45,7 @@ class OneLedgerListTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.env = scene.env(str(Path(self.tmp.name) / "기록"))
         self.dir = Path(self.tmp.name) / "기록" / "작업" / "시험"   # 기록 폴더 안 — 명령이 없는 읽기 폴더를 만든다
+        self.cli(PRICE, "work")   # 일의 첫 명령(SKILL.md 「준비」 3) — 작업 폴더보다 장부가 먼저다
 
     def tearDown(self):
         self.tmp.cleanup()

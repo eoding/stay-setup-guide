@@ -170,6 +170,7 @@ class TrialTest(Cli):
             self.run_cli("record-result", "--change", change, "--result", result)
 
     def test_r2_trial_one_page_two_characters_short_after_applying_costs_one_retake(self):
+        self.run_cli("work")   # 일의 첫 명령(SKILL.md 「준비」 3) — 작업 폴더보다 장부가 먼저다
         job = self.records / "작업" / "A"
         first, _ = self.read("A", "읽기-1", PRICE, ["--request", self.save(self.dir, "range.json", RANGE)], "a1")
         plan = self.run_cli("plan", "--snapshot", self.snapshot(first), "--request", self.save(self.dir, "targets.json", TARGETS),
