@@ -474,10 +474,13 @@ def reading_time(results: Iterable, reads: Iterable[str]) -> str:
 @dataclass(frozen=True)
 class Outcome:
     """저장 작업 답 하나의 뜻. `saved` 는 True 저장됨 · False 저장 안 됨 · "unknown" 단추는 눌렸고 저장됐는지 모름 ·
-    None 시작하지 않음(지나가는 까닭으로 아무것도 누르기 전에 멈췄다 — `wait` 초 뒤 같은 값으로 다시 부른다)."""
+    None 시작하지 않음(지나가는 까닭으로 아무것도 누르기 전에 멈췄다 — `wait` 초 뒤 같은 값으로 다시 부른다). `moved` 는 페이지가
+    누르기 전에 화면의 값이 그 단계가 실은 값(`was` — 그 계산이 바탕으로 삼은 읽은 값)과 달라 거절한 칸 수다(0 이면 그런 거절이
+    아니다). 그 사이 다른 손이 탄 것이라 저장 안 됨이고, 다시 읽어 새 미리보기를 만든다."""
     saved: bool | str | None
     note: str
     wait: int | None = None
+    moved: int = 0
 
     @property
     def started(self) -> bool:
@@ -498,4 +501,5 @@ def step_outcome(call: Mapping, result: Mapping) -> Outcome:
         return Outcome(True, note if result.get("ok") else f"{note} · {result.get('error')}")
     if result.get("saved") == "unknown":
         return Outcome("unknown", f"저장됐는지 알 수 없습니다 — 다시 읽어 값을 확인해야 합니다: {reason}")
-    return Outcome(False, reason)
+    moved = result.get("moved") if result.get("refused") and not result.get("pressed") else 0
+    return Outcome(False, reason, moved=moved if isinstance(moved, int) and not isinstance(moved, bool) and moved > 0 else 0)
