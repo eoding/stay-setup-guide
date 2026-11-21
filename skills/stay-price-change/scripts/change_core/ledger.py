@@ -25,6 +25,7 @@
     checks       check 한 번에 한 줄 — 그 읽은 값의 시각, 이어서 해도 되는지와 안 되는 까닭, 멈춘 까닭, 남은 저장의 항목
                  가운데 그 계산의 읽은 값과 지금 값이 다른 것(지금 값). 결과 페이지가 멈춘 변경을 이것으로 말한다. 그 뒤에
                  저장 결과가 적히면 다 쓴 것(`spent`)이 된다 — 그 check 는 그 저장을 모른다
+    begins       적용을 시작한 변경 하나에 한 줄 — begin 이 처음 받아들인 때. 목록의 「적용 중」 · 「적용하다 멈춤」이 이 시각이다
 
 되돌리기와 저장 상태로 되돌리기는 다시 되돌리지 않는다(`_undoable`). 되돌리기를 되돌리면 그 되돌리기가 단 표지(`rolled_back_by`)를
 풀어야 하고, 그것을 또 되돌리면 다시 달아야 한다 — 장부가 ERP 에 살아 있는 값을 말하지 못하게 된다(ERP 의 [되돌리기]도 한 번만
@@ -140,7 +141,12 @@ CREATE TABLE IF NOT EXISTS checks (
   moved TEXT NOT NULL,
   spent INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS begins (
+  change_id INTEGER PRIMARY KEY REFERENCES changes(id),
+  begun_at TEXT NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS keep_checks BEFORE DELETE ON checks BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
+CREATE TRIGGER IF NOT EXISTS keep_begins BEFORE DELETE ON begins BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_meta BEFORE DELETE ON meta BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_changes BEFORE DELETE ON changes BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_values BEFORE DELETE ON item_values BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
@@ -583,8 +589,8 @@ class Ledger:
         단계가 쓰는 값은 미리보기 때 적은 줄(넣는 필드 · 넣는 값 · 비움)과 꼭 같아야 한다. 미리보기에 없던 값, 다른 값, 두 번
         쓰는 값, 그리고 미리보기가 넣는다고 보였는데 어느 단계도 쓰지 않는 값이 하나라도 있으면 시작하지 않는다.
         `read_at` 은 적용 직전에 읽어 미리보기 때 값과 같다고 본 읽은 값의 시각이다. 그 번호를 계산한 뒤에 IDLE 안에 읽은 값으로만
-        시작한다(_check_fresh). 그 시각이 첫 활동이다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은
-        요청과 같은 계산인지 본다.
+        시작한다(_check_fresh). 그 시각이 첫 활동이다. 시작한 때(장부의 시계)는 `begins` 에 적는다. 같은 단계로 다시 부르면
+        아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은 요청과 같은 계산인지 본다.
         """
         encoded = [(step.kind, _body(step.body)) for step in steps]
         with self._db() as db:
@@ -625,8 +631,10 @@ class Ledger:
             if left:
                 raise LedgerError(f"미리보기가 넣는다고 보인 값 {len(left)}개를 어느 저장 단계도 넣지 않습니다 — 처음 것: "
                                   f"{left[0]['label']} · {left[0]['field']}")
+            stamp = self._stamp()
+            db.execute("INSERT INTO begins (change_id, begun_at) VALUES (?, ?)", (change_id, stamp))
             db.execute("UPDATE changes SET status = 'applying', updated_at = ?, active_at = ? WHERE id = ?",
-                       (self._stamp(), read_at, change_id))
+                       (stamp, read_at, change_id))
 
     def _check_fresh(self, header, read_at: str) -> None:
         """적용 직전에 읽은 값이 그 번호를 계산한 뒤에(_read_before), IDLE 안에 읽은 것이 아니면 거절한다."""
@@ -934,7 +942,8 @@ class Ledger:
         """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만, 종류로 열었으면 그 종류의 번호와 종류 없는 번호만).
         `item_kind` 는 그 번호의 종류(`_kind_of`). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
         `partly_rolled_back` 이다(`written` · `rolled_back` 이 그 수, `undone_by` 가 되돌린 번호들) — 되돌린 변경이 살아 있는
-        것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None).
+        것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None),
+        `begun_at` 은 적용을 시작한 때(`begins` — 시작하지 않았거나 그 표를 두기 전에 시작한 번호는 None).
         `planned` 는 적힌 항목 가운데 저장이 값을 넣는(넣을) 항목 수다 — 안 바꾸기로 고른 항목 · 적용할 수 없는 항목은 들지 않는다."""
         item = "item_values.item_kind || '|' || item_values.item_key"
         where, params = [], []
@@ -949,7 +958,8 @@ class Ledger:
                 f" COUNT(DISTINCT CASE WHEN item_values.rolled_back_by IS NOT NULL THEN {item} END) AS rolled_back,"
                 " GROUP_CONCAT(DISTINCT item_values.rolled_back_by) AS undone_by,"
                 " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id) AS step_count,"
-                " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id AND s.status = 'saved') AS saved_steps"
+                " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id AND s.status = 'saved') AS saved_steps,"
+                " (SELECT begun_at FROM begins WHERE begins.change_id = changes.id) AS begun_at"
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
                 " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 + (" WHERE " + " AND ".join(where) if where else "") + " GROUP BY changes.id ORDER BY changes.id DESC",
@@ -957,7 +967,7 @@ class Ledger:
             kinds = {row["id"]: row["item_kind"] or _kind_of(db, row["id"]) for row in rows}
         return [dict(id=row["id"], kind=row["kind"], item_kind=kinds[row["id"]], status=self._listed_status(row), hotel=row["hotel"],
                      hotel_id=row["hotel_id"], offer=row["offer"], currency=row["currency"],
-                     sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
+                     sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"], begun_at=row["begun_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
                      replaces=row["replaces"], items=row["items"], planned=row["planned"], written=row["written"],
                      rolled_back=row["rolled_back"],

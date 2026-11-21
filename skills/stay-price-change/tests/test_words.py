@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -40,25 +41,33 @@ class ConfirmLineTest(unittest.TestCase):
         self.assertEqual(confirm_line(self.entry(kind="snapshot", status="saved", applied_at=None)),
                          "장부 7번 · 11/21 09:30 저장 · 디럭스 · 판매가 +10%")
         self.assertEqual(confirm_line(self.entry(status="previewed", applied_at=None)), "장부 7번 · 11/21 09:40 미리보기 · 디럭스 · 판매가 +10%")
-        self.assertEqual(confirm_line(self.entry(status="stopped", applied_at=None)),
-                         "장부 7번 · 11/21 09:40 적용하다 멈춤 · 디럭스 · 판매가 +10%")
+        self.assertEqual(confirm_line(self.entry(status="stopped", applied_at=None, begun_at="2026-11-21T09:43:00+09:00")),
+                         "장부 7번 · 11/21 09:43 적용하다 멈춤 · 디럭스 · 판매가 +10%", "멈춘 변경은 적용을 시작한 때")
+        self.assertEqual(confirm_line(self.entry(status="applying", applied_at=None, begun_at="2026-11-21T09:43:00+09:00")),
+                         "장부 7번 · 11/21 09:43 적용 중 · 디럭스 · 판매가 +10%")
+        self.assertEqual(confirm_line(self.entry(status="stopped", applied_at=None, begun_at=None)),
+                         "장부 7번 · 11/21 09:40 적용하다 멈춤 · 디럭스 · 판매가 +10%", "시작한 때를 적기 전의 장부")
 
 
 
 class StoppedThenUndoneLineTest(unittest.TestCase):
     """F4 — 저장 하나를 넣고 멈춘 변경을 뒤에 되돌려도 목록의 줄은 「미리보기」가 아니다. ERP 에 칸을 넣었던 변경이라 되돌리기 전의
-    말과 시각(「적용하다 멈춤」, 시작한 때) 그대로이고, 끝에 되돌린 만큼이 붙는다. 다 적용한 뒤 되돌린 변경은 「적용」 그대로다."""
+    말과 시각(「적용하다 멈춤」, 시작한 때) 그대로이고, 끝에 되돌린 만큼이 붙는다. 다 적용한 뒤 되돌린 변경은 「적용」 그대로다.
+    시운전 8 F2 — 그 시각은 적용을 시작한 때(begin)다. 미리보기는 10:00, 적용 시작은 10:03, 첫 저장은 10:04 에 한다."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME, now=scene.clock)
+        self.at = scene.NOW
+        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME, now=lambda: self.at)
         self.before = scene.snapshot()
         plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
         self.steps = plan_steps(plan)
         self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
                                                  request=encode_request(plan.request))
+        self.at = scene.NOW + timedelta(minutes=3)
         self.ledger.begin(self.change, step_plans(self.steps), read_at=scene.READ_AGAIN)
+        self.at = scene.NOW + timedelta(minutes=4)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -86,7 +95,7 @@ class StoppedThenUndoneLineTest(unittest.TestCase):
         self.ledger.record_step(self.change, 2, saved=False, note="드로어 표에 없는 줄")
         stopped = self.line(self.change)
         head = stopped.split(" · 객실 가격 · ")[0]
-        self.assertTrue(head.endswith(" 적용하다 멈춤"), stopped)
+        self.assertEqual(head, f"장부 {self.change}번 · 11/21 10:03 적용하다 멈춤", "미리보기(10:00)가 아니라 적용을 시작한 때")
         self.assertTrue(stopped.endswith("저장 8번 중 1번 하고 멈춤"), stopped)
         first = self.undo(1, occupancies=["A2"])
         partly = self.line(self.change)
