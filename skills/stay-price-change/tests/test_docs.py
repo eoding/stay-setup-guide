@@ -288,6 +288,13 @@ class SheetDocsTest(unittest.TestCase):
         self.assertEqual(sorted(steps, key=compare.index), steps)
         self.assertIn("시즌 창에는 다시 채운 입력값이 그대로 보이고, 캘린더의 날짜별 값만 저장해 둔 값으로 돌아갑니다", way)
 
+    def test_the_child_percentage_question_reads_as_a_discount_and_names_every_guest_combination_it_covers(self):
+        """K4 — 시운전의 물음 「'3박 이상 -10%'를 … 칸 전체에 하면」은 할인으로 읽히지 않았고, 한 답이 여러 인원 조합에 가는데 하나만 댔다."""
+        bullet = self.sheet[self.sheet.index("**아동이 든 줄의 퍼센트는 묻는다.**"):].split("\n", 1)[0]
+        for said in ("'3박 이상 10% 할인'", "칸 전체를 10% 깎으면", "성인 몫 <`adult`> 만 10% 깎고", "인원 조합을 모두 댄다",
+                     "성인 2 + 아동 1 · 성인 1 + 아동 1 칸"):
+            self.assertIn(said, bullet)
+
     def test_commands_md_names_every_kind_of_gap(self):
         table = self.commands[self.commands.index("## 넣지 않는 것"):]
         table = table[:table.index("\n## ", 1)]

@@ -82,6 +82,10 @@ class RestoreSettlesTest(unittest.TestCase):
         self.assertEqual((rows[change]["rolled_back"], rows[change]["written"], rows[change]["undone_by"]),
                          (rows[change]["written"], rows[change]["written"], [restore]))
         self.assertIn(f"모두 되돌림 {rows[change]['written']}/{rows[change]['written']}칸 (장부 {restore}번)", rows[change]["scope"])
+        self.assertEqual([rows[number]["line"].split(" · ")[:2] for number in (saved, change, restore)],
+                         [[f"장부 {saved}번", "11/21 10:00 저장"], [f"장부 {change}번", "11/21 10:00 적용"],
+                          [f"장부 {restore}번", "11/21 10:00 적용"]],
+                         "K4 — 저장해 둔 상태는 값을 읽은 때와 「저장」으로 확인받는다(적용이 아니다)")
         refused = self.cli("rollback", "--change", change, "--snapshot", self.write(encode_snapshot(restored)), "--record",
                            "--sentence", "방금 바꾼 거 되돌려", "--out", self.dir / "rollback-2.json", code=2)
         self.assertIn("아직 되돌리지 않은 것이 없습니다", refused["error"], "다시 내밀지 않는다")

@@ -312,4 +312,6 @@ def render_prices(listing: Listing) -> str:
         body += [f"<h2>{esc(offer_name)} <small class=\"sub\">오퍼 {esc(offer_id)}번</small></h2>",
                  (f'<div class="scroll"><table><tr><th>부과금</th><th>종류</th><th>부과 방식</th><th>금액</th><th>적용 날짜</th></tr>'
                   f"{rows}</table></div>" if mine else '<p class="sub">부과금이 없습니다.</p>')]
+    if listing.charges:      # 보기는 퍼센트로 — 부과금마다 통화가 다를 수 있다
+        body.append(notes([f'바꾸고 싶으면 대화창에서 "{listing.charges[0].name} 10% 올려줘" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.']))
     return page(title, "\n".join(body), MAKER)

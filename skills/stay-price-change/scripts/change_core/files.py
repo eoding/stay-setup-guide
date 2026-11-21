@@ -66,6 +66,21 @@ def answer_files(paths, prefixes: tuple[str, ...]) -> list[Path]:
     return files
 
 
+def _first_value(text: str):
+    """답 파일의 글 → 답. 온전한 JSON 이면 그것. JSON 하나가 온전히 닫힌 뒤에 도구가 붙인 글(탭 목록 같은 것)이 이어지면 그 JSON 만
+    — 작업의 답은 그것이다. 닫히지 않은(잘린) 글은 그대로 글이다(change_core.answers 가 잘린 답으로 알아본다)."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    stripped = text.lstrip()
+    try:
+        value, end = json.JSONDecoder().raw_decode(stripped)
+    except json.JSONDecodeError:
+        return text
+    return value if isinstance(value, (dict, list)) and stripped[end:].strip() else text
+
+
 def load_results(paths, prefixes: tuple[str, ...]) -> list:
     """브라우저 답 파일들(폴더도 된다 — answer_files) — 파일 하나에 답 하나(객체) 또는 여럿(목록). 목록의 글자 항목, 그리고
     JSON 이 아닌 파일은 도구가 보인 그대로의 답이다(잘린 답일 수 있다 — change_core.answers.answers 가 알아본다). UTF-8 로 읽히지
@@ -77,10 +92,7 @@ def load_results(paths, prefixes: tuple[str, ...]) -> list:
             text = Path(path).read_text(encoding="utf-8", errors="replace")
         except FileNotFoundError:
             raise ValueError(f"파일이 없습니다: {path}") from None
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            data = text
+        data = _first_value(text)
         results += [named(item, Path(path).name) for item in (data if isinstance(data, list) else [data])]
     return results
 
@@ -144,13 +156,35 @@ def look_hotel(path: str) -> dict:
     return dict(id=str(hotel["id"]), name=str(hotel.get("name") or ""))
 
 
+def _short_time(moment: str) -> str:
+    """「11/21 10:05」 — 장부가 적은 시각 그대로(장부 · 읽은 시각은 이 컴퓨터의 시각대로 적혀 있다)."""
+    when = datetime.fromisoformat(moment.replace("Z", "+00:00"))
+    return f"{when.month}/{when.day} {when:%H:%M}"
+
+
+def confirm_line(entry: dict) -> str:
+    """장부 목록의 한 줄을 담당자에게 확인받을 때 읽어 주는 말 — 「장부 3번 · 11/21 10:05 적용 · <범위>」. 저장해 둔 상태는 그 값을
+    ERP 에서 읽은 때와 「저장」, 적용을 시작하지 않은 미리보기는 만든 때와 「미리보기」, 적용 중이거나 멈춘 변경은 시작한 때와 그 말.
+    세 도우미가 같은 말로 묻는다(되돌리기 · 견주기의 「이것 맞나요?」)."""
+    if entry["kind"] == "snapshot":
+        moment, word = entry["read_at"], "저장"
+    elif entry.get("applied_at"):
+        moment, word = entry["applied_at"], "적용"
+    elif entry["status"] in ("applying", "stopped"):
+        moment, word = entry["created_at"], "적용하다 멈춤" if entry["status"] == "stopped" else "적용 중"
+    else:
+        moment, word = entry["created_at"], "미리보기"
+    return f"장부 {entry['id']}번 · {_short_time(moment)} {word} · {entry['scope']}"
+
+
 def hotel_list(ledger_path: Path, entries: list[dict], look: str | None, every: bool) -> dict:
     """장부 목록의 답 — 탭에 열린 호텔(`look`, look 명령이 낸 파일)의 번호만. `every` 면 그 뒤에 다른 호텔의 번호도 싣는다(탭의
     호텔이 먼저, 저마다 새것부터). 둘 다 없으면 거절한다 — 다른 호텔의 기록은 담당자가 청할 때만 본다. `others` 는 싣지 않은
-    다른 호텔의 번호 수다."""
+    다른 호텔의 번호 수다. 줄마다 확인받을 때 읽어 주는 말(`line` — confirm_line)을 단다."""
     if look is None and not every:
         raise ValueError("list 에는 --look(탭에 열린 호텔 — look 명령이 낸 파일)을 줍니다. 다른 호텔의 기록까지 보려면 --all 을 더합니다")
     hotel = look_hotel(look) if look else None
+    entries = [dict(entry, line=confirm_line(entry)) for entry in entries]
     mine = [entry for entry in entries if hotel is not None and str(entry["hotel_id"]) == hotel["id"]]
     rest = [entry for entry in entries if hotel is None or str(entry["hotel_id"]) != hotel["id"]]
     return dict(ledger=str(ledger_path), hotel=hotel, changes=mine + rest if every else mine, others=0 if every else len(rest))

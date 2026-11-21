@@ -144,6 +144,9 @@ class FourShapesTest(Flow):
         self.assertEqual(set(page), {"text"}, "--text 만이면 파일을 만들지 않는다")
         for said in ("현장 결제: 15.00 USD", "소아: 50.00 USD", "의무 지정 1일 2026-12-24", "미정"):
             self.assertIn(said, page["text"])
+        lines = page["text"].splitlines()
+        self.assertEqual(lines.count(lines[0]), 1, "K4 — --text 는 제목을 한 번만 낸다")
+        self.assertIn('10% 올려줘" 처럼 말씀해 주세요', page["text"], "K5 — 부과금마다 통화가 달라 말 보기는 퍼센트로")
         self.assertEqual(self.erp.posts, [])
 
     def test_a_percentage_charge_with_two_time_bands_changes_one_band_and_sends_the_other_band_as_read(self):
@@ -528,6 +531,8 @@ class LedgerListTest(Flow):
         tab = self.cli("list", "--look", self.look())
         self.assertEqual(([entry["id"] for entry in tab["changes"]], tab["others"], tab["hotel"]),
                          ([mine], 1, {"id": "1", "name": "데모 호텔"}))
+        self.assertRegex(tab["changes"][0]["line"], rf"^장부 {mine}번 · \d+/\d+ \d\d:\d\d 미리보기 · 부과금 1개 ",
+                         "K5 — 확인받는 한 줄은 세 도우미가 같은 코드로 만든다")
         every = self.cli("list", "--look", self.look(), "--all")
         self.assertEqual(([entry["id"] for entry in every["changes"]], every["others"]), ([mine, other], 0),
                          "다른 호텔의 번호는 청할 때만, 탭의 호텔 것 뒤에")

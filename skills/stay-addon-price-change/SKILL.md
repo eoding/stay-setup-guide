@@ -89,7 +89,7 @@ metadata:
 
 ## 3. 되돌리기
 
-「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>".
+「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? <그 줄의 `line`>".
 
 1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.

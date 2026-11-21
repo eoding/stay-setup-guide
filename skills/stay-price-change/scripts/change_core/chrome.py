@@ -115,7 +115,7 @@ class _Text(HTMLParser):
         self.line, self.cells = [], 0
 
     def handle_starttag(self, tag, attrs):
-        if tag in ("style", "script"):
+        if tag in ("style", "script", "title"):          # 제목은 머리(h1)가 다시 말한다 — 한 번만
             self.skip += 1
         elif tag in self.BREAKS:
             self.flush()
@@ -125,7 +125,7 @@ class _Text(HTMLParser):
             self.cells += 1
 
     def handle_endtag(self, tag):
-        if tag in ("style", "script"):
+        if tag in ("style", "script", "title"):
             self.skip -= 1
         elif tag in self.BREAKS:
             self.flush()

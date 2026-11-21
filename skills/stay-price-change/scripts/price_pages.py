@@ -27,7 +27,7 @@ from change_core.chrome import (
     stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
-from change_core.money import scale_of
+from change_core.money import example_step, scale_of
 from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 
@@ -798,6 +798,14 @@ def _with(value: CellValue, fields: Mapping[str, Decimal | None]) -> CellValue:
     return CellValue(merged["sell"], merged["list"], merged["supply"], "open" if value.state == "missing" else value.state)
 
 
+def _example(snapshot: Snapshot) -> str:
+    """페이지의 말 보기 — 읽은 첫 객실 · 첫 달과 그 오퍼의 통화에 맞는 금액(「12월 디럭스 +10」 · 원 오퍼면 「+10,000」)."""
+    days = sorted({key.date for key in snapshot.cells} | set(snapshot.dates))
+    room = min((room for room, _plan in snapshot.pairs), default="")
+    month = f"{int(days[0][5:7])}월 " if days else ""
+    return f"{month}{room} +{example_step(snapshot.currency)}".strip()
+
+
 def render_prices(snapshot: Snapshot, by_date: bool = False) -> str:
     currency = snapshot.currency
     title = f"지금 가격 · {snapshot.hotel} · {snapshot.offer}"
@@ -824,7 +832,7 @@ def render_prices(snapshot: Snapshot, by_date: bool = False) -> str:
                + esc(" / ".join(f"{room} · {days_summary(day for r, day in snapshot.no_sale if r == room)}"
                                 for room in sorted({r for r, _ in snapshot.no_sale}))) + "</p>"] if snapshot.no_sale else []),
             notes(["판매가는 굵게, 정가(손님 화면에 줄 그어 보이는 값)와 공급 원가는 작게 보입니다.",
-                   '바꾸고 싶으면 대화창에서 "12월 디럭스 +10,000" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.'])]
+                   f'바꾸고 싶으면 대화창에서 "{_example(snapshot)}" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.'])]
     return page(title, "\n".join(body), MAKER)
 
 
