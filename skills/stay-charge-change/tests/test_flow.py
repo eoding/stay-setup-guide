@@ -471,6 +471,20 @@ class SmallFindingsTest(Flow):
         self.assertFalse(db.exists() and self.cli("list", "--all")["changes"], "장부에 적지 않는다")
 
 
+class AdultWordTest(Flow):
+    def test_an_adult_age_band_is_refused_with_the_rule_that_the_charge_s_own_amount_is_the_adult_one(self):
+        """H2 — 연령별 단가가 있는 부과금에서 「성인」은 연령 구간이 아니다. 그렇게 적은 요청은 짐작해 고치지 않고 규칙을 말하며 거절한다."""
+        request = self.request({"offer": "602", "charge": "705", "age": "성인", "field": "amount"}, value="110",
+                               sentence="갈라 디너 성인 요금 110 으로")
+        snapshot = self.read(request=request)
+        refused = self.cli("plan", "--snapshot", snapshot, "--request", request, "--out", self.work / "plan-1.json", code=2)
+        self.assertIn("연령별 단가가 아니라 부과금 자체의 금액입니다", refused["error"])
+        right = self.request({"offer": "602", "charge": "705", "field": "amount"}, value="110", sentence="갈라 디너 성인 요금 110 으로")
+        _change, plan = self.preview(right, name="plan-2.json")
+        change, = json.loads(plan.read_text(encoding="utf-8"))["plan"]["changes"]
+        self.assertEqual((change["before"], change["after"]), ("100.00", "110.00"), "성인 금액은 부과금 자체의 금액이다")
+
+
 class LedgerListTest(Flow):
     """H3 — 저장할 것이 없는 미리보기는 그렇게 적히고 그렇게 보이며, 목록은 탭의 호텔 것을 먼저, 다른 호텔 것은 청할 때만 싣는다."""
 

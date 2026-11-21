@@ -236,6 +236,19 @@ class SkillShapeTest(unittest.TestCase):
         for said in ("이 부과금 설정 다 보여줘", "read-calls --charge ", "render window --snapshot"):
             self.assertIn(said, job)
 
+    def test_everyday_words_map_to_one_amount_by_a_written_rule_and_the_box_says_the_erp_words(self):
+        """H2 — 「성인 요금」 같은 말이 어느 금액 칸인지 요청 형식 쪽에 규칙으로 적혀 있고, SKILL.md 가 그 규칙과 묻는 때를 가리키며,
+        확인 상자는 고른 칸을 ERP 의 말로 적는다."""
+        rule = section((SKILL / "references" / "commands.md").read_text(encoding="utf-8"), "### 담당자의 말 → 금액 칸")
+        for word, place in (("성인 요금", '"field": "amount"'), ("14시 이후", '"time"'), ("소아", '"age"'), ("현장 결제", '"field": "onsite"')):
+            row = next(line for line in rule.splitlines() if word in line and line.startswith("|"))
+            self.assertIn(place, row, word)
+        self.assertIn("짐작하지 않고 묻는다", rule)
+        ask = self.skill[self.skill.index("**묻고 확인한다.**"):self.skill.index("**읽고 미리보기.**")]
+        for said in ("「담당자의 말 → 금액 칸」", '"성인 요금"', "부과금 자체의 금액", "짐작하지 않고 묻는다", "ERP 의 말"):
+            self.assertIn(said, ask)
+        self.assertRegex(ask, r"바꾸는 칸 「[^」]+」", "확인 상자의 보기가 ERP 의 금액 줄을 그대로 옮긴다")
+
     def test_the_pointer_to_the_stopped_page_repeats_the_rule_that_must_not_be_missed(self):
         pointing = [line for line in self.skill.splitlines() if "](references/stopped.md)" in line]
         self.assertTrue(any("다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다" in line for line in pointing))

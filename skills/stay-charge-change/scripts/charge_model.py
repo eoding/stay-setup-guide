@@ -50,6 +50,7 @@ PER_PERSON = "2"                     # per — 인당
 SET, BLANK = "set", "blank"          # amount_mode · pct_mode — 지정 · 미정
 MANDATORY = "mandatory"
 UNSET_LABEL = "---------"
+ADULT_WORDS = ("성인", "어른", "대인")   # 연령별 단가가 있는 부과금에서도 성인 금액은 부과금 자체의 금액이다(commands.md 「담당자의 말 → 금액 칸」)
 
 
 class ModelError(Refused):
@@ -294,10 +295,14 @@ class Charge:
         return tuple(AgeRate(code, entry["label"], entry["amount"], entry["onsite"]) for code, entry in found.items())
 
     def normal(self, place: Place) -> Place:
-        """요청이 연령 구간을 화면의 이름(「소아」)으로 짚었으면 구간 코드로 바꾼 자리 — 장부의 키는 코드로 적는다."""
+        """요청이 연령 구간을 화면의 이름(「소아」)으로 짚었으면 구간 코드로 바꾼 자리 — 장부의 키는 코드로 적는다. 성인은 연령 구간이
+        아니다 — 부과금 자체의 금액이 성인 금액이다(연령별 단가가 비면 「성인가와 같음」)."""
         if place.part != AGE or any(rate.code == place.at for rate in self.ages()):
             return place
         named = [rate.code for rate in self.ages() if rate.label == place.at]
+        if not named and place.at.strip() in ADULT_WORDS:
+            raise ModelError(f"부과금 {self.id}번의 「{place.at}」 요금은 연령별 단가가 아니라 부과금 자체의 금액입니다 — "
+                             '"age" 없이 "field": "amount" 로 적습니다')
         if len(named) != 1:
             raise ModelError(f"부과금 {self.id}번에 연령 구간 {place.at} 이(가) {'둘 이상' if named else '없습니다'} — 구간 코드로 적습니다")
         return Place(place.charge, place.part, named[0], place.field)
