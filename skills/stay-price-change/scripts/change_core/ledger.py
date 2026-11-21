@@ -1,7 +1,10 @@
 """담당자 PC 의 변경 장부(SQLite 하나). 지우는 일은 없다.
 
 자리는 어느 폴더에서 Claude 를 열어도 같은 한 곳이다: `~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3`.
-환경 변수 `STAY_PRICE_LEDGER_DIR` 로 다른 폴더를 줄 수 있다(시험은 임시 폴더를 쓴다). 가격·부과금·프로모션·부가옵션
+환경 변수 `STAY_PRICE_LEDGER_DIR` 로 다른 폴더를 줄 수 있다(시험은 임시 폴더를 쓴다). 문서 폴더를 iCloud 같은 클라우드가 동기화하면
+장부 파일이 클라우드로만 옮겨지거나 사본으로 갈릴 수 있어, 그때는 동기화하지 않는 폴더를 준다. 기록 폴더에 작업 폴더나 페이지가
+있는데 장부 파일이 없으면 장부가 있던 자리다 — 빈 장부를 새로 만들지 않고 거절한다(`_missing`). 그래서 작업 폴더를 처음 만드는
+`work` 가 장부도 같이 만든다(files.new_work). 가격·부과금·프로모션·부가옵션
 도우미가 모두 이 장부 하나에 적는다. 시험은 `STAY_PRICE_TEST_NOW`(ISO 시각)로 장부의 시계를 그 시각에 세운다 — 명령을 부르는
 시험이 이 컴퓨터의 시계에 기대지 않게(clock).
 
@@ -62,6 +65,7 @@ LEDGER_ENV = "STAY_PRICE_LEDGER_DIR"
 CLOCK_ENV = "STAY_PRICE_TEST_NOW"   # 시험용 — 주면 장부의 시계가 그 시각(ISO)에 서 있다
 FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
+WORK = "작업"                        # 기록 폴더 안의 작업 폴더들(files.new_work) — 있으면 장부가 있던 기록 폴더다
 SCHEMA_VERSION = 3                   # 3 — 상태 empty(저장할 것이 없는 미리보기)
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
@@ -141,6 +145,17 @@ def ledger_dir() -> Path:
     folder = Path(override).expanduser() if override else Path.home() / "Documents" / FOLDER_NAME
     folder.mkdir(parents=True, exist_ok=True)
     return folder
+
+
+def _missing(path: Path) -> str | None:
+    """장부 파일이 없는데 그 기록 폴더에 작업 폴더나 페이지가 있으면(장부가 있던 자리) 담당자에게 전할 문장, 아니면 None."""
+    folder = path.parent
+    if path.exists() or not (any((folder / WORK).glob("*")) or any(folder.glob("*.html"))):
+        return None
+    return (f"기록 폴더({folder})에 작업 폴더 · 페이지가 있는데 장부 파일({path.name})이 없습니다 — 장부가 있던 자리라 빈 장부를 새로 "
+            "만들지 않았습니다. 문서 폴더(Documents)를 iCloud 같은 클라우드가 동기화하면 장부 파일이 클라우드로만 옮겨졌거나(내려받지 "
+            "않음) 다른 이름의 사본이 됐을 수 있습니다. 여기서 멈추고 담당자에게 이 글을 그대로 전합니다 — 파일을 되찾은 뒤 같은 명령을 "
+            f"다시 하거나, 동기화하지 않는 폴더를 환경 변수 {LEDGER_ENV} 로 정하고 기록 폴더를 그리로 옮깁니다")
 
 
 def _moment(text: str) -> datetime:
@@ -360,6 +375,9 @@ class Ledger:
         self.path = Path(path) if path else ledger_dir() / DB_NAME
         self._now = now or clock()
         self.kind = kind
+        missing = _missing(self.path)
+        if missing:
+            raise LedgerError(missing)
         with self._db() as db:
             has_meta = db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone()
             found = db.execute("SELECT value FROM meta WHERE name = 'schema_version'").fetchone() if has_meta else None
