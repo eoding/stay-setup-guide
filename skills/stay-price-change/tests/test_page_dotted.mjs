@@ -44,14 +44,15 @@ test('T4 · R3 · 페이지의 모든 작업 답과 쪽에는 도구가 가리�
   const call = async (op, value) => plain(await sp[op](inPage(page.w, value)));
   const answers = [];
   const look = await call('look', {});
-  answers.push(look, await call('look', { offer: OFFER }));
-  assert.equal(look.hotel.name, 'demo·hotel·one', '이름은 점을 · 로 바꿔 읽을 수 있게 남는다');
+  answers.push(look, await call('look', { offer: OFFER }), ...takeAll(page.w, look).takes);
+  assert.equal(look.hotel.name, 'demo·hotel·one', '답의 칸(사람이 읽는 것)에서는 점을 · 로 바꿔 읽을 수 있게 남는다');
+  assert.equal(takeAll(page.w, look).body.hotel.name, 'demo.hotel.one', 'A2 — 명령에 돌아가는 이름은 조각이 그대로 싣는다');
   const pair = await call('readPair', { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK });
   const resv = await call('readReserved', { hotel: HOTEL, offer: OFFER, rooms: ['디럭스'], ratePlans: ['조식 포함'], from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK, occupancy: '*', nights: 'all' });
   assert.equal(pair.ok, true, pair.error);
   assert.equal(resv.ok, true, resv.error);
   answers.push(pair, resv, ...takeAll(page.w, pair).takes, ...takeAll(page.w, resv).takes);
-  assert.equal(takeAll(page.w, pair).body.hotel.name, 'demo·hotel·one', '조각 안의 이름도 같은 규칙');
+  assert.equal(takeAll(page.w, pair).body.hotel.name, 'demo.hotel.one', 'A2 — 조각 안의 이름은 바꾸지 않는다(쪽 글자는 도구가 가리지 않는 모양 — 아래 blocked)');
   answers.push(await call('applyBulk', { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] }));
   answers.push(await call('applyCell', { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] }));
   answers.push(await call('readPair', { hotel: { id: '2', name: 'other.hotel.two' }, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK }));

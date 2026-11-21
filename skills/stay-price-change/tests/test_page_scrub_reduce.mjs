@@ -61,7 +61,7 @@ test('B3 · 주소 같은 키와 주소·쿼리 붙은 경로·토큰 같은 글
   w.close();
 });
 
-test('B4 · 줄인 조각에는 태그·글자·data-stay-*·data-calendar-*·colspan/rowspan 만 남는다', () => {
+test('B4 · 줄인 조각에는 태그·글자·data-stay-*·data-calendar-*·colspan/rowspan 만 남는다(표식의 값은 주소만 빼고 그대로)', () => {
   const { w, doc } = erpPage();
   const box = doc.createElement('div');
   box.innerHTML = `<section class="stay-card" data-stay-summary id="s1" style="color:red" title="t" onclick="x()">
@@ -71,8 +71,9 @@ test('B4 · 줄인 조각에는 태그·글자·data-stay-*·data-calendar-*·co
     <textarea name="t">글</textarea><script>var leak = 1;</script><style>.x{}</style><template><b>틀</b></template><a href="/stay/1/?q=1" data-stay-action="goto">링크 글자</a><!-- 주석 --><br></section>`;
   assert.equal(w.stayPrice.reduce(box.firstElementChild),
     '<section data-stay-summary> <table data-stay-rows=prices data-calendar-link-base><thead><tr><th colspan=4>머리</th></tr></thead>'
-    + '<tbody data-stay-occupancy-key=A2 data-stay-los-nights=1 data-stay-name=디럭스&#32;&#34;킹&#34;&#32;a&#61;b><tr data-stay-existing><td rowspan=2>1 &lt; 2 &amp; "3"</td></tr></tbody></table>'
-    + ' <a data-stay-action=goto>링크 글자</a><br></section>', '표 뼈대 사이 빈칸은 지우고 다른 빈칸 줄은 한 칸으로 · 속성은 따옴표 없이, 설 수 없는 글자는 &#번호;');
+    + `<tbody data-stay-occupancy-key=A2 data-stay-los-nights=1 data-stay-token=${CSRF} data-stay-name=디럭스&#32;&#34;킹&#34;&#32;a&#61;b><tr data-stay-existing><td rowspan=2>1 &lt; 2 &amp; "3"</td></tr></tbody></table>`
+    + ' <a data-stay-action=goto>링크 글자</a><br></section>', '표 뼈대 사이 빈칸은 지우고 다른 빈칸 줄은 한 칸으로 · 속성은 따옴표 없이, 설 수 없는 글자는 &#번호; · '
+    + '주소인 표식 값(data-stay-href)만 빠지고 토큰 꼴의 값은 남는다(A2 — 32자 인원 조합 키도 그 꼴이다. 조각은 pack 이 도구가 가리지 않는 모양으로 싣는다)');
   w.close();
 });
 

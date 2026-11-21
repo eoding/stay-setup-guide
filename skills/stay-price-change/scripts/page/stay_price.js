@@ -37,8 +37,10 @@
  *    userActivation) 화면 스크립트가 누른 클릭은 지난다. `standDown()` 으로 내린다.
  *  - 누르기는 `press` 하나다. 단추가 화면에 있고 막히지 않았고 htmx 가 연결했고 도는 요청이 없을 때 한 번 누른다 — 다시 누르지
  *    않는다. 화면을 바꾼 뒤(칩·오퍼·보기·탭·달·드로어 단계·셀 창)에는 바뀐 조각이 왔고 도는 요청이 없을 때(`settle`) 넘어간다.
- *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
+ *  - 답의 칸은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
  *    조각 셋 이상뿐인 글자(`0.15.0`)는 점을 `·` 로 바꾼다(도구가 토큰으로 보고 가린다). 러너 함수의 결과는 그대로 넘기지 않는다.
+ *    명령에 값으로 돌아가는 것(창의 칸 · 물은 값 `asked` · look 의 이름 · 화면 조각과 그 표식)은 조각으로만 싣고 거르지 않는다 —
+ *    `pack` 이 그 글자를 바꾸지 않고 도구가 가리는 자리만 `&#번호;` 로 적는다.
  *  - 화면 조각은 `reduce` 로 줄인다 — 태그 구조 · 글자 · `data-stay-*`/`data-calendar-*` · colspan/rowspan 만, 속성은 따옴표
  *    없이. 줄인 조각은 따옴표 없는 JSON(`pack`)으로 페이지에 두고 답에는 `body`(id 와 그 글자를 알아볼 값 — 글자 수 · 바이트 수 ·
  *    CRC-32 · FNV-1a)만 싣는다. 쪽(take)마다 제 검사값(sum)이 있다. 파이썬은 앞선 읽기에서 이미 받은 같은 조각이면 다시 받지 않는다.
@@ -64,21 +66,24 @@
 
   // 키 이름만으로 버린다 — 값이 무엇이든 나가지 않는다
   var ADDRESS_KEY = /url|uri|href|src|hash|path|location|host|origin|referr?er|cookie|token|csrf|^hx/i;
-  // 글자 안의 주소·토큰: scheme:// · //host · ?key= 가 붙은 경로 · /a/b 꼴 절대 경로 · www. · JWT · 32자 넘는 토큰
-  var ADDRESS_SOURCE = [
+  // 브라우저 도구가 답에서 가리거나 비우는 모양 — 주소(scheme:// · //host · ?key= 가 붙은 경로 · /a/b 꼴 절대 경로 · www.)와
+  // 토큰(JWT · 32자 넘는 글자 줄). 사람이 읽을 글(error · what · note …)에서는 그 자리를 지운다(scrub). 명령에 값으로 돌아가는
+  // 글자(조각 — 창의 칸 · 물은 값 · 이름 · 화면 조각)는 지우지 않고 그 자리의 글자를 `&#번호;` 로 적어 모양만 깬다(pack) — 명령이
+  // 그대로 되돌린다
+  var URL_SOURCE = [
     '[a-z][a-z0-9+.-]*:\\/\\/[^\\s"\'<>]*',
     '(?<=^|[\\s"\'(=>])\\/\\/[^\\s"\'<>]+',
     '[^\\s"\'<>]*\\?[^\\s"\'<>=&]+=[^\\s"\'<>]*',
     '(?<=^|[\\s"\'(=>])\\/[\\w.~%{}:-]+\\/[^\\s"\'<>]*',
-    '\\bwww\\.[^\\s"\'<>]+',
-    '\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]*',
-    '[A-Za-z0-9_-]{32,}'
+    '\\bwww\\.[^\\s"\'<>]+'
   ].join('|');
+  var ADDRESS_SOURCE = URL_SOURCE + '|' + ['\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]*', '[A-Za-z0-9_-]{32,}'].join('|');
   var GONE = '[주소 지움]';
   // 브라우저 도구는 답이 객체일 때, 점으로 이은 조각(글자·숫자·_·-) 셋 이상만으로 된 글자를 토큰으로 보고 통째로 가린다
   // (`0.15.0` → `[BLOCKED: JWT token]`). 그런 글자는 점을 `·` 로 바꿔 보낸다 — 판 번호도 이름도 읽을 수 있게 남는다
   var DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2,}$/;
   function addressLike(text) { return new RegExp(ADDRESS_SOURCE, 'i').test(String(text)); }
+  function urlLike(text) { return new RegExp(URL_SOURCE, 'i').test(String(text)); }
   function scrubText(text) {
     var out = text.replace(new RegExp(ADDRESS_SOURCE, 'gi'), GONE);
     if (out !== text && !out.split(GONE).join('').trim()) return undefined;   // 글자 전체가 주소였다
@@ -127,7 +132,8 @@
       if (n.nodeType !== 1) return;                                          // 주석 등
       var tag = n.localName;
       if (DROP_TAGS[tag]) return;
-      var attrs = [].slice.call(n.attributes).filter(function (a) { return keepAttr(a.name) && !addressLike(a.value); })
+      // 표식의 값은 그대로 둔다(32자 인원 조합 키 같은 값도 — 조각은 pack 이 도구가 가리지 않는 모양으로 싣는다). 주소인 값만 뺀다
+      var attrs = [].slice.call(n.attributes).filter(function (a) { return keepAttr(a.name) && !urlLike(a.value); })
         .map(function (a) { return ' ' + a.name + (a.value === '' ? '' : '=' + attrValue(a.value)); });
       out.push('<' + tag + attrs.join('') + '>');
       if (VOID_TAGS[tag]) return;
@@ -203,8 +209,30 @@
 
   // 페이지에 두는 조각의 모양 — 따옴표 없는 JSON. 글자는 작은따옴표로 감싸고, 글자 안의 & ' " \ 와 제어 글자는 `&#번호;` 로
   // 적는다. 그래서 조각 글자에는 큰따옴표도 역슬래시도 없다 — 도구가 쪽을 JSON 으로 보일 때 이스케이프가 붙지 않아, 보인 그대로
-  // 옮겨 적으면 된다. 작은따옴표를 큰따옴표로 바꾸면 이스케이프 없는 JSON 이다(파이썬 `change_core.answers.unpack`)
-  function packText(text) { return "'" + String(text).replace(/[&'"\\\u0000-\u001f]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }) + "'"; }
+  // 옮겨 적으면 된다. 작은따옴표를 큰따옴표로 바꾸면 이스케이프 없는 JSON 이다(파이썬 `change_core.answers.unpack`).
+  // 값은 바꾸지 않는다 — 도구가 가리는 모양(주소 · 토큰 · 점으로 이은 조각 셋)이 든 자리만 그 자리의 . / : ? = @ 와, 글자 · 숫자 ·
+  // _ · - 줄의 16자째마다 한 자를 `&#번호;` 로 적는다. 명령은 `&#번호;` 를 모두 한 번 돌려 원래 글자를 얻는다
+  function entity(c) { return '&#' + c.charCodeAt(0) + ';'; }
+  function breakShape(part) {
+    var run = 0;
+    return part.replace(/[\s\S]/g, function (c) {
+      if (/[.\/:?=@]/.test(c)) { run = 0; return entity(c); }
+      if (!/[A-Za-z0-9_-]/.test(c)) { run = 0; return c; }
+      if (++run < 16) return c;
+      run = 0;
+      return entity(c);
+    });
+  }
+  function safeText(text) {
+    for (var pass = 0; pass < 3; pass++) {
+      if (DOTTED.test(text)) return breakShape(text);
+      var next = text.replace(new RegExp(ADDRESS_SOURCE, 'gi'), breakShape);
+      if (next === text) return text;
+      text = next;
+    }
+    return breakShape(text);
+  }
+  function packText(text) { return "'" + safeText(String(text).replace(/[&'"\\\u0000-\u001f]/g, entity)) + "'"; }
   function pack(value) {
     if (value === null || value === undefined) return 'null';
     if (typeof value === 'string') return packText(value);
@@ -236,8 +264,9 @@
     piece.sum = crc32(id + ':' + at + ':' + text.length + ':' + piece.text);
     return piece;
   }
+  // 읽은 것을 조각으로 둔다 — 값은 거르지 않는다(pack 이 도구가 가리지 않는 모양으로 적는다). 사람이 읽을 답의 칸만 fit 이 거른다
   function keep(body) {
-    var text = pack(scrub(body));
+    var text = pack(body);
     var id = 'b' + Date.now().toString(36) + (BODIES.order.length + 1);
     var item = BODIES.items[id] = { text: text, bytes: byteLength(text), crc32: crc32(text) };
     BODIES.order.push(id);
@@ -866,8 +895,9 @@
       if (offer && shown.picked !== offer) fail('캘린더에 오퍼 `' + offer + '` 이 없습니다 (보이는 오퍼: ' + shown.names.join(' / ') + ')');
       var pairs = all('#stay_calendar [data-stay-entity="rate_plan"][data-stay-action="goto"]').map(pairOf);
       var whole = { ok: true, login: false, hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs };
-      // 답의 나머지 칸(ask · clicks · rest · ms · doneAt …)이 250자 안팎이다 — 목록까지 800자에 들면 그대로, 아니면 조각으로
-      if (shownLength(whole) <= RESULT_CHARS - 300) return whole;
+      // 답의 나머지 칸(ask · clicks · rest · ms · doneAt …)이 250자 안팎이다 — 목록까지 800자에 들고 거르기가 이름을 하나도 바꾸지
+      // 않으면 그대로, 아니면 조각으로(이름은 명령에 값으로 돌아가므로 조각이 그대로 싣는다)
+      if (shownLength(whole) <= RESULT_CHARS - 300 && canon(scrub(whole)) === canon(whole)) return whole;
       return { ok: true, login: false, hotel: hotel, offer: shown.picked, count: { offers: shown.names.length, pairs: pairs.length },
         keep: { hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs } };
     }, CALENDAR);
