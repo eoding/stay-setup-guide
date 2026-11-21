@@ -236,6 +236,15 @@ class SkillShapeTest(unittest.TestCase):
         for said in ("이 부과금 설정 다 보여줘", "read-calls --charge ", "render window --snapshot"):
             self.assertIn(said, job)
 
+    def test_p5_several_matching_charges_are_asked_first_and_the_settings_page_has_a_sentence(self):
+        """P5 — 「이 부과금 설정 다 보여줘」에 맞는 부과금이 여럿이면(오퍼마다 이름이 같다) 오퍼 · 번호로 늘어놓고 읽기 전에 묻고,
+        페이지를 열며 할 말이 있다."""
+        job = self.skill[self.skill.index("## 1. "):self.skill.index("## 2. ")]
+        asked = job.index("맞는 부과금이 여럿이면 「<오퍼> · <부과금> (부과금 <번호>번)」으로 늘어놓고 먼저 묻는다")
+        self.assertLess(asked, job.index("read-calls --charge "), "묻는 것이 읽기보다 먼저")
+        self.assertIn('"모두"면 `--charge` 를 여러 번', job)
+        self.assertIn('"○시 ○분에 ERP 에서 읽은 <오퍼> · <부과금> 설정 전부입니다. 바꾸지 않았고 장부에도 적지 않았습니다."', job)
+
     def test_everyday_words_map_to_one_amount_by_a_written_rule_and_the_box_says_the_erp_words(self):
         """H2 — 「성인 요금」 같은 말이 어느 금액 칸인지 요청 형식 쪽에 규칙으로 적혀 있고, SKILL.md 가 그 규칙과 묻는 때를 가리키며,
         확인 상자는 고른 칸을 ERP 의 말로 적는다."""

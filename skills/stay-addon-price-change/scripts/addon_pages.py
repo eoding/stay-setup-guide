@@ -314,6 +314,8 @@ def render_prices(listing: Listing) -> str:
             stats([(addon_count, "부가옵션"), (len(listing.lines), "가격 줄")]),
             (f'<div class="scroll"><table><tr><th>부가옵션</th><th>가격 줄</th><th>적용 대상</th><th>판매가</th><th>공급 원가</th></tr>'
              f'{"".join(rows)}</table></div>' if rows else '<p class="sub">가격 줄이 없습니다.</p>')]
-    if listing.lines:
-        body.append(notes([f'바꾸고 싶으면 대화창에서 "{listing.lines[0].addon} +{example_step(currency)}" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.']))
+    if listing.lines:   # 말 보기는 오퍼부터 — 오퍼마다 이름이 같은 부가옵션이 있다
+        first = listing.lines[0]
+        named = f"{first.offer} · {first.addon}" if first.offer else first.addon
+        body.append(notes([f'바꾸고 싶으면 대화창에서 "{named} +{example_step(currency)}" 처럼 말씀해 주세요. 바꾸기 전에 미리보기를 먼저 보여 드립니다.']))
     return page(title, "\n".join(body), MAKER)

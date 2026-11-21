@@ -11,7 +11,7 @@ metadata:
 
 # 부과금 도우미
 
-호텔 하나의 부과금(오퍼마다 붙은 얼리 체크인 · 레이트 체크아웃 · 갈라 디너 · 리조트피 같은 것)의 **금액만** 담당자의 로그인된 크롬 탭에서 읽고, 미리보기를 보여 주고, "적용"이라고 한 뒤에만 저장한다. 저장 전 값과 넣은 값은 다른 두 도우미와 같은 장부에 남아 되돌릴 수 있다. 담당자에게는 이 스킬을 **도우미**라고 부른다.
+호텔 하나의 부과금(오퍼마다 붙은 것)의 **금액만** 담당자의 로그인된 크롬 탭에서 읽고, 미리보기를 보여 주고, "적용"이라고 한 뒤에만 저장한다. 저장 전 값과 넣은 값은 다른 두 도우미와 같은 장부에 남아 되돌릴 수 있다. 담당자에게는 이 스킬을 **도우미**라고 부른다.
 
 하는 일은 셋이다. 1 지금 부과금 보기(한 부과금의 설정 전부도) · 2 부과금 금액 바꾸기 · 3 되돌리기.
 
@@ -64,7 +64,7 @@ metadata:
 
 「준비」 다음 `python3 scripts/charge_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 부과금입니다. 아무것도 바꾸지 않았습니다."
 
-"이 부과금 설정 다 보여줘"면 「읽기」를 `read-calls --charge <번호> --look "<작업>/look.json" --out "<R>/calls.json"` 으로 하고 `python3 scripts/charge_change.py render window --snapshot "<R>/snapshot.json"` → `page` 를 연다. 바꾸지 않고 장부에도 적지 않는다.
+"이 부과금 설정 다 보여줘"면(맞는 부과금이 여럿이면 「<오퍼> · <부과금> (부과금 <번호>번)」으로 늘어놓고 먼저 묻는다 — "모두"면 `--charge` 를 여러 번) 「읽기」를 `read-calls --charge <번호> --look "<작업>/look.json" --out "<R>/calls.json"` 으로 하고 `python3 scripts/charge_change.py render window --snapshot "<R>/snapshot.json"` → `page` 를 열고 말한다: "○시 ○분에 ERP 에서 읽은 <오퍼> · <부과금> 설정 전부입니다. 바꾸지 않았고 장부에도 적지 않았습니다."
 
 ## 2. 부과금 금액 바꾸기
 
@@ -101,7 +101,7 @@ metadata:
 
 ## 적용하기 — 바꾸기 · 되돌리기 공통
 
-필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려"). 그다음 [references/apply.md](references/apply.md) 대로 한다 — 직전에 다시 읽어 `begin`(미리보기 때와 다르면 아무것도 저장하지 않는다), 저장을 하나씩(`calls` → `stayCharge.applyCharge` → `record-result`), 뒤에 다시 읽어 `verify`, 결과 페이지. 저장이 안 됐거나 `status: stopped` 면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
+필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려"). 그다음 [references/apply.md](references/apply.md) 대로 한다(직전에 다시 읽어 `begin` — 다르면 저장하지 않는다). 저장이 안 됐거나 `status: stopped` 면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
 
 ## 하지 않는 것
 

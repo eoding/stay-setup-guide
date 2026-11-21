@@ -224,6 +224,12 @@ class SkillBudgetTest(unittest.TestCase):
             if "--look" in flags:
                 self.assertIn(f"`{name}`", said, f"--look 을 받는 {name} 을 준비에서 댄다")
 
+    def test_p5_the_price_view_says_that_it_leaves_a_ledger_entry(self):
+        """P5 — 「지금 가격 보기」도 장부에 한 줄(지금 상태 저장)을 남긴다고 안내문이 말한다(도우미가 말하는 문장은 그 번호를 댄다)."""
+        job = section(self.skill, "## 1. 지금 가격 보기")
+        self.assertIn("보기도 장부에 「지금 상태 저장」 한 줄을 남긴다", job)
+        self.assertIn("장부 S번에 적어 두었습니다", job)
+
     def test_a_person_asking_what_changed_since_a_saved_state_reaches_compare_from_skill_md(self):
         """H4 — 「아침에 저장해 둔 것과 뭐가 달라졌어?」는 요금표 참고 파일을 거치지 않고 SKILL.md 에서 compare 에 닿는다."""
         job = section(self.skill, "## 6. 저장해 둔 상태와 견주기")

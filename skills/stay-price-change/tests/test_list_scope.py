@@ -230,6 +230,17 @@ class TabHotelListTest(unittest.TestCase):
         self.assertIn("--look", self.cli("list", code=2)["error"], "어느 호텔인지 말하지 않으면 싣지 않는다")
         self.assertEqual([entry["id"] for entry in self.cli("list", "--all")["changes"]], [newer, other, older])
 
+    def test_a_price_view_leaves_a_saved_state_line_that_reads_as_a_view_saved_not_a_change(self):
+        """P5 — 「지금 가격 보기」는 일부러 「지금 상태 저장」 한 줄을 남기고, 도우미는 그 번호를 말한다. 목록의 그 줄은 ERP 에서
+        읽은 때와 「저장」 · 무엇을 읽었는지 · 「지금 상태 저장」으로 읽힌다 — 적용한 변경이나 미리보기로 들리지 않는다."""
+        snapshot = trial_scene.snapshot(read_at="2026-11-21T13:16:00+09:00")
+        path = self.dir / "기록" / "snapshot.json"
+        path.write_text(json.dumps(encode_snapshot(snapshot), ensure_ascii=False), encoding="utf-8")
+        saved = self.cli("save-snapshot", "--snapshot", path, "--sentence", "지금 가격 보여줘")["change_id"]
+        entry, = self.cli("list", "--look", self.look())["changes"]
+        self.assertEqual(entry["line"], f"장부 {saved}번 · 11/21 13:16 저장 · {HEAD} · 지금 상태 저장")
+        self.assertEqual((entry["kind"], entry["status"]), ("snapshot", "saved"))
+
     def test_each_helper_makes_a_new_work_folder_every_time(self):
         made = [Path(self.cli("work", script=script)["work"]) for script in (
             SCRIPT, HERE.parent.parent / "stay-addon-price-change" / "scripts" / "addon_change.py",

@@ -186,6 +186,12 @@ class SkillShapeTest(unittest.TestCase):
         for said in ("이 가격 줄 설정 다 보여줘", "read-calls --line ", "render window --snapshot"):
             self.assertIn(said, job)
 
+    def test_p5_the_prices_view_narrows_to_what_the_person_named(self):
+        """P5 — 「조식 가격 보여줘」처럼 부가옵션 · 줄을 말하면 look 을 그 낱말로 좁혀 그 줄만 오퍼부터 말한다(페이지는 호텔 전부)."""
+        job = self.skill[self.skill.index("## 1. "):self.skill.index("## 2. ")]
+        for said in ('`--find "<그 낱말>"`', "`items` 만 「오퍼 · 부가옵션 · 줄」과 판매가로 말한다", "페이지는 호텔 전부다"):
+            self.assertIn(said, job)
+
     def test_the_pointer_to_the_stopped_page_repeats_the_rule_that_must_not_be_missed(self):
         pointing = [line for line in self.skill.splitlines() if "](references/stopped.md)" in line]
         self.assertTrue(any("다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다" in line for line in pointing))

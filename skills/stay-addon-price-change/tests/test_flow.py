@@ -519,7 +519,8 @@ class PageTextTest(Flow):
         self.assertIn("지금 부가옵션 가격 · 데모 호텔", text["text"])
         lines = text["text"].splitlines()
         self.assertEqual(lines.count(lines[0]), 1, "K4 — --text 는 제목을 한 번만 낸다")
-        self.assertIn('"조식 추가 (성인) +10" 처럼 말씀해 주세요', text["text"], "K5 — 달러 호텔의 말 보기는 달러에 맞는 금액")
+        self.assertIn('"데모 오퍼 2027 · 조식 추가 (성인) +10" 처럼 말씀해 주세요', text["text"],
+                      "K5 — 달러 호텔의 말 보기는 달러에 맞는 금액, P5 — 이름이 같은 부가옵션이 오퍼마다 있으니 오퍼부터")
         self.assertEqual(len(list(ledger.glob("*.html"))), 1, "글을 읽어도 「… (2).html」 이 생기지 않는다")
         refused = self.cli("render", "prices", "--look", self.work / "look.json", "--text", "--out", self.work / "p.html", code=2)
         self.assertIn("파일을 만들지 않습니다", refused["error"])
