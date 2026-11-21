@@ -136,7 +136,9 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   tab          'offers' 면 오퍼 탭이 켜진 채로 연다(가격 캘린더 탭을 눌러야 한다)
  *   bulkReview   가격 수정 ② 조각(기본: 캡처 price-step2)       bulkReviewManual  연동 방식을 「직접 입력」으로 바꾼 ②
  *   adjustReview 가감 ② 조각(기본: 손 조각 adjust-rejected)
- *   onBulkSave   'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다) | 'hang'(요청이 끝나지 않는다)
+ *   onBulkSave   'saved'(기본: 드로어 닫고 저장 표지) | '403'(CSRF 거절 — 드로어가 남는다) | 'hang'(요청이 끝나지 않는다) |
+ *                'esc'(요청이 도는 사이 사람이 Esc — 드로어가 닫히고, 요청은 저장 표지 없이 끝난다) | 'escLate'(Esc 로 닫힌 뒤
+ *                200ms 에 저장 표지가 온다) | 'reload'(요청이 도는 사이 페이지가 떠난다 — pagehide, 요청은 끝나지 않는다)
  *   drawerStuck  true 면 드로어가 닫혀도 내용이 비지 않는다(쉬는 화면이 오지 않는다)
  *   cell         셀 창 그리기 값 {date, plan, rows} · cellSave 'ok'|'error'
  *   echoDays     true 면 가격 수정 ② 의 상태 표·기존 값 줄을 받은 날짜 구간대로 다시 그린다
@@ -240,6 +242,15 @@ export function erpPage(opts = {}) {
       log.posts.push(post);
       fire('htmx:before:request', {});
       if (o.onBulkSave === 'hang') return;   // 요청이 끝나지 않는다(서버가 답하지 않음)
+      if (o.onBulkSave === 'reload') { w.dispatchEvent(new w.Event('pagehide')); return; }
+      if (o.onBulkSave === 'esc' || o.onBulkSave === 'escLate') {
+        closeDrawer();   // ERP 의 `@keydown.escape.window` 처럼 — 클릭이 아니라 벽을 지나지 않는다
+        w.setTimeout(() => {
+          if (o.onBulkSave === 'escLate') { const m = doc.getElementById('stay_save_result'); m.setAttribute('data-stay-result', 'saved'); m.setAttribute('data-stay-saved-at', String(Date.now())); }
+          fire('htmx:finally:request', {});
+        }, o.onBulkSave === 'escLate' ? 200 : 30);
+        return;
+      }
       if (o.onBulkSave === '403') {
         fire('htmx:response:error', { ctx: { response: { status: 403 } } });
         fire('htmx:finally:request', {});

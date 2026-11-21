@@ -589,6 +589,12 @@
   /* ───────────── 5. 화면 부품 — 가격 캘린더 · 칩 · 드로어 ───────────── */
 
   function drawerOpen() { return !!document.querySelector('.stay-drawer.is-open'); }
+  // ERP 의 저장 표지 — 저장에 성공한 응답만 `#stay_save_result` 를 「saved」 와 저장 시각으로 갈아 끼운다(editor.mark_saved ·
+  // drawer_close). 누르기 전과 시각이 다르면 이번 저장을 서버가 받은 것이다. 드로어가 닫힌 것 · 페이지 이동은 표지가 아니다
+  function saveStamp() {
+    var mark = document.getElementById('stay_save_result');
+    return mark && mark.getAttribute('data-stay-result') === 'saved' ? (mark.getAttribute('data-stay-saved-at') || 'saved') : null;
+  }
   function cellWindow() { return document.getElementById('stay_cell_edit'); }
   // 쉬는 화면 — 드로어가 닫혔고 내용도 비었고(ERP 는 닫고 0.35초 뒤에 비운다), 셀 창이 없고, 도는 htmx 요청이 없다
   function atRest() {
@@ -1042,14 +1048,19 @@
       ctx.pins.ranges = span.ranges;   // 저장 단추는 드로어가 이 날짜·이 칩일 때만 눌린다(WHEN.bulkTarget)
       // 읽기와 같은 길로 연다 — ② 가 그 오퍼 · 요금제 · 그 날들인지 본 뒤에만 칸을 친다
       var review = await openBulkReview(ctx, { offer: want.offer, ratePlan: want.ratePlan, from: span.from, to: span.to, weekdays: span.weekdays }, span);
+      var stamp = saveStamp();
       var sub = await saveRows(ctx, review, want.rows);
       var pressed = ctx.wall.pressed('bulkSave');
+      // 저장됨은 서버의 표지로만 안다. 드로어가 닫혔어도(사람의 Esc) 요청이 아직 돌면 표지가 오거나 요청이 끝날 때까지 기다린다.
+      // 페이지가 떠나는 중이면(새로 고침) 기다리지 않는다 — 표지는 오지 않는다
+      var hx = window.stayRun.hx;
+      var stamped = function () { var now = saveStamp(); return !!now && now !== stamp; };
+      if (pressed) await ctx.wait(function () { return stamped() || quiet() || !!(hx && hx.unloading); }, 10000);
       var still = document.querySelector('[data-stay-screen="calendar-bulk"]');
       var errors = (sub.errors || []).concat(still ? window.calErrors(still) : []);
-      var confirmed = pressed && window.SUBMIT_OK.indexOf(String(sub.status)) >= 0 && !errors.length;
-      // 눌렀는데 드로어가 오류를 보이며 남았으면 서버가 거절한 것(저장 안 됨). 그 밖에 확인 못 한 것은 「알 수 없음」이다
-      var refusedByServer = pressed && sub.status === 'stayed' && errors.length > 0;
-      var saved = confirmed ? true : (pressed && !refusedByServer ? 'unknown' : false);
+      // 눌렀는데 드로어가 오류를 보이며 남았으면 서버가 거절한 것(저장 안 됨). 표지 없이 끝난 것은 모두 「알 수 없음」이다
+      var refusedByServer = pressed && !stamped() && sub.status === 'stayed' && errors.length > 0;
+      var saved = pressed && stamped() && !errors.length ? true : (pressed && !refusedByServer ? 'unknown' : false);
       var out = { ok: saved === true, what: clip(want.room + ' · ' + want.ratePlan + ' · ' + span.ranges.join(', '), 120), saved: saved, pressed: pressed };
       if (saved === true) { out.note = '저장했습니다'; return out; }
       out.error = pressed ? '[입력한 가격 적용] 을 저장하지 못했습니다' : '저장 단추를 누르지 못했습니다';
@@ -1236,11 +1247,8 @@
     var root = opts.root, rootId = root.id, screen = root.getAttribute('data-stay-screen');
     var windowRoot = function () { return document.querySelector('#stay_drawer_body [data-stay-screen="' + screen + '"]'); };
     var signs = function () {
-      var mark = document.getElementById('stay_save_result'), list = document.getElementById(opts.panel);
-      return {
-        stamp: mark && mark.getAttribute('data-stay-result') === 'saved' ? mark.getAttribute('data-stay-saved-at') : null,
-        panel: list, banner: list ? list.querySelector('[data-stay-result="saved"]') : null
-      };
+      var list = document.getElementById(opts.panel);
+      return { stamp: saveStamp(), panel: list, banner: list ? list.querySelector('[data-stay-result="saved"]') : null };
     };
     var was = signs();
     await press(ctx, opts.window + ' [저장]', function () { return windowRoot() === root ? saveButton(root) : null; });

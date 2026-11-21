@@ -78,6 +78,24 @@ test('B7 · applyBulk — 저장을 다시 누르지 않는다(러너의 CSRF �
   page.w.close();
 });
 
+test('A3 · applyBulk — 저장됨은 서버의 저장 표지로만 안다: 요청이 도는 사이 Esc 로 드로어가 닫히거나 페이지가 떠나면 「알 수 없음」', async () => {
+  for (const mode of ['esc', 'reload']) {
+    const page = erpPage({ onBulkSave: mode });
+    page.w.stayPrice.config({ restMs: 600 });
+    const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
+    assert.equal(r.pressed, true, mode);
+    assert.equal(r.saved, 'unknown', `${mode}: 드로어가 닫혔거나 페이지가 떠난 것은 저장의 표지가 아니다 — ${r.error}`);
+    assert.equal(r.ok, false, mode);
+    assert.match(r.error, /저장됐는지 알 수 없습니다/, mode);
+    assert.equal(page.log.posts.length, 1, `${mode}: 한 번만 눌렀다`);
+    page.w.close();
+  }
+  const late = erpPage({ onBulkSave: 'escLate' });
+  const r = plain(await late.w.stayPrice.applyBulk(inPage(late.w, BULK)));
+  assert.equal(r.saved, true, `Esc 로 닫힌 뒤에라도 서버의 저장 표지가 오면 저장된 것 — ${r.error}`);
+  late.w.close();
+});
+
 test('B7 · applyBulk — 드로어가 다른 객실·날짜를 열었으면 칸을 치기 전에 멈추고 저장 단추를 누르지 않는다', async () => {
   for (const review of [runFixture('calendar-bulk--price-step2.html').replace('name="rate_plan" value="{rate_plan:1}"', 'name="rate_plan" value="{rate_plan:2}"'),
     runFixture('calendar-bulk--price-step2.html').replace('<tbody><tr><td>2026-07-01</td>', '<tbody><tr><td>2026-07-02</td>')]) {
