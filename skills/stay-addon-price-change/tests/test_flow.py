@@ -173,7 +173,7 @@ class RollbackKeepsTest(Flow):
         out = self.work / "rollback-1.json"
         short = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--out", out)
         self.assertEqual((short["restored"], short["kept"]), (1, 1))
-        self.assertEqual(short["kept_why"], [{"change_id": None, "at": None, "sentence": None, "outside": True, "lines": 1}])
+        self.assertEqual(short["kept_why"], [{"change_id": None, "at": None, "sentence": None, "why": None, "outside": True, "lines": 1}])
         kept, = json.loads(out.read_text(encoding="utf-8"))["rollback"]["kept"]
         self.assertEqual((kept["recorded"], kept["written"], kept["now"]["fields"]["sell"]),
                          ({"sell": "30.00"}, {"sell": "33.00"}, "40.00"))
@@ -648,6 +648,47 @@ class UndoOnceTest(Flow):
         self.assertEqual((sorted(rows), rows[change]["status"], rows[change]["undone_by"]), ([change, rollback], "rolled_back", [rollback]))
         self.assertIn("아직 되돌리지 않은 것이 없습니다",
                       self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), code=2)["error"])
+
+
+class RollbackDoubtTest(Flow):
+    """검토 7 — 되돌리기도 바꾸기와 같은 의심을 본다. 지금 목록이 그 줄의 금액 기록을 보이지 않거나(창이 저장된 공급 원가를 못 보고
+    빈칸으로 열림) 목록과 편집 창이 금액을 다르게 보이면, 그 줄은 저장하지 않고 까닭을 달아 그대로 둔다 — 같이 되돌리라고 해도."""
+
+    def changed_304(self):
+        line = [{"addon": "203", "line": "304"}]
+        change, plan = self.preview(self.request(lines=line, sentence="엑스트라베드 10% 올려줘"))
+        self.apply(change, plan)
+        self.assertEqual((self.erp.lines["304"]["sell"], self.erp.lines["304"]["supply"]), ("33.00", "25.00"))
+        return change
+
+    def test_a_line_whose_cost_the_window_cannot_see_is_kept_by_the_rollback_with_the_reason(self):
+        change = self.changed_304()
+        self.erp.lines["304"].update(hidden=True, supply="")   # 목록에 금액 기록이 안 보이고, 창의 공급 원가 칸이 비었다
+        posts = len(self.erp.posts)
+        for flags, name in (((), "rollback-1.json"), (("--include-kept",), "rollback-2.json")):
+            with self.subTest(flags):
+                short = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), *flags,
+                                 "--out", self.work / name)
+                self.assertEqual((short["restored"], short["kept"], short["saves"]), (0, 1, 0), "그 줄은 저장하지 않는다")
+                why, = short["kept_why"]
+                self.assertEqual((why["why"], why["outside"], why["lines"]), (scene_doubt("hidden"), False, 1))
+                self.assertEqual(json.loads((self.work / name).read_text(encoding="utf-8"))["steps"], [])
+                page = self.cli("render", "rollback", "--plan", self.work / name, "--text")["text"]
+                self.assertIn("지금 저장하면 안 됩니다(같이 되돌리라고 하셔도 넣지 않습니다)", page)
+                self.assertIn("편집 창이 저장된 공급 원가를 못 보고", page)
+                self.assertNotIn("포함해서 되돌려", page, "같이 되돌리자고 청하지 않는다")
+        self.assertEqual(len(self.erp.posts), posts, "아무것도 저장하지 않았다 — 창이 못 본 원가가 지워지지 않는다")
+
+    def test_a_line_whose_list_and_window_differ_is_kept_too(self):
+        change = self.changed_304()
+        self.erp.lines["304"]["listed"] = ["판매가: 33.00 USD", "공급 원가: 27.00 USD"]   # 목록은 원가 27, 창은 25
+        short = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--out", self.work / "rollback-1.json")
+        self.assertEqual((short["restored"], short["kept"], [item["why"] for item in short["kept_why"]]), (0, 1, [scene_doubt("differ")]))
+
+
+def scene_doubt(code: str) -> str:
+    from addon_model import DOUBT_LABELS
+    return DOUBT_LABELS[code]
 
 
 if __name__ == "__main__":

@@ -260,7 +260,8 @@ def render_rollback(plan: RollbackPlan, scope: str = "") -> str:
         rows.append(f'<tr><td class="text">{esc(item.label)}<small class="more">가격 줄 {esc(key_of_item(item.key).line)}번</small></td>'
                     f"{cells}</tr>")
     body = [f"<h1>{esc(title)}</h1>", rollback_head(plan, scope),
-            stats([(len(plan.restored), "되돌리는 줄"), (0 if plan.include_kept else len(plan.kept), "그대로 두는 줄")]),
+            stats([(len(plan.restored), "되돌리는 줄"),
+                   (sum(1 for item in plan.kept if item.cause.why or not plan.include_kept), "그대로 두는 줄")]),
             kept_table(plan, FIELD_LABELS), unremovable_table(plan, FIELD_LABELS, UNIT),
             "<h2>되돌리는 줄 — 지금 값 → 적어 둔 값</h2>",
             (f'<div class="scroll"><table><tr><th>가격 줄</th><th>판매가</th><th>공급 원가</th></tr>{"".join(rows)}</table></div>'

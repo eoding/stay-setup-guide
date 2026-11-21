@@ -93,7 +93,7 @@ metadata:
 
 1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.
-3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept` — 그 사이 값이 달라진 줄)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
+3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept`)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
 4. "되돌려" → 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그 줄도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.
 
 ## 되돌릴 것이 없을 때

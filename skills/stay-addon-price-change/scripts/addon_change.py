@@ -460,12 +460,13 @@ def short_rollback(result: dict) -> dict:
     plan = decode_rollback(result["rollback"])
     causes: dict[tuple, int] = {}
     for item in plan.kept:
-        cause = (item.cause.change_id, item.cause.at, item.cause.sentence)
+        cause = (item.cause.change_id, item.cause.at, item.cause.sentence, item.cause.why)
         causes[cause] = causes.get(cause, 0) + 1
     return dict(change_id=result["change_id"], replaces=result["replaces"], scope=result["scope"], restore_to=plan.restore_to,
                 restored=len(plan.restored), kept=len(plan.kept),
-                kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, lines=count)
-                          for (change_id, at, sentence), count in causes.items()],
+                kept_why=[dict(change_id=change_id, at=at, sentence=sentence, why=why, outside=change_id is None and why is None,
+                               lines=count)
+                          for (change_id, at, sentence, why), count in causes.items()],
                 saves=len(result["steps"]))
 
 

@@ -23,7 +23,7 @@ from addon_model import (
 )
 from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import money, money_text, round_money
-from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_rollback
+from change_core.rollback import Cause, KeptItem, LaterWrite, RecordedChange, RollbackPlan, plan_rollback
 from change_core.rules import BLOCKED, RED, Resolution, Rule, RuleTable, decide, moved_far
 from change_core.window import Form, form_value, with_values
 
@@ -289,7 +289,11 @@ def line_filter(lines: Iterable[str] = ()) -> tuple[Callable[[str, str], bool] |
 def plan_line_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequence[LaterWrite]], now: Snapshot,
                        include_kept: bool = False, select: Callable[[str, str], bool] | None = None) -> RollbackPlan:
     """부가옵션 가격 줄 되돌리기 — 지금 값을 그 줄들만큼 읽었는지 보고 공통 되돌리기 계산에 넘긴다. 그 사이 지워진 줄은 되살릴 길이
-    없어 그대로 두는 줄(까닭: 도우미 밖)로 남고, 같이 되돌리라고 해도 넣지 않는다."""
+    없어 그대로 두는 줄(까닭: 도우미 밖)로 남고, 같이 되돌리라고 해도 넣지 않는다.
+
+    바꾸기가 적용할 수 없다고 보는 줄(LINE_RULES 의 HIDDEN · DIFFER — 지금 목록이 금액 기록을 보이지 않거나 목록과 편집 창이 금액을
+    다르게 보임)은 되돌리기도 저장하지 않는다. 그 창을 다시 보내면 창이 못 본 공급 원가가 지워질 수 있다. 그런 줄은 그 까닭(DOUBT_LABELS)을
+    달아 그대로 두고, 같이 되돌리라고 해도 넣지 않는다(change_core.rollback.Cause.why)."""
     if now.hotel_id != recorded.hotel_id:
         raise PlanError(f"지금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} 것이고, 되돌릴 변경은 "
                         f"{hotel_label(recorded.hotel, recorded.hotel_id)} 입니다")
@@ -299,7 +303,16 @@ def plan_line_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str],
     if gaps:
         raise PlanError(f"지금 값을 읽지 않은 가격 줄: {', '.join(gaps)}")
     plan = plan_rollback(recorded, later, snapshot_items(now), now.read_at, include_kept, select)
-    return replace(plan, restored=tuple(item for item in plan.restored if item.now.state == PRESENT))
+    doubts = {item.key: DOUBT_LABELS[line.doubt] for item in (*plan.restored, *plan.kept)
+              if (line := now.lines.get(key_of_item(item.key))) is not None and line.doubt}
+    ours = {item.key: item for item in recorded.items}
+    kept = [replace(item, cause=Cause(why=doubts[item.key])) if item.key in doubts else item for item in plan.kept]
+    already = {item.key for item in plan.kept}     # 같이 되돌리기(include_kept)면 그 사이 달라진 줄은 kept 와 restored 에 다 있다
+    kept += [KeptItem(item.kind, item.key, item.label, {name: ours[item.key].before.get(name) for name in ours[item.key].written},
+                      ours[item.key].written, item.now, Cause(why=doubts[item.key]))
+             for item in plan.restored if item.key in doubts and item.key not in already]
+    return replace(plan, restored=tuple(item for item in plan.restored if item.now.state == PRESENT and item.key not in doubts),
+                   kept=tuple(kept))
 
 
 def rollback_steps(plan: RollbackPlan, now: Snapshot) -> tuple[LineStep, ...]:
