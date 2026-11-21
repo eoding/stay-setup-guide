@@ -273,6 +273,33 @@ class SkillBudgetTest(unittest.TestCase):
         self.assertIn("어느 쪽으로 할까요?", ask)
         self.assertNotIn("이 변경만 되돌릴까요", self.skill + compare, "두 줄을 읽어 주는 긴 물음은 없앴다")
 
+class TrialSevenDocsTest(unittest.TestCase):
+    """T6 · T7 — 시운전 7 의 빈틈 하나에 답 하나, 도우미가 그때 읽는 자리에."""
+
+    def setUp(self):
+        self.skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        self.stopped = (SKILL / "references" / "stopped.md").read_text(encoding="utf-8")
+
+    def test_the_saves_of_one_change_run_back_to_back_and_fifteen_idle_minutes_stop_it(self):
+        apply = section(self.skill, "## 적용하기 — 바꾸기·되돌리기 공통")
+        self.assertIn("사이에 다른 일 없이 잇달아 한다 — 15분 동안 아무 일이 없으면 변경이 멈추고 stopped.md 로 간다", apply)
+        for skill, place in (("stay-addon-price-change", "SKILL.md"), ("stay-charge-change", "references/apply.md")):
+            self.assertIn("사이에 다른 일 없이 잇달아", (SKILL.parent / skill / place).read_text(encoding="utf-8"), skill)
+
+    def test_rolling_back_what_was_saved_after_a_stop_uses_a_new_work_folder_and_skips_the_stopped_notice(self):
+        step = self.stopped[self.stopped.index("## 4. 된 것까지 되돌리기"):self.stopped.index("## 5.")]
+        self.assertIn("새 작업 폴더에서 한다", step)
+        self.assertIn("멈춘 변경 알림은 하지 않는다", step)
+        self.assertIn("(된 것까지 되돌리기는 4 — 새 작업 폴더)", self.stopped)
+        prep = self.skill[self.skill.index("5. **장부 보기.**"):self.skill.index("## 읽기")]
+        self.assertIn("(지금 다루는 그 변경이면 하지 않는다)", prep)
+
+    def test_a_view_request_that_points_back_is_filled_from_the_conversation_and_saved_with_the_read_range(self):
+        job = section(self.skill, "## 1. 지금 가격 보기")
+        self.assertIn("\"그 이틀 두 객실\"처럼 앞 대화를 가리키면 거기서 채우고 무엇으로 채웠는지 말한다", job)
+        self.assertIn("\"응 저장해\" · \"그 이틀 두 객실\"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다", job)
+
+
 class SheetDocsTest(unittest.TestCase):
     """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
 

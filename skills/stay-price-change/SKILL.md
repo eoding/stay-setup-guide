@@ -15,7 +15,7 @@ metadata:
 
 하는 일은 여섯이다. 1 지금 가격 보기 · 2 지금 상태만 저장 · 3 가격 바꾸기 · 4 되돌리기 · 5 새 요금표로 맞추기 · 6 저장해 둔 상태와 견주기.
 
-- 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
+- 명령: 이 스킬 폴더의 `scripts/price_change.py`(다른 폴더에서는 절대 경로로). 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
 - 페이지: 탭에 올린 `window.stayPrice`.
 - 필요할 때만 여는 파일(이 글의 그 자리에서 연다): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/compare.md](references/compare.md) 견주기, [references/rollback.md](references/rollback.md) 되돌리기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
@@ -39,7 +39,7 @@ metadata:
 ## 담당자에게 말할 때
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
-- 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말한다. 도우미가 만든 페이지는 브라우저 도구로 열지 못하므로 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text`(페이지에 보이는 글)에서 옮긴다.
+- 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말한다. 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(브라우저 도구로는 못 연다)(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text` 에서 옮긴다.
 - "날짜별로 펼쳐 줘"면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
 
 ## 준비 — 시킨 일마다 3 부터
@@ -55,7 +55,7 @@ metadata:
    - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 와 4.
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.
    - `hotel.name` 이 말한 호텔이 아니면 "지금 탭에는 △△ 호텔이 열려 있습니다. ○○ 호텔 화면을 열어 주세요."
-5. **장부 보기.** `python3 scripts/price_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 세 도우미 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 줄마다 `scope` 가 그 번호가 덮는 것이다(종류 · 오퍼 · 객실 · 요금제, 날짜, 한 일, 어디까지 갔는지). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 **알리기만** 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope` 그대로>. 그것부터 볼까요?" 이어서 할지 되돌릴지는 여기서 묻지 않는다(어디서 멈췄는지는 다시 읽어야 안다). 보자고 하면 [references/stopped.md](references/stopped.md), 다른 일을 먼저 하자고 하면 그 일을 한다.
+5. **장부 보기.** `python3 scripts/price_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 세 도우미 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 줄마다 `scope` 가 그 번호가 덮는 것이다. 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 **알리기만** 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope` 그대로>. 그것부터 볼까요?"(지금 다루는 그 변경이면 하지 않는다) 이어서 할지 되돌릴지는 여기서 묻지 않는다(어디서 멈췄는지는 다시 읽어야 안다). 보자고 하면 [references/stopped.md](references/stopped.md), 다른 일을 먼저 하자고 하면 그 일을 한다.
 
 ## 읽기 — 네 일이 모두 이것으로 읽는다
 
@@ -69,13 +69,13 @@ metadata:
 4. **지금 값으로 묶기.** `price_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. 답의 `read_at` 이 ERP 에서 읽은 시각이다(페이지 작업이 끝난 시각 가운데 가장 이른 것 — 15분 창도 여기서 잰다).
 5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고, 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이고, `bad` 는 다시 받는 쪽과 까닭이다(failures.md). 잘렸어도 그대로 저장한다.
 
-답이 `started: false` 면 아무것도 하지 않았다 — `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 작업(`look`·`readPair`·`readReserved`)의 답을 잃었으면(끊김 · 잘림) `stayPrice.last()` 의 답을 새 파일로 저장하거나 같은 값으로 다시 불러 저장한다. 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
+답이 `started: false` 면 아무것도 하지 않았다 — `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 작업의 답을 잃었거나(끊김 · 잘림 — `stayPrice.last()`) 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
 
 ## 1. 지금 가격 보기
 
-1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look` 의 답에서 보여 준다. 범위가 크면(호텔 전체 · 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
+1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다 — "그 이틀 두 객실"처럼 앞 대화를 가리키면 거기서 채우고 무엇으로 채웠는지 말한다. 고를 이름은 `look` 의 답에서 보여 준다. 범위가 크면(호텔 전체 · 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
 2. `<작업>/range.json`(`kind: range`)을 쓰고 「읽기」 → `<R>/snapshot.json`.
-3. `save-snapshot --snapshot "<R>/snapshot.json" --sentence "<담당자 말>"` → 장부 번호 S — 보기도 장부에 「지금 상태 저장」 한 줄을 남긴다. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
+3. `save-snapshot --snapshot "<R>/snapshot.json" --sentence "<담당자 말>"` → 장부 번호 S — 보기도 장부에 「지금 상태 저장」 한 줄을 남긴다. 문장은 담당자의 말 그대로다. 말이 "응 저장해" · "그 이틀 두 객실"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
 4. `render prices --snapshot "<R>/snapshot.json"` → `page` 를 연다.
 5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다." ○시 ○분은 「읽기」 4 의 `read_at`(ERP 에서 읽은 시각)이다.
 
@@ -108,7 +108,7 @@ metadata:
 3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
 4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸(`will_change`)·적용할 수 없는 칸·예약 있는 날의 칸·판매 마감인 칸·새로 생기는 칸 수를 말한다(0 인 것은 뺀다). 해당되면 덧붙인다: 예약 있는 날도 바꾸고 이미 받은 예약의 금액은 그대로 · 마감인 날은 값만 바뀌고 마감은 그대로 · 새로 생기는 칸은 되돌려도 지울 수 없음 · (인원 · 박수가 없던 목표 값 표면) 미리보기 머리의 「칸」이 넣는 줄. 그다음은 빨간 줄에 따라 다르다.
    - **빨간 줄이 남아 있으면**(`counts.red` 가 0 보다 큼, `saves` 가 null) [references/red-lines.md](references/red-lines.md) 를 열어 그대로 말하고 고르게 한다. 저장 횟수는 아직 말하지 않는다. 고름은 담당자의 말에서만 나오고 도우미가 대신 고르지 않는다. 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다.
-   - **빨간 줄을 다 골랐거나 없으면**(`counts.red` 가 0, `saves` 가 있음) 저장 횟수(`saves`)와, 고른 빨간 줄이 있으면 `chosen` 대로 무엇이 바뀌는지 숫자로 말한다(red-lines.md). 그리고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다. `saves` 가 0 이면 저장할 것이 없다고만 하고 "적용"을 청하지 않는다(red-lines.md).
+   - **빨간 줄을 다 골랐거나 없으면**(`counts.red` 가 0, `saves` 가 있음) 저장 횟수(`saves`)와, 고른 빨간 줄이 있으면 `chosen` · `unused` 대로 무엇이 바뀌는지 숫자로 말한다(red-lines.md). 그리고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다. `saves` 가 0 이면 저장할 것이 없다고만 하고 "적용"을 청하지 않는다(red-lines.md).
    - 적용할 수 없는 칸(`counts.blocked`)이 있으면 어느 쪽이든 red-lines.md 「적용할 수 없는 칸」대로 말한다.
 
 ## 4. 되돌리기
@@ -145,7 +145,7 @@ metadata:
 필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일(`plan-<k>.json` · `rollback-<k>.json`), 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려").
 
 1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan "<계산 파일>" --snapshot "<S2>"` 가 미리보기 때 값과 견준다. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)·2 면 아무것도 시작하지 않았다 — failures.md 「적용」.
-2. `calls --change N --out "<작업>/적용-N/calls.json"` 의 `calls` 를 차례로 하나씩 한다.
+2. `calls --change N --out "<작업>/적용-N/calls.json"` 의 `calls` 를 차례로 하나씩, 사이에 다른 일 없이 잇달아 한다 — 15분 동안 아무 일이 없으면 변경이 멈추고 stopped.md 로 간다.
    - `await stayPrice.<op>(<payload 그대로>)` — `op` 는 `applyBulk` 또는 `applyCell`.
    - 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result "<그 파일>"`.
    - `saved: true` 이고 `status: applying` 이면 다음으로, `status: applied` 면 3 으로 간다. 그 밖(저장이 안 됐거나 `status: stopped`)이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다.

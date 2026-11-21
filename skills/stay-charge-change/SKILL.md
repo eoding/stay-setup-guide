@@ -15,7 +15,7 @@ metadata:
 
 하는 일은 셋이다. 1 지금 부과금 보기(한 부과금의 설정 전부도) · 2 부과금 금액 바꾸기 · 3 되돌리기.
 
-- 명령: 이 스킬 폴더의 `scripts/charge_change.py`. 아래의 `python3 scripts/charge_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
+- 명령: 이 스킬 폴더의 `scripts/charge_change.py`(다른 폴더에서는 절대 경로로). 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
 - 페이지: 탭에 올린 `window.stayCharge`. 가격 캘린더 도우미의 페이지 파일 위에 올린다(「준비」).
 - 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 금액 칸 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/rollback.md](references/rollback.md) 되돌리기, [references/apply.md](references/apply.md) 적용하기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
@@ -101,7 +101,7 @@ metadata:
 
 ## 적용하기 — 바꾸기 · 되돌리기 공통
 
-필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려"). 그다음 [references/apply.md](references/apply.md) 대로 한다(직전에 다시 읽어 `begin` — 다르면 저장하지 않는다). 저장이 안 됐거나 `status: stopped` 면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
+필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려"). 그다음 [references/apply.md](references/apply.md) 대로 한다(직전에 다시 읽어 `begin` — 다르면 저장하지 않는다. 저장은 사이에 다른 일 없이 잇달아 — 15분 동안 아무 일이 없으면 멈춘다). 저장이 안 됐거나 `status: stopped` 면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
 
 ## 하지 않는 것
 

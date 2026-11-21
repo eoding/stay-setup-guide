@@ -15,7 +15,7 @@ metadata:
 
 하는 일은 셋이다. 1 지금 부가옵션 가격 보기(가격 줄 하나의 설정 전부도) · 2 부가옵션 가격 바꾸기 · 3 되돌리기.
 
-- 명령: 이 스킬 폴더의 `scripts/addon_change.py`. 아래의 `python3 scripts/addon_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
+- 명령: 이 스킬 폴더의 `scripts/addon_change.py`(다른 폴더에서는 절대 경로로). JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
 - 페이지: 탭에 올린 `window.stayAddonPrice`. 가격 캘린더 도우미의 페이지 파일 위에 올린다(「준비」).
 - 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
@@ -109,7 +109,7 @@ metadata:
 필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려").
 
 1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `python3 scripts/addon_change.py begin --change N --plan "<계산 파일>" --snapshot "<S2>"`. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 줄이 같아서 그대로 적용합니다." 종료 1(`same: false`)이면 아무것도 저장하지 않았다 — "미리보기 뒤에 ERP 의 값이 바뀌었습니다(<`differences` 의 줄>)." 하고 「2」 의 읽기부터 새 미리보기를 만든다.
-2. `python3 scripts/addon_change.py calls --change N --out "<작업>/적용-N/calls.json"` 의 `calls` 를 차례로 하나씩: `await stayAddonPrice.applyLine(<payload 그대로>)` → 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장 → `python3 scripts/addon_change.py record-result --change N --result "<그 파일>"`. `saved: true` 이고 `status: applying` 이면 다음, `applied` 면 3. 그 밖이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayAddonPrice.last()` 로 받는다. 같은 저장을 두 번 누르지 않는다.
+2. `python3 scripts/addon_change.py calls --change N --out "<작업>/적용-N/calls.json"` 의 `calls` 를 차례로 하나씩, 사이에 다른 일 없이 잇달아(15분 동안 아무 일이 없으면 변경이 멈춘다): `await stayAddonPrice.applyLine(<payload 그대로>)` → 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장 → `python3 scripts/addon_change.py record-result --change N --result "<그 파일>"`. `saved: true` 이고 `status: applying` 이면 다음, `applied` 면 3. 그 밖이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayAddonPrice.last()` 로 받는다. 같은 저장을 두 번 누르지 않는다.
 3. **뒤에 다시 읽기.** `read-calls --record N` 으로 「읽기」 → S3. `python3 scripts/addon_change.py verify --change N --snapshot "<S3>"`.
 4. `python3 scripts/addon_change.py render result --change N --snapshot "<S3>"` → `page` 를 연다. 3 의 `names` 가 있으면 그 문장도 그대로 말한다.
    - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 손님 화면에는 곧 새 금액이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."(되돌리기면 끝 문장 없이)
