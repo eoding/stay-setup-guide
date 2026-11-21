@@ -9,12 +9,13 @@ node --test 와 jsdom). 여섯을 차례로 돌려 무엇을 돌렸는지 찍고
     NODE_PATH=<jsdom 이 든 node_modules> python3.11 scripts/run_price_helper_tests.py     # 다른 파이썬으로
 
 - 파이썬: 이 스크립트를 부른 파이썬(3.10 이상)으로 돈다. 페이지 시험이 안에서 부르는 `python3` 도 같은 파이썬이 되도록 그 파이썬을
-  `python3` 라는 이름으로 PATH 맨 앞에 잠시 둔다(임시 폴더, 끝나면 지운다).
+  `-B` 와 함께 부르는 작은 `python3` 를 PATH 맨 앞에 잠시 둔다(임시 폴더, 끝나면 지운다 — 윈도에서는 두지 않고 PATH 의 것을 댄다).
 - Node: PATH 의 `node`(18 이상 — node --test).
 - jsdom: 페이지 시험은 `require('jsdom')` 으로 jsdom 을 찾는다. 이 저장소는 jsdom 을 담지 않는다 — jsdom 이 든 node_modules 를
   `NODE_PATH` 로 준다(시험은 jsdom 22 로 맞췄고, 사람의 클릭을 흉내 내려고 jsdom 안쪽 파일 `living/generated/utils.js` 를 쓴다).
   못 찾으면 페이지 시험을 돌리지 않고 그렇게 말한 뒤 실패로 끝난다(건너뛰어 통과로 치지 않는다).
-- __pycache__ 를 만들지 않는다(-B · PYTHONDONTWRITEBYTECODE).
+- __pycache__ 를 만들지 않는다(-B · PYTHONDONTWRITEBYTECODE — 페이지 시험은 `python3 -I` 로 불러 환경 변수가 듣지 않으므로 위의
+  `python3` 가 -B 를 붙인다).
 
 다섯 페이지 파일(러너의 stay_helper.js · stay_boot.js, stay_price.js · stay_addon_price.js · stay_charge.js)을 고치면 먼저
 `python3 skills/stay-price-change/scripts/loader_identity.py` 로 올리개의 알아볼 값을 다시 적는다 — 가격 캘린더 도우미의 파이썬 시험
@@ -93,12 +94,13 @@ def jsdom_found(env: dict) -> tuple[str | None, str | None]:
 
 
 def shim(folder: Path) -> bool:
-    """페이지 시험이 부르는 `python3` 를 이 파이썬으로 — 임시 폴더에 그 이름의 링크를 둔다. 못 두면 False."""
-    target = folder / ("python3.exe" if os.name == "nt" else "python3")
-    try:
-        os.symlink(sys.executable, target)
-    except OSError:
+    """페이지 시험이 부르는 `python3` 를 이 파이썬으로 — 임시 폴더에 `-B` 를 붙여 이 파이썬을 부르는 `python3` 를 둔다. 페이지 시험은
+    `python3 -I` 로 부르는데 -I 는 PYTHONDONTWRITEBYTECODE 를 듣지 않아 -B 가 따로 있어야 __pycache__ 가 생기지 않는다. 윈도는 False."""
+    if os.name == "nt":
         return False
+    target = folder / "python3"
+    target.write_text(f'#!/bin/sh\nexec "{sys.executable}" -B "$@"\n', encoding="utf-8")
+    target.chmod(0o755)
     return True
 
 
