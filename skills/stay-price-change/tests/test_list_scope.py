@@ -142,7 +142,7 @@ class NarrowedScopeTest(unittest.TestCase):
         return short["change_id"], self.write(f"{name}-after.json", encode_snapshot(scene.applied(self.snapshot, steps, now)))
 
     def line(self, number: int) -> str:
-        return next(item for item in self.cli("list")["changes"] if item["id"] == number)["scope"]
+        return next(item for item in self.cli("list", "--all")["changes"] if item["id"] == number)["scope"]
 
     def test_r5_a_narrowed_change_says_which_cells_and_its_rollback_and_restore_answers_carry_the_scope(self):
         nights, after = self.applied_change("nights", nights=(1,))
@@ -168,3 +168,61 @@ class NarrowedScopeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TabHotelListTest(unittest.TestCase):
+    """H3 — 목록은 탭에 열린 호텔(look 명령이 낸 파일)의 번호만 싣고, 다른 호텔의 번호는 --all 로 청할 때만 그 뒤에 싣는다.
+    작업 폴더는 work 가 일마다 새로 만든다(세 도우미가 같은 것을 쓴다)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        (self.dir / "기록").mkdir()
+        self.env = scene.env(str(self.dir / "기록"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def cli(self, *args, script=SCRIPT, code=0):
+        done = subprocess.run([sys.executable, str(script), *map(str, args)], capture_output=True, text=True, env=self.env)
+        self.assertEqual(done.returncode, code, done.stderr or done.stdout)
+        return json.loads(done.stdout if code == 0 else done.stderr)
+
+    def preview(self, hotel: str, hotel_id: str) -> int:
+        snapshot = replace(trial_scene.snapshot(read_at=scene.NOW_TEXT), hotel=hotel, hotel_id=hotel_id)
+        plan = resolve(plan_change(snapshot, replace(trial_scene.request(), hotel=hotel, hotel_id=hotel_id)),
+                       [Resolution("ABOVE_LIST", "raise_list")])
+        return Ledger(self.dir / "기록" / DB_NAME, now=scene.clock).record_preview(
+            hotel=hotel, hotel_id=hotel_id, offer=trial_scene.OFFER, currency="USD", sentence="12% 올려줘",
+            read_at=snapshot.read_at, rows=preview_rows(plan), request=encode_request(plan.request), reading=encode_snapshot(snapshot))
+
+    def look(self) -> Path:
+        folder = self.dir / "look"
+        folder.mkdir()
+        (folder / "look-1.json").write_text(json.dumps({
+            "op": "look", "ok": True, "login": False, "hotel": trial_scene.HOTEL_REF, "offer": trial_scene.OFFER,
+            "offers": [trial_scene.OFFER], "pairs": [], "doneAt": "2026-11-21T01:00:00.000Z"}, ensure_ascii=False), encoding="utf-8")
+        self.cli("look", "--answers", folder, "--out", self.dir / "look.json")
+        return self.dir / "look.json"
+
+    def test_the_tab_hotel_first_and_other_hotels_only_when_asked(self):
+        older = self.preview(trial_scene.HOTEL, trial_scene.HOTEL_ID)
+        other = self.preview("다른 데모 호텔", "9")
+        newer = self.preview(trial_scene.HOTEL, trial_scene.HOTEL_ID)
+        look = self.look()
+        tab = self.cli("list", "--look", look)
+        self.assertEqual(([entry["id"] for entry in tab["changes"]], tab["others"], tab["hotel"]),
+                         ([newer, older], 1, trial_scene.HOTEL_REF))
+        every = self.cli("list", "--look", look, "--all")
+        self.assertEqual([entry["id"] for entry in every["changes"]], [newer, older, other], "탭의 호텔이 먼저, 저마다 새것부터")
+        self.assertIn("--look", self.cli("list", code=2)["error"], "어느 호텔인지 말하지 않으면 싣지 않는다")
+        self.assertEqual([entry["id"] for entry in self.cli("list", "--all")["changes"]], [newer, other, older])
+
+    def test_each_helper_makes_a_new_work_folder_every_time(self):
+        made = [Path(self.cli("work", script=script)["work"]) for script in (
+            SCRIPT, HERE.parent.parent / "stay-addon-price-change" / "scripts" / "addon_change.py",
+            HERE.parent.parent / "stay-charge-change" / "scripts" / "charge_change.py", SCRIPT)]
+        self.assertEqual(len(set(made)), 4, "같은 초에 불러도 앞선 일의 폴더를 다시 주지 않는다")
+        for path in made:
+            self.assertTrue(path.is_dir())
+            self.assertEqual(path.parent, self.dir / "기록" / "작업")

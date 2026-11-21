@@ -65,6 +65,17 @@ class Flow(unittest.TestCase):
         self.cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json")
         return folder / "snapshot.json"
 
+    def look(self) -> Path:
+        """look 한 번 — 이 작업 폴더의 look/ 에 답을 두고 look 명령으로 묶는다. look.json 의 자리를 돌려준다."""
+        if not (self.work / "look.json").exists():
+            scene.write_answers(self.work / "look", "look", [scene.look_answer(self.erp)])
+            self.cli("look", "--answers", self.work / "look", "--out", self.work / "look.json")
+        return self.work / "look.json"
+
+    def listed(self, *flags) -> dict:
+        """탭의 호텔(look)로 좁힌 장부 목록 — 번호 → 줄."""
+        return {entry["id"]: entry for entry in self.cli("list", "--look", self.look(), *flags)["changes"]}
+
     def preview(self, request, name="plan-1.json", **extra) -> tuple[int, Path]:
         snapshot = self.read(request=request)
         plan = self.work / name
@@ -123,7 +134,7 @@ class EndToEndTest(Flow):
         self.assertEqual(self.cli("verify", "--change", back, "--snapshot", self.read(record=back))["same"], True)
         self.assertEqual({key: (item["sell"], item["supply"]) for key, item in self.erp.lines.items() if key in ("301", "304")},
                          {"301": ("20.00", "15.00"), "304": ("30.00", "25.00")})
-        listed = {entry["id"]: entry for entry in self.cli("list")["changes"]}
+        listed = self.listed()
         self.assertEqual((listed[change]["status"], listed[back]["status"]), ("rolled_back", "applied"))
         self.assertIn("판매가 +10%", listed[change]["scope"])
 
@@ -177,7 +188,7 @@ class RollbackKeepsTest(Flow):
         loose = self.cli("rollback", "--change", change, "--snapshot", snapshot, "--line", "304", "--out", self.work / "rollback-0.json")
         short = self.cli("rollback", "--change", change, "--snapshot", snapshot, "--line", "304", "--record",
                          "--out", self.work / "rollback-1.json")
-        entry, = [item for item in self.cli("list")["changes"] if item["id"] == short["change_id"]]
+        entry = self.listed()[short["change_id"]]
         self.assertEqual(short["scope"], entry["scope"])
         self.assertEqual(loose["scope"], entry["scope"], "장부에 적지 않아도 같은 줄이다")
         self.assertEqual(short["scope"], f"부가옵션 가격 줄 1개 (데모 오퍼 2027 · 엑스트라베드 · 엑스트라베드 1개 · 전체) · "
@@ -269,11 +280,30 @@ class StoppedTest(Flow):
         self.assertEqual(len(self.cli("calls", "--change", change)["calls"]), 2)
 
 
+class LedgerListTest(Flow):
+    def test_the_list_shows_the_tab_hotel_and_other_hotels_only_when_asked(self):
+        sys.path.insert(0, str(SKILL.parent / "stay-price-change" / "scripts"))
+        from decimal import Decimal
+        from change_core.ledger import Ledger, ValueRow
+        mine, _plan = self.preview(self.request())
+        reading = dict(json.loads(self.read(request=self.request("request-2.json")).read_text(encoding="utf-8")),
+                       hotel={"id": "2", "name": "다른 데모 호텔"}, lines=[])
+        other = Ledger(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3", kind="addon_price").record_preview(
+            hotel="다른 데모 호텔", hotel_id="2", offer="", currency="USD", sentence="다른 호텔 부가옵션", read_at=self.erp.clock.isoformat(),
+            rows=[ValueRow("addon_price", '{"addon":"9","line":"901"}', "다른 줄", "sell", "present", Decimal("10.00"))],
+            reading=reading)
+        tab = self.cli("list", "--look", self.look())
+        self.assertEqual(([entry["id"] for entry in tab["changes"]], tab["others"]), ([mine], 1))
+        every = self.cli("list", "--look", self.look(), "--all")
+        self.assertEqual([entry["id"] for entry in every["changes"]], [mine, other], "다른 호텔의 번호는 청할 때만, 탭의 호텔 것 뒤에")
+        self.cli("list", code=2)
+
+
 class OneLedgerTest(Flow):
     def test_the_price_calendar_helper_neither_lists_nor_touches_an_add_on_change_in_the_same_ledger(self):
         change, plan = self.preview(self.request())
         self.apply(change, plan)
-        self.assertEqual(self.cli("list", script=PRICE_SCRIPT)["changes"], [])
+        self.assertEqual(self.cli("list", "--all", script=PRICE_SCRIPT)["changes"], [])
         refused = self.cli("calls", "--change", change, script=PRICE_SCRIPT, code=2)
         self.assertIn("부가옵션 가격 도우미의 기록", refused["error"])
         db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")
@@ -306,10 +336,12 @@ class NothingToSaveTest(Flow):
         refused = self.cli("begin", "--change", short["change_id"], "--plan", plan, "--snapshot",
                            self.read(record=short["change_id"]), code=2)
         self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", refused["error"], "빨간 줄을 고르라는 말이 아니다")
-        entry, = [item for item in self.cli("list")["changes"] if item["id"] == short["change_id"]]
-        self.assertEqual((entry["status"], entry["steps"]), ("previewed", 0), "begin 이 받지 않아 아무것도 시작하지 않았다")
+        entry = self.listed()[short["change_id"]]
+        self.assertEqual((entry["status"], entry["steps"]), ("empty", 0),
+                         "저장할 것이 없는 미리보기로 적혀 적용을 기다리는 미리보기처럼 읽히지 않는다(H3), begin 도 시작하지 않았다")
         self.assertTrue(entry["scope"].startswith("부가옵션 가격 줄 0개 ("), "범위 한 줄은 넣는 줄을 센다(F5 의 부가옵션 쪽) — "
                         + entry["scope"])
+        self.assertTrue(entry["scope"].endswith(" · 저장할 것 없음"), entry["scope"])
         self.assertEqual(self.erp.posts, [])
 
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
@@ -373,7 +405,7 @@ class SameNameTest(Flow):
         self.assertIn(spring, result)
         other, _ = self.preview(self.request("request-3.json", lines=self.TWINS[1:], percent="10"), "plan-3.json")
 
-        listed = {entry["id"]: entry for entry in self.cli("list")["changes"]}
+        listed = self.listed()
         self.assertEqual((listed[change]["offer"], listed[other]["offer"]), (self.SPRING, self.SUMMER))
         self.assertIn(f"({spring})", listed[change]["scope"])
         self.assertIn(f"({self.SUMMER} · 성인 엑스트라베드 · 성인 엑스트라베드 1개 · 전체)", listed[other]["scope"])
@@ -381,7 +413,7 @@ class SameNameTest(Flow):
         out = self.work / "rollback-1.json"
         back = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--record", "--out", out)
         self.assertIn(spring, self.page("rollback", "--plan", out))
-        self.assertIn(f"({spring})", {e["id"]: e for e in self.cli("list")["changes"]}[back["change_id"]]["scope"],
+        self.assertIn(f"({spring})", self.listed()[back["change_id"]]["scope"],
                       "되돌리기 확인이 읽는 줄도 오퍼로 가른다")
 
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")

@@ -72,6 +72,17 @@ class Flow(unittest.TestCase):
         self.cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json")
         return folder / "snapshot.json"
 
+    def look(self) -> Path:
+        """look 한 번 — 이 작업 폴더의 look/ 에 답을 두고 look 명령으로 묶는다. look.json 의 자리를 돌려준다."""
+        if not (self.work / "look.json").exists():
+            scene.write_answers(self.work / "look", "look", [scene.look_answer(self.erp)])
+            self.cli("look", "--answers", self.work / "look", "--out", self.work / "look.json")
+        return self.work / "look.json"
+
+    def listed(self, *flags) -> dict:
+        """탭의 호텔(look)로 좁힌 장부 목록 — 번호 → 줄."""
+        return {entry["id"]: entry for entry in self.cli("list", "--look", self.look(), *flags)["changes"]}
+
     def preview(self, request, name="plan-1.json", **extra) -> tuple[int, Path]:
         snapshot = self.read(request=request)
         plan = self.work / name
@@ -168,7 +179,7 @@ class FourShapesTest(Flow):
         self.assertEqual((sent["onsite_amount"], sent["amount"], sent["onsite_currency"]), ("20.00", "0.00", "2"))
         self.assertIn("“현장 결제는 20달러 맞아요, 그대로 바꿔 주세요”",
                       self.cli("render", "result", "--change", _change, "--text")["text"], "고르며 한 말이 결과에 보인다")
-        listed = {entry["id"]: entry for entry in self.cli("list")["changes"]}
+        listed = self.listed()
         self.assertEqual(listed[change]["status"], "replaced")
 
     def test_an_age_rate_changes_by_its_band_code_and_the_other_band_and_adult_price_stay(self):
@@ -176,7 +187,7 @@ class FourShapesTest(Flow):
         change, _plan, posts = self.round_trip(request)
         sent = dict(posts[0])
         self.assertEqual((sent["age_rate_82"], sent["age_rate_81"], sent["amount"]), ("55.00", "0.00", "100.00"))
-        listed = {entry["id"]: entry for entry in self.cli("list")["changes"]}
+        listed = self.listed()
         self.assertEqual(listed[change]["status"], "rolled_back")
         self.assertIn("1인 단가 +10%", listed[change]["scope"])
 
@@ -366,8 +377,57 @@ class AnswersTest(Flow):
     def test_the_scope_line_counts_the_charges_a_change_writes(self):
         change, _plan = self.preview(self.request(GALA, {"offer": "602", "charge": "706", "field": "amount"}, value="95",
                                                   sentence="갈라 디너 95"))
-        entry, = [item for item in self.cli("list")["changes"] if item["id"] == change]
+        entry = self.listed()[change]
         self.assertTrue(entry["scope"].startswith("부과금 1개 (데모 오퍼 2027 · 크리스마스 갈라 디너"), entry["scope"])
+
+
+class LedgerListTest(Flow):
+    """H3 — 저장할 것이 없는 미리보기는 그렇게 적히고 그렇게 보이며, 목록은 탭의 호텔 것을 먼저, 다른 호텔 것은 청할 때만 싣는다."""
+
+    def test_a_preview_whose_red_lines_are_all_declined_is_recorded_and_listed_as_nothing_to_save(self):
+        request = self.request(GALA, value="130", sentence="갈라 디너 130달러로")
+        first, _plan = self.preview(request)
+        keep = self.file("안바꿈.json", [{"rule": "OVER_30", "choice": "keep", "said": "그럼 안 바꿀게요"}])
+        declined, plan = self.preview(request, name="plan-2.json", resolutions=keep, replaces=first)
+        self.assertEqual(json.loads(plan.read_text(encoding="utf-8"))["steps"], [])
+        entry = self.listed()[declined]
+        self.assertEqual(entry["status"], "empty", "적용을 기다리는 미리보기(previewed)로 읽히지 않는다")
+        self.assertTrue(entry["scope"].endswith("· 저장할 것 없음"), entry["scope"])
+        self.assertEqual(self.listed()[first]["status"], "replaced")
+        self.assertIn("저장할 것이 없는 미리보기였습니다", self.cli("render", "result", "--change", declined, "--text")["text"])
+        db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")
+        self.assertEqual(db.execute("SELECT status FROM changes WHERE id = ?", (declined,)).fetchone()[0], "empty",
+                         "장부 자체에 그렇게 적힌다")
+        db.close()
+        include = self.file("바꿈.json", [{"rule": "OVER_30", "choice": "include", "said": "아니 그냥 130으로 해 주세요"}])
+        again, _plan = self.preview(request, name="plan-3.json", resolutions=include, replaces=declined)
+        self.assertEqual((self.listed()[declined]["status"], self.listed()[again]["status"]), ("replaced", "previewed"),
+                         "마음을 바꾸면 다시 계산한 미리보기가 그 번호를 바꾼다")
+
+    def test_begin_refuses_a_preview_with_nothing_to_save_even_without_the_plan_file_check(self):
+        sys.path.insert(0, str(SKILL.parent / "stay-price-change" / "scripts"))
+        from change_core.ledger import Ledger, LedgerError
+        change, _plan = self.preview(self.request(GALA, value="90.00", sentence="갈라 디너 그대로"))
+        self.assertEqual(self.listed()[change]["status"], "empty", "바뀌는 칸이 없는 미리보기도 저장할 것이 없다")
+        ledger = Ledger(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3", kind="charge")
+        with self.assertRaisesRegex(LedgerError, "저장할 것이 없는 미리보기"):
+            ledger.begin(change, [], read_at=self.erp.clock.isoformat())
+
+    def test_the_list_shows_the_tab_hotel_and_other_hotels_only_when_asked(self):
+        sys.path.insert(0, str(SKILL.parent / "stay-price-change" / "scripts"))
+        from decimal import Decimal
+        from change_core.ledger import Ledger, ValueRow
+        mine, _plan = self.preview(self.request(GALA, value="95"))
+        other = Ledger(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3", kind="charge").record_preview(
+            hotel="다른 데모 호텔", hotel_id="2", offer="", currency="USD", sentence="다른 호텔 부과금", read_at=self.erp.clock.isoformat(),
+            rows=[ValueRow("charge", '{"charge":"901"}', "다른 오퍼 · 다른 부과금", "amount", "present", Decimal("10.00"))])
+        tab = self.cli("list", "--look", self.look())
+        self.assertEqual(([entry["id"] for entry in tab["changes"]], tab["others"], tab["hotel"]),
+                         ([mine], 1, {"id": "1", "name": "데모 호텔"}))
+        every = self.cli("list", "--look", self.look(), "--all")
+        self.assertEqual(([entry["id"] for entry in every["changes"]], every["others"]), ([mine, other], 0),
+                         "다른 호텔의 번호는 청할 때만, 탭의 호텔 것 뒤에")
+        self.assertIn("--look", self.cli("list", code=2)["error"])
 
 
 class OneLedgerTest(Flow):
@@ -375,7 +435,7 @@ class OneLedgerTest(Flow):
         change, plan = self.preview(self.request(LATE_BAND, value="60"))
         self.apply(change, plan)
         for script, name in ((PRICE_SCRIPT, "부과금 도우미의 기록"), (ADDON_SCRIPT, "부과금 도우미의 기록")):
-            self.assertEqual(self.cli("list", script=script)["changes"], [])
+            self.assertEqual(self.cli("list", "--all", script=script)["changes"], [])
             self.assertIn(name, self.cli("calls", "--change", change, script=script, code=2)["error"])
         db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")
         kinds = {row[0] for row in db.execute("SELECT DISTINCT item_kind FROM item_values")}

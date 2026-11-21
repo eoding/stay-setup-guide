@@ -38,29 +38,27 @@ metadata:
 ## 담당자에게 말할 때
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
-- 도우미는 자기가 만든 페이지(이 컴퓨터의 HTML 파일)를 브라우저 도구로 열지 못한다. 브라우저 도구는 ERP 탭만 다룬다. 그래서 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text`(페이지에 보이는 글)에서 옮긴다.
+- 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말한다. 도우미가 만든 페이지(이 컴퓨터의 HTML 파일)는 브라우저 도구로 열지 못하므로 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text`(페이지에 보이는 글)에서 옮긴다.
 - 담당자가 "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
 
-## 준비
+## 준비 — 시킨 일마다 3 부터
+
+담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 같은 세션에서 방금 멈춘 변경을 이어서 할 때만 그 일의 폴더를 그대로 쓴다. 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` 다.
 
 1. **브라우저 도구.** Claude in Chrome 이면 `javascript_tool`(JS 실행) · `file_upload`(파일 올리기) · `computer`(스크린샷) · `tabs_context_mcp`(탭). 다른 도구면 JS 로 값 받기 · 파일 칸에 파일 넣기 · 스크린샷이 되는지 먼저 본다.
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`)마다.
-   1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체를 실행한다. 답은 `{ok: true, label: "stay price file bridge", …}`.
-   2. 먼저 `stayPriceLoader.again()` 을 부른다. 이 탭에 적어 둔 원본이 설치된 도우미와 같을 때만 실행하므로 안전하다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다.
-   3. `again()` 이 거절할 때만(`적어 둔 원본이 없습니다` · `…설치된 도우미와 다릅니다` — 아무것도 실행되지 않았다) 올린다. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 세 파일 — 러너의 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js` — 을 올리고 `await stayPriceLoader.load()`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 경로를 거절하거나 `load()` 가 `ok: true` 가 아니면 page.md 「올리기」.
-3. **어디인지 보기.** `await stayPrice.look()`.
-   - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 와 3.
+   1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체 뒤에 한 줄 `stayPriceLoader.again()` 을 붙여 한 번에 실행한다. 이 탭에 적어 둔 원본이 설치된 도우미와 같을 때만 실행하므로 안전하다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다.
+   2. 거절하면(`적어 둔 원본이 없습니다` · `…설치된 도우미와 다릅니다` — 아무것도 실행되지 않았다) 답의 `want` 세 파일 — 러너의 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js` — 을 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load()`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 경로를 거절하거나 `load()` 가 `ok: true` 가 아니면 page.md 「올리기」.
+3. **작업 폴더.** `python3 scripts/price_change.py work` 의 `work` 가 이 일의 `<작업>` 이다(장부가 있는 기록 폴더 안). 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` …. 경로에 빈칸과 `·` 가 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다(`--out "<작업>/plan-1.json"`).
+4. **어디인지 보기.** `await stayPrice.look()`(다른 오퍼는 `stayPrice.look({offer: "<이름>"})`)의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/price_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 는 「읽기」 5 처럼 받아 `<작업>/look/` 에 두고 다시 한다. 답의 `offers` 는 오퍼, `offer` 는 고른 오퍼, `pairs` 는 그 오퍼의 객실 · 요금제다.
+   - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 와 4.
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.
    - `hotel.name` 이 말한 호텔이 아니면 "지금 탭에는 △△ 호텔이 열려 있습니다. ○○ 호텔 화면을 열어 주세요."
-   - `offers` 는 오퍼, `offer` 는 고른 오퍼, `pairs` 는 그 오퍼의 객실 · 요금제다. 다른 오퍼는 `stayPrice.look({offer: "<이름>"})`.
-   - `pairs` 대신 `body` 가 오면(목록이 길다) page.md 의 `look` 줄대로 `look` 명령으로 묶는다.
-4. **장부 보기 · 작업 폴더.** `python3 scripts/price_change.py list` 를 한 번 본다. 줄마다 `scope` 가 그 번호가 덮는 것이다(객실 · 요금제, 날짜, 한 일, 어디까지 갔는지).
-   - 이 호텔(`hotel_id` 가 `look()` 의 `hotel.id`)의 `status: stopped` 인 변경이 있으면 다른 일보다 먼저 **알리기만** 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope` 그대로>. 그것부터 볼까요?" 이어서 할지 되돌릴지는 여기서 묻지 않는다(어디서 멈췄는지는 다시 읽어야 안다). 보자고 하면 [references/stopped.md](references/stopped.md), 다른 일을 먼저 하자고 하면 그 일을 한다.
-   - `ledger` 가 든 폴더가 기록 폴더다(보통 `~/Documents/어딩 Stay 가격 변경 기록`). 경로에 빈칸과 `·` 가 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다(`--out "<작업>/plan-1.json"`). 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(아래 `<작업>`)에 둔다 — 담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 이어서)에 하나, 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` …. 같은 세션에서 방금 멈춘 변경을 이어서 하면 그 작업 폴더를 그대로 쓰고, 새 세션의 일은 새 작업 폴더에서 한다.
+5. **장부 보기.** `python3 scripts/price_change.py list --look "<작업>/look.json"` — 이 호텔의 기록만 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 줄마다 `scope` 가 그 번호가 덮는 것이다(객실 · 요금제, 날짜, 한 일, 어디까지 갔는지). `status: stopped` 인 변경이 있으면 다른 일보다 먼저 **알리기만** 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope` 그대로>. 그것부터 볼까요?" 이어서 할지 되돌릴지는 여기서 묻지 않는다(어디서 멈췄는지는 다시 읽어야 안다). 보자고 하면 [references/stopped.md](references/stopped.md), 다른 일을 먼저 하자고 하면 그 일을 한다.
 
 ## 읽기 — 네 일이 모두 이것으로 읽는다
 
-페이지는 읽은 화면(조각)을 페이지에 두고 답에는 짧은 머리(`body`)만 싣는다(도구가 답을 1,000자쯤에서 자른다). 명령은 기록 폴더의 같은 호텔 읽기 폴더에서 이미 받은 같은 조각을 스스로 찾아 쓰고(도우미가 폴더를 대 주지 않는다), 어디에도 없는 조각만 받아 오라고(`refetch`) 한다. 읽기 한 번에 폴더 하나(`<작업>/읽기-1`, `읽기-2` …, 아래 `<R>`)를 쓴다.
+페이지는 읽은 화면(조각)을 페이지에 두고 답에는 짧은 머리(`body`)만 싣는다. 명령은 기록 폴더에서 이미 받은 같은 조각을 스스로 찾아 쓰고, 어디에도 없는 조각만 받아 오라고(`refetch`) 한다. 읽기 한 번에 폴더 하나(`<작업>/읽기-1`, `읽기-2` …, 아래 `<R>`)를 쓴다.
 
 범위는 처음에는 요청 파일(바꾸지 않으면 `kind: range` — commands.md 「요청 파일」)로, 장부 번호가 있는 일(적용 직전·뒤, 되돌리기, 이어서)은 `--record <번호>`(그 번호를 계산할 때 읽은 범위)로 준다.
 
@@ -74,7 +72,7 @@ metadata:
 
 ## 1. 지금 가격 보기
 
-1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look()` 의 답에서 보여 준다. 범위가 크면(호텔 전체, 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
+1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look` 의 답에서 보여 준다. 범위가 크면(호텔 전체, 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
 2. `<작업>/range.json`(`kind: range`)을 쓰고 「읽기」 → `<R>/snapshot.json`.
 3. `save-snapshot --snapshot "<R>/snapshot.json" --sentence "<담당자 말>"` → 장부 번호 S. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
 4. `render prices --snapshot "<R>/snapshot.json"` → `page` 를 연다.
@@ -114,7 +112,7 @@ metadata:
 
 ## 4. 되돌리기
 
-`python3 scripts/price_change.py list` 로 장부 목록을 본다. 상태가 `previewed`(미리보기만)·`replaced`(바뀐 미리보기)·`rolled_back`(이미 모두 되돌림)인 줄은 되돌릴 것이 없고, `partly_rolled_back` 은 나머지를 되돌릴 수 있다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. 맞는 줄이 하나뿐이어도 묻는다. "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>". 담당자가 "응"·"맞아"처럼 분명히 답한 뒤에 읽는다.
+「준비」 5 의 목록을 본다. 상태가 `previewed`(미리보기만)·`empty`(저장할 것이 없던 미리보기)·`replaced`(바뀐 미리보기)·`rolled_back`(이미 모두 되돌림)인 줄은 되돌릴 것이 없고, `partly_rolled_back` 은 나머지를 되돌릴 수 있다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. 맞는 줄이 하나뿐이어도 묻는다. "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>". 담당자가 "응"·"맞아"처럼 분명히 답한 뒤에 읽는다.
 
 **"원래 값으로 되돌려"는 둘로 들린다.** 변경 되돌리기는 그 변경이 넣은 칸만 넣기 전 값으로(그 사이 바뀐 칸은 그대로), 저장해 둔 상태로 되돌리기는 그 저장의 범위 전체를 저장한 때의 값으로 맞춘다. 번호를 말했으면 그 번호, "방금 · 어제 바꾼 거"처럼 바꾼 일을 말하면 맞는 변경, "아침 상태로" · "저장해 둔 걸로"처럼 때나 저장을 말하면 맞는 `snapshot` 이다. 둘 다 맞으면 견주어 묻는다: "장부 12번 변경(<`scope`>)만 되돌릴까요, 장부 9번에 저장해 둔 상태(<그 줄의 `read_at` 의 월 · 일 · 시 · 분>, <`scope`>)로 모두 맞출까요?" 어느 쪽이든 고른 줄의 종류 · 번호 · `scope` 를 말하고 "응"을 받은 뒤에 읽는다.
 
@@ -154,7 +152,7 @@ metadata:
 
 ## 중간에 멈췄을 때
 
-적용하다 멈췄을 때, "N번 이어서"라고 할 때, 「준비」 4 에서 알린 멈춘 변경을 보자고 할 때 [references/stopped.md](references/stopped.md) 대로 한다. 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 고를 것은 `check` 뒤에 한 번만 묻는다.
+적용하다 멈췄을 때, "N번 이어서"라고 할 때, 「준비」 5 에서 알린 멈춘 변경을 보자고 할 때 [references/stopped.md](references/stopped.md) 대로 한다. 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 고를 것은 `check` 뒤에 한 번만 묻는다.
 
 ## 하지 않는 것
 

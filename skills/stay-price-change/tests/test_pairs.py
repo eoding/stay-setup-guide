@@ -97,7 +97,7 @@ class PairsTest(unittest.TestCase):
             result = json.loads(done.stdout)
             self.assertEqual(len(result["plan"]["request"]["pairs"]), 3)
             self.assertEqual(result["plan"]["absent_pairs"], [{"room": "스위트", "rate_plan": "룸온리"}])
-            listed = subprocess.run([sys.executable, str(HERE.parent / "scripts" / "price_change.py"), "list"],
+            listed = subprocess.run([sys.executable, str(HERE.parent / "scripts" / "price_change.py"), "list", "--all"],
                                     capture_output=True, text=True, env=scene.env(str(folder)))
             self.assertEqual(json.loads(listed.stdout)["changes"][0]["id"], result["change_id"])
 

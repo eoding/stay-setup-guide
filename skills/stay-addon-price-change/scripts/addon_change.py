@@ -5,6 +5,7 @@
 (`../stay-price-change/scripts/change_core`). 장부는 같은 파일이고, 이 명령은 그 장부를 부가옵션 가격 줄(`addon_price`)의 장부로
 연다 — 목록에는 부가옵션 가격 줄 번호만 나오고, 다른 도우미의 번호는 거절한다.
 
+    work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
     look          stayAddonPrice.look() 의 답과 그 조각(take 답들) → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로). 기록 폴더의
                   다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     read-calls    요청 파일(필요하면 --look), 또는 장부 번호 → readLine 부를 값(calls.json)
@@ -19,14 +20,16 @@
     check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 해도 되는지
     verify        적용 뒤 다시 읽은 값과 견주기 — 넣은 값, 그리고 그대로여야 할 필드 · 칸까지. 다르면 종료 1
     rollback      장부의 변경 하나(또는 --line 으로 고른 줄)를 되돌리는 계산. --record 면 장부에 적는다
-    list          장부에 적힌 부가옵션 가격 줄의 변경 목록
+    list          장부에 적힌 부가옵션 가격 줄의 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
 
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령(look · read-calls · read · plan · rollback)은
 `--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(begin · verify) · 2 입력이나 순서가 맞지 않음
 (표준 오류에 {"error": "…"}, 조각을 받아야 하면 "refetch").
 
 예:
+    python3 addon_change.py work
     python3 addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"
+    python3 addon_change.py list --look "<작업>/look.json"
     python3 addon_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"
     python3 addon_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"
     python3 addon_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"
@@ -57,7 +60,7 @@ from change_core.answers import BrowserError, answers_for, attach_bodies, readin
 from change_core.chrome import page_text
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
-from change_core.ledger import Ledger, LedgerError, ledger_dir
+from change_core.ledger import Ledger, LedgerError
 from change_core.money import money, money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution, said_in
@@ -65,7 +68,6 @@ from change_core.window import moved_since as window_moved
 
 PAGE_OBJECT = "stayAddonPrice"      # 이 도우미의 페이지 모듈 — 조각을 다시 받으라는 글이 이 이름의 take 를 부르라고 한다
 PREFIXES = ("look-", "line-", "take-")
-LOOK_FOLDER = "look"        # 작업 폴더 안에서 look 답을 두는 폴더(SKILL.md 「준비」) — 다음 look 이 여기서 조각을 빌린다
 READS = ("readLine",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readLine 하나가 조각 하나다
 PAGE_NAMES = {"preview": "부가옵션 미리보기", "result": "부가옵션 적용 결과", "rollback": "부가옵션 되돌리기 미리보기",
@@ -83,26 +85,13 @@ def load_results(paths) -> list:
 
 # ───────────── 읽기 ─────────────
 
-def lent_looks(results: list, answer_paths) -> list:
-    """이 look 에 조각을 빌려 줄 답들 — 기록 폴더의 다른 작업 폴더마다의 `look/` 가운데 같은 호텔을 본 것의 답 파일. 읽기가 앞선 읽기
-    폴더에서 빌리는 것과 같다(change_core.files.lent_answers): 알아볼 값 넷이 같은 다 받은 조각만 쓰고, 이번 look 의 답으로 치지 않는다."""
-    hotels = {str((result.get("hotel") or {}).get("id")) for result in results
-              if isinstance(result, dict) and result.get("op") == "look"}
-    own = {(path if path.is_dir() else path.parent).resolve() for path in map(Path, answer_paths)}
-    lent = []
-    for folder in sorted((ledger_dir() / files.WORK).glob(f"*/{LOOK_FOLDER}")):
-        if not folder.is_dir() or folder.resolve() in own:
-            continue
-        answers = load_results([folder])
-        if any(isinstance(answer, dict) and answer.get("op") == "look" and str((answer.get("hotel") or {}).get("id")) in hotels
-               for answer in answers):
-            lent += answers
-    return lent
+def cmd_work(args):
+    return dict(work=str(files.new_work()))
 
 
 def cmd_look(args):
     results = load_results(args.answers)
-    looks = [result for result in attach_bodies(answers_for(results, "look"), lent_looks(results, args.answers), PAGE_OBJECT)
+    looks = [result for result in attach_bodies(answers_for(results, "look"), files.lent_looks(results, args.answers, PREFIXES), PAGE_OBJECT)
              if result.get("op") == "look"]
     if len(looks) != 1:
         raise BrowserError(f"stayAddonPrice.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
@@ -206,7 +195,7 @@ def cmd_plan(args):
     change_id = open_ledger().record_preview(
         hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=OFFERLESS, currency=plan.currency, sentence=request.sentence,
         read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(request), reading=encode_snapshot(snapshot),
-        replaces=args.replaces) if args.record else None
+        replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
     return dict(change_id=change_id, replaces=args.replaces, counts=counts(plan), plan=encode_plan(plan), red=red_lines(plan),
                 chosen=chosen_said(plan), blocked=blocked_lines(plan), scope_card=scope_card(plan),
                 steps=None if steps is None else [encode_step(step) for step in steps])
@@ -340,7 +329,8 @@ def cmd_rollback(args):
     request = dict(kind="rollback", scope=picked) if picked else None      # 고른 줄 — 장부 목록의 범위 한 줄이 말한다
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rows, reverses=args.change,
-                                      request=request, reading=encode_snapshot(now), replaces=args.replaces) if args.record else None
+                                      request=request, reading=encode_snapshot(now), replaces=args.replaces,
+                                      empty=not steps) if args.record else None
     # 되돌리기 확인이 읽는 범위 한 줄 — 장부에 적었으면 `list` 의 그 번호 줄, 아니면 같은 셈
     scope = listed(ledger, change_id)[0]["scope"] if change_id is not None else scope_line(rows, record_what(request, args.change))
     return dict(change_id=change_id, replaces=args.replaces, scope=scope, rollback=encode_rollback(plan),
@@ -372,8 +362,9 @@ def scope_line(rows, did: str, stopped: str = "") -> str:
 
 
 def record_scope(entry: dict, rows) -> str:
-    """장부 한 줄의 범위(scope_line)."""
-    stopped = f"{entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped" else ""
+    """장부 한 줄의 범위(scope_line) — 멈췄으면 어디까지, 저장할 것이 없는 미리보기면 그렇다고."""
+    stopped = (f"{entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped"
+               else "저장할 것 없음" if entry["status"] == "empty" else "")
     return scope_line(rows, record_what(entry.get("request"), entry.get("reverses")), stopped)
 
 
@@ -394,7 +385,7 @@ def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
 
 def cmd_list(args):
     ledger = open_ledger()
-    return dict(ledger=str(ledger.path), changes=listed(ledger))
+    return files.hotel_list(ledger.path, listed(ledger), args.look, args.all)
 
 
 # ───────────── 짧은 답 · 파서 ─────────────
@@ -447,6 +438,7 @@ def parser() -> argparse.ArgumentParser:
         sub.add_argument("--out", help="결과(JSON, render 는 HTML)를 쓸 파일")
         return sub
 
+    command("work", cmd_work, "새 작업 폴더")
     sub = command("look", cmd_look, "look 답 → 부가옵션 · 가격 줄 전부")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
     sub = command("read-calls", cmd_read_calls, "읽을 줄 → readLine 부를 값")
@@ -494,7 +486,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--record", action="store_true", help="장부에 되돌리기 미리보기로 적는다")
     sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 되돌리기 미리보기(같은 변경을 되돌리는 것)의 장부 번호")
     sub.add_argument("--sentence", default="되돌리기", help="담당자가 한 말")
-    command("list", cmd_list, "장부 목록")
+    sub = command("list", cmd_list, "장부 목록")
+    sub.add_argument("--look", help="look 명령이 낸 파일 — 탭에 열린 호텔의 기록만 싣는다")
+    sub.add_argument("--all", action="store_true", help="다른 호텔의 기록도 싣는다(탭의 호텔이 먼저)")
     return top
 
 

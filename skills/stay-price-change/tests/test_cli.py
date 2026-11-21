@@ -151,7 +151,7 @@ class CommandTest(unittest.TestCase):
         refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", bare, "--record",
                                "--out", self.dir / "plan-0.json", code=2)
         self.assertIn("(said)", refused["error"], "담당자의 말이 없는 고름은 받지 않는다")
-        self.assertEqual(self.run_cli("list")["changes"], [], "장부에 아무것도 적지 않았다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"], [], "장부에 아무것도 적지 않았다")
 
         choices = self.write("choices.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": said}])
         short = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", choices, "--record",
@@ -225,7 +225,7 @@ class CommandTest(unittest.TestCase):
                         "G5 — 되돌리기의 낡음 확인은 그 계산이 바탕으로 삼은 읽은 값(after)과 견준다")
 
         snapshot_id = self.run_cli("save-snapshot", "--snapshot", after)["change_id"]
-        listed = self.run_cli("list")
+        listed = self.run_cli("list", "--all")
         self.assertEqual([(row["id"], row["kind"], row["status"]) for row in listed["changes"]],
                          [(snapshot_id, "snapshot", "saved"), (rollback["change_id"], "rollback", "applying"),
                           (change, "change", "applied"), (first["change_id"], "change", "replaced")])
@@ -237,13 +237,13 @@ class CommandTest(unittest.TestCase):
         refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
                                "--record", "--replaces", first, "--out", self.dir / "plan-1.json", code=2)["error"]
         self.assertIn("이미 있는 파일입니다", refused)
-        self.assertEqual([row["id"] for row in self.run_cli("list")["changes"]], [first], "덮어쓰기를 거절하면 장부에도 적지 않는다")
+        self.assertEqual([row["id"] for row in self.run_cli("list", "--all")["changes"]], [first], "덮어쓰기를 거절하면 장부에도 적지 않는다")
         self.assertIsNone(json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["steps"], "앞 계산 파일은 그대로")
 
         second = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.request, "--resolutions", self.choice,
                               "--record", "--replaces", first, "--out", self.dir / "plan-2.json")
         self.assertEqual(second["replaces"], first)
-        listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
+        listed = {row["id"]: row for row in self.run_cli("list", "--all")["changes"]}
         self.assertEqual((listed[first]["status"], listed[first]["replaces"]), ("replaced", None))
         self.assertEqual((listed[second["change_id"]]["status"], listed[second["change_id"]]["replaces"]), ("previewed", first))
 
@@ -266,7 +266,7 @@ class CommandTest(unittest.TestCase):
         self.assertIn("같은 호텔 · 오퍼의 미리보기만", self.run_cli("plan", "--snapshot", other, "--request", other_request,
                                                           "--resolutions", self.choice, "--record", "--replaces", third,
                                                           code=2)["error"])
-        self.assertEqual({row["id"]: row["status"] for row in self.run_cli("list")["changes"]}[third], "previewed",
+        self.assertEqual({row["id"]: row["status"] for row in self.run_cli("list", "--all")["changes"]}[third], "previewed",
                          "거절한 바꾸기는 앞 번호를 그대로 둔다")
 
     def applied_change(self):
@@ -288,12 +288,12 @@ class CommandTest(unittest.TestCase):
         rollback = ("rollback", "--change", change, "--snapshot", now, "--record", "--sentence", "방금 것 되돌려")
         first = self.run_cli(*rollback, "--out", self.dir / "rollback-1.json")
         self.assertEqual(first["kept"], 1, "그 사이 달라진 칸 하나는 그대로 둔다")
-        before = self.run_cli("list")["changes"]
+        before = self.run_cli("list", "--all")["changes"]
 
         refused = self.run_cli(*rollback, "--include-kept", "--replaces", first["change_id"], "--out", self.dir / "rollback-1.json",
                                code=2)["error"]
         self.assertIn("이미 있는 파일입니다", refused)
-        self.assertEqual(self.run_cli("list")["changes"], before, "덮어쓰기를 거절하면 장부에도 적지 않는다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"], before, "덮어쓰기를 거절하면 장부에도 적지 않는다")
         self.assertEqual(len(json.loads((self.dir / "rollback-1.json").read_text(encoding="utf-8"))["rollback"]["kept"]), 1,
                          "앞 계산 파일은 그대로")
         self.assertIn("--record", self.run_cli("rollback", "--change", change, "--snapshot", now, "--include-kept",
@@ -302,7 +302,7 @@ class CommandTest(unittest.TestCase):
         second = self.run_cli(*rollback, "--include-kept", "--replaces", first["change_id"], "--out", self.dir / "rollback-2.json")
         self.assertEqual((second["replaces"], second["restored"]), (first["change_id"], first["restored"] + 1),
                          "그대로 두던 칸도 되돌린다")
-        listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
+        listed = {row["id"]: row for row in self.run_cli("list", "--all")["changes"]}
         self.assertEqual((listed[first["change_id"]]["status"], listed[second["change_id"]]["status"],
                           listed[second["change_id"]]["replaces"]), ("replaced", "previewed", first["change_id"]))
         self.assertEqual([row["id"] for row in listed.values() if row["sentence"] == "방금 것 되돌려" and row["status"] == "previewed"],
@@ -320,16 +320,16 @@ class CommandTest(unittest.TestCase):
         now = self.write("now.json", encode_snapshot(after))
         restore = ("restore", "--saved", saved, "--snapshot", now, "--record", "--sentence", "저장해 둔 대로")
         first = self.run_cli(*restore, "--out", self.dir / "rollback-1.json")
-        before = self.run_cli("list")["changes"]
+        before = self.run_cli("list", "--all")["changes"]
         self.assertIn("이미 있는 파일입니다", self.run_cli(*restore, "--replaces", first["change_id"],
                                                     "--out", self.dir / "rollback-1.json", code=2)["error"])
-        self.assertEqual(self.run_cli("list")["changes"], before, "덮어쓰기를 거절하면 장부에도 적지 않는다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"], before, "덮어쓰기를 거절하면 장부에도 적지 않는다")
         self.assertIn("--record", self.run_cli("restore", "--saved", saved, "--snapshot", now, "--replaces", first["change_id"],
                                                code=2)["error"])
 
         second = self.run_cli(*restore, "--room", "디럭스", "--replaces", first["change_id"], "--out", self.dir / "rollback-2.json")
         self.assertEqual(second["replaces"], first["change_id"])
-        listed = {row["id"]: row for row in self.run_cli("list")["changes"]}
+        listed = {row["id"]: row for row in self.run_cli("list", "--all")["changes"]}
         self.assertEqual((listed[first["change_id"]]["status"], listed[second["change_id"]]["status"]), ("replaced", "previewed"))
         fresh = self.write("fresh-now.json", encode_snapshot(scene.fresh(after)))
         self.assertIn("다시 계산해", self.run_cli("begin", "--change", first["change_id"], "--plan", self.dir / "rollback-2.json",
@@ -344,7 +344,7 @@ class CommandTest(unittest.TestCase):
                              (("rollback", "--change", change, "--snapshot", now, "--record"), second["change_id"]),
                              (("plan", "--snapshot", self.snapshot, "--request", self.request, "--record"), second["change_id"])):
             self.assertIn("같은 것을 다시 계산한 미리보기만", self.run_cli(*args, "--replaces", target, code=2)["error"], (args[0], target))
-        statuses = {row["id"]: row["status"] for row in self.run_cli("list")["changes"]}
+        statuses = {row["id"]: row["status"] for row in self.run_cli("list", "--all")["changes"]}
         self.assertEqual([statuses[n] for n in (rollback, preview, second["change_id"])], ["previewed"] * 3,
                          "거절한 바꾸기는 앞 번호를 그대로 둔다")
 
@@ -379,7 +379,7 @@ class CommandTest(unittest.TestCase):
         request = dict(encode_request(replace(scene.request(), operation="amount", value=D("1000"))), currency="JPY")
         refused = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.write("yen.json", request), "--record", code=2)
         self.assertIn("말씀하신 통화는 JPY 인데 ERP 의 이 오퍼는 USD 입니다", refused["error"])
-        self.assertEqual(self.run_cli("list")["changes"], [], "장부에 아무것도 적지 않았다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"], [], "장부에 아무것도 적지 않았다")
         same = self.run_cli("plan", "--snapshot", self.snapshot, "--request", self.write("usd.json", dict(request, currency="usd")))
         self.assertGreater(same["counts"]["will_change"], 0)
 

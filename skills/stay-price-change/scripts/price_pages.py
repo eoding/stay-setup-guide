@@ -413,6 +413,8 @@ def record_progress(entry: Mapping) -> str:
         return f"저장 {steps}번 중 {saved}번 함 · 적용 중"
     if status == "rolled_back":
         return f"모두 되돌림 {entry['rolled_back']:,}/{entry['written']:,}칸 (장부 {by})"
+    if status == "empty":
+        return "저장할 것 없음"
     if status == "partly_rolled_back":
         return f"일부 되돌림 {entry['rolled_back']:,}/{entry['written']:,}칸 (장부 {by}) · 나머지 {entry['written'] - entry['rolled_back']:,}칸은 넣은 값 그대로"
     return ""

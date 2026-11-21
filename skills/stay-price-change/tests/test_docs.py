@@ -210,6 +210,20 @@ class SkillBudgetTest(unittest.TestCase):
                 self.assertIn(sentence, kept, f"「반드시 지킬 것」에서 빠진 문장: {sentence}")
 
 
+    def test_every_preparation_step_uses_only_what_an_earlier_step_set_up(self):
+        """H4 — 일마다 새 작업 폴더(work)에서 시작하고, look 을 부르고 · 명령으로 묶고 · 명령이 말한 조각을 받은 뒤에 목록을 탭의
+        호텔로 본다(그 차례가 명령이 바라는 차례다). --look 을 받는 명령을 한 곳에서 다 댄다."""
+        prep = self.skill[self.skill.index("## 준비"):self.skill.index("## 읽기")]
+        self.assertLess(prep.index("price_change.py work"), prep.index("<작업>/"), "작업 폴더를 만든 뒤에 그 안에 저장한다")
+        self.assertLess(prep.index("stayPrice.look()"), prep.index("price_change.py look --answers"))
+        self.assertLess(prep.index("price_change.py look --answers"), prep.index("`refetch`"), "명령이 받을 조각을 말한다")
+        self.assertLess(prep.index("`refetch`"), prep.index("price_change.py list --look"), "목록은 탭의 호텔을 안 뒤에")
+        self.assertIn("같은 대화의 두 번째 요청도", prep)
+        said = prep[prep.index("`--look` 으로 받는 명령은"):].split("\n", 1)[0]
+        for name, flags in commands().items():
+            if "--look" in flags:
+                self.assertIn(f"`{name}`", said, f"--look 을 받는 {name} 을 준비에서 댄다")
+
 class SheetDocsTest(unittest.TestCase):
     """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
 

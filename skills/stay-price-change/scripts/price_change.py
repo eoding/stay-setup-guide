@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
-    look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제(답이 길 때)
+    work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
+    look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제. 기록 폴더의 다른 작업 폴더의
+                  look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     read-calls    읽을 범위(요청 파일, 또는 장부 번호) → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음(calls.json)
     reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
@@ -28,7 +30,7 @@
     compare       지금 상태 저장으로 적어 둔 상태와 같은 범위를 방금 읽은 값 견주기 — 바뀐 · 새로 생긴 · 없어진 칸, 날짜별로 바꿔
                   두었다가 바뀐 칸, 예약 있는 날(ERP 시즌 [가격]을 다시 채운 뒤에 쓴다). 아무것도 바꾸지 않고 장부에도 적지 않는다
     save-snapshot 지금 값을 장부에만 적어 두기
-    list          장부에 적힌 변경 목록
+    list          장부에 적힌 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
 
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 일곱(read-calls · read · sheet · plan ·
 rollback · restore · compare)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일
@@ -112,8 +114,14 @@ def price_page_arg(text: str) -> PairRead:
     return PairRead.of(room.strip(), parse_price_page(Path(path).read_text(encoding="utf-8")))
 
 
+def cmd_work(args):
+    return dict(work=str(files.new_work()))
+
+
 def cmd_look(args):
-    looks = [result for result in attach_bodies(load_results(args.answers)) if result.get("op") == "look"]
+    results = load_results(args.answers)
+    looks = [result for result in attach_bodies(results, files.lent_looks(results, args.answers, ANSWER_PREFIXES))
+             if result.get("op") == "look"]
     if len(looks) != 1:
         raise BrowserError(f"stayPrice.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
     look = looks[0]
@@ -232,7 +240,7 @@ def cmd_plan(args):
                                         currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                         request=encode_request(plan.request), reading=encode_snapshot(snapshot),
-                                        replaces=args.replaces) if args.record else None
+                                        replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
     result = dict(change_id=change_id, replaces=args.replaces, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
                   red=red_lines(plan), chosen=chosen_lines(plan), above_one_night_before=plan.above_one_night_before,
                   unresolved=[encode_change(change) for change in unresolved(plan)],
@@ -408,7 +416,7 @@ def cmd_rollback(args):
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan),
                                       reverses=args.change, reading=encode_snapshot(snapshot), request=request,
-                                      replaces=args.replaces) if args.record else None
+                                      replaces=args.replaces, empty=not rollback_writes(plan)) if args.record else None
     scope = rollback_scope(ledger, change_id, "rollback", request, args.change, plan)
     return rollback_answer(change_id, args, scope, plan, snapshot, undone)
 
@@ -423,7 +431,7 @@ def cmd_restore(args):
     change_id = ledger.record_preview(
         hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, sentence=args.sentence,
         read_at=plan.read_at, rows=rollback_rows(plan), reading=encode_snapshot(snapshot),
-        request=request, replaces=args.replaces) if args.record else None
+        request=request, replaces=args.replaces, empty=not rollback_writes(plan)) if args.record else None
     return rollback_answer(change_id, args, rollback_scope(ledger, change_id, "change", request, None, plan), plan, snapshot)
 
 
@@ -476,7 +484,7 @@ def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
 
 def cmd_list(args):
     ledger = open_ledger()
-    return dict(ledger=str(ledger.path), changes=listed(ledger))
+    return files.hotel_list(ledger.path, listed(ledger), args.look, args.all)
 
 
 def short_read_calls(result: dict) -> dict:
@@ -573,6 +581,7 @@ def parser() -> argparse.ArgumentParser:
         sub.add_argument("--out", help="결과(JSON, render 는 HTML)를 쓸 파일")
         return sub
 
+    command("work", cmd_work, "새 작업 폴더")
     sub = command("look", cmd_look, "stayPrice.look() 의 답(과 그 조각) → 호텔 · 오퍼 · 객실 × 요금제")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
 
@@ -683,7 +692,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--snapshot", required=True)
     sub.add_argument("--sentence", default="지금 상태 저장")
 
-    command("list", cmd_list, "장부 목록")
+    sub = command("list", cmd_list, "장부 목록")
+    sub.add_argument("--look", help="look 명령이 낸 파일 — 탭에 열린 호텔의 기록만 싣는다")
+    sub.add_argument("--all", action="store_true", help="다른 호텔의 기록도 싣는다(탭의 호텔이 먼저)")
     return root
 
 

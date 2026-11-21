@@ -227,7 +227,7 @@ class BrowserCommandTest(unittest.TestCase):
         choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         change = self.run_cli("plan", "--snapshot", read, "--request", request, "--resolutions", choice, "--record",
                               "--out", self.dir / "plan.json")["change_id"]
-        listed = self.run_cli("list")["changes"][0]
+        listed = self.run_cli("list", "--all")["changes"][0]
         self.assertEqual((listed["hotel"], listed["hotel_id"]), ("페이지가 부르는 이름", scene.HOTEL_ID),
                          "장부에는 요청에 적은 이름이 아니라 페이지가 알아본 호텔이 적힌다")
         self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", self.fresh(snapshot))
@@ -257,7 +257,7 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertEqual((waited["started"], waited["wait"], waited["status"]), (False, 5, "applying"))
         self.assertNotIn("saved", waited)
         self.assertEqual(self.run_cli("calls", "--change", change)["calls"][0]["no"], call["no"], "그 단계는 그대로 남는다")
-        self.assertEqual(self.run_cli("list")["changes"][0]["status"], "applying", "멈추지 않았다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"][0]["status"], "applying", "멈추지 않았다")
         saved = dict(later, ok=True, started=None, wait=None, saved=True, pressed=True, note="저장했습니다", error=None)
         self.assertEqual(self.run_cli("record-result", "--change", change, "--result", self.write("saved.json", saved))["saved"],
                          True, "기다린 뒤 같은 단계를 다시 불러 저장한다")

@@ -7,7 +7,8 @@
 
     meta         schema_version — 이 코드보다 새 판이 만든 장부는 열지 않는다
     changes      변경 한 번에 한 줄 — 종류(change / snapshot / rollback), 상태(previewed → applying → stopped / applied,
-                 다시 계산해 새 번호로 바뀐 미리보기는 replaced — 새 번호의 `replaces` 가 그 번호다, 지금 상태 저장은 saved),
+                 저장할 것이 없는 미리보기는 처음부터 empty, 다시 계산해 새 번호로 바뀐 미리보기는 replaced — 새 번호의
+                 `replaces` 가 그 번호다, 지금 상태 저장은 saved),
                  호텔(페이지가 알아본 번호와 이름), 요청 문장, 읽은 시각, 되돌리기면 되돌리는 변경 번호, 요청 원문(JSON),
                  그 번호의 계산이 바탕으로 삼은 읽은 값(JSON — 읽은 범위가 들어 있다), 마지막으로 이어 가도 된다고 본
                  때(`active_at` — begin 이 받아들인 읽은 값의 시각, 저장 결과를 적은 때, 이어서 해도 된다고 한 check 의
@@ -20,6 +21,8 @@
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 다(적용한 것이 아니다 — 목록에서 적용된 변경과 갈린다).
+바뀌는 항목이 없거나 빨간 줄을 모두 안 바꾸기로 고른 미리보기는 적는 순간 상태가 empty 다 — 적용할 것이 없어 begin 이 받지 않고,
+목록에서 적용을 기다리는 미리보기(previewed)처럼 읽히지 않는다. 담당자가 마음을 바꿔 다시 계산하면 replaced 가 된다.
 
 도우미마다 자기 항목 종류로 장부를 연다(`Ledger(kind="price_cell")`). 그러면 목록에는 그 종류의 번호만 나오고, 다른 종류의 번호를
 주면 어느 도우미의 기록인지 대며 거절한다. 번호의 종류는 그 번호에 적힌 항목 줄의 종류다(표의 모양은 그대로다).
@@ -50,7 +53,7 @@ LEDGER_ENV = "STAY_PRICE_LEDGER_DIR"
 CLOCK_ENV = "STAY_PRICE_TEST_NOW"   # 시험용 — 주면 장부의 시계가 그 시각(ISO)에 서 있다
 FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3                   # 3 — 상태 empty(저장할 것이 없는 미리보기)
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
 KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장)
@@ -60,7 +63,7 @@ CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS changes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL CHECK (kind IN ('change', 'snapshot', 'rollback')),
-  status TEXT NOT NULL CHECK (status IN ('previewed', 'applying', 'stopped', 'applied', 'replaced', 'saved')),
+  status TEXT NOT NULL CHECK (status IN ('previewed', 'empty', 'applying', 'stopped', 'applied', 'replaced', 'saved')),
   hotel TEXT NOT NULL,
   hotel_id TEXT NOT NULL DEFAULT '',
   offer TEXT NOT NULL,
@@ -325,6 +328,9 @@ class Ledger:
             if found and int(found["value"]) > SCHEMA_VERSION:
                 raise LedgerError(f"이 장부는 더 새 판 도우미가 만든 것입니다(장부 판 {found['value']}, 이 도우미는 "
                                   f"{SCHEMA_VERSION}). 도우미를 새로 받아 주세요")
+            if found and int(found["value"]) < SCHEMA_VERSION:   # 표의 모양(상태의 CHECK)은 판마다 다르고 SQLite 는 고쳐 쓰지 못한다
+                raise LedgerError(f"이 장부는 시험 판 도우미가 만든 것입니다(장부 판 {found['value']}, 이 도우미는 "
+                                  f"{SCHEMA_VERSION}). 장부 폴더를 새로 정해 주세요({LEDGER_ENV})")
             db.executescript(SCHEMA)
             db.execute("INSERT INTO meta (name, value) VALUES ('schema_version', ?)"
                        " ON CONFLICT(name) DO UPDATE SET value = excluded.value", (str(SCHEMA_VERSION),))
@@ -358,21 +364,26 @@ class Ledger:
 
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
                        hotel_id: str, rows: Iterable[ValueRow], request: Mapping | None = None,
-                       reverses: int | None = None, reading: Mapping | None = None, replaces: int | None = None) -> int:
+                       reverses: int | None = None, reading: Mapping | None = None, replaces: int | None = None,
+                       empty: bool = False) -> int:
         """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다. `reading` 은 그 계산이 바탕으로 삼은
-        읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다.
+        읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다. `empty` 는 저장 단계가 하나도 없는 미리보기(바뀌는
+        항목이 없거나 빨간 줄을 모두 안 바꾸기로 고름)다 — 상태 empty 로 적고, 넣는 값이 있는 줄이 있으면 거절한다.
 
         `replaces` 는 이 미리보기가 바꾸는 앞 미리보기 번호다(빨간 줄을 고른 뒤 · 그대로 둔 칸도 되돌릴 때 · 적용 직전에 값이 달라
         다시 계산함). 같은 것을 하는(`_acts` — 가격 바꾸기 · 같은 변경 되돌리기 · 같은 저장 상태로 되돌리기) 같은 호텔 · 오퍼의,
         아직 적용을 시작하지 않은 미리보기여야 하고, 그 번호는 `replaced` 가 되어 begin 이 받지 않는다."""
         kind = "rollback" if reverses is not None else "change"
+        rows = list(rows)
+        if empty and any(row.action for row in rows):
+            raise LedgerError("저장할 것이 없다는 미리보기에 넣는 값이 있습니다 — 미리보기를 다시 계산합니다")
         with self._db() as db:
             if reverses is not None:
                 self._header(db, reverses)
             if replaces is not None:
                 self._replace(db, replaces, self._acts(kind, reverses, request), hotel_id, offer)
-            return self._insert(db, kind, "previewed", hotel, hotel_id, offer, currency, sentence, read_at, rows, reverses,
-                                request, reading, replaces)
+            return self._insert(db, kind, "empty" if empty else "previewed", hotel, hotel_id, offer, currency, sentence,
+                                read_at, rows, reverses, request, reading, replaces)
 
     @staticmethod
     def _acts(kind: str, reverses: int | None, request: Mapping | None) -> str:
@@ -388,7 +399,7 @@ class Ledger:
         old = self._header(db, change_id)
         if old["status"] == "replaced":
             raise LedgerError(f"{change_id}번 미리보기는 이미 {self._replacer(db, change_id)}번으로 바뀌었습니다 — 그 번호를 바꿉니다")
-        if old["status"] != "previewed":
+        if old["status"] not in ("previewed", "empty"):
             raise LedgerError(f"{change_id}번은 바꿀 수 있는 미리보기가 아닙니다(종류 {old['kind']} · 상태 {self._status(old)}) — "
                               "아직 적용을 시작하지 않은 미리보기만 바꿉니다")
         was = self._acts(old["kind"], old["reverses"], None if old["request"] is None else json.loads(old["request"]))
@@ -472,6 +483,8 @@ class Ledger:
             if header["status"] == "replaced":
                 raise LedgerError(f"{change_id}번 미리보기는 다시 계산해 {self._replacer(db, change_id)}번으로 바뀌었습니다 — "
                                   "그 번호와 그 계산 파일로 적용합니다")
+            if header["status"] == "empty":
+                raise LedgerError(f"{change_id}번은 저장할 것이 없는 미리보기입니다 — 적용할 것이 없습니다")
             if request is not None and header["request"] is not None and json.loads(header["request"]) != dict(request):
                 raise LedgerError(f"{change_id}번 변경의 요청과 다른 계산입니다. 미리보기를 다시 만들어 주세요")
             if header["status"] != "previewed":

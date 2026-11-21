@@ -5,7 +5,9 @@
 (`../stay-price-change/scripts/change_core`). 장부는 같은 파일이고, 이 명령은 그 장부를 부과금(`charge`)의 장부로 연다 — 목록에는
 부과금 번호만 나오고, 다른 도우미의 번호는 거절한다.
 
-    look          stayCharge.look() 의 답과 그 조각(take 답들) → 호텔의 오퍼마다 부과금 전부(목록이 보인 그대로)
+    work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
+    look          stayCharge.look() 의 답과 그 조각(take 답들) → 호텔의 오퍼마다 부과금 전부(목록이 보인 그대로). 기록 폴더의
+                  다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     read-calls    요청 파일(목록 확인은 --look), 또는 장부 번호 → readCharge 부를 값(calls.json)
     read          calls.json + readCharge 답과 조각(폴더째) → 지금 값(snapshot.json). 읽은 시각은 그 답들이 끝난 시각 가운데 가장
                   이른 것. 기록 폴더의 앞선 읽기 폴더(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
@@ -18,14 +20,16 @@
     check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 해도 되는지
     verify        적용 뒤 다시 읽은 값과 견주기 — 넣은 값, 그리고 그 부과금의 다른 금액 · 칸이 그대로인지. 다르면 종료 1
     rollback      장부의 변경 하나(또는 --charge 로 고른 부과금)를 되돌리는 계산. --record 면 장부에 적는다
-    list          장부에 적힌 부과금 변경 목록
+    list          장부에 적힌 부과금 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
 
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령(look · read-calls · read · plan · rollback)은
 `--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(begin · verify) · 2 입력이나 순서가 맞지 않음
 (표준 오류에 {"error": "…"}, 조각을 받아야 하면 "refetch").
 
 예:
+    python3 charge_change.py work
     python3 charge_change.py look --answers "<작업>/look" --out "<작업>/look.json"
+    python3 charge_change.py list --look "<작업>/look.json"
     python3 charge_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"
     python3 charge_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"
     python3 charge_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"
@@ -80,9 +84,14 @@ def load_results(paths) -> list:
 
 # ───────────── 읽기 ─────────────
 
+def cmd_work(args):
+    return dict(work=str(files.new_work()))
+
+
 def cmd_look(args):
     results = load_results(args.answers)
-    looks = [result for result in attach_bodies(answers_for(results, "look"), page=PAGE_OBJECT) if result.get("op") == "look"]
+    looks = [result for result in attach_bodies(answers_for(results, "look"), files.lent_looks(results, args.answers, PREFIXES),
+                                                PAGE_OBJECT) if result.get("op") == "look"]
     if len(looks) != 1:
         raise BrowserError(f"stayCharge.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
     look = looks[0]
@@ -163,7 +172,7 @@ def cmd_plan(args):
     change_id = open_ledger().record_preview(
         hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=OFFERLESS, currency=plan.currency, sentence=request.sentence,
         read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(request), reading=encode_snapshot(snapshot),
-        replaces=args.replaces) if args.record else None
+        replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
     return dict(change_id=change_id, replaces=args.replaces, counts=counts(plan), plan=encode_plan(plan, encode_request),
                 red=red_lines(plan), chosen=chosen_amounts(plan), blocked=blocked_amounts(plan), free=free_amounts(plan),
                 scope_card=any(name.startswith("scope_") for charge in plan.charges for name, _text in charge.form),
@@ -301,13 +310,14 @@ def cmd_rollback(args):
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
                                       sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan, now),
                                       reverses=args.change, reading=encode_snapshot(now),
-                                      replaces=args.replaces) if args.record else None
+                                      replaces=args.replaces, empty=not steps) if args.record else None
     return dict(change_id=change_id, replaces=args.replaces, scope=scope or listed(ledger, args.change)[0]["scope"],
                 rollback=encode_rollback(plan), steps=[encode_step(step) for step in steps])
 
 
 def record_scope(entry: dict, labels: list[str]) -> str:
-    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일, 멈췄으면 어디까지."""
+    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일, 멈췄으면 어디까지,
+    저장할 것이 없는 미리보기면 그렇다고."""
     names = list(dict.fromkeys(labels))
     head = f"부과금 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
     request = entry.get("request") or {}
@@ -320,7 +330,7 @@ def record_scope(entry: dict, labels: list[str]) -> str:
     elif entry.get("reverses"):
         did = f" · {entry['reverses']}번 되돌리기"
     stopped = f" · {entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped" else ""
-    return head + did + stopped
+    return head + did + stopped + (" · 저장할 것 없음" if entry["status"] == "empty" else "")
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
@@ -338,7 +348,7 @@ def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
 
 def cmd_list(args):
     ledger = open_ledger()
-    return dict(ledger=str(ledger.path), changes=listed(ledger))
+    return files.hotel_list(ledger.path, listed(ledger), args.look, args.all)
 
 
 # ───────────── 짧은 답 · 파서 ─────────────
@@ -389,6 +399,7 @@ def parser() -> argparse.ArgumentParser:
         sub.add_argument("--out", help="결과(JSON, render 는 HTML)를 쓸 파일")
         return sub
 
+    command("work", cmd_work, "새 작업 폴더")
     sub = command("look", cmd_look, "look 답 → 오퍼마다 부과금 전부")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
     sub = command("read-calls", cmd_read_calls, "읽을 부과금 → readCharge 부를 값")
@@ -436,7 +447,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--record", action="store_true", help="장부에 되돌리기 미리보기로 적는다")
     sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 되돌리기 미리보기(같은 변경을 되돌리는 것)의 장부 번호")
     sub.add_argument("--sentence", default="되돌리기", help="담당자가 한 말")
-    command("list", cmd_list, "장부 목록")
+    sub = command("list", cmd_list, "장부 목록")
+    sub.add_argument("--look", help="look 명령이 낸 파일 — 탭에 열린 호텔의 기록만 싣는다")
+    sub.add_argument("--all", action="store_true", help="다른 호텔의 기록도 싣는다(탭의 호텔이 먼저)")
     return top
 
 

@@ -38,15 +38,17 @@ metadata:
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷 · 플랜 · JSON · 명령 · 스크립트 · DB · payload · stale · verify. 대신 지금 값 · 미리보기 · 장부 · 저장 · 가격 줄 · ERP 화면이라고 한다.
 - 숫자는 명령의 짧은 답에서 말하고, 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지의 글을 옮겨야 하면 같은 `render` 를 `--text` 를 붙여 부르고 답의 `text` 에서 옮긴다 — `--text` 는 글만 내고 파일을 만들지 않는다.
 
-## 준비
+## 준비 — 시킨 일마다 3 부터
+
+담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기)마다 3 부터 새 작업 폴더에서 한다 — 같은 대화의 두 번째 요청도 새 작업 폴더다. 같은 대화에서 방금 멈춘 변경을 이어서 할 때만 그 일의 폴더를 그대로 쓴다. 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `read-calls` · `render prices` · `list` 다.
 
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 답이 `stayAddonPrice is not defined`)마다.
    1. JS 실행 도구로 가격 캘린더 도우미의 `../stay-price-change/scripts/page/stay_price_loader.js` 내용 전체 **뒤에 한 줄 `stayPriceLoader.again('addon')` 을 붙여** 한 번에 실행한다. 그래서 첫 답이 이 도우미의 묶음(네 파일)의 것이다. `ok: true` 와 `addon` 판 번호가 오면 됐다.
    2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 가 올릴 네 파일이다. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 네 파일 — `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js` — 을 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
-3. **장부 보기 · 작업 폴더.** `python3 scripts/addon_change.py list` 를 한 번 본다. `ledger` 가 든 폴더가 기록 폴더다. 이번 일의 파일은 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`(`<작업>`)에, 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)에 둔다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
-   - **일 하나에 작업 폴더 하나.** 담당자가 시킨 일(보기 · 바꾸기 · 되돌리기) 하나마다 새 `<작업>` 을 만들고 4 부터 한다 — 같은 대화의 두 번째 요청도 새 작업 폴더다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. 새 폴더의 look 은 앞선 폴더에서 받아 둔 같은 조각을 빌려 오므로 받을 쪽이 거의 없다. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다). 같은 대화에서 방금 멈춘 변경을 이어서 하면 그 일의 작업 폴더를 그대로 쓴다.
-4. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾으면 "○○ 호텔의 Stay 화면을 열어 주세요". 답의 `body` 는 「읽기」 4 처럼 조각으로 받아 같은 폴더에 둔다. 그리고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"` — 짧은 답의 `hotel` 이 말한 호텔이 아니면 그 호텔 화면을 열어 달라고 한다. 3 의 목록에 이 호텔(`hotel_id` 가 `hotel.id`)의 `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?"
+3. **작업 폴더.** `python3 scripts/addon_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. 새 폴더의 look 은 앞선 폴더에서 받아 둔 같은 조각을 빌려 오므로 받을 쪽이 거의 없다. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다).
+4. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 가 받을 조각이다 — 「읽기」 4 처럼 받아 `<작업>/look/` 에 두고 이 명령을 다시 한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾거나 짧은 답의 `hotel` 이 말한 호텔이 아니면 "○○ 호텔의 Stay 화면을 열어 주세요".
+5. **장부 보기.** `python3 scripts/addon_change.py list --look "<작업>/look.json"` — 이 호텔의 기록만 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `empty` 는 저장할 것이 없던 미리보기다.
 
 ## 읽기 — 바꾸기 · 되돌리기 · 적용이 모두 이것으로 읽는다
 
@@ -59,7 +61,7 @@ metadata:
 
 ## 1. 지금 부가옵션 가격 보기
 
-「준비」 3 · 4 를 하고 `python3 scripts/addon_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 부가옵션 가격입니다. 아무것도 바꾸지 않았습니다." 「알 수 없음」 줄이 있으면 덧붙인다: "이 줄은 ERP 화면에 금액 기록이 보이지 않아 도우미가 바꾸지 않습니다."
+「준비」 다음 `python3 scripts/addon_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 부가옵션 가격입니다. 아무것도 바꾸지 않았습니다." 「알 수 없음」 줄이 있으면 덧붙인다: "이 줄은 ERP 화면에 금액 기록이 보이지 않아 도우미가 바꾸지 않습니다."
 
 ## 2. 부가옵션 가격 바꾸기
 
@@ -84,7 +86,7 @@ metadata:
 
 ## 3. 되돌리기
 
-`python3 scripts/addon_change.py list` 로 장부 목록을 보고 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>".
+「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>".
 
 1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.

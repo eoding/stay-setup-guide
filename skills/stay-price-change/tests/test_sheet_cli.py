@@ -113,7 +113,7 @@ class SheetCommandTest(unittest.TestCase):
         self.assertEqual(again["range"], checked["range"], "범위가 같으면 읽은 값을 그대로 쓴다")
         new = self.run_cli("plan", "--snapshot", snapshot, "--request", self.dir / "sheet-check-2.json", "--record",
                            "--replaces", old, "--out", self.dir / "plan-2.json")
-        listed = {entry["id"]: entry for entry in self.run_cli("list")["changes"]}
+        listed = {entry["id"]: entry for entry in self.run_cli("list", "--all")["changes"]}
         self.assertEqual((listed[old]["status"], listed[new["change_id"]]["replaces"]), ("replaced", old))
         changes = json.loads((self.dir / "plan-2.json").read_text(encoding="utf-8"))["plan"]["changes"]
         self.assertIn("265.00", {c["after"]["sell"] for c in changes if c["key"]["occupancy"] == "A2" and c["key"]["nights"] == 1})

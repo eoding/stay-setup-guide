@@ -187,7 +187,7 @@ class ResumeCommandTest(unittest.TestCase):
         self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json", "--snapshot", self.reading("edge.json", scene.snapshot(), edge))
         self.assertEqual(len(self.cli("calls", "--change", self.change)["calls"]), 8, "15분 안 — 남은 저장을 낸다")
         self.clock += timedelta(seconds=4.5)              # 세션이 끊겼다 — 받아들인 읽은 값에서 15분이 지났다
-        self.assertEqual(self.cli("list")["changes"][0]["status"], "stopped")
+        self.assertEqual(self.cli("list", "--all")["changes"][0]["status"], "stopped")
         self.assertIn("멈춰 있습니다", self.cli("calls", "--change", self.change, code=2)["error"])
         page = Path(self.cli("render", "result", "--change", self.change, "--out", self.dir / "result.html")["page"]).read_text(encoding="utf-8")
         self.assertIn("첫 저장 전에 끊겼습니다", page)

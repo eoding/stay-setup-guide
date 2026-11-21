@@ -1,7 +1,9 @@
-"""기록 폴더의 파일 — 도우미 명령들이 같이 쓰는 파일 읽기 · 페이지 자리 · 답 폴더 · 앞선 읽기에서 조각 빌리기 · 계산 파일 지키기.
+"""기록 폴더의 파일 — 도우미 명령들이 같이 쓰는 파일 읽기 · 페이지 자리 · 작업 폴더 · 답 폴더 · 앞선 읽기와 look 에서 조각
+빌리기 · 계산 파일 지키기 · 탭의 호텔로 좁힌 장부 목록.
 
-기록 폴더는 장부가 있는 곳이다(`ledger.ledger_dir`). 담당자가 시킨 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`, 그 안의 읽기마다
-`읽기-1/` … 를 쓴다. 답 파일은 이름의 머리(`look-` · `pair-` · `line-` · `take-` …)로 알아본다 — 머리는 도우미마다 정한다.
+기록 폴더는 장부가 있는 곳이다(`ledger.ledger_dir`). 담당자가 시킨 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`(new_work), 그 안의 look
+답은 `look/`, 읽기마다 `읽기-1/` … 를 쓴다. 답 파일은 이름의 머리(`look-` · `pair-` · `line-` · `take-` …)로 알아본다 — 머리는
+도우미마다 정한다.
 """
 
 from __future__ import annotations
@@ -13,9 +15,10 @@ from pathlib import Path
 from typing import Iterable
 
 from .answers import named
-from .ledger import ledger_dir
+from .ledger import clock, ledger_dir
 
 WORK = "작업"   # 기록 폴더 안의 작업 폴더들 — 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`, 그 안의 읽기마다 `읽기-1/` …
+LOOK = "look"   # 작업 폴더 안에서 look 답을 두는 폴더(SKILL.md 「준비」) — 다음 작업의 look 이 여기서 조각을 빌린다
 
 
 def load(path: str):
@@ -35,6 +38,20 @@ def page_path(hotel: str, name: str) -> Path:
     while path.exists():
         path, number = ledger_dir() / f"{base} ({number}).html", number + 1
     return path
+
+
+def new_work() -> Path:
+    """새 작업 폴더 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/` 를 만들어 돌려준다 — 담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기 ·
+    이어서)에 하나. 같은 이름이 이미 있으면 뒤에 ` (2)` · ` (3)` …을 붙인다 — 앞선 일의 파일과 섞이지 않는다."""
+    base = ledger_dir() / WORK / clock()().strftime("%Y-%m-%d %H%M%S")
+    number = 1
+    while True:
+        path = base if number == 1 else base.with_name(f"{base.name} ({number})")
+        try:
+            path.mkdir(parents=True)
+            return path
+        except FileExistsError:
+            number += 1
 
 
 def answer_files(paths, prefixes: tuple[str, ...]) -> list[Path]:
@@ -99,6 +116,44 @@ def lent_answers(calls_path: str, answer_paths, calls: dict, prefixes: tuple[str
     """이번 읽기에 조각을 빌려 줄 답들 — 기록 폴더에서 같은 호텔을 읽은 앞선 읽기 폴더마다의 답 파일(earlier_readings)."""
     own = [Path(calls_path), *map(Path, answer_paths or ())]
     return load_results(earlier_readings(calls_hotel(calls), own), prefixes)
+
+
+def lent_looks(results: list, answer_paths, prefixes: tuple[str, ...]) -> list:
+    """이 look 에 조각을 빌려 줄 답들 — 기록 폴더의 다른 작업 폴더마다의 `look/` 가운데 같은 호텔을 본 것의 답 파일. 읽기가 앞선 읽기
+    폴더에서 빌리는 것과 같다(lent_answers): 알아볼 값 넷이 같은 다 받은 조각만 쓰고, 이번 look 의 답으로 치지 않는다."""
+    hotels = {str((result.get("hotel") or {}).get("id")) for result in results
+              if isinstance(result, dict) and result.get("op") == "look"}
+    own = {(path if path.is_dir() else path.parent).resolve() for path in map(Path, answer_paths or ())}
+    lent = []
+    for folder in sorted((ledger_dir() / WORK).glob(f"*/{LOOK}")):
+        if not folder.is_dir() or folder.resolve() in own:
+            continue
+        answers = load_results([folder], prefixes)
+        if any(isinstance(answer, dict) and answer.get("op") == "look" and str((answer.get("hotel") or {}).get("id")) in hotels
+               for answer in answers):
+            lent += answers
+    return lent
+
+
+def look_hotel(path: str) -> dict:
+    """look 명령이 낸 파일의 호텔 `{id, name}` — 탭에 열린 호텔(페이지가 알아본 번호와 이름)."""
+    data = load(path)
+    hotel = data.get("hotel") if isinstance(data, dict) else None
+    if not isinstance(hotel, dict) or not str(hotel.get("id") or "").strip():
+        raise ValueError(f"look 명령이 낸 파일(hotel)이 아닙니다: {path}")
+    return dict(id=str(hotel["id"]), name=str(hotel.get("name") or ""))
+
+
+def hotel_list(ledger_path: Path, entries: list[dict], look: str | None, every: bool) -> dict:
+    """장부 목록의 답 — 탭에 열린 호텔(`look`, look 명령이 낸 파일)의 번호만. `every` 면 그 뒤에 다른 호텔의 번호도 싣는다(탭의
+    호텔이 먼저, 저마다 새것부터). 둘 다 없으면 거절한다 — 다른 호텔의 기록은 담당자가 청할 때만 본다. `others` 는 싣지 않은
+    다른 호텔의 번호 수다."""
+    if look is None and not every:
+        raise ValueError("list 에는 --look(탭에 열린 호텔 — look 명령이 낸 파일)을 줍니다. 다른 호텔의 기록까지 보려면 --all 을 더합니다")
+    hotel = look_hotel(look) if look else None
+    mine = [entry for entry in entries if hotel is not None and str(entry["hotel_id"]) == hotel["id"]]
+    rest = [entry for entry in entries if hotel is None or str(entry["hotel_id"]) != hotel["id"]]
+    return dict(ledger=str(ledger_path), hotel=hotel, changes=mine + rest if every else mine, others=0 if every else len(rest))
 
 
 def fresh_record(out: str | None, replaces: int | None, record: bool, name: str) -> None:

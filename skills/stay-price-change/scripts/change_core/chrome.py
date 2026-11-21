@@ -191,6 +191,8 @@ def result_banner(record, written: int, mismatched: int, unit: str = "칸") -> s
         return '<div class="banner amber"><b>적용했습니다.</b> 아직 다시 읽어 확인하지 않았습니다.</div>'
     if record.status == "applying":
         return f'<div class="banner amber"><b>적용하는 중입니다.</b> {done}/{len(record.steps)}번 저장했습니다.</div>'
+    if record.status == "empty":
+        return '<div class="banner blue"><b>저장할 것이 없는 미리보기였습니다.</b> 아무것도 바뀌지 않았습니다.</div>'
     return '<div class="banner blue"><b>아직 적용하지 않았습니다.</b></div>'
 
 

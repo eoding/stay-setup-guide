@@ -88,7 +88,7 @@ class SheetCommandTest(unittest.TestCase):
         planned = self.plan(S.reading(read_at=scene.NOW_TEXT))
         self.assertEqual(planned["coverage"]["unseen"], 0)
         self.assertEqual(planned["coverage"]["untouched"], 13, "요금표에 없는 칸은 스위트 성인 1 줄뿐 — 아동 줄은 같은 칸이다")
-        self.assertEqual(len(self.run_cli("list")["changes"]), 1, "장부에는 한 번만 적힌다")
+        self.assertEqual(len(self.run_cli("list", "--all")["changes"]), 1, "장부에는 한 번만 적힌다")
         targets = json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["plan"]["request"]["targets"]
         self.assertEqual({t["key"]["occupancy"] for t in targets}, {"A2", "A3", "A2C1_CHD"})
         changed = {(c["key"]["room"], c["key"]["date"], c["key"]["occupancy"]): c["after"]["sell"]
@@ -101,7 +101,7 @@ class SheetCommandTest(unittest.TestCase):
         self.assertEqual({(item["room"], item["occupancy"]) for item in refused["choose"]}, {("디럭스", "A2C1"), ("스위트", "A2C1")})
         self.assertEqual(refused["choose"][0]["choices"], [{"occupancy": "A2C1_CHD", "label": "A2C1_CHD · 소아 1"},
                                                            {"occupancy": TEEN, "label": "A2C1_TEEN · 청소년 1"}])
-        self.assertEqual(self.run_cli("list")["changes"], [], "고르기 전에는 장부에 아무것도 적지 않는다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"], [], "고르기 전에는 장부에 아무것도 적지 않는다")
         self.assertFalse((self.dir / "plan-1.json").exists())
 
 

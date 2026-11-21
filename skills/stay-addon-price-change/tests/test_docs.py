@@ -185,10 +185,18 @@ class SkillShapeTest(unittest.TestCase):
         self.assertTrue(any("다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다" in line for line in pointing))
 
     def test_every_preparation_step_uses_only_what_an_earlier_step_set_up(self):
+        """H4 — 일마다 새 작업 폴더(work)에서 시작하고, look 을 부르고 · 명령으로 묶고 · 명령이 말한 조각을 받은 뒤에 목록을 탭의
+        호텔로 본다(그 차례가 명령이 바라는 차례다). --look 을 받는 명령을 한 곳에서 다 댄다."""
         prep = self.skill[self.skill.index("## 준비"):self.skill.index("## 읽기")]
-        self.assertLess(prep.index("(`<작업>`)"), prep.index("<작업>/"), "작업 폴더를 정한 뒤에 그 안에 저장한다")
-        self.assertLess(prep.index("python3 scripts/addon_change.py list"), prep.index("3 의 목록에"))
-        self.assertIn("같은 대화의 두 번째 요청도 새 작업 폴더다", prep)
+        self.assertLess(prep.index("addon_change.py work"), prep.index("<작업>/"), "작업 폴더를 만든 뒤에 그 안에 저장한다")
+        self.assertLess(prep.index("stayAddonPrice.look()"), prep.index("addon_change.py look --answers"))
+        self.assertLess(prep.index("addon_change.py look --answers"), prep.index("`refetch`"), "명령이 받을 조각을 말한다")
+        self.assertLess(prep.index("`refetch`"), prep.index("addon_change.py list --look"), "목록은 탭의 호텔을 안 뒤에")
+        self.assertIn("같은 대화의 두 번째 요청도", prep)
+        takes = {name for name, command in subcommands().items() if "--look" in {flag for action in command._actions for flag in action.option_strings}}
+        said = prep[prep.index("`--look` 으로 받는 명령은"):].split("\n", 1)[0]
+        for name in takes:
+            self.assertIn(f"`{name}", said, f"--look 을 받는 {name} 을 준비에서 댄다")
 
     def test_it_says_what_it_refuses(self):
         rules = self.skill[self.skill.index("## 반드시 지킬 것"):self.skill.index("## 담당자에게 말할 때")]

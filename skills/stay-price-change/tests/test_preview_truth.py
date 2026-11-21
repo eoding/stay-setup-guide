@@ -280,8 +280,10 @@ class NothingToSaveTest(CommandCase):
                                str(self.dir / "plan.json"), "--snapshot", fresh], capture_output=True, text=True, env=self.env)
         self.assertEqual(done.returncode, 2, done.stdout)
         self.assertIn("바꿀 칸이 없어 적용할 것이 없습니다", json.loads(done.stderr)["error"], "빨간 줄을 고르라는 말이 아니다")
-        listed, = [item for item in self.run_cli("list")["changes"] if item["id"] == short["change_id"]]
-        self.assertEqual((listed["status"], listed["steps"]), ("previewed", 0), "begin 이 받지 않아 아무것도 시작하지 않았다")
+        listed, = [item for item in self.run_cli("list", "--all")["changes"] if item["id"] == short["change_id"]]
+        self.assertEqual((listed["status"], listed["steps"]), ("empty", 0),
+                         "저장할 것이 없는 미리보기로 적혀 적용을 기다리는 미리보기처럼 읽히지 않는다(H3), begin 도 시작하지 않았다")
+        self.assertTrue(listed["scope"].endswith(" · 저장할 것 없음"), listed["scope"])
 
         skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
         step = skill[skill.index("**읽고 미리보기.**"):skill.index("## 4. 되돌리기")]
