@@ -137,7 +137,7 @@ test('W1 · 올라온 파일이 설치된 것과 다르면(올린 폴더의 예�
   page.w.close();
 });
 
-test('W1 · 플러그인을 새로 깐 뒤 again() 은 탭에 적어 둔 예전 원본을 되살리지 않고 세 파일을 다시 올리라고 한다', async () => {
+test('W1 · 플러그인을 새로 깐 뒤 again() 은 탭에 적어 둔 예전 원본을 되살리지 않고 그 파일만 다시 올리라고 한다(N6)', async () => {
   const page = erpPage({ bare: true });
   [['stayPriceHelperSrc', HELPER], ['stayPriceBootSrc', BOOT], ['stayPriceSrc', OLD_PAGE]].forEach(([k, v]) => page.w.localStorage.setItem(k, v));
   runnerLeftovers(page);
@@ -145,11 +145,14 @@ test('W1 · 플러그인을 새로 깐 뒤 again() 은 탭에 적어 둔 예전 
   const old = plain(page.w.stayPriceLoader.again());
   assert.equal(old.ok, false);
   assert.deepEqual(old.wrong, ['stay_price.js']);
-  assert.match(old.error, /^적어 둔 원본이 설치된 도우미와 다릅니다: stay_price\.js — .*예전 판.*세 파일을 다시 올립니다\(load\)$/);
+  assert.deepEqual(old.want, ['stay_price.js'], '올릴 파일은 예전 판인 그 하나뿐이다');
+  assert.match(old.error, /^적어 둔 원본이 설치된 도우미와 다릅니다: stay_price\.js — .*예전 판입니다\. 이 파일을 「stay price file bridge」 칸에 다시 올립니다\(load\) — 나머지는 이 탭에 적어 둔 원본을 씁니다$/);
   assert.equal(page.w.stayRun, undefined, '하나도 실행하지 않았다');
   assert.equal(page.w.stayPrice, undefined);
-  upload(page, [['stay_helper.js', HELPER], ['stay_boot.js', BOOT], ['stay_price.js', PAGE]]);
-  assert.equal(plain(await page.w.stayPriceLoader.load()).ok, true);
+  upload(page, [['stay_price.js', PAGE]]);
+  const fixed = plain(await page.w.stayPriceLoader.load());
+  assert.equal(fixed.ok, true, fixed.error);
+  assert.deepEqual(fixed.loaded.map((f) => f.name), ['stay_helper.js', 'stay_boot.js', 'stay_price.js'], '나머지 둘은 적어 둔 원본으로');
   assert.equal(page.w.localStorage.getItem('stayPriceSrc'), PAGE, '다시 올리면 적어 둔 원본도 설치된 것으로 바뀐다');
   runnerKeysUntouched(page);
   page.w.close();

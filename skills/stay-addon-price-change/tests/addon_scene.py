@@ -103,7 +103,8 @@ class Erp:
                          note="목록에 그 부가옵션의 그 가격 줄이 없습니다 — 아무것도 열지 않았습니다")
         keep = {"hotel": HOTEL, "addon": {"id": item["addon"], "name": item["addon_name"], "offer": item["offer"]}, "line": row_of(item),
                 "window": window_of(item)}
-        return reply("readLine", asked, keep, pieces=3, body_id=f"b{self.reads}", what=f"{item['addon_name']} · {item['name']}",
+        return reply("readLine", asked, keep, pieces=3, body_id=f"b{self.reads}",
+                     what=f"{item['offer']} · {item['addon_name']} · {item['name']}",
                      doneAt=self.tick())
 
     def apply(self, payload, outcome=True):
@@ -124,7 +125,7 @@ class Erp:
         item["sell"], item["supply"] = values["price"], values["net_amount"]
         if outcome == "unknown":
             return dict(base, ok=False, saved="unknown", pressed=True, error="저장 단추는 눌렸고 저장됐는지 알 수 없습니다")
-        return dict(base, ok=True, saved=True, pressed=True, note="저장했습니다", what=f"{item['addon_name']} · {item['name']}")
+        return dict(base, ok=True, saved=True, pressed=True, note="저장했습니다", what=f"{item['offer']} · {item['addon_name']} · {item['name']}")
 
 
 def write_answers(folder: Path, prefix: str, answers) -> None:

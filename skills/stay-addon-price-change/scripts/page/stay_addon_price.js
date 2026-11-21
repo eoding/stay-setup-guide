@@ -115,6 +115,8 @@
   }
   // 카드 하나 — 번호 · 이름 · 오퍼. 오퍼마다 이름이 같은 부가옵션이 있어, 읽기 답도 오퍼를 싣는다(담당자에게 줄을 말할 때 가른다)
   function addonOf(card) { return { id: card.getAttribute('data-stay-entity-id') || '', name: C(card.getAttribute('data-stay-name')), offer: offerOf(card) }; }
+  // 작업 답의 `what` — 오퍼 · 부가옵션 · 줄. 오퍼마다 이름이 같은 부가옵션이 있어 오퍼부터 댄다(부과금 도우미의 `what` 과 같은 꼴)
+  function whatOf(win) { return [win.addon.offer, win.addon.name, win.line.name].filter(Boolean).join(' · '); }
 
   /* ───────────── 3. 편집 창 — 연 창이 그 호텔 · 그 줄의 것인지, 저장 단추가 보낼 칸 ───────────── */
 
@@ -180,7 +182,7 @@
       var facts = windowFacts(win.root, form);
       await K.closeDrawer(Date.now() + 3000);
       if (K.drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
-      return { ok: true, what: clip(win.addon.name + ' · ' + win.line.name, 120),
+      return { ok: true, what: clip(whatOf(win), 120),
         keep: { hotel: ctx.hotel, addon: win.addon, line: win.line, window: facts } };
     }, SPEC);
   }
@@ -217,7 +219,7 @@
           if (hadNet && !nowNet && set.net_amount !== '') fail('공급 원가가 빈 채로 저장될 뻔했습니다(비면 저장된 원가가 지워집니다) — 저장하지 않았습니다', { refused: true });
         }
       });
-      return K.saveOnce(ctx, { root: win.root, panel: 'stay_addons', window: '가격 편집 창', what: clip(win.addon.name + ' · ' + win.line.name, 120) });
+      return K.saveOnce(ctx, { root: win.root, panel: 'stay_addons', window: '가격 편집 창', what: clip(whatOf(win), 120) });
     }, SPEC);
   }
 

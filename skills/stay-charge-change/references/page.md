@@ -10,8 +10,8 @@
 |---|---|
 | `../stay-price-change/scripts/page/stay_price_loader.js` 전체 + 끝에 한 줄 `stayPriceLoader.again('charge')` 을 한 번에 실행 | 올리개가 서고(파일 칸 · `window.stayPriceLoader`) 그 실행의 답은 `again('charge')` 의 답이다(아래). 올리개만 실행한 답은 묶음마다의 파일 이름(`sets` — 이 도우미는 `charge` 의 네 파일)이다. 파일 칸은 1px · 거의 투명이라 화면에 안 보이지만 접근성 트리에 그 이름으로 있다 |
 | (파일 올리기 도구) 그 칸에 네 파일 | 러너의 `stay_helper.js` · `stay_boot.js`, 가격 캘린더 도우미의 `stay_price.js`, 이 스킬의 `stay_charge.js`. 한 번에 넷이든 하나씩이든 모인다 |
-| `await stayPriceLoader.load('charge')` | 네 파일을 도우미 → 부트 → 가격 도우미 → 부과금 도우미 차례로 실행하고 원본을 적어 둔다. 올라온 파일이 설치된 것과 다르면 아무것도 실행하지 않고 `wrong` 에 그 파일 이름을 댄다 |
-| `stayPriceLoader.again('charge')` | 적어 둔 원본을 같은 차례로 다시 실행한다 — 탭에 올릴 때마다 먼저 부른다(설치된 것과 같을 때만 실행하므로 안전하다). 원본이 없거나 예전 판이면 아무것도 실행하지 않고 네 파일을 다시 올리라고 하며 `want` 에 그 네 파일 이름을 댄다 |
+| `await stayPriceLoader.load('charge')` | 네 파일을 도우미 → 부트 → 가격 도우미 → 부과금 도우미 차례로 실행하고 원본을 적어 둔다. 올라온 파일이 설치된 것과 다르면 아무것도 실행하지 않고 `wrong` 에 그 파일 이름을 댄다. 올라오지 않은 파일은 이 탭에 적어 둔 원본이 설치된 것과 같으면 그것을 쓰고, 그것도 없으면 `올라온 파일에 없는 것: …`(`want` 에 그 파일) |
+| `stayPriceLoader.again('charge')` | 적어 둔 원본을 같은 차례로 다시 실행한다 — 탭에 올릴 때마다 먼저 부른다(설치된 것과 같을 때만 실행하므로 안전하다). 원본이 없거나 예전 판인 파일이 있으면 아무것도 실행하지 않고 `want` 에 **그 파일만** 댄다(다른 묶음을 쓰던 탭이면 이 도우미의 파일 하나뿐일 수 있다). 그 파일만 올리고 `load('charge')` 를 부르면 나머지는 이 탭에 적어 둔 원본(설치된 것과 같은 것)을 쓴다 |
 | `stayPriceLoader.status('charge')` | `{ok, helper, price, charge, stored}` — 올라 있는지 볼 때 |
 
 **파일 올리기 도구가 경로를 거절할 때.** Claude 를 연 폴더 아래에 `stay-charge-upload/` 를 만들어 네 파일을 복사하고 거기서 올린다. `load('charge')` 가 `ok: true` 면 그 폴더를 지운다. `load` 가 `올라온 파일이 설치된 도우미의 것과 다릅니다: <파일>` 이면 그 파일은 예전 복사본이다. 스킬 폴더의 것을 다시 복사해 올린다.

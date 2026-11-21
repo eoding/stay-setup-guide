@@ -12,7 +12,8 @@
  *   3. `await stayPriceLoader.load()`(부가옵션은 `load('addon')`) → 이름으로 골라 도우미 → 부트 → 가격 도우미(→ 부가옵션 가격
  *      도우미) 차례로 실행하고 작은 상태를 돌려준다.
  *   전체 페이지 이동 뒤에는 1 을 다시 하고 `stayPriceLoader.again()`(부가옵션은 `again('addon')`) — 적어 둔 원본을 같은 차례로 다시 실행한다.
- *   `again` 이 거절하면(원본이 없거나 예전 판) 그 묶음의 파일 이름(`want`)을 대어, 무엇을 올릴지 그 답 하나로 안다.
+ *   `again` 이 거절하면 원본이 없거나 예전 판인 파일만(`want`) 대어, 무엇을 올릴지 그 답 하나로 안다. 그 파일만 올리고 `load` 를 부르면
+ *   나머지는 이 탭에 적어 둔 원본(설치된 것과 같은 것)을 쓴다 — 다른 묶음을 쓰던 탭에서 제 묶음의 파일 하나만 없을 때.
  *
  * 묶음은 셋이다 — 인자 없이(가격 캘린더) 세 파일, `'addon'`(부가옵션 가격) 네 파일, `'charge'`(부과금) 네 파일. `bridge` · `load` ·
  * `again` · `status` 가 같은 인자를 받는다. 파일 칸은 하나라 다섯 이름을 모두 모은다.
@@ -41,14 +42,13 @@
   // 묶음 → 실행 차례. 인자 없이 부르면 가격 캘린더 묶음이다
   var SETS = { price: [HELPER, BOOT, PRICE], addon: [HELPER, BOOT, PRICE, ADDON], charge: [HELPER, BOOT, PRICE, CHARGE] };
   var KNOWN = [HELPER, BOOT, PRICE, ADDON, CHARGE];
-  var COUNT = { 3: '세', 4: '네' };
   // 설치된 다섯 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
   // 다섯 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
     'stay_price.js': { bytes: 99693, crc32: '47469c1d', fnv: '49ad812a' },
-    'stay_addon_price.js': { bytes: 16408, crc32: '37505989', fnv: 'fb4a2d2e' },
+    'stay_addon_price.js': { bytes: 16645, crc32: '8503dfcd', fnv: '9083ec41' },
     'stay_charge.js': { bytes: 19858, crc32: 'b1e9a054', fnv: 'a806ff00' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
@@ -176,16 +176,33 @@
     out.loaded = files.map(function (f, i) { return { name: f.name, chars: texts[i].length }; });
     return out;
   }
+  // 이 탭에 적어 둔 원본 가운데 설치된 것과 같은 것 — 파일 이름 → 글자. 없거나 예전 판인 파일은 들지 않는다
+  function storedCurrent(files) {
+    var out = {};
+    files.forEach(function (f) {
+      var text = localStorage.getItem(f.key);
+      if (text && !notInstalled([f], [text]).length) out[f.name] = text;
+    });
+    return out;
+  }
+  // 올라온 파일을 쓰고, 올라오지 않은 파일은 이 탭에 적어 둔 원본이 설치된 것과 같으면 그것을 쓴다 — 그래서 again 이 댄 파일(`want`)만
+  // 올려도 된다. 올라온 파일이 설치된 것과 다르면 아무것도 실행하지 않는다
   async function load(set) {
     var files = filesOf(set);
     if (!files) return unknownSet(set);
-    var every = COUNT[files.length] + ' 파일';
     var input = document.getElementById(BRIDGE);
     if (input) collect(input);       // change 사건 없이 올린 도구도 있다
-    var missing = files.filter(function (f) { return !picked[f.name]; }).map(function (f) { return f.name; });
-    if (missing.length) return clean({ ok: false, label: LABEL, error: '올라온 파일에 없는 것: ' + missing.join(', ') + ' — ' + every + '을 「' + LABEL + '」 칸에 올린 뒤 다시 부릅니다', got: Object.keys(picked) });
+    var kept = storedCurrent(files);
+    var missing = files.filter(function (f) { return !picked[f.name] && !kept[f.name]; }).map(function (f) { return f.name; });
+    if (missing.length) return clean({ ok: false, label: LABEL, want: missing, error: '올라온 파일에 없는 것: ' + missing.join(', ') + ' — 그 파일을 「' + LABEL + '」 칸에 올린 뒤 다시 부릅니다', got: Object.keys(picked) });
+    var uploaded = files.filter(function (f) { return picked[f.name]; });
     var texts;
-    try { texts = await Promise.all(files.map(function (f) { return picked[f.name]; })); } catch (e) {
+    try {
+      var read = await Promise.all(uploaded.map(function (f) { return picked[f.name]; }));
+      var byName = {};
+      uploaded.forEach(function (f, i) { byName[f.name] = read[i]; });
+      texts = files.map(function (f) { return Object.prototype.hasOwnProperty.call(byName, f.name) ? byName[f.name] : kept[f.name]; });
+    } catch (e) {
       return clean({ ok: false, error: '올라온 파일을 읽지 못했습니다: ' + String(e && e.message || e).slice(0, 160) });
     }
     var wrong = notInstalled(files, texts);
@@ -197,18 +214,23 @@
     picked = {};
     return evaluate(set, files, texts, true);
   }
+  // 적어 둔 원본을 다시 실행한다. 없거나 예전 판인 파일이 있으면 아무것도 실행하지 않고 그 파일만 `want` 에 댄다 — 그 파일을 올리고
+  // load 를 부르면 나머지는 적어 둔 원본을 쓴다
   function again(set) {
     var files = filesOf(set);
     if (!files) return unknownSet(set);
-    var every = COUNT[files.length] + ' 파일';
     var texts = files.map(function (f) { return localStorage.getItem(f.key); });
-    var missing = files.filter(function (f, i) { return !texts[i]; }).map(function (f) { return f.key; });
-    var want = files.map(function (f) { return f.name; });
-    if (missing.length) return clean({ ok: false, want: want, error: '적어 둔 원본이 없습니다: ' + missing.join(', ') + ' — ' + every + '을 다시 올립니다(load)' });
-    var wrong = notInstalled(files, texts);
-    if (wrong.length) {
-      return clean({ ok: false, wrong: wrong, want: want, error: '적어 둔 원본이 설치된 도우미와 다릅니다: ' + wrong.join(', ') +
-        ' — 도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판입니다. ' + every + '을 다시 올립니다(load)' });
+    var missing = files.filter(function (f, i) { return !texts[i]; }).map(function (f) { return f.name; });
+    var wrong = files.filter(function (f, i) { return texts[i] && notInstalled([f], [texts[i]]).length; }).map(function (f) { return f.name; });
+    if (missing.length || wrong.length) {
+      var want = files.filter(function (f) { return missing.indexOf(f.name) >= 0 || wrong.indexOf(f.name) >= 0; }).map(function (f) { return f.name; });
+      var said = [];
+      if (missing.length) said.push('적어 둔 원본이 없습니다: ' + missing.join(', '));
+      if (wrong.length) said.push('적어 둔 원본이 설치된 도우미와 다릅니다: ' + wrong.join(', ') + ' — 도우미를 새로 깔기 전에 이 탭에 적어 둔 예전 판입니다');
+      var out = { ok: false, want: want, error: said.join(' · ') + '. 이 파일을 「' + LABEL + '」 칸에 다시 올립니다(load)' +
+        (want.length < files.length ? ' — 나머지는 이 탭에 적어 둔 원본을 씁니다' : '') };
+      if (wrong.length) out.wrong = wrong;
+      return clean(out);
     }
     return evaluate(set, files, texts, false);
   }

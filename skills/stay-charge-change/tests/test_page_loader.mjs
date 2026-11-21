@@ -50,13 +50,14 @@ test('C7 · status("charge") 는 부과금 도우미가 없으면 charge: null �
   page.w.close();
 });
 
-test('C7 · 부과금 파일이 빠지면 무엇이 없는지 말하고 네 파일을 올리라고 하며 아무것도 실행하지 않는다 — 부가옵션 파일로는 대신하지 않는다', async () => {
+test('C7 · 부과금 파일이 빠지면 무엇이 없는지 말하고 그 파일을 올리라고 하며 아무것도 실행하지 않는다 — 부가옵션 파일로는 대신하지 않는다', async () => {
   const page = chargePage({ bare: true });
   page.w.eval(LOADER);
   upload(page, [...FOUR.slice(0, 3), ['stay_addon_price.js', ADDON]]);
   const r = plain(await page.w.stayPriceLoader.load('charge'));
   assert.equal(r.ok, false);
-  assert.match(r.error, /^올라온 파일에 없는 것: stay_charge\.js — 네 파일을 「stay price file bridge」 칸에 올린 뒤 다시 부릅니다$/);
+  assert.match(r.error, /^올라온 파일에 없는 것: stay_charge\.js — 그 파일을 「stay price file bridge」 칸에 올린 뒤 다시 부릅니다$/);
+  assert.deepEqual(r.want, ['stay_charge.js']);
   assert.equal(page.w.stayRun, undefined);
   assert.deepEqual(stored(page), [null, null, null, null]);
   page.w.close();
@@ -76,7 +77,8 @@ test('C7 · 설치된 것과 다른 stay_charge.js 는 올리지도(load) 다시
   next.w.eval(LOADER);
   const again = plain(next.w.stayPriceLoader.again('charge'));
   assert.deepEqual([again.ok, again.wrong], [false, ['stay_charge.js']]);
-  assert.match(again.error, /네 파일을 다시 올립니다\(load\)$/);
+  assert.deepEqual(again.want, ['stay_charge.js']);
+  assert.match(again.error, /이 파일을 「stay price file bridge」 칸에 다시 올립니다\(load\) — 나머지는 이 탭에 적어 둔 원본을 씁니다$/);
   assert.equal(next.w.stayCharge, undefined);
   next.w.close();
 });
