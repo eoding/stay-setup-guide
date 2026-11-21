@@ -60,7 +60,8 @@ class CompareCase(unittest.TestCase):
                                                                         "said": "정가도 같이 올려"}]),
                           "--out", self.dir / "plan-1.json")["change_id"]
         steps = json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["steps"]
-        self.cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", self.dir / "snapshot.json")
+        again = self.write("again.json", encode_snapshot(replace(snapshot, read_at=scene.read_again(2))))   # 적용 직전에 다시 읽은 값
+        self.cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", again)
         for call in self.cli("calls", "--change", change)["calls"]:
             answer = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True}
             self.cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer))
@@ -201,7 +202,8 @@ class WhoChangedTest(CompareCase):
         back = self.cli("rollback", "--change", change, "--snapshot", self.write("after.json", encode_snapshot(scene.fresh(after))),
                         "--record", "--room", "디럭스", "--sentence", "디럭스만 되돌려", "--out", self.dir / "rollback-1.json")
         steps = json.loads((self.dir / "rollback-1.json").read_text(encoding="utf-8"))["steps"]
-        self.cli("begin", "--change", back["change_id"], "--plan", self.dir / "rollback-1.json", "--snapshot", self.dir / "after.json")
+        again = self.write("again.json", encode_snapshot(replace(scene.fresh(after), read_at=scene.read_again(2))))
+        self.cli("begin", "--change", back["change_id"], "--plan", self.dir / "rollback-1.json", "--snapshot", again)
         for call in self.cli("calls", "--change", back["change_id"])["calls"]:
             answer = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True}
             self.cli("record-result", "--change", back["change_id"], "--result", self.write(f"b{call['no']}.json", answer))

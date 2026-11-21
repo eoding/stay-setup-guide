@@ -116,7 +116,7 @@ class LifecycleTest(unittest.TestCase):
                          [("디럭스", "조식 포함"), ("디럭스", "룸온리"), ("스위트", "조식 포함"), ("스위트", "룸온리")])
 
     def test_steps_are_written_as_each_finishes_and_a_failure_stops_the_change(self):
-        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         self.assertEqual(self.ledger.change(self.change_id).status, "applying")
         for index in range(1, 6):
             self.assertEqual(self.ledger.record_step(self.change_id, index, saved=True), "applying")
@@ -133,7 +133,7 @@ class LifecycleTest(unittest.TestCase):
         self.assertIsNotNone(record.applied_at)
 
     def test_a_save_whose_outcome_is_unknown_is_marked_until_it_is_settled(self):
-        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         self.assertEqual(self.ledger.record_step(self.change_id, 1, saved=False, note="모름", unknown=True), "stopped")
         self.assertEqual([(s.status, s.unknown) for s in self.ledger.change(self.change_id).steps[:2]],
                          [("failed", True), ("pending", False)])
@@ -142,7 +142,7 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual((first.status, first.unknown), ("saved", False))
 
     def test_verification_marks_matching_values_and_reports_the_rest(self):
-        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         for index in range(1, 9):
             self.ledger.record_step(self.change_id, index, saved=True)
         after = scene.applied(self.before, self.steps)
@@ -158,7 +158,7 @@ class LifecycleTest(unittest.TestCase):
         cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
         change = record_preview(self.ledger, cleared)
         steps = plan_steps(cleared)
-        self.ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(change, step_plans(steps), read_at=scene.READ_AGAIN)
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
         cleared = [(row.label, row.after) for row in self.ledger.change(change).rows if row.action == "clear"]
@@ -170,19 +170,19 @@ class LifecycleTest(unittest.TestCase):
                          [("list", D("500.00")), ("list", D("500.00"))])
 
     def test_begin_twice_with_the_same_steps_changes_nothing_and_other_steps_are_refused(self):
-        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         self.ledger.record_step(self.change_id, 1, saved=True)
-        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         self.assertEqual(self.ledger.change(self.change_id).steps[0].status, "saved")
         with self.assertRaises(LedgerError):
-            self.ledger.begin(self.change_id, step_plans(self.steps[:3]), read_at=scene.NOW_TEXT)
+            self.ledger.begin(self.change_id, step_plans(self.steps[:3]), read_at=scene.READ_AGAIN)
 
     def test_a_step_for_a_value_the_preview_did_not_show_or_another_request_is_refused(self):
         stray = BulkStep("디럭스", "조식 포함", ("2026-12-31",), self.steps[0].rows)
         with self.assertRaises(LedgerError):
-            self.ledger.begin(self.change_id, step_plans((stray,)), read_at=scene.NOW_TEXT)
+            self.ledger.begin(self.change_id, step_plans((stray,)), read_at=scene.READ_AGAIN)
         with self.assertRaises(LedgerError):
-            self.ledger.begin(self.change_id, step_plans(self.steps), encode_request(scene.request("15")), read_at=scene.NOW_TEXT)
+            self.ledger.begin(self.change_id, step_plans(self.steps), encode_request(scene.request("15")), read_at=scene.READ_AGAIN)
         self.assertEqual(self.ledger.change(self.change_id).status, "previewed")
 
     def test_v1_begin_takes_only_the_values_the_preview_showed_and_all_of_them(self):
@@ -192,17 +192,17 @@ class LifecycleTest(unittest.TestCase):
                          "미리보기 줄에 올린 정가가 넣는 값으로 적힌다")
         cleared = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "clear_list")])
         with self.assertRaises(LedgerError) as caught:
-            self.ledger.begin(self.change_id, step_plans(plan_steps(cleared)), read_at=scene.NOW_TEXT)
+            self.ledger.begin(self.change_id, step_plans(plan_steps(cleared)), read_at=scene.READ_AGAIN)
         self.assertIn("미리보기와 다른 값입니다: 1/1 금 · 스위트 · 조식 포함 · 성인 2 · 1박 이상 · list", str(caught.exception))
         with self.assertRaises(LedgerError) as caught:
-            self.ledger.begin(self.change_id, step_plans(self.steps[:-1]), read_at=scene.NOW_TEXT)
+            self.ledger.begin(self.change_id, step_plans(self.steps[:-1]), read_at=scene.READ_AGAIN)
         self.assertIn("어느 저장 단계도 넣지 않습니다", str(caught.exception))
         record = self.ledger.change(self.change_id)
         self.assertEqual((record.status, record.steps), ("previewed", ()))
         self.assertTrue(all(row.step is None for row in record.rows), "거절한 begin 은 아무것도 적지 않는다")
 
     def test_nothing_is_ever_deleted(self):
-        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         db = sqlite3.connect(self.ledger.path)
         for table in ("steps", "item_values", "changes", "meta"):
             with self.assertRaises(sqlite3.DatabaseError):
@@ -219,7 +219,7 @@ class LifecycleTest(unittest.TestCase):
                          "V5 — 지금 상태 저장은 적용한 것이 아니라 저장한 것이다")
         self.assertEqual({row["id"]: row["status"] for row in self.ledger.list_changes()}[snapshot_id], "saved")
         with self.assertRaises(LedgerError):
-            self.ledger.begin(snapshot_id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+            self.ledger.begin(snapshot_id, step_plans(self.steps), read_at=scene.READ_AGAIN)
         with self.assertRaises(LedgerError):
             self.ledger.recorded_change(snapshot_id)
 
@@ -231,11 +231,11 @@ class OtherKindTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             ledger = Ledger(Path(folder) / DB_NAME, now=scene.clock)
             key = item_key({"charge": "리조트 요금", "season": "성수기"})
-            change = ledger.record_preview(hotel="H", hotel_id="", offer="", currency="USD", sentence="리조트 요금 25 로", read_at="t1",
+            change = ledger.record_preview(hotel="H", hotel_id="", offer="", currency="USD", sentence="리조트 요금 25 로", read_at=scene.NOW_TEXT,
                                            rows=[ValueRow("charge", key, "리조트 요금 · 성수기", "amount", "on", D("20"), D("25"), action="set"),
                                                  ValueRow("charge", key, "리조트 요금 · 성수기", "per", "on", D("1"))])
             ledger.begin(change, [StepPlan("charge_edit", "리조트 요금", {"charge": "리조트 요금"},
-                                           (FieldWrite("charge", key, "amount", D("25")),))], read_at=scene.NOW_TEXT)
+                                           (FieldWrite("charge", key, "amount", D("25")),))], read_at=scene.READ_AGAIN)
             self.assertEqual(ledger.record_step(change, 1, saved=True), "applied")
             now = {("charge", key): ItemState("리조트 요금 · 성수기", "on", {"amount": D("25"), "per": D("1")})}
             self.assertEqual(ledger.verify(change, now), [])
@@ -253,7 +253,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
         plan = resolve(plan_change(before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
         steps = plan_steps(plan)
         self.a = record_preview(self.ledger, plan)
-        self.ledger.begin(self.a, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.a, step_plans(steps), read_at=scene.READ_AGAIN)
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(self.a, index, saved=True)
         after_a = scene.applied(before, steps)
@@ -262,7 +262,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
         plan_b = plan_change(after_a, later)
         steps_b = plan_steps(plan_b)
         self.b = record_preview(self.ledger, plan_b)
-        self.ledger.begin(self.b, step_plans(steps_b), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.b, step_plans(steps_b), read_at=scene.READ_AGAIN)
         self.ledger.record_step(self.b, 1, saved=True)
         now = scene.applied(after_a, steps_b)
         self.outside = CellKey("스위트", "조식 포함", "2027-01-01", "A3", 1)
@@ -288,7 +288,7 @@ class RollbackThroughLedgerTest(unittest.TestCase):
                                        sentence="방금 것 되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback),
                                        reverses=self.a)
         steps = save_steps(rollback_writes(rollback))
-        self.ledger.begin(r, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(r, step_plans(steps), read_at=scene.read_after(rollback.read_at))
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(r, index, saved=True)
         record = self.ledger.change(r)

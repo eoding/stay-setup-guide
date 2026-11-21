@@ -182,7 +182,7 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
         self.id = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
                                              read_at=plan.read_at, rows=preview_rows(plan),
                                              request=encode_request(plan.request))
-        self.ledger.begin(self.id, step_plans(self.steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.id, step_plans(self.steps), read_at=scene.READ_AGAIN)
 
     def tearDown(self):
         self.tmp.cleanup()

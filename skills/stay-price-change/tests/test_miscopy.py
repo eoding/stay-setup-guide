@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -140,13 +141,15 @@ class TrialTest(Cli):
     """세 번째 시운전 — 가격을 적용하고, 적용 뒤 확인 읽기에서 쪽 하나를 두 글자 모자라게 옮겨 적었다. 그 뒤로 (a) 같은 읽기가 그 쪽
     하나를 새 파일로 다시 받아 끝나고, (b) 새 폴더의 새 읽기가 앞 폴더를 건드리지 않고 끝나고, (c) 되돌리기가 끝까지 간다."""
 
-    def read(self, job: str, name: str, fragment: str, calls_args, ids: str, pages_too=True) -> tuple[Path, list]:
+    def read(self, job: str, name: str, fragment: str, calls_args, ids: str, pages_too=True, at: str | None = None) -> tuple[Path, list]:
+        """읽기 한 번 — `at` 은 그 읽기가 끝난 시각(ISO, 주지 않으면 시험의 지금). 적용 직전의 읽기는 미리보기를 적은 뒤의 것이다."""
         folder = self.records / "작업" / job / name
         folder.mkdir(parents=True)
         self.run_cli("read-calls", *calls_args, "--out", folder / "calls.json")
         calls = json.loads((folder / "calls.json").read_text(encoding="utf-8"))
-        pair = reply("readPair", calls["pairs"][0], {"fragment": fragment}, pieces=4, body_id=f"{ids}p")
-        resv = reply("readReserved", calls["reserved"][0], {"fragment": REJECTED}, pieces=3, body_id=f"{ids}r")
+        moment = {} if at is None else {"doneAt": done_at(datetime.fromisoformat(at))}
+        pair = reply("readPair", calls["pairs"][0], {"fragment": fragment}, pieces=4, body_id=f"{ids}p", **moment)
+        resv = reply("readReserved", calls["reserved"][0], {"fragment": REJECTED}, pieces=3, body_id=f"{ids}r", **moment)
         self.save(folder, "pair-1.json", pair[0])
         self.save(folder, "resv-1.json", resv[0])
         if pages_too:
@@ -173,7 +176,7 @@ class TrialTest(Cli):
                             "--record", "--out", job / "plan-1.json")
         change = plan["change_id"]
         self.assertEqual(plan["saves"], 1)
-        before, _ = self.read("A", "읽기-2", PRICE, ["--record", change], "a2", pages_too=False)
+        before, _ = self.read("A", "읽기-2", PRICE, ["--record", change], "a2", pages_too=False, at=scene.READ_AGAIN)
         (job / "적용-1").mkdir()
         self.apply(change, job / "plan-1.json", self.snapshot(before), job / "적용-1")
 
@@ -211,7 +214,7 @@ class TrialTest(Cli):
         rollback = self.run_cli("rollback", "--change", change, "--snapshot", self.snapshot(now), "--record",
                                 "--out", back / "rollback-1.json")
         self.assertEqual((rollback["restored"], rollback["saves"]), (1, 1))
-        again, _ = self.read("B", "읽기-2", APPLIED, ["--record", rollback["change_id"]], "b2", pages_too=False)
+        again, _ = self.read("B", "읽기-2", APPLIED, ["--record", rollback["change_id"]], "b2", pages_too=False, at=scene.READ_AGAIN)
         (back / "적용-1").mkdir()
         self.apply(rollback["change_id"], back / "rollback-1.json", self.snapshot(again), back / "적용-1")
         undone, _ = self.read("B", "읽기-3", PRICE, ["--record", rollback["change_id"]], "b3", pages_too=False)

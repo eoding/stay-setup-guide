@@ -101,7 +101,7 @@ class GroupedColumnsTest(unittest.TestCase):
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                            sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan))
             steps = plan_steps(plan)
-            ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
+            ledger.begin(change, step_plans(steps), read_at=scene.READ_AGAIN)
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)
             result, = heads(render_result(ledger.change(change)))

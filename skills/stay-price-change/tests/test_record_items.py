@@ -30,6 +30,7 @@ OTHER_KEY = item_key({"addon": "11", "line": "102"})
 CELL = "price_cell"
 CELL_KEY = item_key({"room": "디럭스", "rate_plan": "조식", "date": "2026-12-24", "occupancy": "", "nights": 1})
 START = datetime(2026, 11, 21, 10, 0, tzinfo=timezone.utc)
+AGAIN = START + timedelta(minutes=1)    # 미리보기(START)를 적은 뒤 적용 직전에 다시 읽은 시각
 
 
 def line(sell="20.00", supply="18.00", name="소아 1인", season="7"):
@@ -134,27 +135,27 @@ class KindLedgerTest(unittest.TestCase):
         ledger = self.ledger(LINE)
         change = preview(ledger, rows(D("22.00")))
         then = {(LINE, KEY): line()}
-        moved = ledger.begin_fresh(change, STEP, then, {(LINE, KEY): line(season="8")}, read_at=START.isoformat())
+        moved = ledger.begin_fresh(change, STEP, then, {(LINE, KEY): line(season="8")}, read_at=AGAIN.isoformat())
         self.assertEqual([item.key for item in moved], [KEY])
         self.assertEqual(ledger.change(change).status, "previewed", "아무것도 시작하지 않았다")
-        self.assertEqual(ledger.begin_fresh(change, STEP, then, {(LINE, KEY): line()}, read_at=START.isoformat()), ())
+        self.assertEqual(ledger.begin_fresh(change, STEP, then, {(LINE, KEY): line()}, read_at=AGAIN.isoformat()), ())
         self.assertEqual(ledger.change(change).status, "applying")
-        self.assertEqual(ledger.begin_fresh(change, STEP, then, {(LINE, KEY): line(season="9")}, read_at=START.isoformat()), (),
+        self.assertEqual(ledger.begin_fresh(change, STEP, then, {(LINE, KEY): line(season="9")}, read_at=AGAIN.isoformat()), (),
                          "이미 시작한 번호를 같은 단계로 다시 부르면 견주지 않고 그대로 둔다")
 
     def test_begin_fresh_refuses_a_reading_older_than_fifteen_minutes(self):
         ledger = self.ledger(LINE)
         change = preview(ledger, rows(D("22.00")))
-        self.clock.at = START + timedelta(minutes=16)
+        self.clock.at = AGAIN + timedelta(minutes=16)
         with self.assertRaisesRegex(LedgerError, "16분 전 것입니다"):
-            ledger.begin_fresh(change, STEP, {(LINE, KEY): line()}, {(LINE, KEY): line()}, read_at=START.isoformat())
+            ledger.begin_fresh(change, STEP, {(LINE, KEY): line()}, {(LINE, KEY): line()}, read_at=AGAIN.isoformat())
 
     def test_untouched_names_a_field_the_save_was_to_leave_alone_that_came_back_different(self):
         ledger = self.ledger(LINE)
         change = preview(ledger, rows(D("22.00")) + [
             ValueRow(LINE, OTHER_KEY, "조식 · 소아 2인", "sell", "present", D("30.00")),
             ValueRow(LINE, OTHER_KEY, "조식 · 소아 2인", "supply", "present", D("25.00"))])
-        ledger.begin(change, STEP, read_at=START.isoformat())
+        ledger.begin(change, STEP, read_at=AGAIN.isoformat())
         ledger.record_step(change, 1, True)
         kept = {(LINE, KEY): line(sell="22.00"), (LINE, OTHER_KEY): line(sell="30.00", supply="25.00", name="소아 2인")}
         self.assertEqual(ledger.verify(change, kept), [])

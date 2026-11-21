@@ -191,7 +191,7 @@ class PreviewTruthTest(CommandCase):
         for spot, field, value in shown:
             self.assertEqual(by_cell.get((spot, field)), [value], f"{name}: 페이지에서 바뀐다는 {spot} · {field} = {value} 는 "
                                                                   "꼭 한 저장 단계에 같은 값으로 있어야 한다")
-        fresh = self.write(f"{name}/fresh.json", dict(encode_snapshot(snapshot), read_at=scene.NOW_TEXT))
+        fresh = self.write(f"{name}/fresh.json", dict(encode_snapshot(snapshot), read_at=scene.READ_AGAIN))
         begun = self.run_cli("begin", "--change", planned["change_id"], "--plan", folder / "plan.json", "--snapshot", fresh)
         self.assertEqual((begun["status"], begun["steps"]), ("applying", len(planned["steps"])), f"{name}: 장부의 줄 = 저장 단계")
         return planned, page.read_text(encoding="utf-8")
@@ -275,7 +275,7 @@ class NothingToSaveTest(CommandCase):
             self.assertNotIn(said, text, "저장할 것이 없는 미리보기는 저장한다고도, 적용하라고도 말하지 않는다")
         self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "칸마다도 저장하지 않는다고 말한다")
 
-        fresh = self.write("fresh.json", dict(encode_snapshot(snapshot), read_at=scene.NOW_TEXT))
+        fresh = self.write("fresh.json", dict(encode_snapshot(snapshot), read_at=scene.READ_AGAIN))
         done = subprocess.run([sys.executable, str(SCRIPT), "begin", "--change", str(short["change_id"]), "--plan",
                                str(self.dir / "plan.json"), "--snapshot", fresh], capture_output=True, text=True, env=self.env)
         self.assertEqual(done.returncode, 2, done.stdout)
@@ -298,7 +298,7 @@ class ChosenListThroughLedgerTest(CommandCase):
 
     def apply(self, name, snapshot, plan_file, change_id):
         """begin → calls → 저장마다 record-result(페이지가 저장했다고 답함) → 그 저장이 들어간 지금 값(scene.applied)."""
-        fresh = self.write(f"{name}-fresh.json", dict(encode_snapshot(snapshot), read_at=scene.NOW_TEXT))
+        fresh = self.write(f"{name}-fresh.json", dict(encode_snapshot(snapshot), read_at=scene.READ_AGAIN))
         self.run_cli("begin", "--change", change_id, "--plan", plan_file, "--snapshot", fresh)
         for call in self.run_cli("calls", "--change", change_id)["calls"]:
             reply = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True,

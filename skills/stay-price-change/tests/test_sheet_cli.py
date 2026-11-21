@@ -86,7 +86,8 @@ class SheetCommandTest(unittest.TestCase):
         self.assertIn("스위트 · 조식 포함 성인 1 · 1박 이상 1/4 ~ 1/12, 1/14 ~ 1/17 (13일)", preview)
 
         change = planned["change_id"]
-        self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", snapshot)["status"],
+        again = self.write("again.json", encode_snapshot(S.reading(read_at=scene.READ_AGAIN)))   # 적용 직전에 다시 읽은 값
+        self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", again)["status"],
                          "applying")
         for call in self.run_cli("calls", "--change", change)["calls"]:
             last = self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))

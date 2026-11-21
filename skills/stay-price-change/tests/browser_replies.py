@@ -8,7 +8,7 @@ unittest 가 찾지 않도록 이름이 test_ 로 시작하지 않는다.
 import json
 import re
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from change_core.answers import ask_sum, fnv1a, page_sum
 
@@ -16,6 +16,14 @@ from change_core.answers import ask_sum, fnv1a, page_sum
 # 장부를 바로 부르면 Ledger(now=…))가 따로 주지 않으면 이 시각이다.
 NOW_TEXT = "2026-11-21T10:00:00+09:00"
 NOW = datetime.fromisoformat(NOW_TEXT)
+# 다시 읽은 시각 — 장부가 시험의 지금(NOW)에 미리보기를 적은 뒤, 적용 직전 · 멈춘 뒤에 다시 읽은 값의 시각. begin · check 는 그 번호를
+# 계산한 뒤에 읽은 값만 받는다(장부의 시계는 NOW 에 서 있으니 1분 뒤의 읽은 값도 15분 안이다).
+READ_AGAIN = "2026-11-21T10:01:00+09:00"
+
+
+def read_again(minutes: int) -> str:
+    """시험의 지금(NOW)에서 `minutes` 분 뒤에 다시 읽은 시각 — 같은 번호를 두 번 다시 읽는 시험(되돌리기의 적용 직전 …)이 쓴다."""
+    return (NOW + timedelta(minutes=minutes)).isoformat()
 
 
 def done_at(moment: datetime | None = None) -> str:

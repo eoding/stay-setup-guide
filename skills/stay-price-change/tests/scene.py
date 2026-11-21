@@ -6,10 +6,11 @@
 """
 
 import os
+from datetime import datetime, timedelta
 from dataclasses import replace
 from decimal import Decimal
 
-from browser_replies import NOW, NOW_TEXT
+from browser_replies import NOW, NOW_TEXT, READ_AGAIN, read_again
 from change_core.ledger import CLOCK_ENV, LEDGER_ENV
 from change_core.money import round_money
 from price_model import MISSING, CellKey, CellValue, ChangeRequest, Snapshot
@@ -74,9 +75,16 @@ def applied(snapshot: Snapshot, steps, read_at="2026-11-20T14:06:00+09:00") -> S
     return replace(snapshot, read_at=read_at, cells=cells)
 
 
+def read_after(read_at: str) -> str:
+    """그 읽은 값으로 계산한 번호를 장부에 적은 뒤에 다시 읽은 시각 — 그 읽은 시각과 장부의 시계(NOW) 가운데 늦은 것의 1분 뒤.
+    장부를 바로 부르는 시험이 begin 에 준다(begin 은 그 번호를 계산한 뒤에 읽은 값만 받는다)."""
+    return (max(NOW, datetime.fromisoformat(read_at)) + timedelta(minutes=1)).isoformat()
+
+
 def fresh(snapshot: Snapshot) -> Snapshot:
-    """방금 읽은 것처럼 읽은 시각만 시험의 지금으로 — 적용 직전 · 이어서의 읽은 값은 15분 안의 것이어야 한다."""
-    return replace(snapshot, read_at=NOW_TEXT)
+    """방금 다시 읽은 것처럼 읽은 시각만 다시 읽은 시각(READ_AGAIN)으로 — 적용 직전 · 이어서의 읽은 값은 그 번호를 계산한 뒤에,
+    15분 안에 읽은 것이어야 한다."""
+    return replace(snapshot, read_at=READ_AGAIN)
 
 
 def clock():

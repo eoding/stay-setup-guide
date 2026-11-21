@@ -71,7 +71,7 @@ class StoppedResultPageTest(unittest.TestCase):
         change = self.ledger(0).record_preview(
             hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer, currency="USD", sentence=trial_scene.SENTENCE,
             read_at=snapshot.read_at, rows=preview_rows(plan), request=encode_request(plan.request), reading=encode_snapshot(snapshot))
-        self.ledger(0).begin(change, step_plans(steps), read_at=snapshot.read_at)
+        self.ledger(0).begin(change, step_plans(steps), read_at=scene.read_after(snapshot.read_at))
         for index in range(1, saved + 1):
             self.ledger(1).record_step(change, index, saved=True)
         record = self.ledger(20).change(change)

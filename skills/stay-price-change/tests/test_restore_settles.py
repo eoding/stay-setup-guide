@@ -47,7 +47,8 @@ class RestoreSettlesTest(unittest.TestCase):
 
     def apply(self, change: int, plan: Path, now):
         """begin → calls → 저장마다 「저장했다」는 답 → 그 저장이 들어간 지금 값."""
-        self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.write(encode_snapshot(scene.fresh(now))))
+        again = replace(scene.fresh(now), read_at=scene.read_again(2))   # 계산(1분 뒤에 읽은 값) 뒤에 다시 읽은 값
+        self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.write(encode_snapshot(again)))
         for call in self.cli("calls", "--change", change)["calls"]:
             answer = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True}
             self.cli("record-result", "--change", change, "--result", self.write(answer))
@@ -83,7 +84,7 @@ class RestoreSettlesTest(unittest.TestCase):
                          (rows[change]["written"], rows[change]["written"], [restore]))
         self.assertIn(f"모두 되돌림 {rows[change]['written']}/{rows[change]['written']}칸 (장부 {restore}번)", rows[change]["scope"])
         self.assertEqual([rows[number]["line"].split(" · ")[:2] for number in (saved, change, restore)],
-                         [[f"장부 {saved}번", "11/21 10:00 저장"], [f"장부 {change}번", "11/21 10:00 적용"],
+                         [[f"장부 {saved}번", "11/21 10:01 저장"], [f"장부 {change}번", "11/21 10:00 적용"],
                           [f"장부 {restore}번", "11/21 10:00 적용"]],
                          "K4 — 저장해 둔 상태는 값을 읽은 때와 「저장」으로 확인받는다(적용이 아니다)")
         refused = self.cli("rollback", "--change", change, "--snapshot", self.write(encode_snapshot(restored)), "--record",

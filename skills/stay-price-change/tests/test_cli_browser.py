@@ -48,7 +48,7 @@ class BrowserCommandTest(unittest.TestCase):
     def fresh(self, snapshot):
         """적용 직전에 방금 읽은 값 — 미리보기 때와 같은 칸, 읽은 시각만 지금(15분 안)"""
         data = json.loads(Path(snapshot).read_text(encoding="utf-8")) if isinstance(snapshot, str) else snapshot
-        return self.write("fresh.json", dict(data, read_at=scene.NOW_TEXT))
+        return self.write("fresh.json", dict(data, read_at=scene.READ_AGAIN))
 
     def run_cli(self, *args, code=0):
         done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)

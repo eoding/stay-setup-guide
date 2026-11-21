@@ -58,7 +58,7 @@ class ListScopeTest(unittest.TestCase):
 
     def test_a_stopped_change_says_rooms_dates_what_and_how_far_without_the_sentence(self):
         self.assertEqual(self.scope(0, self.change), f"{HEAD} · 판매가 +12%", "미리보기만 — 어디까지는 상태가 말한다")
-        self.ledger(0).begin(self.change, step_plans(self.steps), read_at=self.snapshot.read_at)
+        self.ledger(0).begin(self.change, step_plans(self.steps), read_at=scene.read_after(self.snapshot.read_at))
         self.ledger(1).record_step(self.change, 1, saved=True)
         self.assertEqual(self.scope(2, self.change), f"{HEAD} · 판매가 +12% · 저장 2번 중 1번 함 · 적용 중")
         self.assertEqual(self.scope(20, self.change), f"{HEAD} · 판매가 +12% · 저장 2번 중 1번 하고 멈춤",
@@ -96,16 +96,16 @@ class ListScopeTest(unittest.TestCase):
             hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표대로",
             read_at=reading.read_at, rows=preview_rows(plan), request=encode_request(plan.request), reading=encode_snapshot(reading))
         self.assertTrue(self.scope(0, number).endswith("· 새 요금표 2칸"), self.scope(0, number))
-        self.ledger(0).begin(number, step_plans(plan_steps(plan)), read_at=reading.read_at)
+        self.ledger(0).begin(number, step_plans(plan_steps(plan)), read_at=scene.read_after(reading.read_at))
         for step in range(1, len(plan_steps(plan)) + 1):
             self.ledger(1).record_step(number, step, saved=True)
         self.assertTrue(self.scope(2, number).endswith("· 새 요금표 2칸"), "적용한 뒤에도 넣은 칸 수 — 되돌리기 확인이 읽어 준다")
 
     def test_check_gives_the_same_line(self):
         env = scene.env(str(self.dir))
-        self.ledger(0).begin(self.change, step_plans(self.steps), read_at=self.snapshot.read_at)
+        self.ledger(0).begin(self.change, step_plans(self.steps), read_at=scene.read_after(self.snapshot.read_at))
         self.ledger(1).record_step(self.change, 1, saved=True)
-        now = scene.NOW_TEXT
+        now = scene.read_again(2)            # 첫 저장(1분)을 적은 뒤에 읽었다
         reading = self.dir / "again.json"   # 첫 저장이 들어간 지금 값을 방금 읽었다
         reading.write_text(json.dumps(encode_snapshot(scene.applied(self.snapshot, self.steps[:1], now)), ensure_ascii=False),
                            encoding="utf-8")
@@ -147,7 +147,7 @@ class NarrowedScopeTest(unittest.TestCase):
         self.assertEqual(short["counts"]["red"], 0)
         steps = plan_steps(plan_change(self.snapshot, request))
         ledger = Ledger(self.dir / DB_NAME, now=scene.clock)
-        ledger.begin(short["change_id"], step_plans(steps), read_at=self.snapshot.read_at)
+        ledger.begin(short["change_id"], step_plans(steps), read_at=scene.read_after(self.snapshot.read_at))
         for index in range(1, len(steps) + 1):
             ledger.record_step(short["change_id"], index, saved=True)
         now = scene.NOW_TEXT

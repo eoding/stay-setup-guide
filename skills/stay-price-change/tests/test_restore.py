@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -55,7 +56,7 @@ class RestoreTest(unittest.TestCase):
                                             sentence=plan.request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                             request=encode_request(plan.request))
         steps = plan_steps(plan)
-        self.ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(change, step_plans(steps), read_at=scene.read_after(plan.read_at))
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(change, index, saved=True)
         return scene.applied(current, steps, "2026-11-26T09:00:00+09:00")
@@ -77,7 +78,7 @@ class RestoreTest(unittest.TestCase):
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
                                              request=dict(kind="restore_snapshot", snapshot=self.saved))
         steps = save_steps(rollback_writes(plan))
-        self.ledger.begin(restore, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(restore, step_plans(steps), read_at=scene.read_after(plan.read_at))
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(restore, index, saved=True)
         restored = scene.applied(self.now, steps, "2026-11-27T09:00:00+09:00")
@@ -138,7 +139,8 @@ class RestoreTest(unittest.TestCase):
         saved = run("save-snapshot", "--snapshot", folder / "saved.json")["change_id"]
         result = run("restore", "--saved", saved, "--snapshot", folder / "now.json", "--record", "--out", folder / "r.json")
         self.assertEqual((result["restored"], result["unremovable"], result["saves"]), (90, 1, 8))
-        (folder / "fresh.json").write_text(json.dumps(encode_snapshot(scene.fresh(self.now)), ensure_ascii=False), encoding="utf-8")
+        again = replace(self.now, read_at=scene.read_after(self.now.read_at))   # 되돌리기를 계산한 뒤에 다시 읽은 값
+        (folder / "fresh.json").write_text(json.dumps(encode_snapshot(again), ensure_ascii=False), encoding="utf-8")
         self.assertEqual(run("begin", "--change", result["change_id"], "--plan", folder / "r.json", "--snapshot", folder / "fresh.json")["steps"], 8)
         page = Path(run("render", "rollback", "--plan", folder / "r.json")["page"]).read_text(encoding="utf-8")
         self.assertIn("저장해 둔 상태로 되돌리기 미리보기", page)
@@ -162,7 +164,7 @@ class UnremovableTest(unittest.TestCase):
             change = ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence="새 요금표",
                                            read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(plan.request))
             steps = plan_steps(plan)
-            ledger.begin(change, step_plans(steps), read_at=scene.NOW_TEXT)
+            ledger.begin(change, step_plans(steps), read_at=scene.read_after(plan.read_at))
             for index in range(1, len(steps) + 1):
                 ledger.record_step(change, index, saved=True)
             now = scene.applied(before, steps)

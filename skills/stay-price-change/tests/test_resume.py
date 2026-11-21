@@ -45,7 +45,7 @@ class ResumeLedgerTest(unittest.TestCase):
         self.before = scene.snapshot()
         plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
         self.steps = plan_steps(plan)
-        self.change = self.ledger(0).record_preview(
+        self.change = self.ledger(-20).record_preview(   # 미리보기는 20분 전에 적었다 — 이 시험의 읽은 값은 그 뒤에 읽은 것
             hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD", sentence=scene.SENTENCE,
             read_at=self.before.read_at, rows=preview_rows(plan), request=encode_request(plan.request),
             reading=encode_snapshot(self.before))
@@ -142,6 +142,7 @@ class ResumeCommandTest(unittest.TestCase):
         self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
         self.change = self.cli("plan", "--snapshot", self.dir / "snapshot.json", "--request", self.dir / "request.json",
                                "--resolutions", self.dir / "choice.json", "--record", "--out", self.dir / "plan.json")["change_id"]
+        self.clock = scene.NOW + timedelta(minutes=25)   # 미리보기를 적고 25분 뒤 — 이 시험의 읽은 값은 그 뒤에 읽은 것
 
     def tearDown(self):
         self.tmp.cleanup()

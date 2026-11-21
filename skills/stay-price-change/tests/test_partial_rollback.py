@@ -37,7 +37,7 @@ class PartialRollbackTest(unittest.TestCase):
         self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
                                                  sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
                                                  request=encode_request(plan.request))
-        self.ledger.begin(self.change, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(self.change, step_plans(steps), read_at=scene.READ_AGAIN)
         for index in range(1, len(steps) + 1):
             self.ledger.record_step(self.change, index, saved=True)
         self.now = scene.applied(scene.snapshot(), steps, "2026-11-25T09:00:00+09:00")
@@ -55,7 +55,7 @@ class PartialRollbackTest(unittest.TestCase):
                                          sentence="일부 되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback),
                                          reverses=self.change)
         steps = save_steps(rollback_writes(rollback))
-        self.ledger.begin(rid, step_plans(steps), read_at=scene.NOW_TEXT)
+        self.ledger.begin(rid, step_plans(steps), read_at=scene.read_after(rollback.read_at))
         for index in range(1, (len(steps) if saved is None else saved) + 1):
             self.ledger.record_step(rid, index, saved=True)
         self.now = scene.applied(self.now, steps[:saved] if saved is not None else steps)
