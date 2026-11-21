@@ -114,5 +114,23 @@ class OneLedgerListTest(unittest.TestCase):
         self.assertIn(f" · 객실 가격 · {scene.OFFER} · ", lines[PRICE.name][2], "객실 가격 줄은 오퍼를 댄다(P3)")
 
 
+class InstructionsTest(unittest.TestCase):
+    """P1 · P2 — 세 도우미의 안내문이 같은 말을 한다: 목록에는 세 도우미의 기록이 모두 나오고, 다른 도우미의 기록은 읽어 주기만 하며
+    그 이상(되돌리기 · 이어서)은 맡은 도우미를 댄다. 목록이 비었으면 무엇을 보았는지(이 컴퓨터의 장부 · 이 호텔) 말하는 문장 하나."""
+
+    EMPTY = '`changes` 가 비었으면 "이 컴퓨터의 장부에 <`hotel.name`> 기록이 하나도 없습니다(객실 가격 · 부가옵션 가격 · 부과금 모두)."'
+    OTHER = ('다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 '
+             '하고 그 도우미로 한다.')
+
+    def test_every_helper_reads_out_another_helper_s_record_names_its_owner_and_says_the_empty_ledger_sentence(self):
+        for skill in ("stay-price-change", "stay-addon-price-change", "stay-charge-change"):
+            text = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+            prep = text[text.index("5. **장부 보기.**"):text.index("## 읽기")]
+            self.assertIn("세 도우미", prep, skill)
+            self.assertIn(self.OTHER, prep, skill)
+            show = text[text.index("## 장부 보여줘"):]
+            self.assertIn(self.EMPTY, show[:show.index("\n## ", 1)], skill)
+
+
 if __name__ == "__main__":
     unittest.main()

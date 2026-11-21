@@ -15,7 +15,7 @@ metadata:
 
 하는 일은 여섯이다. 1 지금 가격 보기 · 2 지금 상태만 저장 · 3 가격 바꾸기 · 4 되돌리기 · 5 새 요금표로 맞추기 · 6 저장해 둔 상태와 견주기.
 
-- 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
+- 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
 - 페이지: 탭에 올린 `window.stayPrice`.
 - 필요할 때만 여는 파일(이 글의 그 자리에서 연다): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/compare.md](references/compare.md) 견주기, [references/rollback.md](references/rollback.md) 되돌리기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
@@ -55,7 +55,7 @@ metadata:
    - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 와 4.
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.
    - `hotel.name` 이 말한 호텔이 아니면 "지금 탭에는 △△ 호텔이 열려 있습니다. ○○ 호텔 화면을 열어 주세요."
-5. **장부 보기.** `python3 scripts/price_change.py list --look "<작업>/look.json"` — 이 호텔의 기록만 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 줄마다 `scope` 가 그 번호가 덮는 것이다(오퍼 · 객실 · 요금제, 날짜, 한 일, 어디까지 갔는지). `status: stopped` 인 변경이 있으면 다른 일보다 먼저 **알리기만** 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope` 그대로>. 그것부터 볼까요?" 이어서 할지 되돌릴지는 여기서 묻지 않는다(어디서 멈췄는지는 다시 읽어야 안다). 보자고 하면 [references/stopped.md](references/stopped.md), 다른 일을 먼저 하자고 하면 그 일을 한다.
+5. **장부 보기.** `python3 scripts/price_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 세 도우미 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 줄마다 `scope` 가 그 번호가 덮는 것이다(종류 · 오퍼 · 객실 · 요금제, 날짜, 한 일, 어디까지 갔는지). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 **알리기만** 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope` 그대로>. 그것부터 볼까요?" 이어서 할지 되돌릴지는 여기서 묻지 않는다(어디서 멈췄는지는 다시 읽어야 안다). 보자고 하면 [references/stopped.md](references/stopped.md), 다른 일을 먼저 하자고 하면 그 일을 한다.
 
 ## 읽기 — 네 일이 모두 이것으로 읽는다
 
@@ -138,7 +138,7 @@ metadata:
 
 ## 장부 보여줘
 
-"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
+"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. `changes` 가 비었으면 "이 컴퓨터의 장부에 <`hotel.name`> 기록이 하나도 없습니다(객실 가격 · 부가옵션 가격 · 부과금 모두)." 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
 
 ## 적용하기 — 바꾸기·되돌리기 공통
 

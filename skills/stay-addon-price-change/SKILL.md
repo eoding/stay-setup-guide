@@ -49,7 +49,7 @@ metadata:
    2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 에 든 파일만(이 탭에 없거나 예전 판인 것 — 넷은 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js`) 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
 3. **작업 폴더.** `python3 scripts/addon_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>` — 폴더는 명령이 만든다)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. 새 폴더의 look 은 앞선 폴더에서 받아 둔 같은 조각을 빌려 오므로 받을 쪽이 거의 없다. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다).
 4. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 가 받을 조각이다 — 「읽기」 4 처럼 받아 `<작업>/look/` 에 두고 이 명령을 다시 한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾거나 짧은 답의 `hotel` 이 말한 호텔이 아니면 "○○ 호텔의 Stay 화면을 열어 주세요".
-5. **장부 보기.** `python3 scripts/addon_change.py list --look "<작업>/look.json"` — 이 호텔의 기록만 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `empty` 는 저장할 것이 없던 미리보기다.
+5. **장부 보기.** `python3 scripts/addon_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 세 도우미(객실 가격 · 부가옵션 가격 · 부과금) 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `empty` 는 저장할 것이 없던 미리보기다.
 
 ## 읽기 — 바꾸기 · 되돌리기 · 적용이 모두 이것으로 읽는다
 
@@ -102,7 +102,7 @@ metadata:
 
 ## 장부 보여줘
 
-"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
+"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. `changes` 가 비었으면 "이 컴퓨터의 장부에 <`hotel.name`> 기록이 하나도 없습니다(객실 가격 · 부가옵션 가격 · 부과금 모두)." 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
 
 ## 적용하기 — 바꾸기 · 되돌리기 공통
 
