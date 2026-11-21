@@ -393,7 +393,7 @@ def decode_request(data: Mapping) -> ChangeRequest:
     field_name = data.get("field", "sell")
     if field_name not in FIELDS:
         raise ModelError(f"field 는 sell(판매가) 또는 supply(공급 원가)입니다: {field_name!r}")
-    given = [how for how in HOWS if data.get(how) not in (None, False)]
+    given = [how for how in HOWS if data.get(how) is not None and data.get(how) is not False]   # 0 은 값이다(0 == False 라 `in` 으로 가리지 않는다)
     if len(given) != 1:
         raise ModelError("amount · percent · value · clear 가운데 하나만 적습니다")
     how = given[0]

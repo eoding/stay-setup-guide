@@ -160,6 +160,13 @@ class RequestTest(unittest.TestCase):
         self.assertEqual(request(amount="-5000").describe(), "판매가 -5000")
         self.assertEqual(request(field="supply", percent="3").describe(), "공급 원가 +3%")
 
+    def test_a_zero_written_as_a_json_number_is_a_value(self):
+        self.assertEqual(request(field="supply", value=0).figure, 0, "0 == False 여도 0 은 값이다")
+        self.assertEqual(request(amount=0).how, "amount")
+        with self.assertRaisesRegex(ModelError, "하나만"):
+            request(amount=0, percent="2")
+        self.assertEqual(request(value="5", clear=False).how, "value", "clear: false 는 적지 않은 것이다")
+
     def test_a_plan_refuses_a_reading_of_another_hotel_or_one_that_did_not_read_the_named_lines(self):
         snap = snapshot(scene.line("201", "조식", "1", "a", "20.00", "15.00"))
         other = Snapshot("다른 호텔", "9", snap.read_at, snap.asked, snap.lines)

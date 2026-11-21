@@ -551,7 +551,7 @@ def decode_request(data: Mapping) -> ChangeRequest:
     name, hotel_id = decode_hotel(data.get("hotel"))
     if data.get("clear") is not None:
         raise ModelError("부과금 금액은 비우지 않습니다(비우면 ERP 가 그 금액을 「미정」으로 바꿉니다) — 무료면 value 0 으로 적습니다")
-    given = [how for how in HOWS if data.get(how) not in (None, False)]
+    given = [how for how in HOWS if data.get(how) is not None and data.get(how) is not False]   # 0 은 값이다(0 == False 라 `in` 으로 가리지 않는다)
     if len(given) != 1:
         raise ModelError("amount · percent · value 가운데 하나만 적습니다")
     how = given[0]

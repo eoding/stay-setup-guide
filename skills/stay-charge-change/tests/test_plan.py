@@ -105,6 +105,12 @@ class RulesTest(unittest.TestCase):
         with self.assertRaises(PlanError):
             plan_change(self.snapshot, request({"offer": "602", "charge": "703", "field": "amount"}, value="1"))
 
+    def test_a_zero_written_as_a_json_number_is_a_value(self):
+        free = request(place("703", "amount"), value=0)
+        self.assertEqual((free.how, free.figure), ("value", 0), "무료면 value 0 — 0 == False 여도 0 은 값이다")
+        with self.assertRaisesRegex(ModelError, "하나만"):
+            request(place("703", "amount"), amount=0, percent="2")
+
 
 class StepTest(unittest.TestCase):
     """C3 · C4 — 저장 단계는 금액 칸만, 짚은 칸만 바꾸고 나머지 칸(금액의 뜻 포함)은 창이 보인 그대로 보낸다."""
