@@ -31,7 +31,7 @@ from change_core.rules import BLOCKED, Resolution, decide
 from price_model import (
     CELL_RULES, CLOSED, ERP_MAX_DAYS, FIELD_LABELS, FIELDS, HELD, HELD_RULE, ITEM_KIND, MISSING, NEW, RESERVED, TIER_RULE, BulkStep, CellChange,
     CellEditStep, CellKey,
-    CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, cell_item_key, cell_name,
+    CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, UnusedChoice, UNUSED_WHY, cell_item_key, cell_name,
     day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, matching_rows, occupancy_label, occupancy_order,
     same_hotel, snapshot_reading, split_occupancy, value_of,
 )
@@ -387,16 +387,64 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
         if now == included:
             break
         included = now
-    decide(CELL_RULES, dict.fromkeys(seen, TIER_RULE), tier_choices, cell_name)   # 어느 차례에서도 걸리지 않은 칸을 짚었으면 거절
+    # 어느 차례에서도 걸리지 않은 칸을 짚었으면 거절한다. 받으면 마지막 차례의 고름과 같다(짚은 칸이 모두 걸린 칸이다)
+    picked, _waiting = decide(CELL_RULES, dict.fromkeys(seen, TIER_RULE), tier_choices, cell_name)
+
+    def said_for(key: CellKey) -> str | None:   # 같이 그대로 두는 칸에 말한 고름의 말 — 장부에 남는다(그 칸이 쓰지 않는 고름이라도)
+        return " / ".join(dict.fromkeys(item.said for item in (chosen.get(key), picked.get(key)) if item and item.said)) or None
 
     def final(key: CellKey) -> CellChange:
         if key in held:   # 후 값은 계산한 값 그대로다 — 다음 고름에서 성인 칸이 움직이면 이 값으로 다시 본다(fresh). 저장하지 않는다
-            return replace(fresh[key], verdict=HELD_RULE)
+            return replace(fresh[key], verdict=HELD_RULE, said=said_for(key))
         if key in breaks:
             return _choose(replace(first[key], verdict=TIER_RULE, choice=None), picked.get(key))
         return first[key]
 
-    return replace(plan, changes=tuple(final(change.key) for change in plan.changes))
+    changes = {change.key: final(change.key) for change in plan.changes}
+    unused = _unused(resolutions, chosen, picked, changes, held, breaks,
+                     {key for key, code in flagged.items() if code != TIER_RULE} | seen)
+    return replace(plan, changes=tuple(changes[change.key] for change in plan.changes), unused=unused)
+
+
+def _unused(resolutions: Sequence[Resolution], chosen: Mapping[CellKey, Resolution], picked: Mapping[CellKey, Resolution],
+            changes: Mapping[CellKey, CellChange], held: set[CellKey], breaks: set[CellKey],
+            caught: set[CellKey]) -> tuple[UnusedChoice, ...]:
+    """고른 것 가운데 이번 계산에서 어느 칸도 쓰지 않는 것 — 고름마다 그것을 단 칸(`chosen` · `picked`)과, 끝에 그 고름을 지닌 칸이
+    없는 까닭. 단 칸이 같이 그대로가 됐으면 그 성인 칸이 왜 그대로인지, 박수 층 빨간 줄로 넘어갔으면 그렇다고. 단 칸이 없으면 그 규칙의
+    칸을 모두 칸마다 따로 골랐는지, 같은 규칙 · 칸에 뒤 고름이 앞섰는지, 그 규칙에 걸린 칸이 없는지(`caught` 는 이번 계산에서 빨간 줄
+    규칙에 걸린 칸). 담당자가 한 말이 어디로 갔는지 미리보기와 도우미가 말하게 한다."""
+    owner = {id(item): index for index, item in enumerate(resolutions)}
+    applied: dict[int, list[CellKey]] = defaultdict(list)
+    for mapping in (chosen, picked):
+        for key, item in mapping.items():
+            applied[owner[id(item)]].append(key)
+    taken = {owner[id(item)] for key, item in picked.items() if key in breaks}
+    taken |= {owner[id(item)] for key, item in chosen.items() if key not in held and key not in breaks}
+
+    def held_why(key: CellKey) -> str:
+        adult = changes.get(replace(key, occupancy=split_occupancy(key.occupancy)[0]))
+        if adult is None:
+            return "held"
+        if adult.choice == "keep":
+            return "held_kept"
+        if CELL_RULES.severity(adult.verdict) == BLOCKED:
+            return "held_blocked"
+        return "held_waiting" if adult.waiting else "held"
+
+    out = []
+    for index, item in enumerate(resolutions):
+        if index in taken:
+            continue
+        groups: dict[str, list[CellKey]] = {}
+        for key in applied.get(index, ()):
+            groups.setdefault(held_why(key) if key in held else "tier", []).append(key)
+        if not groups:
+            later = any(other.rule == item.rule and (other.items is None) == (item.items is None)
+                        for other in resolutions[index + 1:])
+            mine = any(changes[key].verdict == item.rule or (key in held and item.rule == TIER_RULE) for key in caught)
+            groups["replaced" if later or item.items is not None else "pinned" if mine else "none"] = []
+        out += [UnusedChoice(item.rule, item.choice, item.said, why, UNUSED_WHY[why], tuple(keys)) for why, keys in groups.items()]
+    return tuple(out)
 
 
 def _named_in(resolutions: Sequence[Resolution], cells: set[CellKey]) -> list[Resolution]:

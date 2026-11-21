@@ -493,6 +493,31 @@ class Skipped:
 
 
 @dataclass(frozen=True)
+class UnusedChoice:
+    """담당자가 고른 빨간 줄 고름 가운데 이번 계산에서 어느 칸도 쓰지 않는 것 — 고름 하나 · 까닭 하나에 하나. `cells` 는 그 고름을
+    말한 칸(규칙 전체 고름이면 그 규칙에 걸린 칸 가운데 그 고름이 덮던 칸, 덮던 칸이 없으면 빈 것), `why` 는 까닭의 코드
+    (UNUSED_WHY), `words` 는 담당자에게 그 까닭을 말하는 한 마디다. 미리보기 · plan 의 답 · 도우미의 말이 같은 것을 말한다."""
+    rule: str
+    choice: str
+    said: str
+    why: str
+    words: str
+    cells: tuple[CellKey, ...] = ()
+
+
+UNUSED_WHY = {   # 고른 것이 어느 칸에도 쓰이지 않은 까닭 → 담당자에게 하는 한 마디(같이 그대로 둔 칸은 성인 칸이 왜 그대로인지에 따라)
+    "held_kept": "성인만 있는 칸을 그대로 두셔서 같이 그대로 둡니다",
+    "held_blocked": "성인만 있는 칸을 바꿀 수 없어 같이 그대로 둡니다",
+    "held_waiting": "성인만 있는 칸을 아직 고르지 않으셔서 같이 그대로 둡니다",
+    "held": "성인만 있는 칸이 바뀌지 않아 같이 그대로 둡니다",
+    "tier": "1박 이상보다 비싸지는 박수 층 빨간 줄로 넘어가 그 고름을 따릅니다",
+    "pinned": "그 빨간 줄의 칸을 모두 칸마다 따로 고르셨습니다",
+    "replaced": "같은 칸 · 같은 빨간 줄에 뒤에 고르신 것이 앞섭니다",
+    "none": "이번 계산에는 그 빨간 줄에 걸린 칸이 없습니다",
+}
+
+
+@dataclass(frozen=True)
 class Plan:
     """`empty_pairs` 는 요청한 (객실, 요금제) 가운데 읽었지만 칸이 하나도 없던 것 — 건너뜀으로 알린다.
 
@@ -501,7 +526,8 @@ class Plan:
     `coverage` 는 새 요금표로 맞출 때 넣지 않는 것 전부(Gap) — 요금표에서 온 계획만 갖는다.
     `tiers` 는 판매가가 바뀌는 칸과 같은 객실 · 요금제 · 날짜 · 인원 조합의 모든 박수 층의 지금 판매가 — 박수 층 규칙(1박 이상보다
     비싼 층)을 고른 뒤에 다시 볼 때 바꾸지 않는 층의 값이다. `above_one_night_before` 는 읽은 값에서 바꾸기 전부터 같은 날 1박 이상
-    층보다 비싼 박수 층 칸의 수다(이번 변경과 상관없이 — 미리보기가 알린다).
+    층보다 비싼 박수 층 칸의 수다(이번 변경과 상관없이 — 미리보기가 알린다). `unused` 는 고른 빨간 줄 고름 가운데 이번 계산에서 어느
+    칸도 쓰지 않는 것(UnusedChoice — price_plan.resolve 가 단다).
     """
     request: ChangeRequest | TargetTable
     currency: str
@@ -514,6 +540,7 @@ class Plan:
     coverage: tuple[Gap, ...] = ()
     tiers: Mapping[CellKey, Decimal] = field(default_factory=dict)
     above_one_night_before: int = 0
+    unused: tuple[UnusedChoice, ...] = ()
 
 
 # ─── 사람이 읽는 이름 ───
@@ -753,7 +780,9 @@ def encode_plan(plan: Plan) -> dict:
                 no_sale=[dict(room=room, rate_plan=plan_name, date=day) for room, plan_name, day in plan.no_sale],
                 coverage=[encode_gap(gap) for gap in plan.coverage],
                 tiers=[dict(encode_key(key), sell=money_text(sell)) for key, sell in sorted(plan.tiers.items())],
-                above_one_night_before=plan.above_one_night_before)
+                above_one_night_before=plan.above_one_night_before,
+                unused=[dict(rule=item.rule, choice=item.choice, said=item.said, why=item.why, words=item.words,
+                             cells=[encode_key(key) for key in item.cells]) for item in plan.unused])
 
 
 def decode_plan(data: Mapping) -> Plan:
@@ -765,4 +794,7 @@ def decode_plan(data: Mapping) -> Plan:
                 tuple((str(item["room"]), str(item["rate_plan"]), iso_day(item["date"])) for item in data.get("no_sale") or ()),
                 tuple(decode_gap(item) for item in data.get("coverage") or ()),
                 {decode_key(item): money(item["sell"]) for item in data.get("tiers") or ()},
-                int(data.get("above_one_night_before") or 0))
+                int(data.get("above_one_night_before") or 0),
+                tuple(UnusedChoice(str(item["rule"]), str(item["choice"]), str(item.get("said") or ""), str(item["why"]),
+                                   str(item["words"]), tuple(decode_key(key) for key in item.get("cells") or ()))
+                      for item in data.get("unused") or ()))

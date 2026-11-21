@@ -80,7 +80,7 @@ from price_model import (
 )
 from price_compare import compare_counts, compare_saved, decode_comparison, encode_comparison
 from price_pages import (
-    EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, render_compare, render_prices, render_preview,
+    EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, unused_lines, render_compare, render_prices, render_preview,
     render_result, render_rollback, render_sheet, result_name, scope_text,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
@@ -300,7 +300,8 @@ def cmd_plan(args):
                                         request=encode_request(plan.request), reading=encode_snapshot(snapshot),
                                         replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
     result = dict(change_id=change_id, replaces=args.replaces, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
-                  red=red_lines(plan), chosen=chosen_lines(plan), above_one_night_before=plan.above_one_night_before,
+                  red=red_lines(plan), chosen=chosen_lines(plan), unused=unused_lines(plan),
+                  above_one_night_before=plan.above_one_night_before,
                   unresolved=[encode_change(change) for change in unresolved(plan)],
                   steps=None if steps is None else [encode_step(step) for step in steps])
     if isinstance(request, TargetTable) and request.from_sheet:
@@ -611,7 +612,7 @@ def short_plan(result: dict) -> dict:
                for rule in CELL_RULES.rules if rule.severity == BLOCKED and result["counts"][rule.code]]
     short = dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
                  saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
-                 blocked=blocked, above_one_night_before=result["above_one_night_before"])
+                 unused=result["unused"], blocked=blocked, above_one_night_before=result["above_one_night_before"])
     if isinstance(plan.request, TargetTable):   # 표에 인원 · 박수가 없던 목표는 명령이 고른 줄 — 담당자에게 어느 줄인지 말한다
         short["lines"] = list(dict.fromkeys(line_label(target.key.occupancy, target.key.nights) for target in plan.request.targets))
     if "coverage" in result:

@@ -518,6 +518,15 @@ def chosen_lines(plan: Plan) -> list[dict]:
     return out
 
 
+def unused_lines(plan: Plan) -> list[dict]:
+    """고르셨지만 이번 계산에서 어느 칸도 쓰지 않는 고름 — 고름 · 까닭마다 그 고름의 이름(`words`), 고르실 때 하신 말, 그 고름을
+    말한 칸 수와 첫 칸, 까닭(`why` 코드 · `label` 담당자에게 하는 한 마디). 미리보기의 「고르신 빨간 줄」과 plan 의 답이 같은 말을
+    쓴다 — 도우미는 red-lines.md 「쓰지 않는 고름」대로 한 문장을 덧붙인다."""
+    return [dict(rule=item.rule, choice=item.choice, words=choice_words(plan.request, item.choice, plan.currency, item.cells),
+                 said=item.said, cells=len(item.cells), why=item.why, label=item.words,
+                 example=cell_name(item.cells[0]) if item.cells else None) for item in plan.unused]
+
+
 EXAMPLES = 3   # 빨간 줄마다 plan 의 답에 싣는 칸의 예
 
 
@@ -548,10 +557,18 @@ def _preview_banners(plan: Plan, tally: Mapping) -> str:
     by_rule: dict[str, list[dict]] = {}
     for line in chosen_lines(plan):
         by_rule.setdefault(line["rule"], []).append(line)
+    idle: dict[str, list[dict]] = {}
+    for line in unused_lines(plan):
+        idle.setdefault(line["rule"], []).append(line)
+        by_rule.setdefault(line["rule"], [])
     for code, lines in by_rule.items():
         parts = [f"<li><b>{esc(line['words'])} · {line['cells']:,}칸</b> {esc(line['does'])}"
                  + (f' <span class="sub">예: {esc(line["example"])}</span>' if line["example"] else "") + "</li>" for line in lines]
-        out.append(f'<div class="banner amber"><b>고르신 빨간 줄 · {sum(line["cells"] for line in lines):,}칸 '
+        parts += [f"<li><b>{esc(line['words'])}</b> — 고르셨지만 이번 계산에서는 쓰지 않습니다"
+                  + (f" ({line['cells']:,}칸)" if line["cells"] else "") + f": {esc(line['label'])}."
+                  + (f' <span class="sub">예: {esc(line["example"])}</span>' if line["example"] else "") + "</li>" for line in idle.get(code, ())]
+        counted = sum(line["cells"] for line in lines)
+        out.append(f'<div class="banner amber"><b>고르신 빨간 줄{f" · {counted:,}칸" if lines else ""} '
                    f'({esc(CHOSEN_GROUPS[code])})</b><ul class="notes">{"".join(parts)}</ul></div>')
     if not tally["red"] and not tally["blocked"]:
         chosen = ("고르신 대로 저장합니다." if tally["will_change"] else "고르신 대로면 바꿀 칸이 없어 아무것도 저장하지 않습니다.")

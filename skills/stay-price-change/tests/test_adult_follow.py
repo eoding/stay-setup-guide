@@ -32,7 +32,7 @@ from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, CellValue, ChangeRequest, Snapshot, Target, TargetTable, cell_item_key, encode_key, encode_request, encode_snapshot,
 )
-from price_pages import render_preview  # noqa: E402
+from price_pages import render_preview, unused_lines  # noqa: E402
 from price_plan import counts, plan_change, plan_steps, plan_targets, preview_rows, resolve  # noqa: E402
 from test_pages import visible  # noqa: E402
 
@@ -202,6 +202,52 @@ class ChildTierCellTest(unittest.TestCase):
         written = {(row.occupancy, row.nights): str(row.sell) for step in plan_steps(plan) for row in step.rows}
         self.assertEqual(written, {("A2", 3): "100.80", ("A2C2_CHD", 3): "130.80"},
                          "성인 3박과 고른 아동 3박만 저장한다 — 안 바꾸기로 고른 아동 칸 · 성인 1박을 따라 그대로인 아동 1박은 쓰지 않는다")
+
+
+
+class UnusedChoiceTest(unittest.TestCase):
+    """T4 — 고른 것이 어느 칸에도 쓰이지 않으면 말한다. 시운전 7: "나머지는 정가도 같이 올려줘" 의 「정가도 같이 올림」은 남은 빨간
+    칸(아동 1박 이상 둘)에 고른 것인데, 성인 1박 이상을 안 바꾸기로 해 그 칸들이 같이 그대로가 되면서 고른 것과 미리보기 · 도우미의
+    말에서 사라졌다. plan 의 답 · 미리보기 · 장부가 그 고름과 까닭을 남긴다."""
+
+    def setUp(self):
+        self.scene = ChildTierCellTest()
+
+    def test_the_raise_said_for_child_cells_held_with_their_kept_adult_cell_is_reported_with_why(self):
+        plan = self.scene.plan()
+        self.assertEqual([(line["rule"], line["choice"], line["cells"], line["why"], line["label"], line["said"]) for line in unused_lines(plan)],
+                         [("ABOVE_LIST", "raise_list", 2, "held_kept", "성인만 있는 칸을 그대로 두셔서 같이 그대로 둡니다", ChildTierCellTest.SAID)])
+        text = visible(render_preview(plan, 5, plan_steps(plan)))
+        self.assertIn("정가도 12% 올림 (아동이 있는 칸은 아동 추가분은 그대로) — 고르셨지만 이번 계산에서는 쓰지 않습니다 (2칸): "
+                      "성인만 있는 칸을 그대로 두셔서 같이 그대로 둡니다.", text, "미리보기의 「고르신 빨간 줄」")
+        held = {row.item_key: row.said for row in preview_rows(plan) if row.verdict == "ADULT_HELD" and row.field == "sell"}
+        self.assertEqual(held[cell_item_key(self.scene.cell("A2C1_CHD", 1))], ChildTierCellTest.SAID, "담당자의 말은 장부에 남는다")
+
+    def test_a_choice_every_cell_takes_is_not_reported_and_one_with_no_cell_of_its_rule_says_so(self):
+        plan = self.scene.plan(Resolution("ABOVE_ONE_NIGHT", "keep", said="그 칸도 안 바꿔"),
+                               Resolution("BELOW_COST", "include", said="원가 아래도 그대로"))
+        self.assertEqual([(line["rule"], line["why"], line["cells"]) for line in unused_lines(plan)],
+                         [("ABOVE_LIST", "held_kept", 2), ("BELOW_COST", "none", 0)],
+                         "성인 3박의 「안 바꿈」은 쓰인다 · 공급 원가 빨간 줄은 이 계산에 없다")
+
+    def test_the_command_s_short_answer_carries_unused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+
+            def write(name, data):
+                (folder / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                return folder / name
+
+            choices = [{"rule": "ABOVE_LIST", "choice": "keep", "said": ChildTierCellTest.SAID, "cells": [encode_key(self.scene.cell("A2", 1))]},
+                       {"rule": "ABOVE_LIST", "choice": "raise_list", "said": ChildTierCellTest.SAID}]
+            done = subprocess.run([sys.executable, "-B", str(SCRIPT), "plan", "--snapshot", write("s.json", encode_snapshot(snap(ChildTierCellTest.CELLS))),
+                                   "--request", write("r.json", encode_request(ask("percent", "12"))), "--resolutions", write("c.json", choices),
+                                   "--out", folder / "plan-2.json"],
+                                  capture_output=True, text=True, env=scene.env(folder / "기록"))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            short = json.loads(done.stdout)
+            self.assertEqual([(line["choice"], line["cells"], line["why"]) for line in short["unused"]], [("raise_list", 2, "held_kept")])
+            self.assertEqual([line["choice"] for line in short["chosen"]], ["keep"])
 
 
 class TierChoiceTest(unittest.TestCase):
