@@ -1,6 +1,7 @@
 ---
 name: stay-charge-change
 description: "이미 판매 중인 호텔 하나의 ERP Stay 부과금 금액(얼리 체크인 · 레이트 체크아웃 시간대 요율, 갈라 디너 금액과 연령별 단가, 리조트피 현장 결제 금액)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌린다. '레이트 체크아웃 50% 를 60% 로', '갈라 디너 성인 요금 100 으로', '리조트피 현장 결제 20달러로', '갈라 디너 아동 요금 10% 올려줘', '부과금 보여줘', '이 부과금 설정 다 보여줘', '어제 바꾼 부과금 되돌려줘' 요청에 쓴다. 객실 가격(가격 캘린더)은 stay-price-change, 부가옵션 금액은 stay-addon-price-change, 새 호텔 세팅은 stay-setup-guide · stay-setup-run 이 맡는다. 프로모션 할인은 ERP 에서 사람이 바꾼다(화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어서). 부과금 만들기 · 지우기 · 모양 바꾸기는 하지 않는다."
+version: 0.1.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -53,8 +54,8 @@ metadata:
 ## 읽기 — 바꾸기 · 되돌리기 · 적용이 모두 이것으로 읽는다
 
 1. `python3 scripts/charge_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"`(장부 번호가 있는 일은 `--record <번호>`).
-2. 답의 `charges` 값마다(i = 1, 2 …) `await stayCharge.readCharge(<값 그대로>)` 의 답을 `<R>/charge-<i>.json` 에 저장한다. 읽기는 창을 열어 보고 닫을 뿐 저장하지 않는다.
-3. `python3 scripts/charge_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. `read_at` 이 ERP 에서 읽은 시각, `missing` 은 목록에 없는 부과금이다.
+2. 답의 `charges` 값마다(i = 1, 2 …) `await stayCharge.readCharge(<값 그대로>)` 의 답을 `<R>/charge-<i>.json` 에 저장한다. 읽기는 창을 열고 닫을 뿐 저장하지 않는다.
+3. `python3 scripts/charge_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. `read_at` 은 ERP 에서 읽은 시각, `missing` 은 목록에 없는 부과금.
 4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayCharge.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayCharge.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름, `bad` 는 옮겨 적다 틀린 쪽이다 — 그 쪽만 다시 받고 틀린 파일은 그대로 둔다.
 
 답이 `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 답을 잃었으면 `stayCharge.last()` 의 답을 새 파일로 저장하거나 다시 불러 저장한다.
@@ -84,7 +85,7 @@ metadata:
 4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 칸 · 그대로인 칸 · 바꿀 수 없는 칸(`blocked` 의 칸마다 `name` 과 `why`)을 말한다. `free` 가 있으면 칸마다 "저장하면 무료가 됩니다"라고 말한다. `names` 가 있으면 그 문장을 그대로 말한다(알림이다). 그리고 꼭 말한다: "저장하면 ERP 가 시간대 줄과 연령별 단가를 다시 만들어 그 번호가 바뀌고, 되돌려도 번호는 돌아오지 않습니다(금액은 돌아옵니다)." `scope_card` 가 true 면 "저장할 때 적용 범위 기록이 하나 생길 수 있고(가격 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 칸과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 칸은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다(고름마다 담당자의 말을 `said` 에 그대로).
    - **저장할 것이 없으면**(`saves` 가 0) "바뀌는 칸이 없어 저장할 것이 없습니다"라고 하고 "적용"을 묻지 않는다.
-   - **그 밖에는** 저장 횟수(`saves`, 부과금마다 한 번)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
+   - **그 밖에는** 저장 횟수(`saves`)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
 
 ## 3. 되돌리기
 
