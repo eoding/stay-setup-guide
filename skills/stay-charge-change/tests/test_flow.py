@@ -147,6 +147,8 @@ class FourShapesTest(Flow):
         lines = page["text"].splitlines()
         self.assertEqual(lines.count(lines[0]), 1, "K4 — --text 는 제목을 한 번만 낸다")
         self.assertIn('10% 올려줘" 처럼 말씀해 주세요', page["text"], "K5 — 부과금마다 통화가 달라 말 보기는 퍼센트로")
+        first = listing["charges"][0]
+        self.assertIn(f'"{first["offer_name"]} · {first["name"]} 10% 올려줘"', page["text"], "T9 — 말 보기도 목록의 줄처럼 오퍼부터 댄다")
         self.assertEqual(self.erp.posts, [])
 
     def test_a_percentage_charge_with_two_time_bands_changes_one_band_and_sends_the_other_band_as_read(self):
