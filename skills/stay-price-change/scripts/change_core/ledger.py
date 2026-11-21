@@ -795,8 +795,9 @@ class Ledger:
         header = self._header(db, change_id)
         if header["kind"] == "snapshot":
             raise LedgerError(f"{change_id}번은 저장해 둔 상태입니다. 그 상태로 돌리려면 '저장해 둔 상태로 되돌리기'를 씁니다")
-        acts = self._acts(header["kind"], header["reverses"], None if header["request"] is None else json.loads(header["request"]))
-        if header["kind"] == "rollback" or acts.endswith("저장 상태로 되돌리기"):
+        request = None if header["request"] is None else json.loads(header["request"])
+        if header["kind"] == "rollback" or (request or {}).get("kind") == "restore_snapshot":
+            acts = self._acts(header["kind"], header["reverses"], request)
             raise LedgerError(f"{change_id}번은 {acts}입니다 — 되돌리기는 다시 되돌리지 않습니다. 되돌린 값으로 다시 바꾸려면 되돌린 "
                               "변경(목록에서 이 번호가 되돌린 줄)과 같은 요청으로 새로 바꿉니다 — 지금 값을 다시 읽어 미리보기부터")
         return header
