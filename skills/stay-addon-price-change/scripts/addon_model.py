@@ -26,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "stay-price-change"
 from change_core.answers import BrowserError  # noqa: E402
 from change_core.items import ItemState, Reading as Items, Refused, absent, item_key, key_fields  # noqa: E402
 from change_core.money import money, money_text  # noqa: E402
-from change_core.window import Form, form_value  # noqa: E402
+from change_core.names import NameNote, name_notes  # noqa: E402
+from change_core.window import Form, form_value, form_values  # noqa: E402
 
 ITEM_KIND = "addon_price"
 FIELDS = ("sell", "supply")
@@ -304,6 +305,22 @@ def decode_snapshot(data: Mapping) -> Snapshot:
 
 def item_state(line: Line) -> ItemState:
     return ItemState(line.label, PRESENT, line.fields(), line.others())
+
+
+def name_notes_of(snapshot: Snapshot, written: Iterable[tuple[str, str, Decimal | None]]) -> list[NameNote]:
+    """바꾸는(바꾼) 필드마다(항목 키, 필드, 바꾸기 전 값) 그 가격 줄의 이름 · 설명과 그 부가옵션의 이름에 바꾸기 전 값이 적혔는지 —
+    도우미는 이름과 설명을 바꾸지 않으므로 알린다(change_core.names). 부가옵션 자체의 설명은 목록에 보이지 않아 보지 않는다."""
+    found = []
+    for key, _field, before in written:
+        line = snapshot.lines.get(key_of_item(key))
+        if line is None:
+            continue
+        what = f"가격 줄 「{line.listed.title}」"
+        addon = "부가옵션 「" + " · ".join(part for part in (line.listed.offer, line.listed.addon) if part) + "」"
+        found += [(what, "이름", line.listed.name, before, False),
+                  (what, "설명", "\n".join(form_values(line.form, "description")), before, False),
+                  (addon, "이름", line.listed.addon, before, False)]
+    return name_notes(found)
 
 
 def snapshot_items(snapshot: Snapshot) -> Items:

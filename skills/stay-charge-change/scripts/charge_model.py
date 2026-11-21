@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "stay-price-change"
 from change_core.answers import BrowserError  # noqa: E402
 from change_core.items import ItemState, Reading, Refused, absent, item_key, key_fields  # noqa: E402
 from change_core.money import money, money_text  # noqa: E402
+from change_core.names import NameNote, name_notes  # noqa: E402
 from change_core.window import Form, form_value, form_values  # noqa: E402
 
 ITEM_KIND = "charge"
@@ -467,6 +468,20 @@ def snapshot_items(snapshot: Snapshot) -> Reading:
             continue
         items.update({(ITEM_KIND, key): state for key, state in charge.items().items()})
     return items
+
+
+def name_notes_of(snapshot: Snapshot, written: Iterable[tuple[str, str, Decimal | None]]) -> list[NameNote]:
+    """바꾸는(바꾼) 금액 칸마다(항목 키, 필드, 바꾸기 전 값) 그 부과금의 이름 · 설명에 바꾸기 전 값이 적혔는지 — 도우미는 이름과
+    설명을 바꾸지 않으므로 알린다(change_core.names). 정률 칸은 `%` 가 붙은 숫자만 본다."""
+    found = []
+    for key, field_name, before in written:
+        charge = snapshot.charges.get(charge_of_key(key))
+        if charge is None:
+            continue
+        what, percent = f"부과금 「{charge.label}」", field_name == "pct"
+        found += [(what, "이름", charge.name, before, percent),
+                  (what, "설명", "\n".join(form_values(charge.form, "description")), before, percent)]
+    return name_notes(found)
 
 
 # ───────────── 바꾸기 요청 ─────────────

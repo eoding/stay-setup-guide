@@ -18,7 +18,7 @@
 | `calls` | `--change` | 아직 저장되지 않은 단계 → `applyLine` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다 |
 | `record-result` | `--change` · `--result` | `applyLine` 답 하나 → 장부에 됨 · 멈춤. 다른 단계 · 다른 값을 물은 답이면 거절한다. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |
 | `check` | `--change` · `--snapshot` | 멈춘 변경을 방금 읽은 값으로 본다(stopped.md) |
-| `verify` | `--change` · `--snapshot` | 적용 뒤 견주기. `mismatches` 넣은 값과 다른 필드, `moved` 저장한 줄에서 그대로여야 할 금액 · 칸이 달라진 것. 하나라도 있으면 종료 1 |
+| `verify` | `--change` · `--snapshot` | 적용 뒤 견주기. `mismatches` 넣은 값과 다른 필드, `moved` 저장한 줄에서 그대로여야 할 금액 · 칸이 달라진 것. 하나라도 있으면 종료 1. `names` 는 `plan` 의 것과 같은 셈(저장한 필드로) |
 | `rollback` | `--change` · `--snapshot` · `--include-kept` · `--line` (여러 번) · `--record` · `--replaces` · `--sentence` · `--out` | 되돌리기 계산. 그 변경이 넣은 값이 지금도 그대로인 줄만 적어 둔 값으로 돌리고, 그 사이 달라진 줄은 그대로 두며 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다 |
 | `list` | `--look` · `--all` | 장부의 부가옵션 가격 줄 변경 목록, 새것부터. 줄마다 `scope`(저장이 값을 넣는 줄이 몇 줄인지 — 안 바꾸기로 고른 줄 · 아직 고르지 않은 빨간 줄 · 적용할 수 없는 줄은 세지 않는다 · 처음 줄 · 한 일 · 멈췄으면 어디까지)와 `offer`(그 변경의 줄이 든 오퍼, 둘 이상이면 ` · ` 로 이음). 줄 이름은 어디서나 「오퍼 · 부가옵션 · 줄 · 적용 대상」이다. 탭에 열린 호텔의 기록만 싣는다(`--look` 은 이 일의 `look.json`). `--all` 이면 다른 호텔의 기록을 그 뒤에 싣는다. 둘 다 없으면 거절한다. 답: `{ledger, hotel, changes, others}` — `others` 는 싣지 않은 다른 호텔의 번호 수. 상태 `empty` 는 저장할 것이 없는 미리보기다(바뀌는 칸이 없거나 빨간 줄을 모두 안 바꾸기로 고름 — 적용할 것이 없고, `scope` 끝에 「저장할 것 없음」) |
 
@@ -58,7 +58,7 @@
 
 - `look`: `hotel` · `currency` · `read_at` · `addons`(수) · `lines`(수).
 - `read`: `hotel` · `currency` · `read_at`(ERP 에서 읽은 시각 — 15분 창도 여기서 잰다) · `asked` · `found` · `missing`(목록에 없는 줄 번호) · `doubt`(목록과 편집 창이 다른 줄 번호).
-- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` 바뀌는 줄 · `unchanged` 그대로인 줄(안 바꾸기로 고른 줄 포함) · `blocked` · `red` 고를 줄 · `missing` · `chosen` 고른 줄과 판정 코드마다의 수 — 앞의 넷이 고른 줄을 빠짐없이 나눈다) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄마다 고름의 이름 `label` 과 담당자의 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`) · `scope_card`(저장할 줄 — 바뀌는 줄 · 고를 빨간 줄 — 가운데 편집 창에 적용 범위 카드가 있는 줄이 있으면 true. 그때만 적용 범위 기록 한 문장을 말한다).
+- `plan`: `change_id` · `replaces` · `counts`(`lines` · `will_change` 바뀌는 줄 · `unchanged` 그대로인 줄(안 바꾸기로 고른 줄 포함) · `blocked` · `red` 고를 줄 · `missing` · `chosen` 고른 줄과 판정 코드마다의 수 — 앞의 넷이 고른 줄을 빠짐없이 나눈다) · `saves`(저장 횟수, 빨간 줄이 남았으면 null) · `red`(규칙마다 `lines` · `choices` · `examples` 의 `line` · `name` · `moves`) · `chosen`(고른 줄마다 고름의 이름 `label` 과 담당자의 말 `said`) · `blocked`(줄마다 `rule` · `label` · `why`) · `names`(바꾸는 값이 그 가격 줄의 이름 · 설명이나 부가옵션의 이름에 화면이 쓰는 꼴로 적혀 있으면 그것마다 알림 한 문장 — 도우미는 이름 · 설명을 바꾸지 않으므로 사람이 ERP 에서 고치라고 한다. 날짜 · 시각 · 나이 · 수 · 코드로 적힌 숫자는 알리지 않는다. 고를 것이 아니다) · `scope_card`(저장할 줄 — 바뀌는 줄 · 고를 빨간 줄 — 가운데 편집 창에 적용 범위 카드가 있는 줄이 있으면 true. 그때만 적용 범위 기록 한 문장을 말한다).
 - `rollback`: `change_id` · `replaces` · `scope`(범위 한 줄 — 장부에 적었으면 `list` 의 그 번호 줄과 같다: 몇 줄 · 처음 줄 · "N번 되돌리기", 줄을 골랐으면 "(가격 줄 …번만)") · `restore_to`(적어 둔 시각) · `restored` · `kept` · `kept_why`(까닭마다 — 이 장부의 나중 변경 `change_id` · `at` · `sentence`, 아니면 `outside: true` 도우미 밖) · `saves`.
 
 ## 장부

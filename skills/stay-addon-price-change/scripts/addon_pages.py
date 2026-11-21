@@ -14,8 +14,8 @@ from addon_model import (
 )
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
-    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
-    stats, steps_list, stopped_choices, unremovable_table,
+    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner, rollback_ask,
+    rollback_head, stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -115,7 +115,7 @@ def blocked_lines(plan: Plan) -> list[dict]:
     return out
 
 
-def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) -> str:
+def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, names: Sequence[str] = ()) -> str:
     currency, request = plan.currency, plan.request
     found = counts(plan)
     title = f"미리보기 · {request.hotel} · 부가옵션 가격"
@@ -128,6 +128,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
                     "\"그 줄은 안 바꿈\"을 말씀해 주시면 다시 계산합니다.</div>")
     if found["blocked"]:
         body.append(f'<div class="banner amber"><b>바꿀 수 없는 줄 {found["blocked"]}줄</b>은 그대로 둡니다(아래 표의 까닭).</div>')
+    body.append(names_banner(names))
     body.append(stats([(found["will_change"], "바뀌는 줄"), (found["unchanged"], "그대로인 줄"), (found["blocked"], "바꿀 수 없는 줄"),
                        (found["red"], "고를 빨간 줄")] + ([(found["missing"], "목록에 없는 줄")] if found["missing"] else [])))
     rows = []
@@ -183,7 +184,7 @@ def _record_lines(record: ChangeRecord) -> dict[str, dict]:
     return lines
 
 
-def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None) -> str:
+def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None, names: Sequence[str] = ()) -> str:
     """장부의 변경 하나의 결과 — 줄마다 넣은 값과 다시 읽어 맞았는지. `moved` 는 그대로여야 할 필드 · 칸이 달라진 것(verify 의 답)."""
     currency = record.currency
     lines = _record_lines(record)
@@ -198,7 +199,7 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub">장부 {record.id}번 · 요청 “{esc(record.sentence)}”'
             f'{f" · {record.reverses}번 변경을 되돌림" if record.reverses else ""} · 통화 {esc(currency)}</p>',
-            result_banner(record, len(written), len(mismatched) + len(moved_keys - set(mismatched)), UNIT)]
+            result_banner(record, len(written), len(mismatched) + len(moved_keys - set(mismatched)), UNIT), names_banner(names)]
     if moved:
         body.append('<div class="banner red"><b>그대로여야 할 칸이 달라졌습니다.</b> '
                     + esc(" · ".join(f"{item['label']} {item['what']}" for item in moved)) + "</div>")

@@ -381,6 +381,43 @@ class AnswersTest(Flow):
         self.assertTrue(entry["scope"].startswith("부과금 1개 (데모 오퍼 2027 · 크리스마스 갈라 디너"), entry["scope"])
 
 
+class NameNoteTest(Flow):
+    """H1 — 시운전에서 레이트 체크아웃을 50% 에서 60% 로 바꾸는 동안 이름 · 설명은 「… 1박 요금의 50%」 그대로였고 아무도 말하지
+    않았다. 바꾸는 값이 이름 · 설명에 적혀 있으면 미리보기와 결과가 한 문장으로 알린다. 우연히 같은 숫자는 알리지 않는다."""
+
+    def test_a_name_and_a_description_that_state_the_old_rate_are_pointed_out_in_the_preview_and_the_result(self):
+        self.erp.charge("701")["description"] = "14:01 부터 18:00 까지 1박 요금의 50% 를 받습니다"
+        change, plan = self.preview(self.request(LATE_BAND, value="60", sentence="레이트 체크아웃 50% 를 60% 로"))
+        names = json.loads(plan.read_text(encoding="utf-8"))["names"]
+        self.assertEqual(names, [
+            "부과금 「데모 오퍼 2027 · 레이트 체크아웃 (14시 이후 · 1박 요금의 50%)」의 이름에 바꾸기 전 값(50%)이 그대로 적혀 "
+            "있습니다 — 도우미는 이름을 바꾸지 않으니 ERP 에서 사람이 고쳐 주세요.",
+            "부과금 「데모 오퍼 2027 · 레이트 체크아웃 (14시 이후 · 1박 요금의 50%)」의 설명 “14:01 부터 18:00 까지 1박 요금의 50% 를 "
+            "받습니다”에 바꾸기 전 값(50%)이 그대로 적혀 있습니다 — 도우미는 설명을 바꾸지 않으니 ERP 에서 사람이 고쳐 주세요."])
+        self.assertIn(names[0], self.cli("render", "preview", "--plan", plan, "--text")["text"])
+        self.apply(change, plan)
+        self.assertEqual(self.erp.charge("701")["name"], "레이트 체크아웃 (14시 이후 · 1박 요금의 50%)", "이름은 바꾸지 않는다")
+        verified = self.cli("verify", "--change", change, "--snapshot", self.read(record=change))
+        self.assertEqual(verified["names"], names, "적용 뒤에도 말한다")
+        self.assertIn(names[1], self.cli("render", "result", "--change", change, "--text")["text"])
+
+    def test_an_on_site_amount_in_the_description_is_pointed_out_too(self):
+        self.erp.charge("704")["description"] = "체크인 때 15달러를 호텔에 직접 냅니다"
+        _change, plan = self.preview(self.request(RESORT, value="17", sentence="리조트피 현장 결제 17달러로"))
+        name, = json.loads(plan.read_text(encoding="utf-8"))["names"]
+        self.assertIn("설명 “체크인 때 15달러를 호텔에 직접 냅니다”에 바꾸기 전 값(15)", name)
+
+    def test_a_number_that_only_happens_to_match_the_old_amount_is_not_pointed_out(self):
+        self.erp.charge("703")["amount"] = "24.00"                        # 이름의 「12/24」 는 날짜다
+        self.erp.charge("701")["tiers"][0]["amount"] = "14.00"            # 이름의 「14시 이후」 는 시각이다
+        self.erp.charge("701")["description"] = "만 14세 이상은 14:00 까지 무료입니다"
+        _change, plan = self.preview(self.request(GALA, {"offer": "601", "charge": "701", "time": "12:01-14:00", "field": "amount"},
+                                                  percent="5", sentence="갈라 디너와 레이트 체크아웃 앞 시간대 5% 올려줘"))
+        data = json.loads(plan.read_text(encoding="utf-8"))
+        self.assertEqual((data["counts"]["will_change"], data["names"]), (2, []))
+        self.assertNotIn("바꾸기 전 값", self.cli("render", "preview", "--plan", plan, "--text")["text"])
+
+
 class LedgerListTest(Flow):
     """H3 — 저장할 것이 없는 미리보기는 그렇게 적히고 그렇게 보이며, 목록은 탭의 호텔 것을 먼저, 다른 호텔 것은 청할 때만 싣는다."""
 

@@ -196,6 +196,15 @@ def result_banner(record, written: int, mismatched: int, unit: str = "칸") -> s
     return '<div class="banner blue"><b>아직 적용하지 않았습니다.</b></div>'
 
 
+def names_banner(names: Iterable[str]) -> str:
+    """이름 · 설명에 바꾸기 전 값이 적힌 항목(change_core.names 의 문장들) — 알림이다(고를 것이 아니다). 없으면 빈 글자."""
+    names = list(names)
+    if not names:
+        return ""
+    return ('<div class="banner blue"><b>이름 · 설명에 바꾸기 전 값이 적혀 있습니다.</b>'
+            + "".join(f"<br>{esc(sentence)}" for sentence in names) + "</div>")
+
+
 def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> str:
     """멈춘 변경의 선택지. `waiting` 은 남은 저장이 쓰는 항목 수(표에 「아직 저장 안 함」으로 보이는 것)."""
     if record.status != "stopped":

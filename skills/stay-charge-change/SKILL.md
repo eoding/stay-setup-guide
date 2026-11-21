@@ -79,7 +79,7 @@ metadata:
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」 · 「금액 칸」). 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/charge_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 가 저장 횟수(빨간 줄이 남았으면 null). 다시 계산하면 `plan-2.json` 처럼 새 이름에 쓰고 `--replaces <앞 번호>` 를 붙인다.
 3. `python3 scripts/charge_change.py render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
-4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 칸 · 그대로인 칸 · 바꿀 수 없는 칸(`blocked` 의 칸마다 `name` 과 `why`)을 말한다. `free` 가 있으면 칸마다 "저장하면 무료가 됩니다"라고 말한다. 그리고 꼭 말한다: "저장하면 ERP 가 시간대 줄과 연령별 단가를 다시 만들어 그 ERP 번호가 바뀌고, 되돌려도 번호는 돌아오지 않습니다(금액은 돌아옵니다)." `scope_card` 가 true 면 "저장할 때 ERP 가 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
+4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 칸 · 그대로인 칸 · 바꿀 수 없는 칸(`blocked` 의 칸마다 `name` 과 `why`)을 말한다. `free` 가 있으면 칸마다 "저장하면 무료가 됩니다"라고 말한다. `names` 가 있으면 그 문장을 그대로 말한다(알림이다). 그리고 꼭 말한다: "저장하면 ERP 가 시간대 줄과 연령별 단가를 다시 만들어 그 ERP 번호가 바뀌고, 되돌려도 번호는 돌아오지 않습니다(금액은 돌아옵니다)." `scope_card` 가 true 면 "저장할 때 ERP 가 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 칸과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 칸은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다(고름마다 담당자의 말을 `said` 에 그대로).
    - **저장할 것이 없으면**(`saves` 가 0) "바뀌는 칸이 없어 저장할 것이 없습니다"라고 하고 "적용"을 묻지 않는다.
    - **그 밖에는** 저장 횟수(`saves`, 부과금마다 한 번)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
@@ -95,7 +95,7 @@ metadata:
 1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `python3 scripts/charge_change.py begin --change N --plan "<계산 파일>" --snapshot "<S2>"`. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)이면 아무것도 저장하지 않았다 — "미리보기 뒤에 ERP 의 값이 바뀌었습니다(<`differences` 의 부과금>)." 하고 「2」 의 읽기부터 새 미리보기를 만든다.
 2. `python3 scripts/charge_change.py calls --change N` 의 `calls` 를 차례로 하나씩: `await stayCharge.applyCharge(<payload 그대로>)` → 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장 → `python3 scripts/charge_change.py record-result --change N --result "<그 파일>"`. `saved: true` 이고 `status: applying` 이면 다음, `applied` 면 3. 그 밖이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다. 같은 저장을 두 번 누르지 않는다.
 3. **뒤에 다시 읽기.** `read-calls --record N` 으로 「읽기」 → S3. `python3 scripts/charge_change.py verify --change N --snapshot "<S3>"`.
-4. `python3 scripts/charge_change.py render result --change N --snapshot "<S3>"` → `page` 를 연다.
+4. `python3 scripts/charge_change.py render result --change N --snapshot "<S3>"` → `page` 를 연다. 3 의 `names` 가 있으면 그 문장도 그대로 말한다.
    - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 그 부과금의 다른 금액과 칸도 그대로입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."
    - `same: false`(종료 1)면 "적용했지만 다시 읽었더니 다른 곳이 있습니다" 하고 `mismatches`(넣은 값과 다름) · `moved`(그대로여야 할 것이 달라짐)를 하나씩 말한다. 다시 저장하지 않는다.
 

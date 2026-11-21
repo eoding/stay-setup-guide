@@ -12,8 +12,8 @@ from typing import Sequence
 from charge_model import FIELD_LABELS, Charge, Listing, Place, part_of_key
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
-    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
-    stats, steps_list, stopped_choices, unremovable_table,
+    chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner, rollback_ask,
+    rollback_head, stats, steps_list, stopped_choices, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -118,7 +118,7 @@ def _verdict_cell(change: AmountChange | None, why: str) -> str:
             f'{f"<small class=more>{esc(why)}</small>" if why else ""}</td>')
 
 
-def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) -> str:
+def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, names: Sequence[str] = ()) -> str:
     currency, request = plan.currency, plan.request
     found = counts(plan)
     title = f"미리보기 · {request.hotel} · 부과금"
@@ -135,6 +135,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
     if free:
         body.append(f'<div class="banner amber"><b>무료가 됩니다 — {len(free)}칸.</b> {esc(" · ".join(free))} 은(는) 저장하면 '
                     "0 이 되어 손님이 내는 금액이 없어집니다.</div>")
+    body.append(names_banner(names))
     body.append(stats([(found["will_change"], "바뀌는 칸"), (found["unchanged"], "그대로인 칸"), (found["blocked"], "바꿀 수 없는 칸"),
                        (found["red"], "고를 빨간 줄")] + ([(found["missing"], "목록에 없는 부과금")] if found["missing"] else [])))
     by_place = {change.place: change for change in plan.changes}
@@ -174,7 +175,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None) ->
     return page(title, "\n".join(body), MAKER)
 
 
-def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None) -> str:
+def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None, names: Sequence[str] = ()) -> str:
     """장부의 변경 하나의 결과 — 칸마다 넣은 값과 다시 읽어 맞았는지. `moved` 는 그대로여야 할 칸이 달라진 것(verify 의 답)."""
     currency = record.currency
     rollback = record.kind == "rollback"
@@ -186,7 +187,7 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub">장부 {record.id}번 · 요청 “{esc(record.sentence)}”'
             f'{f" · {record.reverses}번 변경을 되돌림" if record.reverses else ""} · 통화 {esc(currency)}</p>',
-            result_banner(record, len(written), len(mismatched) + len(moved), UNIT)]
+            result_banner(record, len(written), len(mismatched) + len(moved), UNIT), names_banner(names)]
     if moved:
         body.append('<div class="banner red"><b>그대로여야 할 칸이 달라졌습니다.</b> '
                     + esc(" · ".join(f"{item['label']} {item['what']}" for item in moved)) + "</div>")

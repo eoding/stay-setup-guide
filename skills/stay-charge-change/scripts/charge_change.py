@@ -45,7 +45,7 @@ from pathlib import Path
 from charge_model import (
     ITEM_KIND, OFFERLESS, ModelError, Snapshot, charge_of, charge_of_key, decode_hotel, decode_listing, decode_request,
     decode_snapshot, encode_hotel, encode_listing, encode_request, encode_snapshot, field_label_of, hotel_label,
-    known_charges, listing_of, part_of_key, refs_text, snapshot_items,
+    known_charges, listing_of, name_notes_of, part_of_key, refs_text, snapshot_items,
 )
 from charge_pages import (
     blocked_amounts, chosen_amounts, free_amounts, red_lines, render_preview, render_prices, render_result, render_rollback,
@@ -173,10 +173,19 @@ def cmd_plan(args):
         hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=OFFERLESS, currency=plan.currency, sentence=request.sentence,
         read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(request), reading=encode_snapshot(snapshot),
         replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
+    names = name_notes_of(snapshot, ((change.place.key, change.place.field, change.before) for change in plan.changes
+                                     if change.writes))
     return dict(change_id=change_id, replaces=args.replaces, counts=counts(plan), plan=encode_plan(plan, encode_request),
                 red=red_lines(plan), chosen=chosen_amounts(plan), blocked=blocked_amounts(plan), free=free_amounts(plan),
+                names=[note.sentence for note in names],
                 scope_card=any(name.startswith("scope_") for charge in plan.charges for name, _text in charge.form),
                 steps=None if steps is None else [encode_step(step) for step in steps])
+
+
+def written_names(ledger: Ledger, record) -> list[str]:
+    """저장한 금액 칸의 바꾸기 전 값이 그 부과금의 이름 · 설명에 적혀 있으면 그 알림 문장들(미리보기와 같은 셈, 그 번호가 읽은 값으로)."""
+    return [note.sentence for note in name_notes_of(recorded_snapshot(ledger, record.id), (
+        (row.item_key, row.field, row.before) for row in record.rows if row.written and row.action))]
 
 
 def moved_since(ledger: Ledger, change_id: int, now: Snapshot) -> list[dict]:
@@ -193,7 +202,7 @@ def cmd_render(args):
     if args.kind == "preview":
         data = load(args.plan)
         plan = decode_plan(data["plan"], decode_request)
-        html, hotel = render_preview(plan, data.get("change_id"), data.get("steps")), plan.request.hotel
+        html, hotel = render_preview(plan, data.get("change_id"), data.get("steps"), data.get("names") or ()), plan.request.hotel
     elif args.kind == "rollback":
         data = load(args.plan)
         plan = decode_rollback(data["rollback"])
@@ -205,7 +214,7 @@ def cmd_render(args):
         ledger = open_ledger()
         record = ledger.change(args.change)
         moved = moved_since(ledger, args.change, decode_snapshot(load(args.snapshot))) if args.snapshot else ()
-        html, hotel = render_result(record, moved, str(ledger.path)), record.hotel
+        html, hotel = render_result(record, moved, str(ledger.path), written_names(ledger, record)), record.hotel
         name = "부과금 되돌리기 결과" if record.kind == "rollback" else name
     if args.text:           # 글만 옮길 때 — 페이지 파일을 하나 더 만들지 않는다
         return dict(text=page_text(html))
@@ -291,7 +300,8 @@ def cmd_verify(args):
     same_hotel_or_refuse(args.change, recorded_snapshot(ledger, args.change), now)
     mismatches = ledger.verify(args.change, snapshot_items(now))
     moved = moved_since(ledger, args.change, now)
-    return dict(change_id=args.change, same=not mismatches and not moved, moved=moved, mismatches=[
+    return dict(change_id=args.change, same=not mismatches and not moved, moved=moved,
+                names=written_names(ledger, ledger.change(args.change)), mismatches=[
         dict(charge=charge_of_key(item.item_key), label=item.label, field=item.field,
              what=field_label_of(item.item_key, item.field), after=money_text(item.after), seen=money_text(item.seen),
              seen_state=item.seen_state) for item in mismatches])
@@ -370,7 +380,7 @@ def short_read(result: dict) -> dict:
 def short_plan(result: dict) -> dict:
     return dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
                 saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
-                blocked=result["blocked"], free=result["free"], scope_card=result["scope_card"])
+                blocked=result["blocked"], free=result["free"], names=result["names"], scope_card=result["scope_card"])
 
 
 def short_rollback(result: dict) -> dict:

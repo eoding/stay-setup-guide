@@ -48,10 +48,10 @@ class Flow(unittest.TestCase):
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return path
 
-    def request(self, name="request.json", lines=BOTH, **change):
+    def request(self, name="request.json", lines=BOTH, sentence="조식 · 엑스트라베드 10% 올려줘", **change):
         change = change or {"percent": "10"}
         return self.file(name, dict(kind="addon_change", hotel=scene.HOTEL, lines=lines, field=change.pop("field", "sell"),
-                                    sentence="조식 · 엑스트라베드 10% 올려줘", **change))
+                                    sentence=sentence, **change))
 
     def read(self, **scope) -> Path:
         """읽기 한 번 — read-calls → 줄마다 readLine 답 → read. 지금 값 파일의 자리를 돌려준다."""
@@ -278,6 +278,30 @@ class StoppedTest(Flow):
         report = self.cli("check", "--change", change, "--snapshot", self.read(record=change))
         self.assertEqual((report["cause"], report["can_continue"]), ("cut_off", True))
         self.assertEqual(len(self.cli("calls", "--change", change)["calls"]), 2)
+
+
+class NameNoteTest(Flow):
+    """H1 — 바꾸는 값이 가격 줄의 이름 · 설명이나 부가옵션의 이름에 적혀 있으면 미리보기와 결과가 한 문장으로 알린다. 우연히 같은
+    숫자(시각 · 나이 · 수)는 알리지 않는다."""
+
+    def test_the_old_price_in_a_description_is_pointed_out_and_a_time_or_an_age_is_not(self):
+        self.erp.lines["301"]["description"] = "1인 20달러, 만 6~11세 아동은 10달러"
+        self.erp.lines["304"]["description"] = "14:30 이후 30분 안에 넣어 드립니다"        # 30 은 시각 · 분
+        change, plan = self.preview(self.request(sentence="조식 · 엑스트라베드 10% 올려줘"))
+        names = json.loads(plan.read_text(encoding="utf-8"))["names"]
+        self.assertEqual(names, ["가격 줄 「데모 오퍼 2027 · 조식 추가 (성인) · 비수기 조식」의 설명 “1인 20달러, 만 6~11세 아동은 "
+                                 "10달러”에 바꾸기 전 값(20)이 그대로 적혀 있습니다 — 도우미는 설명을 바꾸지 않으니 ERP 에서 사람이 "
+                                 "고쳐 주세요."])
+        self.assertIn(names[0], self.cli("render", "preview", "--plan", plan, "--text")["text"])
+        self.apply(change, plan)
+        self.assertEqual(self.cli("verify", "--change", change, "--snapshot", self.read(record=change))["names"], names)
+        self.assertIn(names[0], self.cli("render", "result", "--change", change, "--text")["text"])
+
+    def test_the_old_price_in_the_add_on_name_is_pointed_out(self):
+        self.erp.lines["304"]["addon_name"] = "엑스트라베드 (30달러)"
+        _change, plan = self.preview(self.request(lines=BOTH[1:], sentence="엑스트라베드 10% 올려줘"))
+        name, = json.loads(plan.read_text(encoding="utf-8"))["names"]
+        self.assertTrue(name.startswith("부가옵션 「데모 오퍼 2027 · 엑스트라베드 (30달러)」의 이름에 바꾸기 전 값(30)"), name)
 
 
 class LedgerListTest(Flow):
