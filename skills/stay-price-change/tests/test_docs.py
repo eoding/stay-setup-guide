@@ -22,6 +22,7 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL / "scripts"))
 
+from change_core.chrome import UNDO_ONCE_STOPPED  # noqa: E402
 from change_core.ledger import CAUSES, IDLE  # noqa: E402
 from price_browser import PAGE_KEEPS, READ_SPAN, read_calls, reserved_probes  # noqa: E402
 from price_change import parser  # noqa: E402
@@ -305,6 +306,13 @@ class TrialEightDocsTest(unittest.TestCase):
 
     def read(self, skill: str, place: str) -> str:
         return (SKILL.parent / skill / place).read_text(encoding="utf-8")
+
+    def test_a_stopped_rollback_is_not_offered_to_be_undone_and_the_page_says_the_same(self):
+        """되돌리기는 다시 되돌리지 않는다 — 멈춘 되돌리기에는 「된 것까지 되돌리기」가 없고, 세 도우미의 stopped.md 가 페이지와 같은 말을 한다."""
+        for skill in ("stay-price-change", "stay-addon-price-change", "stay-charge-change"):
+            stopped = self.read(skill, "references/stopped.md")
+            self.assertIn("멈춘 것이 되돌리기면", stopped, skill)
+            self.assertIn(f'"{UNDO_ONCE_STOPPED}"', stopped, skill)
 
     def test_u1_the_value_a_check_read_is_told_with_its_time_never_as_now(self):
         stopped = self.read("stay-price-change", "references/stopped.md")

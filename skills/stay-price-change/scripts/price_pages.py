@@ -25,7 +25,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
     notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view,
-    stopped_choices, unremovable_table,
+    stopped_choices, undoes, unremovable_table,
 )
 from change_core.files import record_progress
 from change_core.ledger import ChangeRecord
@@ -681,8 +681,8 @@ def _waiting_tag(view: CellView, steps: Mapping) -> str:
 
 
 def _undoes(record: ChangeRecord) -> bool:
-    """되돌리기인가 — 변경 되돌리기 · 저장해 둔 상태로 되돌리기."""
-    return record.kind == "rollback" or (record.request or {}).get("kind") == "restore_snapshot"
+    """되돌리기인가 — 변경 되돌리기 · 저장해 둔 상태로 되돌리기(chrome.undoes)."""
+    return undoes(record)
 
 
 def result_name(record: ChangeRecord) -> str:

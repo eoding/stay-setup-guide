@@ -317,6 +317,39 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
             self.ledger(minutes + 0.5).record_step(rid, index, saved=True)
         return rid
 
+    def test_a_rollback_that_stopped_does_not_offer_to_undo_what_it_undid(self):
+        """되돌리기가 중간에 멈췄다(둘 가운데 첫 저장만 됨). 되돌리기는 다시 되돌리지 않으므로(`rollback` 이 거절한다) 페이지는
+        「된 것까지 되돌리기」를 권하지 않고, 남은 것은 되돌리던 변경을 새로 되돌리면 된다고 말한다 — 그때 나머지만 되돌린다."""
+        self.ledger(2).record_step(self.change, 2, saved=True)
+
+        def at(minutes):
+            return (REAL + timedelta(minutes=minutes)).isoformat(timespec="seconds")
+
+        ledger = self.ledger(10)
+        rollback = plan_cell_rollback(ledger.recorded_change(self.change), ledger.later_writes(self.change),
+                                      scene.applied(self.snapshot, self.steps, at(9)))
+        rid = ledger.record_preview(hotel=rollback.hotel, hotel_id=rollback.hotel_id, offer=rollback.offer, currency=rollback.currency,
+                                    sentence="되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback), reverses=self.change)
+        steps = save_steps(rollback_writes(rollback))
+        self.assertEqual(len(steps), 2)
+        self.ledger(10.5).begin(rid, step_plans(steps), read_at=at(10.2))
+        self.ledger(11).record_step(rid, 1, saved=True)
+        self.ledger(12).record_step(rid, 2, saved=False, note="드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다")
+        record = self.ledger(13).change(rid)
+        text = page_text(render_result(record))
+        self.assertEqual((record.status, result_name(record)), ("stopped", "되돌리다 멈춤"))
+        self.assertNotIn("된 것까지 되돌리기", text)
+        self.assertIn("이어서 — 남은 저장 한 번을 마저 적용합니다", text)
+        self.assertIn("남은 것을 되돌리려면 되돌리던 것을 새로 되돌려 달라고 하세요 — 이미 되돌린 것은 빼고 나머지만 되돌립니다.", text)
+        with self.assertRaisesRegex(Exception, "다시 되돌리지 않습니다"):
+            self.ledger(14).undoable(rid)
+        # 되돌리던 변경을 새로 되돌리면 — 첫 저장이 되돌린 객실은 빼고, 아직 그 변경의 값인 객실만 되돌린다
+        still = [step for step in self.steps if step.room != steps[0].room]
+        again = plan_cell_rollback(self.ledger(15).recorded_change(self.change), self.ledger(15).later_writes(self.change),
+                                   scene.applied(self.snapshot, still, at(15)))
+        self.assertEqual([step.room for step in save_steps(rollback_writes(again))], [step.room for step in still])
+        self.assertEqual(0 < len(again.restored) < len(rollback.restored), True)
+
     def test_a_change_that_finished_keeps_its_name_its_footer_and_the_undo_hint(self):
         self.ledger(2).record_step(self.change, 2, saved=True)
         record = self.ledger(3).change(self.change)

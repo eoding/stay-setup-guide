@@ -321,9 +321,16 @@ def names_banner(names: Iterable[str]) -> str:
             + "".join(f"<br>{esc(sentence)}" for sentence in names) + "</div>")
 
 
+def undoes(record) -> bool:
+    """되돌리기인가 — 변경 되돌리기 · 저장해 둔 상태로 되돌리기. 다시 되돌리지 않는 기록이다(ledger `_undoable`)."""
+    return record.kind == "rollback" or (record.request or {}).get("kind") == "restore_snapshot"
+
+
 def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> str:
     """멈춘 변경의 선택지 — stopped.md 2 · 3 과 같은 것만(stop_mode). `waiting` 은 남은 저장이 쓰는 항목 수(표에 「아직 저장 안 함」으로
-    보이는 것). 「크롬에서 ERP 로그인을 확인한 뒤」는 로그인이 풀린 것일 수 있을 때만 — 저장됐는지 몰랐거나 페이지가 로그인을 말했을 때."""
+    보이는 것). 「크롬에서 ERP 로그인을 확인한 뒤」는 로그인이 풀린 것일 수 있을 때만 — 저장됐는지 몰랐거나 페이지가 로그인을 말했을 때.
+    멈춘 되돌리기에는 「된 것까지 되돌리기」가 없다 — 되돌리기는 다시 되돌리지 않아 명령이 거절한다. 남은 것은 되돌리던 변경을 새로
+    되돌려 달라고 하면 된다(이미 되돌린 것은 장부가 알아 나머지만 되돌린다)."""
     mode = stop_mode(record)
     if mode is None:
         return ""
@@ -337,7 +344,10 @@ def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> st
         return (f'<div class="banner blue">이 변경이 저장한 {unit}은 뒤에 모두 되돌렸습니다. 이어서 할 것도 되돌릴 것도 없습니다. '
                 "남은 부분을 바꾸려면 새로 말씀해 주세요.</div>")
     back = ""
-    if alive:
+    undoing = undoes(record)
+    rest = ("남은 부분은 새로 되돌려 달라고 하셔야 합니다(새 미리보기부터)." if undoing
+            else "남은 부분은 지금 값으로 새로 바꿔야 합니다(새 미리보기부터).")
+    if alive and not undoing:
         what = "이미 된 저장 가운데 아직 되돌리지 않은 것" if mode == "undone" else f"이미 된 저장 {times_word(done)}"
         back = f'<div><b>된 것까지 되돌리기</b> — {what}을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>'
     shown = f"(아래 표의 「아직 저장 안 함」 {waiting:,}{unit}이 그 값으로 바뀝니다)" if waiting else ""
@@ -358,9 +368,10 @@ def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> st
     else:
         lead = f"{checked_when(record)}에 ERP 를 다시 읽어 보니 이어서 할 수 없습니다."
         why = notes(checked.why)
-        offered = back + stay + " 남은 부분은 지금 값으로 새로 바꿔야 합니다(새 미리보기부터).</div>"
+        offered = back + stay + f" {rest}</div>"
+    once = f"<p>{esc(UNDO_ONCE_STOPPED)}</p>" if undoing and alive else ""
     ask = "크롬에서 ERP 로그인을 확인한 뒤 대화창에서 골라 주세요." if login else "대화창에서 골라 주세요."
-    return (f'<h2>어떻게 할까요?</h2><p>{esc(lead)}</p>{why}<p>{ask}</p><div class="choices">{offered}</div>')
+    return (f'<h2>어떻게 할까요?</h2><p>{esc(lead)}</p>{why}<p>{ask}</p><div class="choices">{offered}</div>{once}')
 
 
 def rollback_head(plan: RollbackPlan, scope: str = "") -> str:
@@ -453,6 +464,8 @@ def chosen_table(entries: Iterable[tuple[str, str, int, str | None]], unit: str 
 
 ROLLBACK_NOTE = ("이 되돌리기도 장부에 적힙니다. 되돌리기는 다시 되돌리지 않습니다 — 되돌린 값으로 다시 바꾸려면 같은 내용으로 새로 "
                  "바꿔 달라고 하세요.")
+UNDO_ONCE_STOPPED = ("남은 것을 되돌리려면 되돌리던 것을 새로 되돌려 달라고 하세요 — 이미 되돌린 것은 빼고 나머지만 "
+                     "되돌립니다.")   # 멈춘 되돌리기의 선택지 아래(세 도우미) — 「된 것까지 되돌리기」는 없다
 UNDO_ONCE = ("이 되돌리기는 다시 되돌리지 않습니다. 되돌린 값으로 다시 바꾸려면 같은 내용으로 새로 바꿔 달라고 하세요.")   # 되돌리기 · 저장 상태로 되돌리기의 결과 페이지 끝(세 도우미)
 
 
