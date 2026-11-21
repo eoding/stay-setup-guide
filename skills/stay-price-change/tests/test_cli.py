@@ -22,7 +22,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 from change_core.answers import ask_sum  # noqa: E402
-from change_core.ledger import DB_NAME  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
 from price_browser import PAGE_KEEPS  # noqa: E402
 from price_model import CellKey, Snapshot, decode_snapshot, decode_step, encode_request, encode_snapshot  # noqa: E402
 
@@ -206,7 +206,14 @@ class CommandTest(unittest.TestCase):
             last = self.run_cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer(call)))
         self.assertEqual(last["status"], "applied")
 
-        after = self.write("after.json", encode_snapshot(scene.applied(scene.snapshot(), map(decode_step, plan["steps"]))))
+        applied = scene.applied(scene.snapshot(), map(decode_step, plan["steps"]))
+        after = self.write("after.json", encode_snapshot(applied))
+        for other in (replace(applied, offer="다른 오퍼"), replace(applied, hotel="다른 호텔", hotel_id="9")):
+            refused = self.run_cli("verify", "--change", change, "--snapshot", self.write("other.json", encode_snapshot(other)), code=2)
+            self.assertIn(f"{change}번은 호텔 1 (데모 호텔) · 기본 오퍼 입니다", refused["error"],
+                          "같은 객실 · 요금제 이름과 같은 값이어도 다른 호텔 · 오퍼를 읽은 값으로는 확인하지 않는다")
+        self.assertFalse(any(row.verified for row in Ledger(self.dir / "기록" / DB_NAME).change(change).rows),
+                         "거절한 verify 는 장부에 확인됨을 적지 않는다")
         self.assertTrue(self.run_cli("verify", "--change", change, "--snapshot", after)["same"])
         result = Path(self.run_cli("render", "result", "--change", change, "--out", self.dir / "result.html")["page"])
         self.assertIn("90칸 모두 넣은 값과 같습니다", result.read_text(encoding="utf-8"))

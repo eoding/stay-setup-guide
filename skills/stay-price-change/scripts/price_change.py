@@ -422,12 +422,17 @@ def cmd_record_result(args):
                                           unknown=outcome.saved == "unknown"))
 
 
-def cmd_check(args):
-    ledger = open_ledger()
-    record, now = ledger.change(args.change), decode_snapshot(load(args.snapshot))
+def same_record_hotel(ledger: Ledger, change_id: int, now) -> None:
+    """방금 읽은 값(`now`)이 그 장부 번호의 호텔 · 오퍼가 아니면 거절한다 — check · verify 가 장부에 무엇이든 적기 전에."""
+    record = ledger.change(change_id)
     if not same_hotel(record.hotel, record.hotel_id, now.hotel, now.hotel_id) or record.offer != now.offer:
-        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {args.change}번은 "
+        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} · {now.offer} 것이고, {change_id}번은 "
                         f"{hotel_label(record.hotel, record.hotel_id)} · {record.offer} 입니다")
+
+
+def cmd_check(args):
+    ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
+    same_record_hotel(ledger, args.change, now)
     report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at)
     step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
     return dict(change_id=report.change_id, scope=listed(ledger, args.change)[0]["scope"], status=report.status, cause=report.cause,
@@ -439,7 +444,9 @@ def cmd_check(args):
 
 
 def cmd_verify(args):
-    mismatches = open_ledger().verify(args.change, snapshot_reading(decode_snapshot(load(args.snapshot))))
+    ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
+    same_record_hotel(ledger, args.change, now)
+    mismatches = ledger.verify(args.change, snapshot_reading(now))
     return dict(change_id=args.change, same=not mismatches, mismatches=[
         dict(key=key_fields(item.item_key), label=item.label, field=item.field, after=money_text(item.after),
              seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])
