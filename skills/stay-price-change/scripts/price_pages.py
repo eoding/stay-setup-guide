@@ -25,8 +25,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
     notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view,
-    stopped_choices,
-    unremovable_table,
+    stopped_choices, unremovable_table,
 )
 from change_core.files import record_progress
 from change_core.ledger import ChangeRecord
@@ -735,7 +734,8 @@ def _waiting_intro(record: ChangeRecord, waiting: int, moved: int) -> str:
 def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False) -> str:
     """장부의 변경 하나의 결과. 칸마다 — 저장한 칸은 `전 → 넣은 값`, 아직 저장하지 않은 칸은 `미리보기 때 값 → 이어서 하면 넣을
     값`과 「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만 「그대로」. 멈춘 뒤 다시 읽어(check) 미리보기 때와 달라진
-    칸은 미리보기 때 값과 그 check 가 읽은 값(그 시각과 함께), 「그 사이 ERP 에서 바뀜 · 넣지 않음」. 멈춘 변경을 이어서 할지 고르는 담당자가 보는 페이지다."""
+    칸은 미리보기 때 값과 그 check 가 읽은 값(그 시각과 함께), 「그 사이 ERP 에서 바뀜 · 넣지 않음」. 멈춘 변경을 이어서 할지 고르는
+    담당자가 보는 페이지다."""
     currency = record.currency
     views = cell_views(record)
     stop = stop_view(record)

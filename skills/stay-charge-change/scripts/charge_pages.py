@@ -14,8 +14,7 @@ from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_r
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner, nothing_left,
     notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices,
-    times_word,
-    unremovable_table,
+    times_word, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
