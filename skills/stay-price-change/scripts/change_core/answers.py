@@ -449,8 +449,8 @@ def unanswered(calls: Iterable[Mapping], results: Iterable, op: str) -> list[dic
 
 
 def reading_time(results: Iterable, reads: Iterable[str]) -> str:
-    """읽기 한 번이 ERP 를 읽은 시각(지금 시각대의 ISO, 초까지) — 그 읽기에서 부른 읽는 작업(`reads`)의 온전한 답마다 페이지가
-    적은 끝난 시각(`doneAt`) 가운데 가장 이른 것. 명령을 부른 때가 아니다(읽기가 끝나고 몇 분 뒤에 부를 수 있다). 15분 창도 이
+    """읽기 한 번이 ERP 를 읽은 시각(지금 시각대의 ISO, 초까지 — 페이지가 적은 천분의 1초가 있으면 그것까지) — 그 읽기에서
+    부른 읽는 작업(`reads`)의 온전한 답마다 페이지가 적은 끝난 시각(`doneAt`) 가운데 가장 이른 것. 명령을 부른 때가 아니다(읽기가 끝나고 몇 분 뒤에 부를 수 있다). 15분 창도 이
     시각에서 잰다. 끝난 시각이 없는 답(예전 판 페이지의 답)이 하나라도 있으면 언제 읽었는지 모르므로 거절한다."""
     moments, reads = [], tuple(reads)
     for result in answers(results, latest=True)[0]:
@@ -468,7 +468,8 @@ def reading_time(results: Iterable, reads: Iterable[str]) -> str:
         moments.append(moment)
     if not moments:
         raise BrowserError("읽기 답이 하나도 없어 언제 읽었는지 모릅니다")
-    return min(moments).astimezone().isoformat(timespec="seconds")
+    first = min(moments).astimezone()   # 페이지가 적은 천분의 1초는 남긴다 — 같은 초에 읽은 두 읽기를 begin · check 가 가른다
+    return first.isoformat(timespec="milliseconds" if first.microsecond else "seconds")
 
 
 @dataclass(frozen=True)
