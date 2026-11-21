@@ -347,6 +347,38 @@ class RolledBackLineTest(Flow):
         self.assertTrue(entry["scope"].endswith(entry["line"].split(" · ", 2)[2]), "읽어 주는 줄 = 「장부 N번 · 때 · <범위>」")
 
 
+class LookItemsTest(Flow):
+    """N4 — 고를 줄의 번호와 이름은 `look` 명령의 짧은 답(`items`)에 있다: 오퍼 · 부가옵션 번호와 이름 · 줄 번호와 이름 · 적용 대상 ·
+    판매가. 시운전의 도우미는 같은 이름의 부가옵션 둘을 가를 오퍼를 페이지 조각에서 옮기거나 파일을 통째로 열었다. 목록이 길면
+    `--find` 로 담당자의 낱말이 든 줄만 받는다(파일은 그대로 전부)."""
+
+    def look_short(self, *flags):
+        folder = self.work / f"look-{len(flags)}"
+        scene.write_answers(folder, "look", [scene.look_answer(self.erp)])
+        return self.cli("look", "--answers", folder, *flags, "--out", self.work / f"look-{len(flags)}.json")
+
+    def test_the_short_answer_lists_the_lines_with_numbers_and_offer_and_a_word_narrows_it(self):
+        self.erp = scene.Erp(scene.demo_lines() + [
+            scene.line("206", "엑스트라베드", "305", "엑스트라베드 1개", "32.00", "26.00", offer="데모 연말 오퍼")])
+        short = self.look_short()
+        self.assertEqual(len(short["items"]), 5)
+        self.assertNotIn("more", short)
+        twins = [item for item in short["items"] if item["addon_name"] == "엑스트라베드"]
+        self.assertEqual([(item["offer"], item["addon"], item["line"], item["sell"]) for item in twins],
+                         [("데모 오퍼 2027", "203", "304", "30.00 USD"), ("데모 연말 오퍼", "206", "305", "32.00 USD")],
+                         "같은 이름의 부가옵션 둘을 오퍼와 번호로 가른다")
+        found = self.look_short("--find", "연말")
+        self.assertEqual((found["find"], found["found"], [item["line"] for item in found["items"]]), ("연말", 2, ["302", "305"]),
+                         "오퍼 이름 · 줄 이름에 든 낱말")
+        listing = json.loads((self.work / "look-2.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(listing["lines"]), 5, "파일은 좁히지 않는다")
+
+    def test_a_long_list_shows_the_first_forty_lines_and_says_how_many_more(self):
+        self.erp = scene.Erp([scene.line("210", "조식", str(400 + n), f"조식 {n}", "20.00", "15.00") for n in range(45)])
+        short = self.look_short()
+        self.assertEqual((len(short["items"]), short["more"]), (40, 5))
+
+
 class OneLedgerTest(Flow):
     def test_the_price_calendar_helper_neither_lists_nor_touches_an_add_on_change_in_the_same_ledger(self):
         change, plan = self.preview(self.request())

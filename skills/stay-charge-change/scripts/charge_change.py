@@ -70,6 +70,7 @@ PREFIXES = ("look-", "charge-", "take-")
 PAGE_OBJECT = "stayCharge"          # 조각을 다시 받으라고 할 때 부르라고 말하는 페이지 모듈
 READS = ("readCharge",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readCharge 하나가 조각 하나다
+LOOK_SHOWN = 40             # look 의 짧은 답이 싣는 고를 부과금 수 — 넘으면 `more` 에 남은 수, --find 로 좁힌다
 PAGE_NAMES = {"preview": "부과금 미리보기", "result": "부과금 적용 결과", "rollback": "부과금 되돌리기 미리보기",
               "prices": "지금 부과금", "window": "부과금 설정"}
 
@@ -380,8 +381,24 @@ def cmd_list(args):
 
 # ───────────── 짧은 답 · 파서 ─────────────
 
-def short_look(result: dict) -> dict:
-    return dict(hotel=result["hotel"], read_at=result["read_at"], offers=len(result["offers"]), charges=len(result["charges"]))
+def look_item(charge: dict) -> dict:
+    """고를 부과금 하나 — 요청 파일에 옮길 번호(`offer` · `charge`)와 이름, 금액 칸의 줄들(시간대 줄의 시각 · 연령별 단가 이름이 여기 있다)."""
+    return dict(offer=charge["offer"], offer_name=charge["offer_name"], charge=charge["id"], name=charge["name"], kind=charge["kind"],
+                amount=charge["amount"])
+
+
+def short_look(result: dict, find: str | None = None) -> dict:
+    """호텔과 수, 그리고 고를 부과금(`items`, LOOK_SHOWN 개까지 — 넘으면 `more` 에 남은 수). `find` 를 주면 오퍼 이름 · 부과금 이름 ·
+    종류 · 금액 줄에 그 낱말이 든 것만(`found` 는 그 수) — 도우미는 이 목록에서 고르고 파일을 통째로 읽지 않는다."""
+    words = (lambda charge: " ".join((charge["offer_name"], charge["name"], charge["kind"], *charge["amount"])).casefold())
+    items = [look_item(charge) for charge in result["charges"] if not find or find.casefold() in words(charge)]
+    short = dict(hotel=result["hotel"], read_at=result["read_at"], offers=len(result["offers"]), charges=len(result["charges"]))
+    if find:
+        short.update(find=find, found=len(items))
+    short["items"] = items[:LOOK_SHOWN]
+    if len(items) > LOOK_SHOWN:
+        short["more"] = len(items) - LOOK_SHOWN
+    return short
 
 
 def short_read_calls(result: dict) -> dict:
@@ -429,6 +446,7 @@ def parser() -> argparse.ArgumentParser:
     command("work", cmd_work, "새 작업 폴더")
     sub = command("look", cmd_look, "look 답 → 오퍼마다 부과금 전부")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub.add_argument("--find", help="짧은 답의 고를 부과금을 이 낱말(오퍼 · 부과금 이름 · 종류 · 금액 줄)로 좁힌다 — 파일은 전부")
     sub = command("read-calls", cmd_read_calls, "읽을 부과금 → readCharge 부를 값")
     scope = sub.add_mutually_exclusive_group(required=True)
     scope.add_argument("--request", help="바꾸기 요청 파일(kind charge_change)")
@@ -487,7 +505,7 @@ def main(argv=None) -> int:
         needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change", "window": "snapshot"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
-    return cli.run(args, SHORT)
+    return cli.run(args, dict(SHORT, look=lambda result: short_look(result, getattr(args, "find", None))))
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
     work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
-    look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제. 기록 폴더의 다른 작업 폴더의
-                  look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
+    look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제(답이 둘 이상이면 가장 늦게 끝난 것 —
+                  다른 오퍼를 다시 본 것). 기록 폴더의 다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     read-calls    읽을 범위(요청 파일, 또는 장부 번호) → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음(calls.json)
     reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
@@ -55,6 +55,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from change_core import cli, files
@@ -121,13 +122,22 @@ def cmd_work(args):
     return dict(work=str(files.new_work()))
 
 
+def newest_look(looks: list) -> dict:
+    """look 의 답이 둘 이상이면(탭이 연 오퍼를 본 뒤 담당자가 말한 오퍼를 `look({offer})` 로 다시 봄) 페이지가 가장 늦게 끝낸 답 —
+    지금 탭에 열린 오퍼다. 앞선 답은 기록으로 남을 뿐이다. 같은 물음의 답 둘은 attach_bodies 가 이미 늦은 것 하나로 줄였다."""
+    if not looks:
+        raise BrowserError("stayPrice.look() 의 답이 없습니다 — 답을 <작업>/look/look-1.json 에 저장하고 다시 묶습니다")
+    if len(looks) > 1 and not all(look.get("doneAt") for look in looks):
+        raise BrowserError(f"stayPrice.look() 의 답이 {len(looks)}개인데 끝난 시각(doneAt)이 없는 답이 있어 어느 것이 나중인지 모릅니다 — "
+                           "도우미를 다시 올리고 look 을 새 작업 폴더에서 다시 봅니다")
+    return max(looks, key=lambda look: datetime.fromisoformat(str(look.get("doneAt") or "1970-01-01T00:00:00+00:00")
+                                                              .replace("Z", "+00:00")))
+
+
 def cmd_look(args):
     results = load_results(args.answers)
-    looks = [result for result in attach_bodies(results, files.lent_looks(results, args.answers, ANSWER_PREFIXES))
-             if result.get("op") == "look"]
-    if len(looks) != 1:
-        raise BrowserError(f"stayPrice.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
-    look = looks[0]
+    look = newest_look([result for result in attach_bodies(results, files.lent_looks(results, args.answers, ANSWER_PREFIXES))
+                        if result.get("op") == "look"])
     if not look.get("ok"):
         raise BrowserError(f"stayPrice.look() 이 실패했습니다: {look.get('error')}")
     return {name: look.get(name) for name in ("login", "hotel", "offer", "offers", "pairs")}

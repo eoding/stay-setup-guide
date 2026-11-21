@@ -261,3 +261,30 @@ class LookReuseTest(unittest.TestCase):
         third = self.look(work / "2026-11-21 110000" / "look", "blook3", pieces=False, pairs=(("디럭스", "룸온리"),))
         self.assertEqual(third.returncode, 2, "화면이 바뀌면 빌릴 것이 없어 받으라고 한다")
         self.assertEqual([item["id"] for item in json.loads(third.stderr)["refetch"]], ["blook3"])
+
+
+class NewestLookTest(unittest.TestCase):
+    """N4 — 담당자가 말한 오퍼가 탭이 연 오퍼가 아니면 도우미는 `look()` 뒤에 `look({offer})` 를 부르고 그 답을 다음 번호
+    (`look-2.json`)로 저장한다(기록 폴더의 파일은 고치지 않는다). 명령은 가장 늦게 끝난 답 — 그 오퍼 — 을 쓴다."""
+
+    def test_two_look_answers_bind_the_one_the_page_finished_last(self):
+        from browser_replies import done_at, reply
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        records = Path(tmp.name) / "기록"
+        folder = records / "작업" / "2026-11-21 100000" / "look"
+        answers = []
+        for offer, pairs, minute in ((trial_scene.OFFER, [("디럭스", "조식 포함")], 1), ("다른 오퍼", [("스위트", "룸온리")], 2)):
+            asked = {} if minute == 1 else {"offer": offer}
+            keep = {"hotel": trial_scene.HOTEL_REF, "offer": offer, "offers": [trial_scene.OFFER, "다른 오퍼"],
+                    "pairs": [{"room": room, "rate_plan": plan} for room, plan in pairs]}
+            answers += reply("look", asked, keep, pieces=2, body_id=f"blook{minute}", login=False, hotel=trial_scene.HOTEL_REF,
+                             offer=offer, count={"offers": 2, "pairs": 1}, doneAt=done_at(scene.NOW + timedelta(minutes=minute)))
+        folder.mkdir(parents=True)
+        for index, answer in enumerate(answers, 1):
+            (folder / f"look-{index}.json").write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
+        done = subprocess.run([sys.executable, str(SCRIPT), "look", "--answers", str(folder), "--out", str(folder.parent / "look.json")],
+                              capture_output=True, text=True, env=scene.env(str(records)))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        look = json.loads(done.stdout)
+        self.assertEqual((look["offer"], look["pairs"]), ("다른 오퍼", [{"room": "스위트", "rate_plan": "룸온리"}]))

@@ -9,7 +9,7 @@
 | 명령 | 플래그 | 하는 일 |
 |---|---|---|
 | `work` | 없음 | 새 작업 폴더를 만들어 `{work}` 로 그 자리를 준다 — `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`. 담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기 · 이어서)에 하나다. 같은 이름이 있으면 ` (2)` …를 붙여 앞선 일의 폴더를 다시 주지 않는다 |
-| `look` | `--answers` (여러 번) · `--out` | `stayAddonPrice.look()` 의 답과 조각 → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로 — 번호 · 이름 · 오퍼 · 적용 대상 · 판매가 · 통화별 금액). `kind: addon_listing`. 기록 폴더의 다른 작업 폴더의 `look/`(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
+| `look` | `--answers` (여러 번) · `--find` · `--out` | `stayAddonPrice.look()` 의 답과 조각 → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로 — 번호 · 이름 · 오퍼 · 적용 대상 · 판매가 · 통화별 금액). `kind: addon_listing`. `--out` 의 짧은 답: `{out, hotel, currency, read_at, addons, lines, items, more}` — `items` 는 고를 줄마다 `{offer, addon, addon_name, line, name, target, sell}`(요청 파일에 옮길 번호와 담당자에게 말할 이름 — 오퍼로 같은 이름의 부가옵션을 가른다), 40줄까지이고 넘으면 `more` 가 남은 줄 수다. `--find <낱말>` 이면 오퍼 · 부가옵션 · 줄 이름 · 적용 대상에 그 낱말이 든 줄만 싣는다(`find` · `found` — 파일은 그대로 전부). 기록 폴더의 다른 작업 폴더의 `look/`(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `read-calls` | `--request` 또는 `--record` 또는 `--line` (여러 번) · `--look` · `--out` | 읽을 줄 → `readLine` 부를 값 `{lines: [{hotel, addon, line}]}`. 요청이 `addons` · `all` 로 고르면 `--look` 이 있어야 한다. `--line <가격 줄 번호>` 는 바꾸지 않고 설정만 볼 때다(`--look` 과 같이 — 부가옵션을 목록에서 찾는다). 한 번에 200줄까지 |
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readLine` 답과 조각 → 지금 값(`kind: addon_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |

@@ -70,6 +70,7 @@ PAGE_OBJECT = "stayAddonPrice"      # 이 도우미의 페이지 모듈 — 조�
 PREFIXES = ("look-", "line-", "take-")
 READS = ("readLine",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readLine 하나가 조각 하나다
+LOOK_SHOWN = 40             # look 의 짧은 답이 싣는 고를 줄 수 — 넘으면 `more` 에 남은 수, --find 로 좁힌다
 PAGE_NAMES = {"preview": "부가옵션 미리보기", "result": "부가옵션 적용 결과", "rollback": "부가옵션 되돌리기 미리보기",
               "prices": "지금 부가옵션 가격", "window": "가격 줄 설정"}
 
@@ -415,9 +416,25 @@ def cmd_list(args):
 
 # ───────────── 짧은 답 · 파서 ─────────────
 
-def short_look(result: dict) -> dict:
-    return dict(hotel=result["hotel"], currency=result["currency"], read_at=result["read_at"], addons=len(result["addons"]),
-                lines=len(result["lines"]))
+def look_item(line: dict) -> dict:
+    """고를 줄 하나 — 요청 파일에 옮길 번호(`addon` · `line`)와 담당자에게 말할 이름(오퍼부터 — 오퍼마다 이름이 같은 부가옵션이 있다)."""
+    return dict(offer=line["offer"], addon=line["addon"], addon_name=line["addon_name"], line=line["line"], name=line["name"],
+                target=line["target"], sell=line["sell"])
+
+
+def short_look(result: dict, find: str | None = None) -> dict:
+    """호텔과 수, 그리고 고를 줄(`items`, LOOK_SHOWN 줄까지 — 넘으면 `more` 에 남은 수). `find` 를 주면 오퍼 · 부가옵션 · 줄 이름 ·
+    적용 대상에 그 낱말이 든 줄만(`found` 는 그 수) — 도우미는 이 목록에서 고르고 파일을 통째로 읽지 않는다."""
+    items = [look_item(line) for line in result["lines"]
+             if not find or find.casefold() in " ".join((line["offer"], line["addon_name"], line["name"], line["target"])).casefold()]
+    short = dict(hotel=result["hotel"], currency=result["currency"], read_at=result["read_at"], addons=len(result["addons"]),
+                 lines=len(result["lines"]))
+    if find:
+        short.update(find=find, found=len(items))
+    short["items"] = items[:LOOK_SHOWN]
+    if len(items) > LOOK_SHOWN:
+        short["more"] = len(items) - LOOK_SHOWN
+    return short
 
 
 def short_read_calls(result: dict) -> dict:
@@ -466,6 +483,7 @@ def parser() -> argparse.ArgumentParser:
     command("work", cmd_work, "새 작업 폴더")
     sub = command("look", cmd_look, "look 답 → 부가옵션 · 가격 줄 전부")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub.add_argument("--find", help="짧은 답의 고를 줄을 이 낱말(오퍼 · 부가옵션 · 줄 이름 · 적용 대상)로 좁힌다 — 파일은 전부")
     sub = command("read-calls", cmd_read_calls, "읽을 줄 → readLine 부를 값")
     scope = sub.add_mutually_exclusive_group(required=True)
     scope.add_argument("--request", help="바꾸기 요청 파일(kind addon_change)")
@@ -524,7 +542,7 @@ def main(argv=None) -> int:
         needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change", "window": "snapshot"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
-    return cli.run(args, SHORT)
+    return cli.run(args, dict(SHORT, look=lambda result: short_look(result, getattr(args, "find", None))))
 
 
 if __name__ == "__main__":

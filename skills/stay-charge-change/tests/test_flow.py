@@ -564,6 +564,28 @@ class RolledBackLineTest(Flow):
         self.assertEqual(entry["line"], f"장부 {change}번 · {entry['line'].split(' · ')[1]} · {entry['scope']}")
 
 
+class LookItemsTest(Flow):
+    """N4 — 고를 부과금의 번호와 이름은 `look` 명령의 짧은 답(`items`)에 있다: 오퍼 번호와 이름 · 부과금 번호와 이름 · 종류 · 금액 줄
+    (시간대 줄의 시각 · 연령별 단가 이름). 목록이 길면 `--find` 로 담당자의 낱말이 든 것만 받는다(파일은 그대로 전부)."""
+
+    def test_the_short_answer_lists_the_charges_with_numbers_and_a_word_narrows_it(self):
+        scene.write_answers(self.work / "look", "look", [scene.look_answer(self.erp)])
+        short = self.cli("look", "--answers", self.work / "look", "--out", self.work / "look.json")
+        listing = json.loads((self.work / "look.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(short["items"]), len(listing["charges"]))
+        self.assertNotIn("more", short)
+        late = next(item for item in short["items"] if item["charge"] == "701")
+        self.assertEqual((late["offer"], late["offer_name"], late["kind"], late["amount"][1]),
+                         ("601", "데모 오퍼 2027", "레이트 체크아웃", "14:01 ~ 18:00 · 1박 요금의 %: 50.00%"),
+                         "요청 파일에 옮길 번호와 시간대 줄의 시각이 짧은 답에 있다")
+        found = self.cli("look", "--answers", self.work / "look", "--find", "레이트", "--out", self.work / "look-2.json")
+        self.assertEqual((found["found"], [item["charge"] for item in found["items"]]),
+                         (sum("레이트" in " ".join((c["name"], c["kind"])) for c in listing["charges"]),
+                          [c["id"] for c in listing["charges"] if "레이트" in " ".join((c["name"], c["kind"]))]))
+        self.assertIn("701", [item["charge"] for item in found["items"]])
+        self.assertEqual(json.loads((self.work / "look-2.json").read_text(encoding="utf-8")), listing, "파일은 좁히지 않는다")
+
+
 class OneLedgerTest(Flow):
     def test_the_other_helpers_neither_list_nor_touch_a_charge_change_in_the_same_ledger(self):
         change, plan = self.preview(self.request(LATE_BAND, value="60"))
