@@ -248,3 +248,35 @@ test('U1 · applyBulk — ② 의 숨은 날짜 구간이 단계와 다르면(�
   assert.deepEqual(page.log.posts, []);
   page.w.close();
 });
+
+test('A5 · 사람이 연 드로어가 있으면 작업은 그것을 닫지 않고 시작하지 않는다 · 이 도우미가 닫지 못하고 남긴 드로어는 다음 작업이 닫는다', async () => {
+  const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
+  const READ = { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
+  const page = erpPage();
+  page.render('<div data-stay-screen="season"><input name="name" value="사람이 치던 시즌"></div>');
+  for (const [op, value] of [['readPair', READ], ['applyBulk', BULK], ['look', {}]]) {
+    const r = plain(await page.w.stayPrice[op](inPage(page.w, value)));
+    assert.equal(r.ok, false, op);
+    assert.match(r.error, /드로어가 열려 있습니다/, op);
+    assert.deepEqual(r.clicks, {}, op);
+    if (op === 'applyBulk') assert.deepEqual([r.saved, r.pressed], [false, false]);
+  }
+  assert.equal(page.drawerOpen(), true, '사람의 드로어는 그대로 열려 있다');
+  assert.equal(page.doc.querySelector('#stay_drawer_body [name="name"]').value, '사람이 치던 시즌');
+  assert.deepEqual(page.log.reached, []);
+  page.w.close();
+
+  // 이 도우미가 연 드로어를 닫지 못하고 끝났으면(ERP 가 닫기 신호를 받지 않음) 다음 작업은 그것을 닫고 시작한다
+  const left = erpPage();
+  const deaf = (e) => e.stopImmediatePropagation();
+  left.w.addEventListener('stay-drawer-close', deaf, true);
+  left.w.stayPrice.config({ restMs: 600 });
+  const first = plain(await left.w.stayPrice.readPair(inPage(left.w, READ)));
+  assert.match(first.error, /닫지 못했습니다/);
+  assert.equal(left.drawerOpen(), true);
+  left.w.removeEventListener('stay-drawer-close', deaf, true);
+  const again = plain(await left.w.stayPrice.readPair(inPage(left.w, READ)));
+  assert.equal(again.ok, true, again.error);
+  assert.equal(left.drawerOpen(), false);
+  left.w.close();
+});

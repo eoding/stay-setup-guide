@@ -465,6 +465,13 @@
     if (missing.length) return remember(fit({ ok: false, op: op, error: '러너의 도우미(stay_helper.js)와 부트(stay_boot.js)를 먼저 올려 주세요 — 없는 것: ' + missing.join(', ') }));
     var busy = window.__stayPriceBusy;
     if (busy) return notStarted(op, input, '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다', BUSY_WAIT);
+    // 열린 드로어가 이 도우미가 남긴 것이 아니면 사람이 하던 일이다 — 닫으면 친 값이 사라지므로 시작하지 않는다(열린 셀 창과 같다)
+    if (drawerOpen() && drawerContent() && drawerContent() !== GUARD.leftDrawer) {
+      var mid = input && typeof input.no === 'number' ? { no: input.no } : {};
+      return remember(fit(Object.assign({ op: op }, mid, { ok: false, ask: crc32(canon(askedOf(input))), clicks: {},
+        error: '드로어가 열려 있습니다 — 이 도우미가 연 것이 아니라 닫지 않았습니다. 사람이 닫은 뒤 다시 부릅니다. 아무것도 누르지 않았습니다' },
+        spec.saves[op] ? { saved: false, pressed: false } : {})));
+    }
     // 나머지 작업은 요청이 짚은 호텔에서만 돈다 — 무엇이든 누르기 전에 탭이 그 번호의 호텔인지 본다(이름은 같은 호텔이 있어 보지 않는다)
     if (!loose) {
       here = boundHotel(op, input, spec);
@@ -488,7 +495,8 @@
       limit: function () { return Math.min(limits.budgetMs, limits.hardMs); }
     };
     var work = (async function () {
-      // 앞 화면이 쉬고 있을 때만 시작한다 — 닫히는 중인 드로어의 조각을 새 화면으로 읽지 않게
+      // 앞 화면이 쉬고 있을 때만 시작한다 — 닫히는 중인 드로어의 조각을 새 화면으로 읽지 않게. 여기서 닫는 드로어는 이 도우미가
+      // 앞 작업에서 닫지 못하고 남긴 것(또는 빈 것)뿐이다(위에서 거른다)
       await closeDrawer(started + limits.restMs);
       if (!await window.stayRun.waitFor(atRest, Math.max(1, Math.min(limits.restMs, ctx.left())))) {
         if (cellWindow()) fail('셀 창이 열려 있습니다 — 사람이 닫은 뒤 다시 부릅니다');
@@ -529,6 +537,7 @@
     // 화면이 쉴 때 돌려준다 — 드로어가 다 닫히고(내용까지 비고) 셀 창이 없고 도는 요청이 없을 때
     out.rest = !!(await window.stayRun.waitFor(atRest, Math.max(1, restUntil - Date.now())));
     if (!out.rest) out.warn = '화면이 아직 정리되지 않았습니다(드로어·셀 창·요청) — 다음 작업은 정리된 뒤에 시작합니다';
+    GUARD.leftDrawer = drawerOpen() ? drawerContent() : null;   // 다음 작업이 닫아도 되는 드로어 — 이 작업이 닫지 못하고 남긴 것
     if (!late) { wall.stop(); window.__stayPriceBusy = null; }
     var blocked = wall.log.blocked;
     if (blocked.length) {
@@ -595,6 +604,7 @@
   /* ───────────── 5. 화면 부품 — 가격 캘린더 · 칩 · 드로어 ───────────── */
 
   function drawerOpen() { return !!document.querySelector('.stay-drawer.is-open'); }
+  function drawerContent() { var body = document.getElementById('stay_drawer_body'); return body ? body.firstElementChild : null; }
   // ERP 의 저장 표지 — 저장에 성공한 응답만 `#stay_save_result` 를 「saved」 와 저장 시각으로 갈아 끼운다(editor.mark_saved ·
   // drawer_close). 누르기 전과 시각이 다르면 이번 저장을 서버가 받은 것이다. 드로어가 닫힌 것 · 페이지 이동은 표지가 아니다
   function saveStamp() {
