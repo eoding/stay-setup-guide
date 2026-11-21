@@ -22,6 +22,9 @@
                  되돌린 되돌리기 번호(되돌리기, 또는 그 값을 저장해 둔 상태로 되돌린 저장 상태로 되돌리기)
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
+    checks       check 한 번에 한 줄 — 그 읽은 값의 시각, 이어서 해도 되는지와 안 되는 까닭, 멈춘 까닭, 남은 저장의 항목
+                 가운데 그 계산의 읽은 값과 지금 값이 다른 것(지금 값). 결과 페이지가 멈춘 변경을 이것으로 말한다. 그 뒤에
+                 저장 결과가 적히면 다 쓴 것(`spent`)이 된다 — 그 check 는 그 저장을 모른다
 
 되돌리기와 저장 상태로 되돌리기는 다시 되돌리지 않는다(`_undoable`). 되돌리기를 되돌리면 그 되돌리기가 단 표지(`rolled_back_by`)를
 풀어야 하고, 그것을 또 되돌리면 다시 달아야 한다 — 장부가 ERP 에 살아 있는 값을 말하지 못하게 된다(ERP 의 [되돌리기]도 한 번만
@@ -57,7 +60,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
-from .items import Difference, Reading, stale_items
+from .items import Difference, ItemState, Reading, decode_state, encode_state, stale_items
 from .money import money, money_text
 from .rollback import LaterWrite, RecordedChange, RecordedItem
 
@@ -127,6 +130,17 @@ CREATE TABLE IF NOT EXISTS steps (
   unknown INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (change_id, idx)
 );
+CREATE TABLE IF NOT EXISTS checks (
+  change_id INTEGER NOT NULL REFERENCES changes(id),
+  checked_at TEXT NOT NULL,
+  read_at TEXT NOT NULL,
+  can_continue INTEGER NOT NULL,
+  cause TEXT,
+  why TEXT NOT NULL,
+  moved TEXT NOT NULL,
+  spent INTEGER NOT NULL DEFAULT 0
+);
+CREATE TRIGGER IF NOT EXISTS keep_checks BEFORE DELETE ON checks BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_meta BEFORE DELETE ON meta BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_changes BEFORE DELETE ON changes BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_values BEFORE DELETE ON item_values BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
@@ -271,6 +285,18 @@ class RowRecord:
 
 
 @dataclass(frozen=True)
+class Checked:
+    """멈춘 뒤 마지막 check 가 본 것 — 결과 페이지가 멈춘 변경을 말할 때 쓴다. `read_at` 은 그 check 의 읽은 값의 시각,
+    `can_continue` · `why` 는 그 답, `cause` 는 그때의 멈춘 까닭(이어서 해도 된다고 해 적용 중으로 돌아간 변경도 왜 멈췄었는지
+    말한다), `moved` 는 남은 저장의 항목 가운데 그 계산의 읽은 값과 지금 값이 다른 것 → 지금 값(없어졌으면 None)."""
+    read_at: str
+    can_continue: bool
+    cause: str | None
+    why: tuple[str, ...]
+    moved: Mapping[tuple[str, str], ItemState | None]
+
+
+@dataclass(frozen=True)
 class ChangeRecord:
     id: int
     kind: str
@@ -290,6 +316,7 @@ class ChangeRecord:
     rows: tuple[RowRecord, ...]
     cause: str | None = None
     replaces: int | None = None
+    checked: Checked | None = None
 
 
 @dataclass(frozen=True)
@@ -641,6 +668,7 @@ class Ledger:
             if step["status"] == "saved":
                 return self._status(header)
             stamp, alive = self._stamp(), self._status(header) == "applying"
+            db.execute("UPDATE checks SET spent = 1 WHERE change_id = ? AND spent = 0", (change_id,))   # 그 check 는 이 저장을 모른다
             if saved:
                 self._mark_saved(db, header, index, note, stamp)
             else:
@@ -734,7 +762,7 @@ class Ledger:
                                             (change_id, step["idx"])).fetchall() for step in steps}
         cause = self._cause(header, steps)
         note = next((step["note"] for step in steps if step["status"] == "failed"), None) if cause in ("failed", "unknown") else None
-        seen_steps, settle = [], []
+        seen_steps, settle, moved_items = [], [], {}
         for step in steps:
             kinds = {_field_seen(row, now.get((row["item_kind"], row["item_key"]))) for row in rows[step["idx"]]}
             seen = {frozenset({"after"}): "saved", frozenset({"before"}): "not_saved",
@@ -749,8 +777,9 @@ class Ledger:
             units = {(row["item_kind"], unit(row["item_key"])) for row in rows[step["idx"]]}
             items = {(kind, key) for kind, key in set(then) | set(now) if (kind, unit(key)) in units}
             items |= {(row["item_kind"], row["item_key"]) for row in rows[step["idx"]]}
-            moved = 0 if done else sum(not _same_item(then.get(item), now.get(item)) for item in items)
-            seen_steps.append(StepSeen(step["idx"], step["label"], state, seen, settled, moved))
+            differ = [] if done else sorted(item for item in items if not _same_item(then.get(item), now.get(item)))
+            moved_items.update((item, now.get(item)) for item in differ)
+            seen_steps.append(StepSeen(step["idx"], step["label"], state, seen, settled, len(differ)))
         why, remaining = [], []
         for step in seen_steps:
             name = f"{step.index}번째 저장({step.label})"
@@ -765,13 +794,13 @@ class Ledger:
                 why.append(f"{name}은 장부에 저장 안 됨인데 칸은 이미 넣으려던 값입니다")
             elif step.seen == "mixed":
                 why.append(f"{name}의 칸이 일부만 넣으려던 값입니다")
-            elif step.seen == "changed":
+            elif step.seen == "changed" and not step.moved:
                 why.append(f"{name}의 칸이 넣으려던 값도 그 전 값도 아닙니다")
-            if step.moved:
+            if step.moved:   # 넣으려던 값도 그 전 값도 아닌 칸은 미리보기 때 읽은 값과 다른 칸이다 — 한 번만 말한다
                 why.append(f"{name}의 칸 {step.moved}개가 미리보기 때 읽은 값과 다릅니다")
         if remaining and self._age(read_at) > IDLE:
-            why.append(f"읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — {_minutes(IDLE)}분 안에 읽은 값으로만 이어 갑니다. "
-                       "다시 읽고 check 를 부릅니다")
+            why.append(f"읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — {_minutes(IDLE)}분 안에 읽은 값으로만 이어 가니 "
+                       "다시 읽습니다")
         can_continue = bool(remaining) and not why
         stamp = self._stamp()
         with self._db() as db:
@@ -785,6 +814,9 @@ class Ledger:
             db.execute("UPDATE changes SET status = ?, updated_at = ?, applied_at = COALESCE(applied_at, ?),"
                        " active_at = CASE WHEN ? THEN ? ELSE active_at END WHERE id = ?",
                        (status, stamp, stamp if status == "applied" else None, can_continue, read_at, change_id))
+            db.execute("INSERT INTO checks (change_id, checked_at, read_at, can_continue, cause, why, moved) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (change_id, stamp, read_at, int(can_continue), cause, _body(why),
+                        _body([dict(kind=kind, key=key, now=encode_state(state)) for (kind, key), state in moved_items.items()])))
         saved = [step for step in seen_steps if step.ledger == "saved" or step.settled == "saved"]
         return CheckReport(header["id"], status, tuple(seen_steps), tuple(remaining), can_continue, tuple(why), cause,
                            saved[-1] if saved else None,
@@ -876,12 +908,19 @@ class Ledger:
                           money(row["seen"]), row["seen_state"], row["rolled_back_by"], row["verdict"],
                           tuple(mark for mark in row["marks"].split(",") if mark), row["choice"], row["said"])
                 for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
+            last = db.execute("SELECT * FROM checks WHERE change_id = ? AND spent = 0 ORDER BY rowid DESC LIMIT 1",
+                              (change_id,)).fetchone()
         cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps])
-        return ChangeRecord(header["id"], header["kind"], self._status(header), header["hotel"], header["hotel_id"],
+        status = self._status(header)
+        checked = None
+        if last is not None and (status == "applying" if last["can_continue"] else status == "stopped"):
+            checked = Checked(last["read_at"], bool(last["can_continue"]), last["cause"], tuple(json.loads(last["why"])),
+                              {(item["kind"], item["key"]): decode_state(item["now"]) for item in json.loads(last["moved"])})
+        return ChangeRecord(header["id"], header["kind"], status, header["hotel"], header["hotel_id"],
                             header["offer"], header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
                             None if header["request"] is None else json.loads(header["request"]), steps, rows, cause,
-                            header["replaces"])
+                            header["replaces"], checked)
 
     def reading(self, change_id: int) -> dict:
         """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""

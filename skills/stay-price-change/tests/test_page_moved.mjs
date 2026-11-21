@@ -61,6 +61,13 @@ test('A1 · 첫 저장 뒤 다른 사람이 두 번째 저장의 칸을 바꿨�
     const check = flow.must('check', '--change', change, '--snapshot', await flow.read(change));
     assert.equal(check.can_continue, false);
     assert.deepEqual(check.steps.map((s) => [s.no, s.ledger, s.seen, s.moved]), [[1, 'saved', 'saved', 0], [2, 'failed', 'changed', 1]]);
+    // T1 — 그 check 뒤의 결과 페이지: 이어서는 없고, 그 칸은 미리보기 때 값과 지금 ERP 값을 보이며, 페이지 오류의 날글은 없다
+    const { text } = flow.must('render', 'result', '--change', change, '--text');
+    assert.ok(!/이어서 —|이어서 하면|나중에 이어서/.test(text), text);
+    assert.match(text, /다시 읽어 보니 이어서 할 수 없습니다\./);
+    assert.match(text, /미리보기 때 125,000\.00 지금 130,000\.00 그 사이 ERP 에서 바뀜 · 넣지 않음/);
+    assert.match(text, /도우미는 이 칸에 아무것도 넣지 않았습니다\./);
+    assert.ok(!/로그인|읽은 값 판매가|화면 판매가|미리보기를 새로 만듭니다/.test(text), text);
   } finally {
     flow.close();
     page.w.close();

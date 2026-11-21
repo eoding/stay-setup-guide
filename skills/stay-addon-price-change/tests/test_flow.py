@@ -279,6 +279,29 @@ class StoppedTest(Flow):
         self.assertEqual((report["cause"], report["can_continue"]), ("cut_off", True))
         self.assertEqual(len(self.cli("calls", "--change", change)["calls"]), 2)
 
+    def test_a_save_refused_because_someone_changed_the_line_shows_the_erp_value_now_and_no_continue(self):
+        """T1 — 첫 저장 뒤 다른 사람이 둘째 줄을 바꿔 둘째 저장이 누르기 전에 거절됐다. 다시 읽어 check 가 이어서 할 수 없다고 한 뒤의
+        결과 페이지는 이어서를 빼고, 그 줄의 지금 값과 그 사이 바뀌었다는 한 문장을 보인다."""
+        change, plan = self.preview(self.request())
+        self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change))
+        first, second = self.cli("calls", "--change", change)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.file("1.json", self.erp.apply(first["payload"])))
+        self.erp.lines["304"]["sell"] = "41.00"              # 다른 사람이 ERP 에서 고침
+        refused = self.cli("record-result", "--change", change, "--result", self.file("2.json", self.erp.apply(second["payload"])))
+        self.assertEqual((refused["saved"], refused["status"]), (False, "stopped"))
+        before = self.cli("render", "result", "--change", change, "--text")["text"]
+        self.assertIn("이어서 할 수 있는지는 ERP 를 다시 읽어 봐야 압니다", before)
+        self.assertNotIn("나중에 이어서 할 수 있습니다", before)
+        report = self.cli("check", "--change", change, "--snapshot", self.read(record=change))
+        self.assertFalse(report["can_continue"])
+        text = self.cli("render", "result", "--change", change, "--text")["text"]
+        self.assertNotIn("이어서 —", text)
+        self.assertIn("ERP 를 다시 읽어 보니 이어서 할 수 없습니다.", text)
+        self.assertIn("「그 사이 ERP 에서 바뀜」 1줄은 미리보기 뒤에 ERP 에서 값이 바뀐 줄입니다", text)
+        self.assertIn("도우미는 이 줄에 아무것도 넣지 않았습니다.", text)
+        self.assertIn("지금 41.00 그 사이 ERP 에서 바뀜 · 넣지 않음", text)
+        self.assertNotIn("로그인", text)
+
 
 class NameNoteTest(Flow):
     """H1 — 바꾸는 값이 가격 줄의 이름 · 설명이나 부가옵션의 이름에 적혀 있으면 미리보기와 결과가 한 문장으로 알린다. 우연히 같은

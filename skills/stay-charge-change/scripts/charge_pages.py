@@ -9,11 +9,11 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Sequence
 
-from charge_model import AGE, FIELD_LABELS, Charge, Listing, Place, Snapshot, part_of_key
+from charge_model import AGE, FIELD_LABELS, ITEM_KIND, Charge, Listing, Place, Snapshot, part_of_key
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
-    UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner,
-    rollback_ask, rollback_head, stats, steps_list, stopped_choices, times, unremovable_table,
+    MOVED_TAG, UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner, nothing_left,
+    notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices, times_word, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -182,7 +182,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     elif not steps:
         body.append('<div class="banner blue"><b>저장할 것이 없습니다.</b> 바뀌는 칸이 없어 적용할 것이 없습니다.</div>')
     else:
-        body.append(f'<div class="banner blue">저장 {times(len(steps))}{"(부과금마다 한 번)" if len(steps) > 1 else ""}. 맞으면 "적용"이라고 해 주세요.</div>')
+        body.append(f'<div class="banner blue">저장 {times_word(len(steps))}{"(부과금마다 한 번)" if len(steps) > 1 else ""}. 맞으면 "적용"이라고 해 주세요.</div>')
     return page(title, "\n".join(body), MAKER)
 
 
@@ -195,6 +195,9 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     written = [row for row in record.rows if row.written and row.action and not row.rolled_back_by]
     mismatched = [row for row in written if record.verified_at and not row.verified]
     waiting = [row for row in record.rows if row.action and not row.written]
+    stop = stop_view(record)   # 멈춘 뒤 다시 읽어 보니 남은 저장의 칸이 미리보기 때와 달라진 것 — 지금 값
+    moved_now = {key: now for (kind, key), now in (stop[1].moved.items() if stop and stop[1] else ()) if kind == ITEM_KIND}
+    changed_since = [row for row in waiting if row.item_key in moved_now]
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub">장부 {record.id}번 · 요청 “{esc(record.sentence)}”'
             f'{f" · {record.reverses}번 변경을 되돌림" if record.reverses else ""} · 통화 {esc(currency)}</p>',
@@ -215,6 +218,12 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
             cell = f'<td class="same">{_move(row.before, None, place, None, currency)}</td>'
         elif row.rolled_back_by:
             cell = f'<td class="same">{_move(row.before, row.after, place, None, currency)}<span class="tag closed">되돌림 · 장부 {row.rolled_back_by}번</span></td>'
+        elif not row.written and row.item_key in moved_now:
+            now = moved_now[row.item_key]
+            shown = ("지금 칸 없음" if now is None or now.state == "missing"
+                     else f"지금 {_value(now.fields.get(row.field), place, None, currency)}")
+            cell = (f'<td class="red"><span class="was">미리보기 때 {_value(row.before, place, None, currency)}</span> '
+                    f'<b class="now">{shown}</b>{MOVED_TAG}</td>')
         elif not row.written:
             cell = f'<td class="wait">{_move(row.before, row.after, place, None, currency)}<span class="tag wait">아직 저장 안 함</span></td>'
         elif record.verified_at and not row.verified:
@@ -226,8 +235,11 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
         rows.append(f'<tr><td class="text">{esc(row.label)} · {esc(FIELD_LABELS[(part, row.field)])}'
                     f'<small class="more">부과금 {esc(charge)}번</small></td>{cell}</tr>')
     body += ["<h2>칸마다 넣은 값</h2>",
+             f'<p class="sub">{esc(moved_sentence(record, len(changed_since), UNIT))}</p>' if changed_since else "",
              f'<div class="scroll"><table><tr><th>금액 칸</th><th>전 → 후</th></tr>{"".join(rows)}</table></div>']
-    if record.status in ("applied", "stopped"):
+    if nothing_left(record):   # ERP 에 이 변경의 값이 하나도 없다 — 손님 화면 · 되돌리는 법은 말하지 않는다
+        body.append(notes([f"기록: {ledger_path}"]) if ledger_path else "")
+    elif record.status in ("applied", "stopped"):
         said = [GUEST_NOTE, UNDO_ONCE if record.kind == "rollback"
                 else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
         if ledger_path:

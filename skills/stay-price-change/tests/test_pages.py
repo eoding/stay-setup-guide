@@ -202,12 +202,13 @@ class ResultPageTest(SelfContainedMixin, unittest.TestCase):
         page = render_result(self.ledger.change(self.id))
         text = visible(page)
         self.assert_self_contained(page)
-        self.assertIn("6번째 저장에서 멈췄습니다. 지금은 일부만 바뀐 상태입니다. (ERP 로그인이 풀린 것으로 보입니다)", text)
+        self.assertIn("6번째 저장에서 멈췄습니다 (ERP 로그인이 풀린 것으로 보입니다). 지금은 일부만 바뀐 상태입니다.", text)
         self.assertIn("1. 디럭스 · 조식 포함 · 12/25 금 ~ 12/26 토 (2일, 2026년) · 12칸 저장함", text)
         self.assertIn("6. 스위트 · 조식 포함 · 1/1 금 ~ 1/2 토 (2일, 2027년) · 12칸 여기서 멈춤 · 바뀌지 않음", text)
         self.assertIn("8. 스위트 · 룸온리 · 1/1 금 (1일, 2027년) · 6칸 아직 안 함", text)
-        self.assertIn("이어서 — 남은 3번을", text)
-        self.assertIn("된 것까지 되돌리기 — 이미 바뀐 5번을", text)
+        self.assertIn("이어서 — 남은 저장 3번을", text)
+        self.assertIn("된 것까지 되돌리기 — 이미 된 저장 5번을", text)
+        self.assertIn("크롬에서 ERP 로그인을 확인한 뒤", text, "페이지가 로그인을 말한 멈춤")
         self.assertIn("이대로 두기", text)
 
     def test_applied_and_verified_and_a_mismatch(self):

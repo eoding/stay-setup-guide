@@ -351,6 +351,26 @@ class StoppedTest(Flow):
         self.assertFalse(report["can_continue"])
         self.assertTrue(any("미리보기 때 읽은 값과 다릅니다" in why for why in report["why"]), report["why"])
 
+    def test_a_save_refused_because_someone_changed_the_charge_shows_the_erp_value_now_and_no_continue(self):
+        """T1 — 첫 저장 뒤 다른 사람이 둘째 부과금의 금액을 바꿔 둘째 저장이 누르기 전에 거절됐다. 다시 읽어 check 가 이어서 할 수
+        없다고 한 뒤의 결과 페이지는 이어서를 빼고, 그 칸의 지금 값과 그 사이 바뀌었다는 한 문장을 보인다."""
+        change, plan = self.preview(self.request(GALA, CHILD, value="95", sentence="둘 다 95"),
+                                    resolutions=self.file("고름.json", [{"rule": "OVER_30", "choice": "include", "said": "네 그대로요"}]))
+        self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change))
+        first, second = self.cli("calls", "--change", change)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.file("1.json", self.erp.apply(first["payload"])))
+        self.erp.charge("705")["ages"]["82"] = "41.00"        # 다른 사람이 ERP 에서 고침
+        refused = self.cli("record-result", "--change", change, "--result", self.file("2.json", self.erp.apply(second["payload"])))
+        self.assertEqual((refused["saved"], refused["status"]), (False, "stopped"))
+        report = self.cli("check", "--change", change, "--snapshot", self.read(record=change))
+        self.assertFalse(report["can_continue"])
+        text = self.cli("render", "result", "--change", change, "--text")["text"]
+        self.assertNotIn("이어서 —", text)
+        self.assertIn("ERP 를 다시 읽어 보니 이어서 할 수 없습니다.", text)
+        self.assertIn("「그 사이 ERP 에서 바뀜」 1칸은 미리보기 뒤에 ERP 에서 값이 바뀐 칸입니다", text)
+        self.assertIn("지금 41.00 USD 그 사이 ERP 에서 바뀜 · 넣지 않음", text)
+        self.assertNotIn("로그인", text)
+
     def test_a_saved_step_is_never_handed_out_again(self):
         change, plan = self.preview(self.request(LATE_BAND, value="60"))
         self.apply(change, plan)

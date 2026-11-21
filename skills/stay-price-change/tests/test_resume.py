@@ -79,7 +79,7 @@ class ResumeLedgerTest(unittest.TestCase):
             self.assertEqual(later.list_changes()[0]["status"], status, f"목록 · {minutes}분")
         page = visible(render_result(self.ledger(16.1).change(self.change)))
         self.assertIn("2번째 저장 앞에서 끊겼습니다. 저장이 실패한 것은 아니고, 1번째 저장까지 됐습니다", page)
-        self.assertIn("이어서 — 남은 7번을 마저 적용합니다", page)
+        self.assertIn("이어서 — 남은 저장 7번을 마저 적용합니다", page)
 
     def test_a_save_recorded_after_the_change_went_quiet_is_kept_but_does_not_revive_it(self):
         self.ledger(0).begin(self.change, step_plans(self.steps), read_at=at(0))
@@ -131,7 +131,7 @@ class ResumeLedgerTest(unittest.TestCase):
         self.ledger(1).record_step(self.change, 1, saved=True)
         old = self.ledger(40).check(self.change, self.reading(1), self.then, read_at=at(20))
         self.assertFalse(old.can_continue)
-        self.assertTrue(any("20분 전" in why and "다시 읽고" in why for why in old.why), old.why)
+        self.assertTrue(any("20분 전" in why and "다시 읽습니다" in why for why in old.why), old.why)
         self.assertEqual(self.ledger(40).change(self.change).status, "stopped")
 
         # 「모름」을 저장됨으로 가렸어도 남은 칸이 그 사이 바뀌었으면 이어 갈 수 없다 — 변경은 멈춘 채로 남는다

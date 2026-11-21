@@ -2,6 +2,10 @@
 
 종류마다 다른 표(가격 칸의 날짜 표 등)는 각 도우미가 그리고, 여기에는 모든 도우미가 같은 모양으로 쓰는 조각을 둔다:
 머리 숫자, 저장 단계 목록, 적용 결과 띠, 멈췄을 때 선택지, 되돌리기 머리 띠, 그대로 두는 항목 표.
+
+멈춘 변경의 결과 페이지는 멈춘 뒤 마지막 check(장부의 `checks` — ChangeRecord.checked)가 본 것대로 말한다(stop_mode): check 가
+없으면 이어서 할 수 있는지는 다시 읽어 봐야 안다고, 이어서 해도 된다고 했으면 그렇다고, 안 된다고 했으면 까닭(`why`)과 함께 이어서를
+빼고. 저장한 칸을 뒤에 되돌린 변경은 이어서 하지 않는다.
 """
 
 from __future__ import annotations
@@ -76,6 +80,12 @@ def esc(text) -> str:
     return html.escape(str(text), quote=True)
 
 
+def fmt_clock(text: str) -> str:
+    """「17시 26분」 — 담당자에게 시각을 말하는 꼴(SKILL.md 의 「○시 ○분」)."""
+    moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return f"{moment.hour}시 {moment.minute}분"
+
+
 def fmt_money(value, currency: str) -> str:
     if value is None:
         return "없음"
@@ -143,7 +153,7 @@ def page_text(page_html: str) -> str:
     return "\n".join(reader.lines)
 
 
-def times(count: int) -> str:
+def times_word(count: int) -> str:
     """저장 횟수를 말하는 글 — 하나면 「한 번」(「1번」은 장부 번호처럼 읽히고, 「1번 나눠」는 말이 되지 않는다), 아니면 「N번」."""
     return "한 번" if count == 1 else f"{count:,}번"
 
@@ -173,20 +183,89 @@ def steps_list(steps, sizes: Mapping[int, int] | None = None, unit: str = "칸")
     return '<h2>저장 단계</h2><ul class="steps">' + "".join(items) + "</ul>"
 
 
+MOVED_ERRORS = ("ERP 화면의 값이 읽은 값과 다릅니다", "창의 값이 읽은 값과 다릅니다")   # 페이지가 누르기 전에 화면이 읽은 값과 달라 거절한 답의 머리(stay_price.js)
+MOVED_NOTE = "미리보기 뒤에 ERP 에서 그 저장의 값이 바뀌어 아무것도 넣지 않았습니다"
+
+
+def plain_note(note: str | None) -> str | None:
+    """저장 메모를 담당자가 읽을 말로 — 그 사이 화면이 바뀌어 페이지가 거절한 답(인원 조합 키 · 「읽은 값 … 화면 …」이 든 글)은 쉬운 한
+    문장으로 바꾼다. 장부에는 페이지의 글 그대로 남는다(기록)."""
+    return MOVED_NOTE if note and note.startswith(MOVED_ERRORS) else note
+
+
+def stop_view(record):
+    """멈춘 변경을 보일 때의 `(멈춘 까닭, 멈춘 뒤의 check 또는 None)`. 멈췄거나, 멈췄다가 다시 읽은 check 가 이어서 해도 된다고 해
+    적용 중인 변경이다(장부는 그 check 를 적용 중으로 돌려놓지만 담당자는 아직 고르지 않았다). 아니면 None."""
+    if record.status == "stopped":
+        return record.cause, getattr(record, "checked", None)
+    checked = getattr(record, "checked", None)
+    if record.status == "applying" and checked is not None and checked.cause:
+        return checked.cause, checked
+    return None
+
+
+def _alive(record) -> bool:
+    """이 변경이 넣고 아직 되돌리지 않은 값이 ERP 에 있는가."""
+    return any(row.written and row.action and row.rolled_back_by is None for row in record.rows)
+
+
+def stop_mode(record) -> str | None:
+    """멈춘 변경의 결과 페이지가 어느 말을 하는지 — `undone` 저장한 칸을 뒤에 되돌렸다(이어서 하지 않는다) · `unchecked` 멈춘 뒤에
+    check 가 없다(이어서 할 수 있는지는 다시 읽어 봐야 안다) · `allows` check 가 이어서 해도 된다고 했다 · `forbids` 안 된다고 했다.
+    멈춘 변경이 아니면 None."""
+    stop = stop_view(record)
+    if stop is None:
+        return None
+    if any(row.rolled_back_by for row in record.rows):
+        return "undone"
+    checked = stop[1]
+    return "unchecked" if checked is None else "allows" if checked.can_continue else "forbids"
+
+
+def nothing_left(record) -> bool:
+    """멈춘 변경인데 ERP 에 이 변경의 값이 하나도 남아 있지 않다 — 하나도 저장하지 않았거나 저장한 것을 모두 되돌렸다. 결과
+    페이지는 손님 화면 · 되돌리는 법을 말하지 않는다."""
+    return stop_view(record) is not None and not _alive(record)
+
+
+def moved_sentence(record, count: int, unit: str = "칸") -> str:
+    """멈춘 뒤 다시 읽어 보니 남은 저장의 항목이 미리보기 때와 달라진 것 — 그 수를 대고, 그 사이 ERP 에서 바뀌었고 도우미는 아무것도
+    넣지 않았다는 한 문장. 표에서는 그 항목이 「그 사이 ERP 에서 바뀜」과 미리보기 때 값 · 지금 값이다."""
+    checked = stop_view(record)[1]
+    return (f"「그 사이 ERP 에서 바뀜」 {count:,}{unit}은 미리보기 뒤에 ERP 에서 값이 바뀐 {unit}입니다 — 미리보기 때 값 옆에 "
+            f"{fmt_clock(checked.read_at)}에 다시 읽은 지금 값을 보입니다. 도우미는 이 {unit}에 아무것도 넣지 않았습니다.")
+
+
+MOVED_TAG = '<span class="tag red">그 사이 ERP 에서 바뀜 · 넣지 않음</span>'
+
+
+def _stop_banner(record, cause: str | None) -> str:
+    """멈춘 변경의 머리 띠 — 어디서 왜 멈췄고 지금 ERP 에 이 변경이 얼마나 남았는지."""
+    done = sum(step.status == "saved" for step in record.steps)
+    waiting = next((step for step in record.steps if step.status != "saved"), None)
+    at = waiting.index if waiting else len(record.steps)
+    now = ("지금은 일부만 바뀐 상태입니다." if _alive(record) else "저장한 것은 뒤에 모두 되돌렸습니다." if done
+           else "아무것도 바뀌지 않았습니다.")
+    if cause == "cut_off":
+        if not done:
+            return '<div class="banner red"><b>첫 저장 전에 끊겼습니다.</b> 저장이 실패한 것은 아니고, 아무것도 바뀌지 않았습니다.</div>'
+        return (f'<div class="banner red"><b>{at}번째 저장 앞에서 끊겼습니다.</b> 저장이 실패한 것은 아니고, '
+                f'{done}번째 저장까지 됐습니다. {now}</div>')
+    failed = next((step for step in record.steps if step.status == "failed"), None)
+    if failed is None:   # 「모름」이던 저장을 다시 읽어 저장된 것으로 가렸다
+        return (f'<div class="banner red"><b>{at}번째 저장 앞에서 멈췄습니다.</b> 저장됐는지 모르던 저장은 다시 읽어 저장된 것을 '
+                f'확인했습니다. {now}</div>')
+    note = plain_note(failed.note)
+    why = f"({esc(note.rstrip('.'))})" if note else ""
+    return f'<div class="banner red"><b>{failed.index}번째 저장에서 멈췄습니다</b>{why}. {now}</div>'
+
+
 def result_banner(record, written: int, mismatched: int, unit: str = "칸") -> str:
     """적용 결과 머리 띠 — 장부의 ChangeRecord 상태와 다시 읽어 맞았는지로 정한다."""
-    failed = next((step for step in record.steps if step.status == "failed"), None)
     done = sum(step.status == "saved" for step in record.steps)
-    if record.status == "stopped" and record.cause == "cut_off":
-        waiting = next((step for step in record.steps if step.status != "saved"), None)
-        if not done:
-            return ('<div class="banner red"><b>첫 저장 전에 끊겼습니다.</b> 저장이 실패한 것은 아니고, 아무것도 바뀌지 않았습니다. '
-                    '이어서 하려면 다시 읽어 확인합니다.</div>')
-        return (f'<div class="banner red"><b>{waiting.index}번째 저장 앞에서 끊겼습니다.</b> 저장이 실패한 것은 아니고, '
-                f'{done}번째 저장까지 됐습니다. 지금은 일부만 바뀐 상태입니다. 이어서 하려면 다시 읽어 확인합니다.</div>')
-    if record.status == "stopped" and failed is not None:
-        return (f'<div class="banner red"><b>{failed.index}번째 저장에서 멈췄습니다.</b> 지금은 일부만 바뀐 상태입니다.'
-                f'{f" ({esc(failed.note)})" if failed.note else ""}</div>')
+    stop = stop_view(record)
+    if stop is not None:
+        return _stop_banner(record, stop[0])
     if record.status == "applied" and record.verified_at and not mismatched:
         return (f'<div class="banner ok"><b>적용했고, 다시 읽어 확인했습니다.</b> {written:,}{unit} 모두 넣은 값과 같습니다.</div>')
     if record.status == "applied" and mismatched:
@@ -211,18 +290,45 @@ def names_banner(names: Iterable[str]) -> str:
 
 
 def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> str:
-    """멈춘 변경의 선택지. `waiting` 은 남은 저장이 쓰는 항목 수(표에 「아직 저장 안 함」으로 보이는 것)."""
-    if record.status != "stopped":
+    """멈춘 변경의 선택지 — stopped.md 2 · 3 과 같은 것만(stop_mode). `waiting` 은 남은 저장이 쓰는 항목 수(표에 「아직 저장 안 함」으로
+    보이는 것). 「크롬에서 ERP 로그인을 확인한 뒤」는 로그인이 풀린 것일 수 있을 때만 — 저장됐는지 몰랐거나 페이지가 로그인을 말했을 때."""
+    mode = stop_mode(record)
+    if mode is None:
         return ""
+    cause, checked = stop_view(record)
     done = sum(step.status == "saved" for step in record.steps)
     left = len(record.steps) - done
-    back = (f'<div><b>된 것까지 되돌리기</b> — 이미 바뀐 {done}번을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>'
-            if done else "")
+    failed = next((step for step in record.steps if step.status == "failed"), None)
+    login = cause == "unknown" or (failed is not None and "로그인" in (failed.note or ""))
+    alive = _alive(record)
+    if mode == "undone" and not alive:
+        return (f'<div class="banner blue">이 변경이 저장한 {unit}은 뒤에 모두 되돌렸습니다. 이어서 할 것도 되돌릴 것도 없습니다. '
+                "남은 부분을 바꾸려면 새로 말씀해 주세요.</div>")
+    back = ""
+    if alive:
+        what = "이미 된 저장 가운데 아직 되돌리지 않은 것" if mode == "undone" else f"이미 된 저장 {times_word(done)}"
+        back = f'<div><b>된 것까지 되돌리기</b> — {what}을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>'
     shown = f"(아래 표의 「아직 저장 안 함」 {waiting:,}{unit}이 그 값으로 바뀝니다)" if waiting else ""
-    return ('<h2>어떻게 할까요?</h2><p>크롬에서 ERP 로그인을 확인한 뒤 대화창에서 골라 주세요.</p><div class="choices">'
-            f'<div><b>이어서</b> — 남은 {left}번을 마저 적용합니다{shown}. 그 전에 남은 값을 다시 읽어 확인합니다.</div>{back}'
-            '<div><b>이대로 두기</b> — 장부에 "중간에 멈춤"으로 적혀 있어 나중에 이어서 할 수 있습니다.</div>'
-            "</div>")
+    stay = '<div><b>이대로 두기</b> — 장부에 "중간에 멈춤"으로 남습니다.'
+    why = ""
+    if mode == "undone":
+        lead = "이 변경은 저장한 것 가운데 일부를 뒤에 되돌렸습니다 — 이어서 하지 않습니다."
+        offered = back + stay + " 남은 부분을 바꾸려면 새로 말씀해 주세요.</div>"
+    elif mode == "unchecked":
+        lead = "이어서 할 수 있는지는 ERP 를 다시 읽어 봐야 압니다 — 그 사이 바뀐 칸이 있으면 이어서 하지 않습니다."
+        offered = (f"<div><b>이어서</b> — 남은 저장 {times_word(left)}을 마저 적용합니다{shown}. 다시 읽어 그 사이 바뀐 칸이 없을 때만 "
+                   f"합니다.</div>{back}{stay}</div>")
+    elif mode == "allows":
+        lead = (f"{fmt_clock(checked.read_at)}에 ERP 를 다시 읽어 보니 남은 저장의 {unit}이 미리보기 때와 같습니다 — 이어서 할 수 "
+                "있습니다.")
+        offered = (f"<div><b>이어서</b> — 남은 저장 {times_word(left)}을 마저 적용합니다{shown}.</div>{back}{stay} 나중에 이어서 하려면 "
+                   "다시 읽어 확인합니다.</div>")
+    else:
+        lead = f"{fmt_clock(checked.read_at)}에 ERP 를 다시 읽어 보니 이어서 할 수 없습니다."
+        why = notes(checked.why)
+        offered = back + stay + " 남은 부분은 지금 값으로 새로 바꿔야 합니다(새 미리보기부터).</div>"
+    ask = "크롬에서 ERP 로그인을 확인한 뒤 대화창에서 골라 주세요." if login else "대화창에서 골라 주세요."
+    return (f'<h2>어떻게 할까요?</h2><p>{esc(lead)}</p>{why}<p>{ask}</p><div class="choices">{offered}</div>')
 
 
 def rollback_head(plan: RollbackPlan, scope: str = "") -> str:

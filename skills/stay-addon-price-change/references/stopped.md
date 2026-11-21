@@ -6,7 +6,7 @@
 2. `python3 scripts/addon_change.py check --change N --snapshot "<S>"`.
    - `cause` 는 멈춘 까닭 — `failed` 저장이 실패함 · `unknown` 저장 단추는 눌렸고 저장됐는지 모름(읽은 값으로 가려 장부에 적는다) · `cut_off` 실패 없이 끊김(15분 동안 아무 일이 없었다).
    - `last_saved` · `next` 는 마지막으로 저장된 단계와 다음 단계, `why` 는 이어서 할 수 없는 까닭(줄마다).
-3. `python3 scripts/addon_change.py render result --change N` → `page` 를 열고 고를 것을 한 번만 묻는다.
+3. `python3 scripts/addon_change.py render result --change N` → `page` 를 열고 고를 것을 한 번만 묻는다(2 의 `check` 뒤에 연다 — 페이지는 그 `check` 대로 이어서를 보이거나 뺀다).
    - `can_continue: true` 면 "이어서 · 된 것까지 되돌리기 · 이대로 두기". **이어서** 는 15분 안에 `calls --change N` 부터 SKILL.md 「적용하기」 2 를 한다(그보다 늦으면 1 부터 다시).
    - `can_continue: false` 면 `why` 를 말하고 "된 것까지 되돌리기 · 이대로 두기" 가운데 고르게 한다. 남은 줄은 새 미리보기로 다시 바꾼다.
    - 다만 미리보기 뒤에 줄이 바뀌어 멈췄고(`why` 에 「미리보기 때 읽은 값과 다릅니다」) 이 변경에서 아직 아무것도 저장하지 않았으면(`last_saved` 가 null) 묻지 않는다: "미리보기 뒤에 ERP 에서 그 줄의 값이 바뀌어 아무것도 넣지 않았습니다. 지금 값으로 미리보기를 새로 만들어 보여 드립니다." 그리고 1 의 읽은 값(S)과 같은 요청 파일로 SKILL.md 「2」 2 의 `plan` 을 새 이름으로 하고(`--snapshot "<S>"`, `--replaces` 없이) 3 부터 한다 — 새 미리보기에 다시 "적용"을 받는다. 앞 저장이 됐으면 위처럼 묻기만 하고 새 미리보기는 만들지 않는다.
