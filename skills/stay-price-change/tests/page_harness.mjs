@@ -148,6 +148,7 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *                「직접 입력」 다시 그리기 · 가감 ② | 'cell' 셀 창 열기·저장 뒤)을 끼운 뒤 ms 지나서 연결한다(실측: 달력은 3~4ms 늦다).
  *                요청은 htmx 4 처럼 연결 뒤에 끝난다. untracked 면 요청이 끼우자마자 끝난다 — 요청 수로는 그 틈이 안 보인다
  *   hotel        호텔 표식 `hotelMarks` 의 값({id, name, said}) · null 이면 표식이 없다 · login true 면 로그인 화면(비밀번호 칸만)
+ *   ratePlans    요금제 탭 목록(`_rate_plans_panel.html` 의 표식 — 편집 화면이 열릴 때 함께 불러온다)의 줄 [{id, room, plan}]. 주지 않으면 없다
  */
 export function erpPage(opts = {}) {
   const o = Object.assign({ start: 'coord', bulkReview: runFixture('calendar-bulk--price-step2.html'), adjustReview: ownFixture('adjust-rejected.html'),
@@ -159,12 +160,16 @@ export function erpPage(opts = {}) {
     : runFixture('panel--calendar--2.html').replaceAll('2026-06', '@prev').replaceAll('2026-08', '@next').replaceAll('2026-07', month)
       .replaceAll('@prev', shift(month, -1)).replaceAll('@next', shift(month, 1)));
   const marks = o.hotel === null ? '' : hotelMarks(o.hotel || {});
+  const attr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const plans = o.ratePlans ? `<div id="stay_tab_rate_plans" class="stay-pane" data-stay-tab="rate_plans" style="display:none"><div id="stay_rate_plans" data-stay-panel="rate_plans"><table>
+    ${o.ratePlans.map((r) => `<tbody data-workspace-item data-workspace-room-name="${attr(r.room)}"><tr data-stay-entity="rate_plan" data-stay-name="${attr(r.plan)}" data-stay-entity-id="${attr(r.id)}"><td>${r.room}</td><td>${r.plan}</td></tr></tbody>`).join('')}
+  </table></div></div>` : '';
   const html = o.login ? `<form method="post" action="/accounts/login/"><input type="text" name="username"><input type="password" name="password"><button type="submit">로그인</button></form>`
     : `${marks}<ul class="tab_style1 tab-container">
     <li class="tab"><a href="#stay_tab_offers" data-stay-tab="offers"${o.tab === 'offers' ? ' class="active"' : ''}><span>오퍼</span></a></li>
     <li class="tab"><a href="#stay_tab_sale_days" data-stay-tab="sale_days"><span>판매일</span></a></li>
     <li class="tab"><a href="#stay_tab_calendar" data-stay-tab="calendar"${o.tab === 'offers' ? '' : ' class="active"'}><span>가격 캘린더</span></a></li>
-  </ul>${OTHER_TABS}
+  </ul>${OTHER_TABS}${plans}
   <div id="stay_tab_calendar" class="col s12 stay-pane stay-root" data-stay-tab="calendar">${panelOf(o.start)}</div>
   <div class="stay-drawer"><aside class="stay-drawer__panel" role="dialog"><header class="stay-drawer__header"><h4 class="stay-drawer__title"></h4>
     <button type="button" class="stay-drawer__close" aria-label="닫기">&times;</button></header>

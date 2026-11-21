@@ -833,11 +833,22 @@
     var name = label ? C(label.textContent) : '';
     return { names: name ? [name] : [], picked: name };
   }
-  // 칩 이름은 「객실 · 요금제」 다(ERP CalendarCoord.label). 객실 이름에 ` · ` 가 든 호텔이 있어 마지막 ` · ` 에서 가른다 —
-  // 잘못 갈라도 readPair 가 드로어의 요금제와 견주어 읽지 않고 거절한다
-  function pairOf(label) {
-    var at = label.lastIndexOf(' · ');
-    return at < 0 ? { room: label, rate_plan: '' } : { room: label.slice(0, at), rate_plan: label.slice(at + 3) };
+  // 칩 이름은 「객실 · 요금제」 를 이은 글자다(ERP CalendarCoord.label) — 객실 이름에도 요금제 이름에도 ` · ` 가 들 수 있어 글자를
+  // 갈라서는 모른다. ERP 가 둘을 따로 주는 곳에서 읽는다: 편집 화면이 열릴 때 함께 불러오는 요금제 탭 목록(`#stay_rate_plans`,
+  // `_rate_plans_panel.html`)의 줄 — 칩과 같은 요금제 번호(`data-stay-entity-id`)의 줄이 요금제 이름(`data-stay-name`)을, 그 줄의
+  // tbody 가 객실 이름(`data-workspace-room-name` — 칩과 같은 ERP room_label)을 싣는다. 둘을 이은 것이 칩 이름과 꼭 같을 때만 쓴다.
+  // 그 줄이 없으면 ` · ` 가 하나뿐인 칩만 거기서 가른다(둘 다 ` · ` 가 없으니 하나로 정해진다). 그 밖은 정하지 못해 거절한다
+  function pairOf(chip) {
+    var label = C(chip.getAttribute('data-stay-name')), id = chip.getAttribute('data-stay-entity-id') || '';
+    var row = all('#stay_rate_plans tr[data-stay-entity="rate_plan"]').filter(function (tr) { return tr.getAttribute('data-stay-entity-id') === id; })[0];
+    var body = row && row.closest('tbody[data-workspace-room-name]');
+    if (body) {
+      var room = C(body.getAttribute('data-workspace-room-name')), plan = C(row.getAttribute('data-stay-name'));
+      if (room + ' · ' + plan === label) return { room: room, rate_plan: plan };
+    }
+    var parts = label.split(' · ');
+    if (parts.length === 2) return { room: parts[0], rate_plan: parts[1] };
+    fail('칩 `' + label + '` 의 객실과 요금제를 가르지 못했습니다 — 이름에 ` · ` 가 여럿이고 요금제 탭 목록에 그 요금제의 줄이 없습니다. 탭을 새로 고친 뒤 다시 부릅니다');
   }
 
   // 이 탭이 어디인지 — 로그인 화면인지, 어느 호텔인지(페이지가 말하는 번호·이름), 캘린더의 오퍼, 그리고 한 오퍼의 객실 × 요금제
@@ -853,7 +864,7 @@
       if (offer) await pickOffer(ctx, offer);
       var shown = offersShown();
       if (offer && shown.picked !== offer) fail('캘린더에 오퍼 `' + offer + '` 이 없습니다 (보이는 오퍼: ' + shown.names.join(' / ') + ')');
-      var pairs = all('#stay_calendar [data-stay-entity="rate_plan"][data-stay-action="goto"]').map(function (c) { return pairOf(C(c.getAttribute('data-stay-name'))); });
+      var pairs = all('#stay_calendar [data-stay-entity="rate_plan"][data-stay-action="goto"]').map(pairOf);
       var whole = { ok: true, login: false, hotel: hotel, offer: shown.picked, offers: shown.names, pairs: pairs };
       // 답의 나머지 칸(ask · clicks · rest · ms · doneAt …)이 250자 안팎이다 — 목록까지 800자에 들면 그대로, 아니면 조각으로
       if (shownLength(whole) <= RESULT_CHARS - 300) return whole;

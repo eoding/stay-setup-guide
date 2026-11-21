@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erpPage, inPage, plain, charsOf, takeAll, OFFER, HOTEL, SKILL } from './page_harness.mjs';
+import { erpPage, inPage, plain, charsOf, takeAll, runFixture, OFFER, HOTEL, SKILL } from './page_harness.mjs';
 
 const PAIRS = [['디럭스', '조식 포함'], ['디럭스', '룸온리'], ['디럭스', '직접 만든 요금제'], ['스위트', '조식 포함'], ['스위트', '룸온리']]
   .map(([room, plan]) => ({ room, rate_plan: plan }));
@@ -98,4 +98,31 @@ test('G1 · look() — 칩이 많아 800자를 넘으면 목록은 조각으로 
     assert.deepEqual(joined.pairs[1], { room: '객실 1호', rate_plan: '조식 포함 요금제 1' });
   } finally { rmSync(dir, { recursive: true, force: true }); }
   page.w.close();
+});
+
+test('A7 · look() — 이름에 ` · ` 가 든 객실 · 요금제도 요금제 탭 목록(같은 요금제 번호의 줄)으로 객실과 요금제를 따로 읽고, 그 이름으로 readPair 가 읽는다', async () => {
+  const ROOM = '〈별관〉 · 스위트', PLAN = 'Breakfast · Flex';
+  const page = erpPage({
+    panelEdit: (html) => html.replace('data-stay-name="디럭스 · 조식 포함"', `data-stay-name="디럭스 · ${PLAN}"`).replace('>디럭스 · 조식 포함<', `>디럭스 · ${PLAN}<`)
+      .replace('data-stay-name="스위트 · 룸온리"', `data-stay-name="${ROOM} · 룸온리"`),
+    ratePlans: [{ id: '{rate_plan:1}', room: '디럭스', plan: PLAN }, { id: '{rate_plan:4}', room: ROOM, plan: '룸온리' }, { id: '{rate_plan:3}', room: '스위트', plan: '조식 포함' }],
+    bulkReview: runFixture('calendar-bulk--price-step2.html').replace('<dt>요금제</dt><dd>조식 포함</dd>', `<dt>요금제</dt><dd>${PLAN}</dd>`)
+  });
+  const r = plain(await page.w.stayPrice.look());
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.pairs.find((p) => p.rate_plan === PLAN), { room: '디럭스', rate_plan: PLAN }, '요금제 이름의 ` · ` 를 객실로 넘기지 않는다');
+  assert.deepEqual(r.pairs.find((p) => p.room === ROOM), { room: ROOM, rate_plan: '룸온리' }, '객실 이름의 ` · ` 도 그대로');
+  assert.deepEqual(r.pairs.find((p) => p.rate_plan === '직접 만든 요금제'), { room: '디럭스', rate_plan: '직접 만든 요금제' }, '목록에 없는 칩은 ` · ` 하나에서 가른다');
+  const read = plain(await page.w.stayPrice.readPair(inPage(page.w, { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: PLAN,
+    from: '2026-07-01', to: '2026-07-01', weekdays: ['월', '화', '수', '목', '금', '토', '일'] })));
+  assert.equal(read.ok, true, read.error);
+  page.w.close();
+
+  // 요금제 탭 목록이 없으면 ` · ` 가 여럿인 칩은 정하지 못한다 — 틀리게 가르지 않고 그 칩을 대며 거절한다
+  const bare = erpPage({ panelEdit: (html) => html.replace('data-stay-name="디럭스 · 조식 포함"', `data-stay-name="디럭스 · ${PLAN}"`) });
+  const none = plain(await bare.w.stayPrice.look());
+  assert.equal(none.ok, false);
+  assert.match(none.error, /디럭스 · Breakfast · Flex/);
+  assert.match(none.error, /가르지 못했습니다/);
+  bare.w.close();
 });
