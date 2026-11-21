@@ -1,7 +1,7 @@
 """Z1 — 멈춘 변경의 결과 페이지는 이어서 하면 무엇을 쓰는지 보인다.
 
 담당자는 이 페이지를 보며 이어서 할지, 된 것까지 되돌릴지, 이대로 둘지 고른다. 그래서 칸마다 — 저장한 칸은 `전 → 넣은 값`,
-아직 저장하지 않은 칸은 `지금 값 → 이어서 하면 넣을 값` 과 「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만
+아직 저장하지 않은 칸은 `미리보기 때 값 → 이어서 하면 넣을 값` 과 「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만
 「그대로」. 미리보기와 같은 약속도 지킨다: 남은 저장이 넣을 값 하나하나가 페이지의 그 칸 옆에 같은 숫자로 있다.
 
 두 번째 시운전의 모양(객실마다 저장 한 번, 둘)을 첫 저장 뒤에 끊고, 칸마다 고름을 섞은 모양(묶음 저장과 셀 창 저장이 한 칸의
@@ -31,7 +31,9 @@ from price_model import (  # noqa: E402
     CellKey, decode_resolution_items, encode_key, encode_request, encode_snapshot, encode_step, snapshot_reading,
 )
 from price_pages import render_result  # noqa: E402
-from price_plan import plan_change, plan_steps, preview_rows, resolve, step_plans  # noqa: E402
+from price_plan import (  # noqa: E402
+    plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, rollback_rows, rollback_writes, save_steps, step_plans,
+)
 from test_preview_truth import above_list_cells, place, read_grid, shown_moves, step_writes  # noqa: E402
 
 REAL = scene.NOW
@@ -116,7 +118,7 @@ class StoppedResultPageTest(unittest.TestCase):
         cell = grid[("스탠다드 바다 전망 · 조식 포함", "12/7 월", "성인 2 · 1박 이상")]
         self.assertEqual([text for _tag, _cls, text in cell],
                          ["120.00", "→", "134.40", "정가 132.00 → 147.84", "아직 저장 안 함 · 2번째 저장"],
-                         "지금 값 → 이어서 하면 넣을 값 — 「120.00 그대로」가 아니다")
+                         "미리보기 때 값 → 이어서 하면 넣을 값 — 「120.00 그대로」가 아니다")
         text = page_text(html)
         self.assertIn("「아직 저장 안 함」 12칸은 미리보기 때 값 → 이어서 하면 넣을 값입니다. 지금 ERP 값은 다시 읽어 봐야 압니다.", text)
         self.assertIn("✓ 1. 스탠다드 · 조식 포함 · 12/7 월 ~ 12/8 화 · 12/10 목 · 12/14 월 (4일, 2026년) · 24칸 저장함", text)
@@ -157,6 +159,9 @@ class StoppedResultPageTest(unittest.TestCase):
 
 
 SEA = "스탠다드 바다 전망"
+MOVED_SENTENCE = ("「그 사이 ERP 에서 바뀜」 1칸은 미리보기 뒤에 ERP 에서 값이 바뀐 칸입니다. 칸에는 미리보기 때 값과 {when}에 다시 읽은 "
+                  "값을 보입니다 — 다시 읽은 값은 그때 ERP 에 있던 값이고, 그 뒤에 또 바뀌었을 수 있습니다. 도우미는 이 칸에 아무것도 넣지 "
+                  "않았습니다.")
 MOVED_ERROR = ("ERP 화면의 값이 읽은 값과 다릅니다(1칸) — 2026-12-07 A2C1_CHD · 1박 이상 — 읽은 값 판매가 135.00 · 정가 147.00 · "
                "공급 원가 125.00 · 화면 판매가 136.00 · 정가 147.00 · 공급 원가 125.00. 아무것도 치지 않았고 누르지 않았습니다")
 
@@ -164,7 +169,9 @@ MOVED_ERROR = ("ERP 화면의 값이 읽은 값과 다릅니다(1칸) — 2026-1
 class StoppedAfterARefusedSaveTest(unittest.TestCase):
     """T1 — 시운전 7 의 모양(값은 지어냄): 첫 저장(스탠다드) 뒤 다른 사람이 둘째 저장의 칸(바다 전망 12/7 성인 2 + 아동 1 · 1박 이상)을
     바꿔, 둘째 저장이 누르기 전에 거절됐다. 결과 페이지는 멈춘 뒤 마지막 check 가 본 것대로 말한다: check 가 없으면 이어서 할 수
-    있는지는 다시 읽어 봐야 안다고, check 가 안 된다고 했으면 이어서를 빼고 까닭과 그 칸의 지금 값을, 된다고 했으면 이어서를."""
+    있는지는 다시 읽어 봐야 안다고, check 가 안 된다고 했으면 이어서를 빼고 까닭과 그 칸을 그 check 가 읽은 값을(그 시각과 함께),
+    된다고 했으면 이어서를. 시운전 8 F1 — check 가 읽은 값은 어느 상태의 페이지에서도 「지금」이 아니다. 그 뒤에 또 바뀌었을 수 있어
+    칸마다 그 시각을 달고(다른 날 연 페이지면 날짜도), 설명 문장이 그렇게 한 번 말한다."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -200,6 +207,14 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
     def page(self, minutes=7):
         return page_text(render_result(self.ledger(minutes).change(self.change)))
 
+    def assert_no_stored_now(self, text):
+        """check 가 읽어 장부에 둔 값을 「지금」이라고 하지 않는다."""
+        self.assertNotRegex(text, r"지금 [\d,.]+|지금 칸 없음", "장부에 둔 값을 지금 값이라고 하지 않는다")
+
+    def moved_cell(self, minutes=7):
+        grid = read_grid(render_result(self.ledger(minutes).change(self.change)), SECTION)
+        return [part for _tag, _cls, part in grid[place(self.moved)]]
+
     def assert_plain(self, text):
         for raw in ("A2C1_CHD", "A2 ·", "읽은 값 판매가", "화면 판매가", "다시 읽고 미리보기를 새로 만듭니다"):
             self.assertNotIn(raw, text, "담당자가 읽는 글에 인원 조합 키 · 페이지 오류의 날글이 없다")
@@ -230,11 +245,10 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
         self.assertIn(report.why[0], text, "check 의 까닭")
         self.assertIn("된 것까지 되돌리기 — 이미 된 저장 한 번을 원래 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).", text)
         self.assertIn('이대로 두기 — 장부에 "중간에 멈춤"으로 남습니다. 남은 부분은 지금 값으로 새로 바꿔야 합니다(새 미리보기부터).', text)
-        self.assertIn("「그 사이 ERP 에서 바뀜」 1칸은 미리보기 뒤에 ERP 에서 값이 바뀐 칸입니다 — 미리보기 때 값 옆에 10시 6분에 다시 "
-                      "읽은 지금 값을 보입니다. 도우미는 이 칸에 아무것도 넣지 않았습니다.", text)
+        self.assertIn(MOVED_SENTENCE.format(when="10시 6분"), text)
+        self.assertEqual(self.moved_cell(), ["미리보기 때 135.00", "·", "10시 6분에 다시 읽으니 136.00", "그 사이 ERP 에서 바뀜 · 넣지 않음"])
+        self.assert_no_stored_now(text)
         grid = read_grid(render_result(self.ledger(7).change(self.change)), SECTION)
-        self.assertEqual([part for _tag, _cls, part in grid[place(self.moved)]],
-                         ["미리보기 때 135.00", "지금 136.00", "그 사이 ERP 에서 바뀜 · 넣지 않음"])
         other = grid[place(replace(self.moved, date="2026-12-08"))]
         self.assertIn("아직 저장 안 함 · 2번째 저장", tags(other), "바뀌지 않은 칸은 넣으려던 값 그대로 보인다")
         self.assertNotIn("로그인", text)
@@ -245,15 +259,50 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
         self.assertTrue(self.check(moved=False).can_continue)
         text = self.page()
         self.assertIn("2번째 저장에서 멈췄습니다 (드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다). 지금은 일부만 바뀐 상태입니다.", text)
-        self.assertIn("10시 6분에 ERP 를 다시 읽어 보니 남은 저장의 칸이 미리보기 때와 같습니다 — 이어서 할 수 있습니다.", text)
+        self.assertIn("10시 6분에 ERP 를 다시 읽어 보니 남은 저장의 칸이 미리보기 때와 같았습니다 — 이어서 할 수 있습니다.", text)
         self.assertIn("이어서 — 남은 저장 한 번을 마저 적용합니다(아래 표의 「아직 저장 안 함」 12칸이 그 값으로 바뀝니다).", text)
-        self.assertIn("「아직 저장 안 함」 12칸은 지금 값 → 이어서 하면 넣을 값입니다(10시 6분에 다시 읽어 미리보기 때와 같은 것을 확인했습니다).",
-                      text)
+        self.assertIn("「아직 저장 안 함」 12칸은 미리보기 때 값 → 이어서 하면 넣을 값입니다. 10시 6분에 다시 읽었을 때 ERP 값이 미리보기 "
+                      "때와 같았습니다 — 그 뒤에 바뀌었을 수 있고, 바뀐 칸이 있으면 그 저장은 넣지 않고 멈춥니다.", text)
+        self.assert_no_stored_now(text)
         self.assertNotIn("로그인", text)
         # 그 check 는 15분이 지나면, 또는 그 뒤 저장 결과가 적히면 더는 이어서를 말하지 않는다
         self.assertIn("이어서 할 수 있는지는 ERP 를 다시 읽어 봐야 압니다", self.page(minutes=22))
         self.ledger(8).record_step(self.change, 2, saved=False, note="드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다")
         self.assertIn("이어서 할 수 있는지는 ERP 를 다시 읽어 봐야 압니다", self.page(minutes=9))
+
+    def test_the_value_the_check_read_carries_its_time_in_every_state_and_the_date_on_a_later_day(self):
+        """시운전 8 F1 — 다른 사람이 그 칸을 되돌린 뒤에도, 저장한 칸을 되돌린 뒤에도, 다음 날 다시 연 페이지에서도 그 값은 10시 6분에
+        읽은 값으로 보인다. 설명 문장은 어느 상태에서나 한 번 있다."""
+        self.refuse()
+        self.check()
+        later = 24 * 60 + 7   # 다음 날 10시 7분
+        text = self.page(minutes=later)
+        self.assertIn("11월 21일 10시 6분에 ERP 를 다시 읽어 보니 이어서 할 수 없습니다.", text)
+        self.assertIn(MOVED_SENTENCE.format(when="11월 21일 10시 6분"), text)
+        self.assertEqual(self.moved_cell(later)[2], "11월 21일 10시 6분에 다시 읽으니 136.00", "다음 날에는 날짜까지")
+        self.assert_no_stored_now(text)
+        # 저장한 첫 저장을 뒤에 되돌렸다 — 이어서도 되돌릴 것도 없지만, 그 칸은 여전히 그때 읽은 값과 그 시각이다(설명 문장도 남는다)
+        undo = self.rollback_saved(minutes=10)
+        text = self.page(minutes=11)
+        self.assertIn("이 변경이 저장한 칸은 뒤에 모두 되돌렸습니다.", text)
+        self.assertIn(f"이 변경의 24칸은 뒤에 되돌렸습니다(장부 {undo}번).", text)
+        self.assertEqual(text.count(MOVED_SENTENCE.format(when="10시 6분")), 1, "설명 문장은 한 번")
+        self.assertEqual(self.moved_cell(11), ["미리보기 때 135.00", "·", "10시 6분에 다시 읽으니 136.00", "그 사이 ERP 에서 바뀜 · 넣지 않음"])
+        self.assert_no_stored_now(text)
+
+    def rollback_saved(self, minutes):
+        """첫 저장의 칸을 모두 되돌리는 되돌리기를 `minutes` 분에 적용한다 → 그 번호."""
+        read_at = (REAL + timedelta(minutes=minutes - 1)).isoformat(timespec="seconds")
+        now = scene.applied(self.snapshot, self.steps[:1], read_at)
+        ledger = self.ledger(minutes)
+        rollback = plan_cell_rollback(ledger.recorded_change(self.change), ledger.later_writes(self.change), now)
+        rid = ledger.record_preview(hotel=rollback.hotel, hotel_id=rollback.hotel_id, offer=rollback.offer, currency=rollback.currency,
+                                    sentence="되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback), reverses=self.change)
+        steps = save_steps(rollback_writes(rollback))
+        self.ledger(minutes + 0.5).begin(rid, step_plans(steps), read_at=(REAL + timedelta(minutes=minutes + 0.2)).isoformat())
+        for index in range(1, len(steps) + 1):
+            self.ledger(minutes + 0.5).record_step(rid, index, saved=True)
+        return rid
 
     def test_the_login_sentence_comes_only_when_the_cause_can_be_a_lost_login(self):
         self.refuse(note="모름", unknown=True)

@@ -279,9 +279,10 @@ class StoppedTest(Flow):
         self.assertEqual((report["cause"], report["can_continue"]), ("cut_off", True))
         self.assertEqual(len(self.cli("calls", "--change", change)["calls"]), 2)
 
-    def test_a_save_refused_because_someone_changed_the_line_shows_the_erp_value_now_and_no_continue(self):
+    def test_a_save_refused_because_someone_changed_the_line_shows_what_the_check_read_and_no_continue(self):
         """T1 — 첫 저장 뒤 다른 사람이 둘째 줄을 바꿔 둘째 저장이 누르기 전에 거절됐다. 다시 읽어 check 가 이어서 할 수 없다고 한 뒤의
-        결과 페이지는 이어서를 빼고, 그 줄의 지금 값과 그 사이 바뀌었다는 한 문장을 보인다."""
+        결과 페이지는 이어서를 빼고, 그 줄을 check 가 읽은 값(그 시각과 함께 — 지금 값이라고 하지 않는다, 시운전 8 F1)과 그 사이
+        바뀌었다는 문장으로 보인다."""
         change, plan = self.preview(self.request())
         self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change))
         first, second = self.cli("calls", "--change", change)["calls"]
@@ -299,7 +300,9 @@ class StoppedTest(Flow):
         self.assertIn("ERP 를 다시 읽어 보니 이어서 할 수 없습니다.", text)
         self.assertIn("「그 사이 ERP 에서 바뀜」 1줄은 미리보기 뒤에 ERP 에서 값이 바뀐 줄입니다", text)
         self.assertIn("도우미는 이 줄에 아무것도 넣지 않았습니다.", text)
-        self.assertIn("지금 41.00 그 사이 ERP 에서 바뀜 · 넣지 않음", text)
+        self.assertRegex(text, r"미리보기 때 \S+ · \d+시 \d+분에 다시 읽으니 41\.00 그 사이 ERP 에서 바뀜 · 넣지 않음")
+        self.assertIn("다시 읽은 값은 그때 ERP 에 있던 값이고, 그 뒤에 또 바뀌었을 수 있습니다.", text)
+        self.assertNotRegex(text, r"지금 [\d,.]+")
         self.assertNotIn("로그인", text)
 
 

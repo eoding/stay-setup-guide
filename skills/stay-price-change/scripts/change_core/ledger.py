@@ -304,6 +304,8 @@ class Checked:
 
 @dataclass(frozen=True)
 class ChangeRecord:
+    """장부의 변경 하나. `status` · `cause` · `checked` 는 장부를 읽은 때(`as_of` — 장부의 시계) 기준이다(15분 멈춤). 결과 페이지는
+    그때를 오늘로 삼는다 — 그날이 아닌 check 의 시각에는 날짜를 붙인다."""
     id: int
     kind: str
     status: str
@@ -323,6 +325,7 @@ class ChangeRecord:
     cause: str | None = None
     replaces: int | None = None
     checked: Checked | None = None
+    as_of: str | None = None
 
 
 @dataclass(frozen=True)
@@ -928,7 +931,7 @@ class Ledger:
                             header["offer"], header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
                             None if header["request"] is None else json.loads(header["request"]), steps, rows, cause,
-                            header["replaces"], checked)
+                            header["replaces"], checked, self._stamp())
 
     def reading(self, change_id: int) -> dict:
         """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""

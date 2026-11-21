@@ -23,8 +23,9 @@ from decimal import Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
-    MOVED_TAG, UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_clock, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
-    notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view, stopped_choices, unremovable_table,
+    MOVED_TAG, UNDO_ONCE, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
+    notes, page, reread, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view, stopped_choices,
+    unremovable_table,
 )
 from change_core.files import record_progress
 from change_core.ledger import ChangeRecord
@@ -685,15 +686,19 @@ def result_name(record: ChangeRecord) -> str:
     return "되돌리기 결과" if record.kind == "rollback" or restore else "적용 결과"
 
 
-def _moved_cell(before: CellValue, now, currency: str) -> str:
-    """멈춘 뒤 다시 읽어 보니 미리보기 때와 달라진 칸 — 미리보기 때 값과 지금 ERP 값(다른 필드만), 그리고 넣지 않았다는 꼬리표."""
+def _moved_cell(before: CellValue, now, currency: str, seen_at: str) -> str:
+    """멈춘 뒤 다시 읽어 보니 미리보기 때와 달라진 칸 — 미리보기 때 값과 그때 읽은 ERP 값(다른 필드만, `seen_at` 은 「19시 26분에
+    다시 읽으니」), 그리고 넣지 않았다는 꼬리표. 그 값은 지금 값이라고 하지 않는다 — 그 뒤에 또 바뀌었을 수 있다."""
     if now is None or now.state == "missing":
-        shown = '<b class="now">지금 칸 없음</b>'
+        shown = f'<b class="now">{seen_at} 칸 없음</b>'
     else:
         fields = [name for name in FIELDS if getattr(before, name) != now.fields.get(name)] or ["sell"]
-        shown = " · ".join(f'{FIELD_LABELS[name] + " " if name != "sell" else ""}<span class="was">미리보기 때 '
-                           f'{fmt_money(getattr(before, name), currency)}</span> <b class="now">지금 {fmt_money(now.fields.get(name), currency)}</b>'
-                           for name in fields)
+
+        def values(value_of) -> str:
+            return " · ".join(f'{FIELD_LABELS[name] + " " if name != "sell" else ""}{fmt_money(value_of(name), currency)}' for name in fields)
+
+        shown = (f'<span class="was">미리보기 때 {values(lambda name: getattr(before, name))}</span> · '
+                 f'<b class="now">{seen_at} {values(now.fields.get)}</b>')
         if now.state != before.state and now.state == "closed":
             shown += '<span class="tag closed">판매 마감</span>'
     return shown + MOVED_TAG
@@ -708,9 +713,11 @@ def _waiting_intro(record: ChangeRecord, waiting: int, moved: int) -> str:
             text += " " + moved_sentence(record, moved)
     elif mode == "undone":
         text = f"「아직 저장 안 함」 {waiting:,}칸은 이 변경이 넣으려던 값입니다 — 넣지 않았고, 이어서 하지 않습니다."
+        if moved:
+            text += " " + moved_sentence(record, moved)
     elif mode == "allows":
-        text = (f"「아직 저장 안 함」 {waiting:,}칸은 지금 값 → 이어서 하면 넣을 값입니다({fmt_clock(stop_view(record)[1].read_at)}에 "
-                "다시 읽어 미리보기 때와 같은 것을 확인했습니다).")
+        text = (f"「아직 저장 안 함」 {waiting:,}칸은 미리보기 때 값 → 이어서 하면 넣을 값입니다. {checked_when(record)}에 다시 읽었을 때 "
+                "ERP 값이 미리보기 때와 같았습니다 — 그 뒤에 바뀌었을 수 있고, 바뀐 칸이 있으면 그 저장은 넣지 않고 멈춥니다.")
     elif mode == "unchecked":
         text = (f"「아직 저장 안 함」 {waiting:,}칸은 미리보기 때 값 → 이어서 하면 넣을 값입니다. 지금 ERP 값은 다시 읽어 봐야 "
                 "압니다.")
@@ -722,7 +729,7 @@ def _waiting_intro(record: ChangeRecord, waiting: int, moved: int) -> str:
 def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False) -> str:
     """장부의 변경 하나의 결과. 칸마다 — 저장한 칸은 `전 → 넣은 값`, 아직 저장하지 않은 칸은 `미리보기 때 값 → 이어서 하면 넣을
     값`과 「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만 「그대로」. 멈춘 뒤 다시 읽어(check) 미리보기 때와 달라진
-    칸은 미리보기 때 값과 지금 값, 「그 사이 ERP 에서 바뀜 · 넣지 않음」. 멈춘 변경을 이어서 할지 고르는 담당자가 보는 페이지다."""
+    칸은 미리보기 때 값과 그 check 가 읽은 값(그 시각과 함께), 「그 사이 ERP 에서 바뀜 · 넣지 않음」. 멈춘 변경을 이어서 할지 고르는 담당자가 보는 페이지다."""
     currency = record.currency
     views = cell_views(record)
     stop = stop_view(record)
@@ -757,11 +764,11 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
         now = moved_now.get(cell_item_key(key), False) if view.waiting else False
         if not view.written:
             if now is not False:
-                return "red", _moved_cell(view.before, now, currency)
+                return "red", _moved_cell(view.before, now, currency, reread(record))
             return "wait", _move(view.before, _with(view.before, view.waiting), currency) + _waiting_tag(view, steps)
         done = _with(view.before, view.after)
         moved = _move(view.before, done, currency)
-        rest = ("" if not view.waiting else _moved_cell(done, now, currency) if now is not False
+        rest = ("" if not view.waiting else _moved_cell(done, now, currency, reread(record)) if now is not False
                 else _move(done, _with(done, view.waiting), currency) + _waiting_tag(view, steps))
         if view.rolled_back_by:
             return "same", f'{moved}<span class="tag closed">되돌림 · 장부 {view.rolled_back_by}번</span>{rest}'

@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import html
-from datetime import datetime
+from datetime import date, datetime
 from html.parser import HTMLParser
 from typing import Iterable, Mapping
 
@@ -80,10 +80,15 @@ def esc(text) -> str:
     return html.escape(str(text), quote=True)
 
 
-def fmt_clock(text: str) -> str:
-    """「17시 26분」 — 담당자에게 시각을 말하는 꼴(SKILL.md 의 「○시 ○분」)."""
+def fmt_clock(text: str, today: date | None = None) -> str:
+    """「17시 26분」 — 담당자에게 시각을 말하는 꼴(SKILL.md 의 「○시 ○분」). `today` 를 주었는데 그 시각이 그날이 아니면 날짜를
+    앞에 붙인다 — 「11월 21일 17시 26분」(해가 다르면 「2026년 11월 21일 17시 26분」)."""
     moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    return f"{moment.hour}시 {moment.minute}분"
+    clock = f"{moment.hour}시 {moment.minute}분"
+    if today is None or moment.date() == today:
+        return clock
+    day = f"{moment.month}월 {moment.day}일"
+    return f"{day} {clock}" if moment.year == today.year else f"{moment.year}년 {day} {clock}"
 
 
 def fmt_money(value, currency: str) -> str:
@@ -228,12 +233,26 @@ def nothing_left(record) -> bool:
     return stop_view(record) is not None and not _alive(record)
 
 
+def checked_when(record) -> str:
+    """멈춘 뒤 마지막 check 가 ERP 를 다시 읽은 때 — 「19시 26분」. 장부를 읽은 날(`record.as_of` — 이 페이지를 만든 때)이 그날이
+    아니면 날짜까지 붙인다 — 뒷날 다시 연 페이지가 그때 읽은 값을 오늘 읽은 것처럼 말하지 않는다."""
+    today = datetime.fromisoformat(record.as_of).date() if record.as_of else None
+    return fmt_clock(stop_view(record)[1].read_at, today)
+
+
+def reread(record) -> str:
+    """check 가 다시 읽은 값 앞에 붙이는 말 — 「19시 26분에 다시 읽으니」. 그 값은 그때 ERP 에 있던 값이라 「지금」이라고 하지 않는다
+    (그 뒤에 또 바뀌었을 수 있다 — 시운전 8 에서 그 사이 값이 되돌려졌다)."""
+    return f"{checked_when(record)}에 다시 읽으니"
+
+
 def moved_sentence(record, count: int, unit: str = "칸") -> str:
-    """멈춘 뒤 다시 읽어 보니 남은 저장의 항목이 미리보기 때와 달라진 것 — 그 수를 대고, 그 사이 ERP 에서 바뀌었고 도우미는 아무것도
-    넣지 않았다는 한 문장. 표에서는 그 항목이 「그 사이 ERP 에서 바뀜」과 미리보기 때 값 · 지금 값이다."""
-    checked = stop_view(record)[1]
-    return (f"「그 사이 ERP 에서 바뀜」 {count:,}{unit}은 미리보기 뒤에 ERP 에서 값이 바뀐 {unit}입니다 — 미리보기 때 값 옆에 "
-            f"{fmt_clock(checked.read_at)}에 다시 읽은 지금 값을 보입니다. 도우미는 이 {unit}에 아무것도 넣지 않았습니다.")
+    """멈춘 뒤 다시 읽어 보니 남은 저장의 항목이 미리보기 때와 달라진 것 — 그 수를 대고, 그 사이 ERP 에서 바뀌었고, 표의 다시 읽은
+    값은 그때 ERP 에 있던 값이라 그 뒤에 또 바뀌었을 수 있고, 도우미는 아무것도 넣지 않았다는 문장. 표에서는 그 항목이 「미리보기 때
+    … · ○시 ○분에 다시 읽으니 …」와 「그 사이 ERP 에서 바뀜 · 넣지 않음」이다."""
+    return (f"「그 사이 ERP 에서 바뀜」 {count:,}{unit}은 미리보기 뒤에 ERP 에서 값이 바뀐 {unit}입니다. {unit}에는 미리보기 때 값과 "
+            f"{checked_when(record)}에 다시 읽은 값을 보입니다 — 다시 읽은 값은 그때 ERP 에 있던 값이고, 그 뒤에 또 바뀌었을 수 "
+            f"있습니다. 도우미는 이 {unit}에 아무것도 넣지 않았습니다.")
 
 
 MOVED_TAG = '<span class="tag red">그 사이 ERP 에서 바뀜 · 넣지 않음</span>'
@@ -319,12 +338,12 @@ def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> st
         offered = (f"<div><b>이어서</b> — 남은 저장 {times_word(left)}을 마저 적용합니다{shown}. 다시 읽어 그 사이 바뀐 칸이 없을 때만 "
                    f"합니다.</div>{back}{stay}</div>")
     elif mode == "allows":
-        lead = (f"{fmt_clock(checked.read_at)}에 ERP 를 다시 읽어 보니 남은 저장의 {unit}이 미리보기 때와 같습니다 — 이어서 할 수 "
+        lead = (f"{checked_when(record)}에 ERP 를 다시 읽어 보니 남은 저장의 {unit}이 미리보기 때와 같았습니다 — 이어서 할 수 "
                 "있습니다.")
         offered = (f"<div><b>이어서</b> — 남은 저장 {times_word(left)}을 마저 적용합니다{shown}.</div>{back}{stay} 나중에 이어서 하려면 "
                    "다시 읽어 확인합니다.</div>")
     else:
-        lead = f"{fmt_clock(checked.read_at)}에 ERP 를 다시 읽어 보니 이어서 할 수 없습니다."
+        lead = f"{checked_when(record)}에 ERP 를 다시 읽어 보니 이어서 할 수 없습니다."
         why = notes(checked.why)
         offered = back + stay + " 남은 부분은 지금 값으로 새로 바꿔야 합니다(새 미리보기부터).</div>"
     ask = "크롬에서 ERP 로그인을 확인한 뒤 대화창에서 골라 주세요." if login else "대화창에서 골라 주세요."

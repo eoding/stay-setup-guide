@@ -15,7 +15,8 @@ from addon_model import (
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner, nothing_left,
-    notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices, times_word, unremovable_table,
+    notes, page, reread, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices, times_word,
+    unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.money import example_step
@@ -205,7 +206,7 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
         row.verified for row in lines[key]["fields"].values() if row.written and row.action)]
     waiting = [key for key, entry in lines.items() if any(row.action and not row.written for row in entry["fields"].values())]
     moved_keys = {item["key"] for item in moved}
-    stop = stop_view(record)   # 멈춘 뒤 다시 읽어 보니 남은 저장의 줄이 미리보기 때와 달라진 것 — 지금 값
+    stop = stop_view(record)   # 멈춘 뒤 다시 읽어 보니 남은 저장의 줄이 미리보기 때와 달라진 것 — 그때 읽은 값
     moved_now = {key: now for (kind, key), now in (stop[1].moved.items() if stop and stop[1] else ()) if kind == ITEM_KIND}
     changed_since = [key for key in waiting if key in moved_now]
     body = [f"<h1>{esc(title)}</h1>",
@@ -232,12 +233,14 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
             moved_html = _move(row.before, row.after, currency)
             if row.rolled_back_by:
                 cells.append(f'<td class="same">{moved_html}<span class="tag closed">되돌림 · 장부 {row.rolled_back_by}번</span></td>')
-            elif not row.written and key in moved_now:
+            elif not row.written and key in moved_now:   # 그때 읽은 값 — 지금 값이라고 하지 않는다(chrome.reread)
                 now = moved_now[key]
-                shown = ("지금 줄 없음" if now is None or now.state == "missing"
-                         else f"지금 {_money(now.fields.get(field_name), currency)}")
-                cells.append(f'<td class="red"><span class="was">미리보기 때 {_money(row.before, currency)}</span> '
-                             f'<b class="now">{shown}</b>{MOVED_TAG}</td>')
+                if now is None or now.state == "missing":
+                    shown = f'<b class="now">{reread(record)} 줄 없음</b>'
+                else:
+                    shown = (f'<span class="was">미리보기 때 {_money(row.before, currency)}</span> · '
+                             f'<b class="now">{reread(record)} {_money(now.fields.get(field_name), currency)}</b>')
+                cells.append(f'<td class="red">{shown}{MOVED_TAG}</td>')
             elif not row.written:
                 cells.append(f'<td class="wait">{moved_html}<span class="tag wait">아직 저장 안 함</span></td>')
             elif record.verified_at and not row.verified:

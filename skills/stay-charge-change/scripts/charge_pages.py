@@ -13,7 +13,8 @@ from charge_model import AGE, FIELD_LABELS, ITEM_KIND, Charge, Listing, Place, S
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner, nothing_left,
-    notes, page, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices, times_word, unremovable_table,
+    notes, page, reread, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices, times_word,
+    unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -195,7 +196,7 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     written = [row for row in record.rows if row.written and row.action and not row.rolled_back_by]
     mismatched = [row for row in written if record.verified_at and not row.verified]
     waiting = [row for row in record.rows if row.action and not row.written]
-    stop = stop_view(record)   # 멈춘 뒤 다시 읽어 보니 남은 저장의 칸이 미리보기 때와 달라진 것 — 지금 값
+    stop = stop_view(record)   # 멈춘 뒤 다시 읽어 보니 남은 저장의 칸이 미리보기 때와 달라진 것 — 그때 읽은 값
     moved_now = {key: now for (kind, key), now in (stop[1].moved.items() if stop and stop[1] else ()) if kind == ITEM_KIND}
     changed_since = [row for row in waiting if row.item_key in moved_now]
     body = [f"<h1>{esc(title)}</h1>",
@@ -218,12 +219,14 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
             cell = f'<td class="same">{_move(row.before, None, place, None, currency)}</td>'
         elif row.rolled_back_by:
             cell = f'<td class="same">{_move(row.before, row.after, place, None, currency)}<span class="tag closed">되돌림 · 장부 {row.rolled_back_by}번</span></td>'
-        elif not row.written and row.item_key in moved_now:
+        elif not row.written and row.item_key in moved_now:   # 그때 읽은 값 — 지금 값이라고 하지 않는다(chrome.reread)
             now = moved_now[row.item_key]
-            shown = ("지금 칸 없음" if now is None or now.state == "missing"
-                     else f"지금 {_value(now.fields.get(row.field), place, None, currency)}")
-            cell = (f'<td class="red"><span class="was">미리보기 때 {_value(row.before, place, None, currency)}</span> '
-                    f'<b class="now">{shown}</b>{MOVED_TAG}</td>')
+            if now is None or now.state == "missing":
+                shown = f'<b class="now">{reread(record)} 칸 없음</b>'
+            else:
+                shown = (f'<span class="was">미리보기 때 {_value(row.before, place, None, currency)}</span> · '
+                         f'<b class="now">{reread(record)} {_value(now.fields.get(row.field), place, None, currency)}</b>')
+            cell = f'<td class="red">{shown}{MOVED_TAG}</td>'
         elif not row.written:
             cell = f'<td class="wait">{_move(row.before, row.after, place, None, currency)}<span class="tag wait">아직 저장 안 함</span></td>'
         elif record.verified_at and not row.verified:
