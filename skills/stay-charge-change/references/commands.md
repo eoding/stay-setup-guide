@@ -8,14 +8,14 @@
 
 | 명령 | 플래그 | 하는 일 |
 |---|---|---|
-| `work` | 없음 | 새 작업 폴더를 만들어 `{work}` 로 그 자리를 준다 — `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`. 담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기 · 이어서)에 하나다. 같은 이름이 있으면 ` (2)` …를 붙여 앞선 일의 폴더를 다시 주지 않는다 |
+| `work` | 없음 | 새 작업 폴더를 그 안의 `look/`(look 답을 둘 곳)과 함께 만들어 `{work}` 로 그 자리를 준다 — `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`. 담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기 · 이어서)에 하나다. 같은 이름이 있으면 ` (2)` …를 붙여 앞선 일의 폴더를 다시 주지 않는다 |
 | `look` | `--answers` (여러 번) · `--find` · `--out` | `stayCharge.look()` 의 답과 조각 → 호텔의 오퍼마다 부과금 전부(목록이 보인 그대로 — 번호 · 이름 · 종류 · 부과 방식 · 금액 칸의 줄들 · 적용 범위 · 적용 날짜). `kind: charge_listing`. `--out` 의 짧은 답: `{out, hotel, read_at, offers, charges, items, more}` — `items` 는 고를 부과금마다 `{offer, offer_name, charge, name, kind, amount}`(요청 파일에 옮길 오퍼 · 부과금 번호, 이름, 금액 칸의 줄 — 시간대 줄의 시각 · 연령별 단가 이름이 여기 있다), 40개까지이고 넘으면 `more` 가 남은 수다. `--find <낱말>` 이면 오퍼 이름 · 부과금 이름 · 종류 · 금액 줄에 그 낱말이 든 것만 싣는다(`find` · `found` — 파일은 그대로 전부). 기록 폴더의 다른 작업 폴더의 `look/`(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `read-calls` | `--request` 또는 `--record` 또는 `--charge` (여러 번) · `--look` · `--out` | 읽을 부과금 → `readCharge` 부를 값 `{charges: [{hotel, offer, charge}]}`. `--look` 을 주면 요청의 오퍼 · 부과금 번호가 목록에 있는지 본다. `--charge <부과금 번호>` 는 바꾸지 않고 설정만 볼 때다(`--look` 과 같이 — 오퍼를 목록에서 찾는다). 한 번에 200개까지 |
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readCharge` 답과 조각 → 지금 값(`kind: charge_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다. 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
 | `render` | `preview` · `result` · `rollback` · `prices` · `window` · `--plan` · `--change` · `--snapshot` · `--look` · `--text` · `--out` | 페이지(HTML). preview 는 `--plan`, rollback 은 `--plan`(rollback 파일), prices 는 `--look`, window 는 `--snapshot`(읽은 부과금마다 편집 창의 칸 전부 — 종류 · 이름 · 방식 · 단위 · 의무와 날짜 · 적용 룸 · 현장 결제 통화 · 설명, 그리고 금액 칸마다 지금 값과 계산에 쓰이는지), result 는 `--change`(적용 뒤 읽은 값 `--snapshot` 을 주면 그대로여야 할 칸이 달라졌는지도 보인다). `--out` 이 없으면 기록 폴더에 쓴다. `--text` 면 파일을 만들지 않고 페이지의 글(`text`)만 낸다(`--out` 과 같이 주면 거절) |
 | `begin` | `--change` · `--plan` · `--snapshot` | 적용 시작. 방금 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 칸이라도(딸린 칸 · 다른 시간대 줄 · 다른 연령별 단가까지) 다르면 아무것도 시작하지 않는다(종료 1, `differences`). 15분보다 오래된 읽은 값은 받지 않는다. 저장할 것이 없는 미리보기는 받지 않는다 |
-| `calls` | `--change` | 아직 저장되지 않은 단계 → `applyCharge` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다 |
+| `calls` | `--change` · `--out` | 아직 저장되지 않은 단계 → `applyCharge` 부를 값 `{no, op, payload}`. 멈춘 변경이면 거절한다. `--out "<작업>/적용-N/calls.json"` 은 저장 답을 둘 `적용-N` 폴더를 만든다(답은 그대로 표준 출력에도 낸다) |
 | `record-result` | `--change` · `--result` | `applyCharge` 답 하나 → 장부에 됨 · 멈춤. 다른 단계 · 다른 값을 물은 답이면 거절한다. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |
 | `check` | `--change` · `--snapshot` | 멈춘 변경을 방금 읽은 값으로 본다(stopped.md). 남은 저장의 부과금은 그 안의 모든 금액 칸을 본다 |
 | `verify` | `--change` · `--snapshot` | 적용 뒤 견주기. `mismatches` 넣은 값과 다른 칸, `moved` 저장한 부과금에서 그대로여야 할 금액(다른 시간대 줄 · 연령별 단가 포함) · 칸이 달라졌거나 없던 줄이 생긴 것. 하나라도 있으면 종료 1. `names` 는 `plan` 의 것과 같은 셈(저장한 칸으로) |

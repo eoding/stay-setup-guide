@@ -49,17 +49,21 @@ def page_path(hotel: str, name: str) -> Path:
 
 
 def new_work() -> Path:
-    """새 작업 폴더 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/` 를 만들어 돌려준다 — 담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기 ·
-    이어서)에 하나. 같은 이름이 이미 있으면 뒤에 ` (2)` · ` (3)` …을 붙인다 — 앞선 일의 파일과 섞이지 않는다."""
+    """새 작업 폴더 `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/` 를 그 안의 `look/` 과 함께 만들어 돌려준다 — 담당자가 시킨 일 하나(보기 ·
+    바꾸기 · 되돌리기 · 이어서)에 하나. 같은 이름이 이미 있으면 뒤에 ` (2)` · ` (3)` …을 붙인다 — 앞선 일의 파일과 섞이지 않는다.
+    `look/` 은 안내문의 첫 저장(look 답)이 가는 곳이다 — 도우미의 파일 도구가 없는 폴더를 만들지 못해도 막히지 않는다. 그 뒤의
+    폴더(읽기 · 적용 답)는 그 안에 `--out` 으로 쓰는 명령(read-calls · calls)이 만든다."""
     base = ledger_dir() / WORK / clock()().strftime("%Y-%m-%d %H%M%S")
     number = 1
     while True:
         path = base if number == 1 else base.with_name(f"{base.name} ({number})")
         try:
             path.mkdir(parents=True)
-            return path
         except FileExistsError:
             number += 1
+            continue
+        (path / LOOK).mkdir()
+        return path
 
 
 def answer_files(paths, prefixes: tuple[str, ...]) -> list[Path]:

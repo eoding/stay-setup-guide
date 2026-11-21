@@ -78,7 +78,7 @@ class MissingFolderTest(Commands):
         self.work = Path(json.loads(path.read_text(encoding="utf-8"))["work"])
 
         looks = self.work / "look"
-        looks.mkdir()
+        self.assertTrue(looks.is_dir(), "work 가 look 답을 둘 폴더를 만들어 둔다(P4)")
         (looks / "look-1.json").write_text(json.dumps({
             "op": "look", "ok": True, "login": False, "hotel": scene.HOTEL_REF, "offer": scene.OFFER, "offers": [scene.OFFER],
             "pairs": [{"room": room, "rate_plan": plan} for room, plan, _ in scene.GROUPS],
@@ -134,6 +134,32 @@ class MissingFolderTest(Commands):
         there = self.dir / "s.json"
         self.cli("save-snapshot", "--snapshot", snapshot, "--out", there)
         self.assertTrue(there.is_file(), "밖이라도 있는 폴더에는 쓴다")
+
+
+class FoldersTheInstructionsNameTest(unittest.TestCase):
+    """P4 — 안내문이 도우미더러 파일을 저장하라는 폴더는 모두 명령이 만든다. 시운전에서 `<작업>/look/` 은 아무 명령도 만들지 않았고,
+    시운전 도우미의 파일 도구가 없는 폴더를 만들어 주었기에 넘어갔을 뿐이다. 폴더를 만들지 않는 파일 도구를 쓰는 담당자도 막히지 않게,
+    세 도우미의 안내문에서 `<작업>/<폴더>/` 마다 — `work` 가 만들어 두거나, 안내문이 그 폴더에 `--out` 으로 쓰는 명령을 먼저 부른다.
+    읽기 폴더(`<R>`)는 `read-calls --out "<R>/calls.json"` 이 만든다."""
+
+    HELPERS = {"stay-price-change": "price_change.py", "stay-addon-price-change": "addon_change.py",
+               "stay-charge-change": "charge_change.py"}
+
+    def test_every_folder_the_instructions_write_into_is_made_by_work_or_by_a_command_writing_there(self):
+        for skill, script in self.HELPERS.items():
+            folder = HERE.parent.parent / skill
+            docs = "\n".join(path.read_text(encoding="utf-8") for path in [folder / "SKILL.md", *sorted((folder / "references").glob("*.md"))])
+            with tempfile.TemporaryDirectory() as tmp:
+                done = subprocess.run([sys.executable, str(folder / "scripts" / script), "work"], capture_output=True, text=True,
+                                      env=scene.env(str(Path(tmp) / "기록")))
+                work = Path(json.loads(done.stdout)["work"])
+                made = {path.name for path in work.iterdir() if path.is_dir()}
+            named = set(re.findall(r"<작업>/([^/<>`\"\s)]+)/", docs))
+            self.assertIn("look", named, f"{skill}: look 답은 <작업>/look/ 에 둔다")
+            for name in named:
+                self.assertTrue(name in made or f'--out "<작업>/{name}/' in docs,
+                                f"{skill}: <작업>/{name}/ 에 저장하라는데 work 도 만들지 않고 그 폴더에 --out 으로 쓰는 명령도 없다")
+            self.assertIn('--out "<R>/calls.json"', docs, f"{skill}: 읽기 폴더는 read-calls 가 만든다")
 
 
 class UnexpectedErrorTest(Commands):

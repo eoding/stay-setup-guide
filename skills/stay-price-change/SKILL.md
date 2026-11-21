@@ -145,7 +145,7 @@ metadata:
 필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일(`plan-<k>.json` · `rollback-<k>.json`), 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려").
 
 1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan "<계산 파일>" --snapshot "<S2>"` 가 미리보기 때 값과 견준다. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)이나 `…분 전 것입니다` 면 아무것도 시작하지 않았다 — failures.md 「적용」.
-2. `calls --change N` 의 `calls` 를 차례로 하나씩 한다.
+2. `calls --change N --out "<작업>/적용-N/calls.json"` 의 `calls` 를 차례로 하나씩 한다.
    - `await stayPrice.<op>(<payload 그대로>)` — `op` 는 `applyBulk` 또는 `applyCell`.
    - 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result "<그 파일>"`.
    - `saved: true` 이고 `status: applying` 이면 다음으로, `status: applied` 면 3 으로 간다. 그 밖(저장이 안 됐거나 `status: stopped`)이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다.

@@ -238,6 +238,7 @@ class TabHotelListTest(unittest.TestCase):
         for path in made:
             self.assertTrue(path.is_dir())
             self.assertEqual(path.parent, self.dir / "기록" / "작업")
+            self.assertEqual([item.name for item in path.iterdir()], ["look"], "look 답을 둘 폴더까지(P4)")
 
 
 class LookReuseTest(unittest.TestCase):
