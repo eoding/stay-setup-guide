@@ -17,7 +17,7 @@ metadata:
 
 - 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
 - 페이지: 탭에 올린 `window.stayPrice`.
-- 필요할 때만 여는 파일(여는 때는 이 글의 그 자리에): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/not-done.md](references/not-done.md) 하지 않는 일.
+- 필요할 때만 여는 파일(이 글의 그 자리에서 연다): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/compare.md](references/compare.md) 견주기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
 ## 반드시 지킬 것
 
@@ -73,11 +73,11 @@ metadata:
 
 ## 1. 지금 가격 보기
 
-1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look` 의 답에서 보여 준다. 범위가 크면(호텔 전체, 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
+1. 오퍼·객실·요금제·기간 가운데 말이 없는 것을 묻는다. 고를 이름은 `look` 의 답에서 보여 준다. 범위가 크면(호텔 전체 · 몇 달) "읽는 데 시간이 꽤 걸립니다"라고 먼저 말한다.
 2. `<작업>/range.json`(`kind: range`)을 쓰고 「읽기」 → `<R>/snapshot.json`.
 3. `save-snapshot --snapshot "<R>/snapshot.json" --sentence "<담당자 말>"` → 장부 번호 S. 문장은 담당자의 말 그대로다. 말이 "응 저장해"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다: "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태".
 4. `render prices --snapshot "<R>/snapshot.json"` → `page` 를 연다.
-5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다." ○시 ○분은 「읽기」 4 의 답의 `read_at`(ERP 에서 읽은 시각)이다.
+5. "○시 ○분에 ERP 에서 읽은 지금 가격입니다. 아무것도 바꾸지 않았습니다. 장부 S번에 적어 두었습니다." ○시 ○분은 「읽기」 4 의 `read_at`(ERP 에서 읽은 시각)이다.
 
 ## 2. 지금 상태만 저장
 
@@ -118,7 +118,7 @@ metadata:
 **"원래 값으로 되돌려"는 둘로 들린다.** 변경 되돌리기는 그 변경이 넣은 칸만 넣기 전 값으로(그 사이 바뀐 칸은 그대로), 저장해 둔 상태로 되돌리기는 그 저장의 범위 전체를 저장한 때의 값으로 맞춘다. 번호를 말했으면 그 번호, "방금 · 어제 바꾼 거"처럼 바꾼 일을 말하면 맞는 변경, "아침 상태로" · "저장해 둔 걸로"처럼 때나 저장을 말하면 맞는 `snapshot` 이다. 둘 다 맞으면 견주어 묻는다: "장부 12번 변경(<`scope`>)만 되돌릴까요, 장부 9번에 저장해 둔 상태(<그 줄의 `read_at` 의 월 · 일 · 시 · 분>, <`scope`>)로 모두 맞출까요?" 어느 쪽이든 고른 줄의 종류 · 번호 · `scope` 를 말하고 "응"을 받은 뒤에 읽는다.
 
 1. `read-calls --record <번호>` 로 「읽기」 → `<R>/snapshot.json`.
-2. 되돌리기 계산 — 변경(`change`·`rollback`)은 `rollback`, 저장해 둔 상태(`snapshot`)는 `restore`. 일부만이면 고르기 플래그를 붙인다: `--room`·`--rate-plan`(여러 번)·`--from`·`--to`(날짜)·`--occupancy`(인원 조합 키를 읽은 값에서 골라서, 성인 2 는 `A2`).
+2. 되돌리기 계산 — 변경(`change`·`rollback`)은 `rollback`, 저장해 둔 상태(`snapshot`)는 `restore`. 일부만이면 고르기 플래그를 붙인다: `--room`·`--rate-plan`(여러 번)·`--from`·`--to`(날짜)·`--occupancy`(읽은 값의 인원 조합 키, 성인 2 는 `A2`).
 
    ```bash
    python3 scripts/price_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"
@@ -138,13 +138,13 @@ metadata:
 
 ## 6. 저장해 둔 상태와 견주기
 
-"아침에 저장해 둔 것과 뭐가 달라졌어?"처럼 저장해 둔 상태(목록의 `snapshot` 줄)와 지금을 견주라고 하면 그 줄을 골라 확인받고(번호 S) [references/sheet.md](references/sheet.md) 「(가) 시즌 원판 바꾸기」 3 의 `compare` 와 그 말하기를 그대로 한다. 아무것도 바꾸지 않는다.
+"아침에 저장해 둔 것과 뭐가 달라졌어?"처럼 저장해 둔 상태(목록의 `snapshot` 줄)와 지금을 견주라고 하면 [references/compare.md](references/compare.md) 대로 `compare` 하고 말한다 — 다른 칸마다 누가 바꿨는지(장부 번호 · 장부에 없는 변화) 댄다. 아무것도 바꾸지 않는다.
 
 ## 적용하기 — 바꾸기·되돌리기 공통
 
 필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일(`plan-<k>.json` · `rollback-<k>.json`), 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려").
 
-1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan "<계산 파일>" --snapshot "<S2>"` 가 S2 를 미리보기 때 읽은 값과 견준다. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)이나 `…분 전 것입니다` 면 아무것도 시작하지 않았다 — failures.md 「적용」.
+1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan "<계산 파일>" --snapshot "<S2>"` 가 미리보기 때 값과 견준다. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)이나 `…분 전 것입니다` 면 아무것도 시작하지 않았다 — failures.md 「적용」.
 2. `calls --change N` 의 `calls` 를 차례로 하나씩 한다.
    - `await stayPrice.<op>(<payload 그대로>)` — `op` 는 `applyBulk` 또는 `applyCell`.
    - 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result "<그 파일>"`.

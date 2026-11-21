@@ -451,14 +451,25 @@ def edited_cells(ledger: Ledger, saved_id: int, saved: Snapshot) -> dict[CellKey
     return found
 
 
+def record_kind(ledger: Ledger, change_id: int) -> str:
+    """장부 번호가 무엇인지 — 변경 · 되돌리기 · 저장 상태로 되돌리기(견주기가 누가 바꿨는지 말할 때)."""
+    record = ledger.change(change_id)
+    if record.kind == "rollback":
+        return "되돌리기"
+    return "저장 상태로 되돌리기" if (record.request or {}).get("kind") == "restore_snapshot" else "변경"
+
+
 def cmd_compare(args):
     """지금 상태 저장(`--saved`)과 그 범위를 방금 읽은 값(`--snapshot`, read-calls --record S 로 읽은 것)을 칸마다 견준다."""
     files.fresh_record(args.out, None, False, "compare")
     ledger = open_ledger()
     record = ledger.recorded_snapshot(args.saved)   # 저장해 둔 상태가 아니면 거절한다
     saved = recorded_reading(ledger, args.saved)
+    later = {key_of_item(key): writes for (kind, key), writes in ledger.later_writes(args.saved).items() if kind == ITEM_KIND}
+    writers = {write.change_id for writes in later.values() for write in writes}
     comparison = compare_saved(args.saved, record.sentence, saved, decode_snapshot(load(args.snapshot)),
-                               edited_cells(ledger, args.saved, saved))
+                               edited_cells(ledger, args.saved, saved), later,
+                               {number: record_kind(ledger, number) for number in writers})
     return dict(encode_comparison(comparison), scope=listed(ledger, args.saved)[0]["scope"], counts=compare_counts(comparison))
 
 
@@ -563,7 +574,7 @@ def short_compare(result: dict) -> dict:
                        now=money_text(getattr(cell.now, field)))
     return dict(saved=comparison.saved, saved_at=comparison.saved_at, read_at=comparison.read_at, scope=result["scope"],
                 counts=result["counts"], edited_by=sorted({cell.edited_by for cell in comparison.cells if cell.edited_by}),
-                example=example)
+                written_by=result["written_by"], example=example)
 
 
 SHORT = {"read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,

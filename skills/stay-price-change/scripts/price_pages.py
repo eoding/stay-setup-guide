@@ -36,7 +36,7 @@ from price_model import (
     CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, decode_request, key_of_item, line_label, nights_label,
     occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
-from price_compare import Comparison, compare_counts
+from price_compare import MOVED, Comparison, compare_counts
 from price_plan import counts, day_runs, days_summary
 from price_sheet import CHILD_READINGS, SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
 
@@ -837,11 +837,14 @@ def render_compare(comparison: Comparison, scope: str = "", by_date: bool = Fals
     def cell(key: CellKey) -> tuple[str, str]:
         item = by_key[key]
         edited = f'<span class="tag chosen">날짜별로 바꿔 둔 값 · 장부 {item.edited_by}번</span>' if item.edited_by else ""
+        if item.kind in MOVED:
+            edited += (f'<span class="tag chosen">장부 {item.written_by}번이 넣은 값</span>' if item.written_by
+                       else '<span class="tag wait">장부에 없는 변화</span>')
         if item.kind == "same":
             shown = "가격 없음" if item.now.sell is None else fmt_money(item.now.sell, currency)
             return "same", f'<span class="was">{shown}</span><small class="more">그대로</small>'
         if item.kind == "new":
-            return "new", _move(item.then, item.now, currency) + '<span class="tag new">새로 생김</span>'
+            return "new", _move(item.then, item.now, currency) + '<span class="tag new">새로 생김</span>' + edited
         if item.kind == "gone":
             return "red", (f'<span class="was">{fmt_money(item.then.sell, currency)}</span><span class="tag red">없어짐</span>'
                            + edited)
@@ -858,6 +861,8 @@ def render_compare(comparison: Comparison, scope: str = "", by_date: bool = Fals
             f'<div class="banner blue">저장할 때 하신 말: “{esc(comparison.sentence)}” (장부 {comparison.saved}번)'
             f'{f"<br>견주는 범위: {esc(scope)}" if scope else ""}</div>',
             stats([(tally["changed"], "바뀐 칸")]
+                  + [(writer.cells, f"장부 {writer.change_id}번({writer.what})이 저장한 뒤 바꾼 칸") for writer in comparison.writers]
+                  + ([(tally["outside"], "장부에 없는 변화")] if tally["outside"] else [])
                   + ([(tally["edited"], "날짜별로 바꿔 두었다가 바뀌거나 없어진 칸")] if tally["edited"] else [])
                   + ([(tally["reserved"], "바뀐 칸 중 예약 있는 날의 칸")] if tally["reserved"] else [])
                   + [(tally["new"], "새로 생긴 칸"), (tally["gone"], "없어진 칸")]
@@ -865,7 +870,13 @@ def render_compare(comparison: Comparison, scope: str = "", by_date: bool = Fals
                   + [(tally["same"], "그대로인 칸")]),
             "<h2>칸마다 저장해 둔 값 → 지금 값</h2>",
             grid(list(by_key), cell, set(comparison.reserved), closed, by_date)]
-    lines = [HAND_EDITS + (" 「날짜별로 바꿔 둔 값」은 이 컴퓨터의 장부에 적힌 도우미의 변경만입니다." if tally["edited"] else "")]
+    lines = [f"장부 {writer.change_id}번({writer.what} — “{writer.sentence}”, {fmt_time(writer.at)})이 저장한 뒤에 바꾼 칸 "
+             f"{writer.cells:,}칸은 지금도 그 값입니다."
+             + (f' 그 변경만 되돌리려면 "{writer.change_id}번 되돌려"라고 하세요.' if writer.what == "변경" else "")
+             for writer in comparison.writers]
+    if tally["outside"]:
+        lines.append(f"장부에 없는 변화 {tally['outside']:,}칸은 도우미 밖(ERP 화면 · 시즌 채우기 · 다른 컴퓨터)에서 바뀌었습니다. "
+                     + HAND_EDITS + (" 「날짜별로 바꿔 둔 값」은 이 컴퓨터의 장부에 적힌 도우미의 변경만입니다." if tally["edited"] else ""))
     if tally["reserved"]:
         lines.append("예약 있는 날의 칸도 바뀌었습니다. 이미 받은 예약의 금액은 바뀌지 않습니다.")
     if tally["new"]:

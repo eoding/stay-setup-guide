@@ -228,8 +228,17 @@ class SkillBudgetTest(unittest.TestCase):
         """H4 — 「아침에 저장해 둔 것과 뭐가 달라졌어?」는 요금표 참고 파일을 거치지 않고 SKILL.md 에서 compare 에 닿는다."""
         job = section(self.skill, "## 6. 저장해 둔 상태와 견주기")
         self.assertIn("6 저장해 둔 상태와 견주기", self.skill.split("## 반드시 지킬 것")[0], "하는 일 목록에 있다")
-        for said in ("아침에 저장해 둔 것과 뭐가 달라졌어?", "`compare`", "](references/sheet.md)"):
+        for said in ("아침에 저장해 둔 것과 뭐가 달라졌어?", "`compare`", "](references/compare.md)"):
             self.assertIn(said, job)
+
+    def test_the_spoken_compare_sentences_name_the_helper_s_own_changes_and_are_not_only_about_a_season_refill(self):
+        """K1 — 견주기를 말하는 문장은 시즌 다시 채우기만의 것이 아니다: 저장한 뒤 도우미가 바꾼 칸은 그 기록을, 나머지는 장부에 없는
+        변화를 말하고, 손입력 이야기는 장부에 없는 변화가 있을 때만 한다."""
+        talk = (SKILL / "references" / "compare.md").read_text(encoding="utf-8")
+        talk = talk[talk.index("4. **말하기.**"):talk.index("5. **되돌리기")]
+        for said in ("`written_by`", "<`change_id`>번 <`what`>", "`counts.outside`", "장부에 없는 변화", "0 이면 이 말은 하지 않는다"):
+            self.assertIn(said, talk)
+        self.assertNotIn("시즌", talk.replace("시즌 채우기", ""), "시즌 다시 채우기를 전제로 말하지 않는다")
 
 class SheetDocsTest(unittest.TestCase):
     """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
@@ -269,10 +278,14 @@ class SheetDocsTest(unittest.TestCase):
         why = re.search(r"도우미는 시즌을 직접 채우지 않습니다 — [^\"]+때문입니다\.", way)
         self.assertIsNotNone(why, "시즌을 채우지 않는다는 것과 그 까닭을 한 문장으로")
         self.assertIn(why.group(0), (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"), "「하지 않는 것」도 같은 문장")
-        steps = ["「2. 지금 상태만 저장」", "read-calls --record S", "compare --saved S", "render compare", "restore --saved S"]
-        self.assertEqual([step for step in steps if step in way], steps, "저장 → 다시 읽기 → 견주기 → 되돌리기")
-        self.assertLess(way.index(steps[0]), way.index(steps[2]))
-        self.assertLess(way.index(steps[2]), way.index(steps[4]))
+        steps = ["「2. 지금 상태만 저장」", "[compare.md](compare.md)", "restore --saved S"]
+        self.assertEqual([step for step in steps if step in way], steps, "저장 → 다시 읽어 견주기(compare.md) → 되돌리기")
+        self.assertLess(way.index(steps[0]), way.index(steps[1]))
+        self.assertLess(way.index(steps[1]), way.index(steps[2]))
+        compare = (SKILL / "references" / "compare.md").read_text(encoding="utf-8")
+        steps = ["read-calls --record S", "compare --saved S", "render compare", "restore --saved S"]
+        self.assertEqual([step for step in steps if step in compare], steps, "다시 읽기 → 견주기 → 페이지 → 되돌리기")
+        self.assertEqual(sorted(steps, key=compare.index), steps)
         self.assertIn("시즌 창에는 다시 채운 입력값이 그대로 보이고, 캘린더의 날짜별 값만 저장해 둔 값으로 돌아갑니다", way)
 
     def test_commands_md_names_every_kind_of_gap(self):

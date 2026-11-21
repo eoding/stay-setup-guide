@@ -32,7 +32,7 @@ CREATED = CellKey("스위트", "룸온리", "2027-01-02", "A2", 1)       # 저�
 BOOKED = ("디럭스", "2026-12-26")                                 # 다시 읽은 값에서 예약이 있는 날 — 바뀐 칸 가운데 하루
 
 
-class SeasonRefillSafetyNetTest(unittest.TestCase):
+class CompareCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
@@ -66,6 +66,8 @@ class SeasonRefillSafetyNetTest(unittest.TestCase):
             self.cli("record-result", "--change", change, "--result", self.write(f"r{call['no']}.json", answer))
         return change, scene.applied(snapshot, map(decode_step, steps), scene.NOW_TEXT)
 
+
+class SeasonRefillSafetyNetTest(CompareCase):
     def test_g1_save_refill_compare_and_restore_through_the_commands(self):
         change, before = self.apply_change()
         saved = self.cli("save-snapshot", "--snapshot", self.write("saved.json", encode_snapshot(before)),
@@ -93,9 +95,12 @@ class SeasonRefillSafetyNetTest(unittest.TestCase):
         for line in ("12 바뀐 칸", "12 날짜별로 바꿔 두었다가 바뀌거나 없어진 칸", "6 바뀐 칸 중 예약 있는 날의 칸", "1 새로 생긴 칸",
                      "0 없어진 칸"):
             self.assertIn(line, text)
-        self.assertIn(f"성인 2 · 1박 이상 | 220.00 → 225.00 날짜별로 바꿔 둔 값 · 장부 {change}번 | "
-                      f"220.00 → 225.00 날짜별로 바꿔 둔 값 · 장부 {change}번 | 330.00 그대로 | 330.00 그대로", text)
-        self.assertIn("성인 2 · 1박 이상 | 373.95 그대로 | 373.95 그대로 | 484.00 그대로 | 새로 → 450.00 새로 생김", text)
+        self.assertIn(f"성인 2 · 1박 이상 | 220.00 → 225.00 날짜별로 바꿔 둔 값 · 장부 {change}번 장부에 없는 변화 | "
+                      f"220.00 → 225.00 날짜별로 바꿔 둔 값 · 장부 {change}번 장부에 없는 변화 | 330.00 그대로 | 330.00 그대로", text)
+        self.assertIn("성인 2 · 1박 이상 | 373.95 그대로 | 373.95 그대로 | 484.00 그대로 | 새로 → 450.00 새로 생김 장부에 없는 변화", text)
+        self.assertEqual((short["counts"]["helper"], short["counts"]["outside"], short["written_by"]), (0, 13, []),
+                         "시즌을 다시 채운 칸은 장부에 없는 변화다")
+        self.assertTrue(any(line.startswith("장부에 없는 변화 13칸은 도우미 밖") for line in text))
         self.assertTrue(any("아무것도 바꾸지 않았습니다" in line for line in text))
         self.assertFalse(any("되돌립니다" in line for line in text), "견주기 페이지는 되돌린다고 말하지 않는다")
         self.assertTrue(any(f'"{saved}번 상태로 되돌려"' in line for line in text))
@@ -134,7 +139,7 @@ class SeasonRefillSafetyNetTest(unittest.TestCase):
         now = self.write("now.json", encode_snapshot(scene.with_cells(before, {tier: CellValue(D("170.00"), None, None, "open")})))
         short = self.cli("compare", "--saved", saved, "--snapshot", now, "--out", self.dir / "compare-1.json")
         self.assertEqual((short["counts"]["new"], short["counts"]["changed"]), (1, 0))
-        self.assertIn("성인 2 · 5박 이상 | 새로 → 170.00 새로 생김 | — | — | —",
+        self.assertIn("성인 2 · 5박 이상 | 새로 → 170.00 새로 생김 장부에 없는 변화 | — | — | —",
                       self.cli("render", "compare", "--plan", self.dir / "compare-1.json", "--text")["text"].splitlines())
         restore = self.cli("restore", "--saved", saved, "--snapshot", now, "--out", self.dir / "rollback-1.json")
         self.assertEqual((restore["restored"], restore["unremovable"]), (0, 1), "되돌려도 지울 수 없는 칸으로 댄다")
@@ -151,6 +156,61 @@ class SeasonRefillSafetyNetTest(unittest.TestCase):
         self.assertIn("297.00 없어짐", text)
         restore = self.cli("restore", "--saved", saved, "--snapshot", now, "--out", self.dir / "rollback-1.json")
         self.assertEqual((restore["restored"], restore["unremovable"]), (1, 0), "없어진 칸은 저장해 둔 값으로 다시 넣는다")
+
+
+class WhoChangedTest(CompareCase):
+    """K1 — 다섯 번째 시운전: 지금 상태를 저장한 뒤 도우미로 바꾼 12칸을 견주었더니 「12 바뀐 칸」과 ERP 화면의 손입력 이야기만
+    나왔다. 장부가 아는 변화(저장한 뒤 이 장부의 기록이 넣었고 지금도 그 값인 칸)는 그 기록을 대고, 나머지만 「장부에 없는 변화」다."""
+
+    def save_then_change(self):
+        before = scene.fresh(scene.snapshot())
+        saved = self.cli("save-snapshot", "--snapshot", self.write("saved.json", encode_snapshot(before)),
+                         "--sentence", "아침 상태 저장해 둬")["change_id"]
+        change, after = self.apply_change()
+        return saved, change, before, after
+
+    def test_the_trial_case_names_the_change_that_wrote_every_differing_cell(self):
+        saved, change, before, after = self.save_then_change()
+        moved = sum(after.cells[key] != before.cells.get(key) for key in after.cells)
+        short = self.cli("compare", "--saved", saved, "--snapshot", self.write("now.json", encode_snapshot(after)),
+                         "--out", self.dir / "compare-1.json")
+        self.assertEqual((short["counts"]["changed"], short["counts"]["helper"], short["counts"]["outside"]), (moved, moved, 0))
+        writer, = short["written_by"]
+        self.assertEqual((writer["change_id"], writer["what"], writer["sentence"], writer["cells"]),
+                         (change, "변경", scene.request().sentence, moved))
+        text = self.cli("render", "compare", "--plan", self.dir / "compare-1.json", "--text")["text"]
+        self.assertIn(f"{moved} 장부 {change}번(변경)이 저장한 뒤 바꾼 칸", text)
+        self.assertIn(f"장부 {change}번이 넣은 값", text)
+        self.assertIn(f"이 저장한 뒤에 바꾼 칸 {moved}칸은 지금도 그 값입니다. 그 변경만 되돌리려면 \"{change}번 되돌려\"라고 하세요.", text)
+        for absent in ("장부에 없는 변화", "손입력"):
+            self.assertNotIn(absent, text, "모든 칸을 장부가 설명하면 도우미 밖 이야기를 하지 않는다")
+
+    def test_a_cell_changed_again_outside_after_the_helper_is_a_change_the_ledger_does_not_have(self):
+        saved, change, before, after = self.save_then_change()
+        moved = sorted(key for key in after.cells if after.cells[key] != before.cells.get(key))
+        touched = scene.with_cells(after, {moved[0]: replace(after.cells[moved[0]], sell=after.cells[moved[0]].sell + D("1.00"))})
+        short = self.cli("compare", "--saved", saved, "--snapshot", self.write("now.json", encode_snapshot(touched)),
+                         "--out", self.dir / "compare-1.json")
+        self.assertEqual((short["counts"]["helper"], short["counts"]["outside"]), (len(moved) - 1, 1))
+        text = self.cli("render", "compare", "--plan", self.dir / "compare-1.json", "--text")["text"]
+        self.assertIn("1 장부에 없는 변화", text)
+        self.assertIn("장부에 없는 변화 1칸은 도우미 밖", text)
+
+    def test_a_rollback_written_after_the_save_is_named_as_such(self):
+        saved, change, before, after = self.save_then_change()
+        back = self.cli("rollback", "--change", change, "--snapshot", self.write("after.json", encode_snapshot(scene.fresh(after))),
+                        "--record", "--room", "디럭스", "--sentence", "디럭스만 되돌려", "--out", self.dir / "rollback-1.json")
+        steps = json.loads((self.dir / "rollback-1.json").read_text(encoding="utf-8"))["steps"]
+        self.cli("begin", "--change", back["change_id"], "--plan", self.dir / "rollback-1.json", "--snapshot", self.dir / "after.json")
+        for call in self.cli("calls", "--change", back["change_id"])["calls"]:
+            answer = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True}
+            self.cli("record-result", "--change", back["change_id"], "--result", self.write(f"b{call['no']}.json", answer))
+        now = scene.applied(scene.fresh(after), map(decode_step, steps), scene.NOW_TEXT)
+        short = self.cli("compare", "--saved", saved, "--snapshot", self.write("now.json", encode_snapshot(now)),
+                         "--out", self.dir / "compare-1.json")
+        self.assertEqual([(w["change_id"], w["what"]) for w in short["written_by"]], [(change, "변경")],
+                         "되돌리기가 저장해 둔 값으로 돌린 칸은 견줄 것이 없고, 남은 칸은 그 변경의 것이다")
+        self.assertEqual(short["counts"]["outside"], 0)
 
 
 if __name__ == "__main__":
