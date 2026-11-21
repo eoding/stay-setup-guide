@@ -377,10 +377,11 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     tier_choices = [item for item in resolutions if item.rule == TIER_RULE]
     field = plan.request.field if isinstance(plan.request, ChangeRequest) else None   # 목표 값 표는 칸마다 값을 적어 따르지 않는다
     included: set[CellKey] = set()
-    seen: set[CellKey] = set()       # 어느 차례에서든 박수 층 규칙에 걸린 칸 — 칸을 짚은 고름은 이 안의 칸이면 받는다
+    seen: set[CellKey] = set()       # 어느 차례에서든 박수 층 규칙에 걸린 칸(같이 그대로 둔 칸도) — 칸을 짚은 고름은 이 안의 칸이면 받는다
     for _round in range(len(first) + 1):    # 「이대로 바꿈」으로 바꾼 값이 다른 칸의 견줌을 바꾼다 — 고름이 더 늘지 않을 때까지
-        breaks, held = _settle(plan, first, included, field)
-        seen |= breaks
+        caught, held = _settle(plan, first, included, field)
+        breaks = caught - held
+        seen |= caught
         picked, _waiting = decide(CELL_RULES, dict.fromkeys(seen, TIER_RULE), _named_in(tier_choices, seen), cell_name)
         now = {key for key, picked_one in picked.items() if picked_one.choice == "include"}
         if now == included:
@@ -389,7 +390,7 @@ def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
     decide(CELL_RULES, dict.fromkeys(seen, TIER_RULE), tier_choices, cell_name)   # 어느 차례에서도 걸리지 않은 칸을 짚었으면 거절
 
     def final(key: CellKey) -> CellChange:
-        if key in held:
+        if key in held:   # 후 값은 계산한 값 그대로다 — 다음 고름에서 성인 칸이 움직이면 이 값으로 다시 본다(fresh). 저장하지 않는다
             return replace(fresh[key], verdict=HELD_RULE)
         if key in breaks:
             return _choose(replace(first[key], verdict=TIER_RULE, choice=None), picked.get(key))
@@ -421,10 +422,10 @@ def _saves_sell(change: CellChange) -> bool:
 
 def _settle(plan: Plan, cells: Mapping[CellKey, CellChange], included: set[CellKey],
             field: str | None) -> tuple[set[CellKey], set[CellKey]]:
-    """`(박수 층 규칙에 걸리는 칸, 같이 그대로 두는 칸)` — ERP `build_preview` 의 고리와 같다: 성인 칸을 따라 그대로 둘 아동 칸을
+    """`(박수 층 규칙에 걸린 칸, 같이 그대로 두는 칸)` — ERP `build_preview` 의 고리와 같다: 성인 칸을 따라 그대로 둘 아동 칸을
     더하고(_followers), 그 값으로 박수 층 규칙을 보고(_tier_breaks), 어느 쪽도 더 늘지 않을 때까지 돈다. 둘 다 늘기만 하니 끝난다.
-    같이 그대로 두는 칸은 박수 층 규칙에 걸린 칸에서 뺀다(성인 칸이 그대로면 고를 것이 없다). `field` 는 요청이 바꾸는 값 —
-    없으면(목표 값 표) 따르지 않는다."""
+    걸린 칸에는 같이 그대로 두게 된 칸도 든다 — 고를 칸은 그 둘의 차다(성인 칸이 그대로면 고를 것이 없다). `field` 는 요청이 바꾸는
+    값 — 없으면(목표 값 표) 따르지 않는다."""
     flagged: set[CellKey] = set()
     held: set[CellKey] = set()
     while True:
@@ -433,28 +434,32 @@ def _settle(plan: Plan, cells: Mapping[CellKey, CellChange], included: set[CellK
             held |= _followers(cells, flagged, included, field)
         _tier_breaks(plan, cells, included, flagged, held)
         if len(flagged) + len(held) == size:
-            return flagged - held, held
+            return set(flagged), held
 
 
 def _followers(cells: Mapping[CellKey, CellChange], flagged: set[CellKey], included: set[CellKey], field: str) -> set[CellKey]:
     """아동이 든 칸 가운데 같은 객실 · 요금제 · 날짜 · 박수 층의 성인만 있는 칸(같은 성인 수)이 이번 계산에 있는데 새 값을 받지 않는
     칸 — ERP `_skip_followers_of_skipped_adult_cells`. 아동 추가분(칸 − 성인 칸)이 바꾸기 전과 같게 남도록 같이 그대로 둔다. 성인 칸이
     이번 계산에 없으면(그 칸을 고르지 않음 · 가격 없음 · 이미 그 값) 담당자가 아동 칸만 옮기려 한 것이라 따르지 않는다. 제 까닭으로
-    이미 움직이지 않는 칸(적용할 수 없음 · 안 바꿈 · 제 박수 층 규칙에 걸림)은 그 까닭 그대로 둔다 — ERP 도 먼저 건너뛴 까닭을 남긴다.
-    그런 칸도 「이대로 바꿈」을 고르면 움직이는 칸이 되어 따른다.
+    이미 움직이지 않는 칸(적용할 수 없음 · 안 바꿈)은 그 까닭 그대로 둔다 — ERP 도 먼저 건너뛴 까닭을 남긴다.
 
-    새 값을 받지 않는 것: 적용할 수 없음, 안 바꾸기로 고름, 박수 층 규칙에 걸렸고 「이대로 바꿈」이 아님(아직 고르지 않은 것 포함 —
+    아동 칸 제 박수 층 빨간 줄은 그 까닭이 되지 않는다 — 성인 칸이 그대로면 아동 칸은 무엇을 고르든 움직이지 않으니(「이대로 바꿈」도
+    따라 그대로), 답이 결과를 바꾸지 못하는 물음을 하지 않으려고 같이 그대로 둔다. 성인 칸을 「이대로 바꿈」으로 고르면 그때 아동 칸이
+    제 빨간 줄로 나와 고를 것이 된다. ERP 는 이런 아동 칸을 제 까닭(1박 가격보다 비싸짐)으로 건너뛴다 — 저장하지 않는 것은 같고 이름만
+    다르다.
+
+    새 값을 받지 않는 성인 칸: 적용할 수 없음, 안 바꾸기로 고름, 박수 층 규칙에 걸렸고 「이대로 바꿈」이 아님(아직 고르지 않은 것 포함 —
     ERP 처럼 바꾸지 않는 것으로 본다), 바꾸는 값이 그대로. 아직 고르지 않은 다른 빨간 줄은 미리보기가 보이는 계산한 값으로 본다."""
-    def moves(change: CellChange) -> bool:
+    def moves(change: CellChange, own_tier: bool = True) -> bool:
         return (CELL_RULES.severity(change.verdict) != BLOCKED and change.choice != "keep" and change.after is not None
                 and getattr(change.after, field) != getattr(change.before, field)
-                and (change.key not in flagged or change.key in included))
+                and (not own_tier or change.key not in flagged or change.key in included))
 
     out = set()
     for key, change in cells.items():
         adult_key, has_children = split_occupancy(key.occupancy)
         adult = cells.get(replace(key, occupancy=adult_key)) if has_children else None
-        if adult is not None and moves(change) and not moves(adult):
+        if adult is not None and moves(change, own_tier=False) and not moves(adult):
             out.add(key)
     return out
 

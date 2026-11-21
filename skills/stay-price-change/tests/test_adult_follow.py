@@ -156,6 +156,54 @@ class AdultFollowTest(unittest.TestCase):
         self.assertEqual(outcome(plan, CellKey("R", "P", DAY, CHILD, 1)), ("moves", "540.00"), "목표 값은 칸마다 담당자가 적은 값이다")
 
 
+
+class ChildTierCellTest(unittest.TestCase):
+    """T5 — 박수 층 빨간 줄과 아동 칸. 시운전 7 의 모양(값은 지어냄): 판매가 +12%, 1박 이상 칸은 모두 정가를 넘고, 성인 1박 이상을
+    안 바꾸고 나머지는 정가도 올리기로 고르면 아동 1박 이상은 성인 칸을 따라 그대로다. 그러면 3박 이상 칸이 모두 그날 1박 이상보다
+    비싸진다. 성인 3박 이상이 아직 고르지 않은 빨간 줄이면 아동 3박 이상은 그 성인 칸을 따라 같이 그대로다 — 성인 칸이 그대로면 아동
+    칸의 답은 결과를 바꾸지 못하니 묻지 않는다(red-lines.md 「같이 그대로 두는 아동 칸」과 같은 말)."""
+
+    CELLS = {("A2", 1): ("100.00", "110.00"), ("A2", 3): "90.00", ("A2C1_CHD", 1): ("115.00", "125.00"), ("A2C1_CHD", 3): "105.00",
+             ("A2C2_CHD", 1): ("130.00", "140.00"), ("A2C2_CHD", 3): "120.00"}
+    SAID = "성인 2 · 1박 이상 칸은 안 바꿔. 나머지는 정가도 같이 올려줘."
+
+    def cell(self, occupancy, nights):
+        return CellKey("R", "P", DAY, occupancy, nights)
+
+    def plan(self, *tier_choices):
+        first = (Resolution("ABOVE_LIST", "keep", (self.cell("A2", 1),), self.SAID), Resolution("ABOVE_LIST", "raise_list", said=self.SAID))
+        return resolve(plan_change(snap(self.CELLS), ask("percent", "12")), first + tier_choices)
+
+    def verdicts(self, plan):
+        return {(c.key.occupancy, c.key.nights): (c.verdict, c.choice) for c in plan.changes}
+
+    def test_while_the_adult_tier_cell_is_unchosen_the_child_tier_cells_follow_it_and_only_the_adult_cell_is_asked(self):
+        plan = self.plan()
+        self.assertEqual(self.verdicts(plan), {
+            ("A2", 1): ("ABOVE_LIST", "keep"), ("A2", 3): ("ABOVE_ONE_NIGHT", None),
+            ("A2C1_CHD", 1): ("ADULT_HELD", None), ("A2C1_CHD", 3): ("ADULT_HELD", None),
+            ("A2C2_CHD", 1): ("ADULT_HELD", None), ("A2C2_CHD", 3): ("ADULT_HELD", None)})
+        tally = counts(plan.changes)
+        self.assertEqual((tally["red"], tally["held"], tally["ABOVE_ONE_NIGHT"]), (1, 4, 1), "red-lines.md 와 같은 수 — 빨간 줄 1칸, 같이 그대로 4칸")
+
+    def test_kept_adult_tier_cell_with_child_tier_cells_chosen_to_change_holds_them_and_saves_nothing(self):
+        include = Resolution("ABOVE_ONE_NIGHT", "include", (self.cell("A2C1_CHD", 3), self.cell("A2C2_CHD", 3)), "아동 칸은 이대로 바꿔")
+        plan = self.plan(Resolution("ABOVE_ONE_NIGHT", "keep", (self.cell("A2", 3),), "성인 3박은 안 바꿔"), include)
+        self.assertEqual({key: verdict for key, verdict in self.verdicts(plan).items() if key[0] != "A2"},
+                         {(child, nights): ("ADULT_HELD", None) for child in ("A2C1_CHD", "A2C2_CHD") for nights in (1, 3)},
+                         "아동 칸은 성인 칸을 따라 그대로 — 「이대로 바꿈」이 아동 추가분을 바꾸지 못한다")
+        self.assertEqual(plan_steps(plan), (), "저장 단계가 하나도 없다")
+        self.assertEqual(counts(plan.changes)["will_change"], 0)
+
+    def test_included_adult_tier_cell_with_one_child_tier_cell_kept_saves_the_adult_and_the_other_child_only(self):
+        plan = self.plan(Resolution("ABOVE_ONE_NIGHT", "include", (self.cell("A2", 3), self.cell("A2C2_CHD", 3)), "3박은 그대로 올려"),
+                         Resolution("ABOVE_ONE_NIGHT", "keep", (self.cell("A2C1_CHD", 3),), "아동 1명 3박은 두고"))
+        self.assertEqual(self.verdicts(plan)[("A2C1_CHD", 3)], ("ABOVE_ONE_NIGHT", "keep"), "성인 칸이 움직이면 아동 칸은 제 빨간 줄이다")
+        written = {(row.occupancy, row.nights): str(row.sell) for step in plan_steps(plan) for row in step.rows}
+        self.assertEqual(written, {("A2", 3): "100.80", ("A2C2_CHD", 3): "130.80"},
+                         "성인 3박과 고른 아동 3박만 저장한다 — 안 바꾸기로 고른 아동 칸 · 성인 1박을 따라 그대로인 아동 1박은 쓰지 않는다")
+
+
 class TierChoiceTest(unittest.TestCase):
     """검토 5 — 디럭스 · 조식 포함 · 12/25: 성인 2 · 3박 이상 180 → 195, 성인 2 · 1박 이상 200 → 190. 첫 계산은 3박 이상만 걸고, 그
     칸을 「이대로 바꿈」으로 고르면 1박 이상이 걸린다. 그 칸을 짚은 「안 바꿈」을 받는다."""
