@@ -292,6 +292,7 @@ test('A1 · applyBulk — ② 의 「기존」 이 읽은 값과 다르면(읽�
   const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
   assert.deepEqual([r.ok, r.refused, r.saved, r.pressed, r.moved], [false, true, false, false, 1], r.error);
   assert.match(r.error, /^ERP 화면의 값이 읽은 값과 다릅니다\(1칸\) — 2026-07-01 인원 무관 · 1박 이상 — 읽은 값 판매가 120000\.00 · 화면 판매가 130000\.00/);
+  assert.match(r.error, /\. 아무것도 치지 않았고 누르지 않았습니다$/, '앞 저장이 됐는지는 페이지가 모른다 — 새 미리보기를 약속하지 않는다');
   assert.deepEqual(r.differ, ['2026-07-01 인원 무관 · 1박 이상 — 읽은 값 판매가 120000.00 · 화면 판매가 130000.00']);
   assert.deepEqual(typed, [], '가격 칸에 아무것도 치지 않았다');
   assert.ok(!r.clicks.bulkSave);

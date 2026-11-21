@@ -114,7 +114,7 @@ class Erp:
         base = {"op": "applyLine", "no": payload["no"], "ask": ask(payload), "doneAt": self.tick()}
         if form_of(item) != payload["form"]:
             return dict(base, ok=False, saved=False, pressed=False, refused=True,
-                        error="창의 값이 읽은 값과 다릅니다 — 아무것도 치지 않았습니다. 다시 읽고 미리보기를 새로 만듭니다")
+                        error="창의 값이 읽은 값과 다릅니다 — 아무것도 치지 않았고 누르지 않았습니다")
         sent = [[name, payload["set"].get(name, value)] for name, value in payload["form"]]
         values = dict(sent)
         if not values["net_amount"] and dict(payload["form"])["net_amount"] and payload["set"].get("net_amount") != "":

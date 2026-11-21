@@ -195,7 +195,7 @@ class Erp:
         base = {"op": "applyCharge", "no": payload["no"], "ask": ask(payload), "doneAt": self.tick()}
         if form_of(offer, charge) != payload["form"]:
             return dict(base, ok=False, saved=False, pressed=False, refused=True,
-                        error="창의 값이 읽은 값과 다릅니다 — 아무것도 치지 않았습니다. 다시 읽고 미리보기를 새로 만듭니다")
+                        error="창의 값이 읽은 값과 다릅니다 — 아무것도 치지 않았고 누르지 않았습니다")
         edits = {(name, nth): value for name, nth, value in payload["set"]}
         seen, sent = {}, []
         for name, value in payload["form"]:

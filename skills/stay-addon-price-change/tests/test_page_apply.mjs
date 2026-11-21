@@ -54,7 +54,7 @@ test('A3 · 창의 판매가가 읽은 값과 다르면(그 사이 누가 고쳤
   page.db.addons[0].lines[0].price = '21.00';   // 다른 사람이 그 사이 저장했다 — 창은 21.00 을 보인다
   const r = await apply(page, Object.assign({ form, set: { price: '22.00' } }, LINE));
   assert.deepEqual([r.ok, r.refused, r.saved, r.pressed], [false, true, false, false]);
-  assert.match(r.error, /창의 값이 읽은 값과 다릅니다\(price\) — 아무것도 치지 않았습니다/);
+  assert.match(r.error, /^창의 값이 읽은 값과 다릅니다\(price\) — 아무것도 치지 않았고 누르지 않았습니다$/, '앞 저장이 됐는지는 페이지가 모른다 — 새 미리보기를 약속하지 않는다');
   assert.deepEqual(r.differ, ['price']);
   assert.deepEqual(page.log.typed, [], '치지 않았다');
   assert.deepEqual(page.log.posts, [], '저장 요청이 없다');

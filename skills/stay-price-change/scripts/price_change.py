@@ -405,7 +405,7 @@ def cmd_calls(args):
 
 def cmd_record_result(args):
     """`moved` 는 페이지가 누르기 전에 화면의 값이 그 단계의 `was` 와 달라 거절한 칸 수다(있을 때만) — 그 사이 다른 손이 탔다.
-    저장 안 됨으로 적혀 변경이 멈춘다. 다시 읽고 새 미리보기를 만든다(failures.md 「적용」)."""
+    저장 안 됨으로 적혀 변경이 멈춘다. 다시 읽어 check 한 뒤의 길은 stopped.md 2 다(앞 저장이 됐는지에 따라 새 미리보기 또는 물음)."""
     result = load(args.result)
     ledger = open_ledger()
     record = ledger.change(args.change)

@@ -99,7 +99,7 @@ test('C4 · 창이 읽은 값과 다른 금액을 보이면(그 사이 누가 �
   page.charge('701').tiers[1].pct = '55.00';   // 다른 사람이 그 사이 저장했다 — 창은 55.00 을 보인다
   const r = await apply(page, '701', form, [['tiers_pct', 1, '60.00']]);
   assert.deepEqual([r.ok, r.refused, r.saved, r.pressed], [false, true, false, false]);
-  assert.match(r.error, /창의 값이 읽은 값과 다릅니다\(tiers_pct\) — 아무것도 치지 않았습니다/);
+  assert.match(r.error, /^창의 값이 읽은 값과 다릅니다\(tiers_pct\) — 아무것도 치지 않았고 누르지 않았습니다$/, '앞 저장이 됐는지는 페이지가 모른다 — 새 미리보기를 약속하지 않는다');
   assert.deepEqual(r.differ, ['tiers_pct']);
   assert.deepEqual(page.log.typed, [], '치지 않았다');
   assert.deepEqual(page.log.posts, [], '저장 요청이 없다');

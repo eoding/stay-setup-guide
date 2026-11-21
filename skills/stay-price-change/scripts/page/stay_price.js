@@ -1078,7 +1078,7 @@
   function movedSay(d) { return d.day + ' ' + d.line + ' — 읽은 값 ' + shownCell(d.was) + ' · 화면 ' + shownCell(d.now); }
   function refuseMoved(moved, what) {
     fail('ERP 화면의 값이 읽은 값과 다릅니다(' + moved.length + '칸) — ' + movedSay(moved[0]) + (moved.length > 1 ? ' 외 ' + (moved.length - 1) + '칸' : '') +
-      '. ' + what + ' — 다시 읽고 미리보기를 새로 만듭니다', { refused: true, saved: false, pressed: false, moved: moved.length, differ: moved.slice(0, 3).map(movedSay) });
+      '. ' + what, { refused: true, saved: false, pressed: false, moved: moved.length, differ: moved.slice(0, 3).map(movedSay) });
   }
   // 단계 줄의 `was`(`[첫 날, 끝 날, 판매가, 정가, 공급 원가]` 목록 — 단계의 날짜를 차례대로 꼭 한 번씩 덮는다) → 날짜마다 칸 하나
   function wasByDay(was, dates, line) {
@@ -1347,7 +1347,7 @@
     var before = sent(root);
     if (!before) fail(opts.window + '의 저장 단추가 무엇을 보내는지 알 수 없어(hx-include) 저장하지 않았습니다', refused);
     var off = differs(before, form);
-    if (off.length) fail('창의 값이 읽은 값과 다릅니다(' + off.join(', ') + ') — 아무것도 치지 않았습니다. 다시 읽고 미리보기를 새로 만듭니다', { refused: true, differ: off });
+    if (off.length) fail('창의 값이 읽은 값과 다릅니다(' + off.join(', ') + ') — 아무것도 치지 않았고 누르지 않았습니다', { refused: true, differ: off });
     // 칠 칸을 모두 먼저 찾는다 — 하나라도 어긋나면 한 글자도 치지 않는다
     var targets = edits.map(function (edit) {
       var name = edit[0], nth = edit[1], label = opts.settable(name);
