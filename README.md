@@ -186,7 +186,11 @@ charge amounts including a time band and a pay-at-property amount; a page answer
 one retake; the new piece form in a real browser tool; a rate sheet whose child rows were matched by the command and whose
 percentage on child rows was asked; comparing a saved state with the present and restoring it; the note on a name that
 states the old amount; two same-named add-ons told apart by their offer; the ledger list by hotel; a comparison that names
-the helper's own ledger record; a restore to a saved state that settles the change it undid. A read-only run on a real
+the helper's own ledger record; a restore to a saved state that settles the change it undid; a save refused at the
+moment of pressing because a colleague's change, made through a second ledger, had landed on its cells, followed by the
+check that forbids continuing, the stopped change's page and both rollbacks (run twice, before and after the page was
+fixed); child cells held together with a kept adults-only cell; a person's click passing the idle wall while a script's
+click is blocked. A read-only run on a real
 tab after the final trial confirmed that a command makes its missing reading folder, that the loader asks only for the
 file a tab is missing, and that `look` hands over the ids and names to choose from. Not yet run on a real ERP: creating
 new cells, the failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real rate-sheet file
@@ -199,7 +203,12 @@ hotel's whole ledger with each record's kind in plain words, an empty list has i
 names the offer, `work` makes the `look/` folder and `calls --out` the folder for saved apply answers, and the wording of
 the add-on and charge views and of the price view's ledger entry. Other follow-ups of the fifth trial (a work folder per
 request, the edit-window view, room names taken from earlier readings, the one-line confirmations) are not counted above
-as run on a real ERP.
+as run on a real ERP. Of the fixes that followed the independent review, these have run in the test suites only: a
+description that holds an address, a save window that closes mid-save, a drawer a person left open, the cost guard of an
+add-on rollback, output on a console that is not UTF-8, and a ledger file that has gone missing. The wording fixes after
+the second colleague trial (a re-read value shown with the time it was read, the list line giving the time applying
+began, the choices of a rollback that stopped) were checked in the suites and by rendering that trial's ledger again,
+not by a new run. Nothing has run on production, on Windows or macOS, or on Python 3.10.
 
 ## Optional room inventory
 
