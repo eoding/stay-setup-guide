@@ -269,6 +269,9 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
     if tally["red"]:
         body.append(f'<p class="sub">빨간 줄 {tally["red"]:,}칸을 어떻게 할지 고르시면 ERP 에 몇 번 나눠 저장하는지 정해집니다. '
                     "그때 미리보기를 다시 보여 드립니다.</p>")
+    elif len(steps or ()) == 1:
+        body.append('<p class="sub">적용하면 ERP 에 한 번에 저장합니다'
+                    f'{"(정가·원가를 비우는 셀 창 저장)" if steps[0].kind == "cell_edit" else ""}.</p>')
     elif steps:
         edits = sum(step.kind == "cell_edit" for step in steps)
         body.append(f'<p class="sub">적용하면 ERP 에 {len(steps)}번 나눠 저장합니다(객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번'

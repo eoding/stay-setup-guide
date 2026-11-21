@@ -86,6 +86,11 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         self.assertNotIn("정가보다 비싸집니다", text, "Y4 — 고른 뒤에는 일어나지 않을 일을 쓰지 않는다")
         self.assertIn("남은 빨간 줄이 없습니다. 고르신 대로 저장합니다.", text)
         self.assertIn("ERP 에 8번 나눠 저장합니다", text)
+        one = plan_change(scene.snapshot(), scene.request(rooms=("디럭스",), rate_plans=("조식 포함",), dates=("2026-12-25",)))
+        self.assertEqual(len(plan_steps(one)), 1)
+        once = visible(render_preview(one, 2, plan_steps(one)))
+        self.assertIn("적용하면 ERP 에 한 번에 저장합니다.", once, "F10 — 저장이 하나면 「1번 나눠」가 아니다")
+        self.assertNotIn("나눠 저장합니다", once)
         self.assertIn("객실 · 요금제마다 값이 같은 날을 묶어 한 번 — 날이 떨어져 있어도 한 번", text, "T7 — 저장 묶음을 말하는 글")
         self.assertIn("다만 고르신 대로 2칸은 정가도 같이 바뀝니다", text)
 

@@ -13,7 +13,7 @@ from charge_model import AGE, FIELD_LABELS, Charge, Listing, Place, Snapshot, pa
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
     UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner,
-    rollback_ask, rollback_head, stats, steps_list, stopped_choices, unremovable_table,
+    rollback_ask, rollback_head, stats, steps_list, stopped_choices, times, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
@@ -182,7 +182,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     elif not steps:
         body.append('<div class="banner blue"><b>저장할 것이 없습니다.</b> 바뀌는 칸이 없어 적용할 것이 없습니다.</div>')
     else:
-        body.append(f'<div class="banner blue">저장 {len(steps)}번(부과금마다 한 번). 맞으면 "적용"이라고 해 주세요.</div>')
+        body.append(f'<div class="banner blue">저장 {times(len(steps))}{"(부과금마다 한 번)" if len(steps) > 1 else ""}. 맞으면 "적용"이라고 해 주세요.</div>')
     return page(title, "\n".join(body), MAKER)
 
 

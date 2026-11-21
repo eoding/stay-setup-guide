@@ -147,6 +147,7 @@ class SentFieldsTest(unittest.TestCase):
         text = page_text(render_preview(result, 1, plan_steps(result)))
         self.assertIn("시즌 연말 시즌 · 날짜 비어 있음 · 요금제 비어 있음 · 설명 비어 있음 · "
                       "적용 범위 요금제 지정한 대상만(포함 1개) · 객실 기존 범위 그대로", text)
+        self.assertIn("저장 한 번. 맞으면 \"적용\"이라고 해 주세요.", text, "F10 — 저장이 하나면 「1번(줄마다 한 번)」이 아니다")
 
 
 class RequestTest(unittest.TestCase):

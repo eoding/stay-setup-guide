@@ -15,7 +15,7 @@ from addon_model import (
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
     UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner,
-    rollback_ask, rollback_head, stats, steps_list, stopped_choices, unremovable_table,
+    rollback_ask, rollback_head, stats, steps_list, stopped_choices, times, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.money import example_step
@@ -180,7 +180,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     elif not steps:     # 고른 대로면 바꿀 줄이 없다 — 저장이 하는 일도, "적용"도 말하지 않는다
         body.append('<div class="banner blue">바꿀 줄이 없어 적용할 것이 없습니다. 아무것도 바뀌지 않았습니다.</div>')
     else:
-        body += [notes(said), f'<div class="banner blue">저장 {len(steps)}번(줄마다 한 번). 맞으면 "적용"이라고 해 주세요.</div>']
+        body += [notes(said), f'<div class="banner blue">저장 {times(len(steps))}{"(줄마다 한 번)" if len(steps) > 1 else ""}. 맞으면 "적용"이라고 해 주세요.</div>']
     return page(title, "\n".join(body), MAKER)
 
 

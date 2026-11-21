@@ -167,6 +167,7 @@ class FourShapesTest(Flow):
                          ("100.00", "set", "mandatory", "2026-12-24", "51"))
         page = self.cli("render", "preview", "--plan", plan, "--text")["text"]
         self.assertIn("90.00 USD → 100.00 USD", page)
+        self.assertIn("저장 한 번. 맞으면 \"적용\"이라고 해 주세요.", page, "F10 — 저장이 하나면 「1번(부과금마다 한 번)」이 아니다")
 
     def test_a_pay_at_property_charge_changes_only_its_on_site_amount_after_the_red_line_is_chosen(self):
         request = self.request(RESORT, value="20", sentence="리조트피 현장 결제 20달러로")

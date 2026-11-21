@@ -143,6 +143,11 @@ def page_text(page_html: str) -> str:
     return "\n".join(reader.lines)
 
 
+def times(count: int) -> str:
+    """저장 횟수를 말하는 글 — 하나면 「한 번」(「1번」은 장부 번호처럼 읽히고, 「1번 나눠」는 말이 되지 않는다), 아니면 「N번」."""
+    return "한 번" if count == 1 else f"{count:,}번"
+
+
 def stats(items: Iterable[tuple[int, str]]) -> str:
     return '<div class="stat">' + "".join(f"<div><b>{number:,}</b><span>{esc(label)}</span></div>"
                                           for number, label in items) + "</div>"
