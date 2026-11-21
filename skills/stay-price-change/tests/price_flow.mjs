@@ -68,11 +68,13 @@ export function priceFlow(page) {
       return { change: short.change_id, plan, short };
     },
     async begin(change, plan) { return must('begin', '--change', change, '--plan', plan, '--snapshot', await this.read(change)); },
-    // calls 의 저장을 차례로 페이지에서 하고 record-result — 저장되지 않은 단계에서 멈춘다(SKILL.md 「적용하기」 2)
-    async apply(change) {
+    // calls 의 저장을 차례로 페이지에서 하고 record-result — 저장되지 않은 단계에서 멈춘다(SKILL.md 「적용하기」 2). `before(call)` 은
+    // 저장마다 그 앞에 부른다(그 사이 다른 사람이 ERP 에서 저장하는 것을 흉내 낸다)
+    async apply(change, before) {
       const calls = must('calls', '--change', change).calls;
       const steps = [];
       for (const call of calls) {
+        if (before) await before(call);
         const answer = plain(await sp[call.op](inPage(page.w, call.payload)));
         const recorded = must('record-result', '--change', change, '--result', file(`step-${call.no}.json`, answer));
         steps.push({ call, answer, recorded });

@@ -12,7 +12,9 @@
  *   stayPrice.applyBulk({no, offer, room, ratePlan, dates, rows})              [선택 날짜 가격 수정] 저장 한 번 — 고른 날들이
  *                                                                              떨어져 있어도 그 날들만 고른다
  *   stayPrice.applyCell({no, offer, room, ratePlan, date, occupancy, nights,
- *                        clear})                                               셀 창 저장 한 번(정가·공급 원가 비우기)
+ *                        clear, was})                                          셀 창 저장 한 번(정가·공급 원가 비우기)
+ *                                                                              저장 작업 둘은 쓰는 칸마다 읽은 값(`was`)을 싣고,
+ *                                                                              무엇이든 치기 전에 화면의 값이 그것과 같은지 본다
  *   stayPrice.take(id, at, size)                                               읽은 조각의 한 쪽 — at=0 부터 next 를 따라 end 까지
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
  *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
@@ -288,7 +290,7 @@
     return out;
   }
   // 거르기를 지나 800자 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
-  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'rest', 'body', 'ms', 'doneAt', 'error'];
+  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'moved', 'rest', 'body', 'ms', 'doneAt', 'error'];
   function fit(result) {
     var out = scrub(result);
     if (shownLength(out) <= RESULT_CHARS) return out;
@@ -1047,6 +1049,66 @@
   var BULK_COLS = [{ key: 'sell', col: 'price', label: '판매가' }, { key: 'list', col: 'original_price', label: '정가' }, { key: 'supply', col: 'net_amount', label: '공급 원가' }];
   function nextDay(day) { return new Date(new Date(day + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10); }
 
+  /* ── 누르기 전에 화면이 읽은 값 그대로인지 — 저장 단계는 쓰는 칸마다 그 계산이 바탕으로 삼은 값(`was`, 명령 `step_calls`)을 싣는다.
+     칸 하나는 [판매가, 정가, 공급 원가] 금액 글자이고, 판매가가 null 이면 칸이 없다(가격 없음). 화면이 그 값이 아니면 그 사이 다른
+     손이 탄 것이다 — 아무것도 치지 않고 누르지 않고 거절한다. 낡은 계산으로 덮으면 장부의 「전 값」도 낡은 값이 되고, 되돌리기가 그
+     낡은 값을 다시 넣는다. */
+  var NO_CELL = [null, null, null];
+  // 금액이 같은 수인지 — 화면은 금액을 통화의 자릿수 · 천 단위 쉼표로 다시 적는다(150000 → 150,000.00). 글자가 아니라 수로 견준다
+  function amountKey(text) {
+    var m = /^(\d*)(?:\.(\d*))?$/.exec(String(text).replace(/[,\s]/g, ''));
+    if (!m || !(m[1] || m[2])) return '?' + text;
+    var part = (m[2] || '').replace(/0+$/, '');
+    return (m[1].replace(/^0+(?=\d)/, '') || '0') + (part ? '.' + part : '');
+  }
+  function sameCell(a, b) {
+    if (a[0] === null || b[0] === null) return a[0] === b[0];
+    return [0, 1, 2].every(function (i) { return a[i] === null || b[i] === null ? a[i] === b[i] : amountKey(a[i]) === amountKey(b[i]); });
+  }
+  function cellOf(value) {
+    var ok = Array.isArray(value) && value.length === 3 && value.every(function (v) { return v === null || AMOUNT.test(String(v)); });
+    return ok ? value.map(function (v) { return v === null ? null : String(v); }) : null;
+  }
+  function lineName(occupancy, nights) { return (occupancy || '인원 무관') + ' · ' + nights + '박 이상'; }
+  function shownCell(v) {
+    if (!v) return '화면에 그 날 줄 없음';
+    if (v[0] === null) return '칸 없음';
+    return '판매가 ' + v[0] + (v[1] !== null ? ' · 정가 ' + v[1] : '') + (v[2] !== null ? ' · 공급 원가 ' + v[2] : '');
+  }
+  function movedSay(d) { return d.day + ' ' + d.line + ' — 읽은 값 ' + shownCell(d.was) + ' · 화면 ' + shownCell(d.now); }
+  function refuseMoved(moved, what) {
+    fail('ERP 화면의 값이 읽은 값과 다릅니다(' + moved.length + '칸) — ' + movedSay(moved[0]) + (moved.length > 1 ? ' 외 ' + (moved.length - 1) + '칸' : '') +
+      '. ' + what + ' — 다시 읽고 미리보기를 새로 만듭니다', { refused: true, saved: false, pressed: false, moved: moved.length, differ: moved.slice(0, 3).map(movedSay) });
+  }
+  // 단계 줄의 `was`(`[첫 날, 끝 날, 판매가, 정가, 공급 원가]` 목록 — 단계의 날짜를 차례대로 꼭 한 번씩 덮는다) → 날짜마다 칸 하나
+  function wasByDay(was, dates, line) {
+    var out = {}, at = 0;
+    var ok = Array.isArray(was) && was.length > 0 && was.every(function (run) {
+      var cell = Array.isArray(run) && run.length === 5 ? cellOf(run.slice(2)) : null;
+      if (!cell || dates[at] !== run[0]) return false;
+      for (; at < dates.length && dates[at] <= run[1]; at++) out[dates[at]] = cell;
+      return dates[at - 1] === run[1];
+    }) && at === dates.length;
+    if (!ok) fail('줄 ' + line + ' 의 `was`(읽은 값)가 단계의 날짜와 맞지 않습니다 — 명령(calls)이 낸 값을 그대로 넣습니다');
+    return out;
+  }
+  // 가격 수정 ② 의 「기존」 줄 — 인원 · 박수 줄 하나의 날짜마다 칸 하나. erp_read.parse_price_page 와 같은 칸 자리(기존 · 판매가 · 정가 ·
+  // 공급 원가)로 읽는다. 「가격 없음」 이면 칸 없음, 정가 · 공급 원가가 「없음」 · 빈칸이면 그 자리가 null. 그 줄이 표에 없으면 null
+  function existingOf(root, occupancy, nights) {
+    var body = all('table[data-stay-rows="prices"] > tbody', root).filter(function (b) {
+      return b.getAttribute('data-stay-occupancy-key') === occupancy && b.getAttribute('data-stay-los-nights') === String(nights);
+    })[0];
+    if (!body) return null;
+    var out = {}, none = function (t) { return t === '' || t === '없음' ? null : t; };
+    [].slice.call(body.children).filter(function (tr) { return tr.matches('tr[data-stay-existing]'); }).forEach(function (tr) {
+      var td = [].slice.call(tr.children).filter(function (el) { return el.localName === 'td'; }).map(function (el) { return C(el.textContent); });
+      if (td.length !== 4) return;
+      var cell = td[1] === '가격 없음' ? NO_CELL : [td[1], none(td[2]), none(td[3])];
+      expandDays([td[0]]).forEach(function (day) { out[day] = cell; });
+    });
+    return out;
+  }
+
   // 저장할 날짜 목록 → 그 날들만 고르는 구간 줄(`date_selection_0` 이 날을 정한다)과 드로어 ① 의 바깥 테두리(시작일 · 종료일 ·
   // 그 날들의 요일). 날은 떨어져 있어도 된다 — 읽기(readPair)도 판매일 없는 날을 빼고 같은 길로 고른다
   function spanOf(dates) {
@@ -1059,7 +1121,7 @@
 
   // ② 에서 「조합마다 직접 입력」 으로 줄마다 넣을 값만 치고 되읽은 뒤 [입력한 가격 적용] 을 누른다 — 러너의 가격 수정 단계 ② 와
   // 같은 부품(calRedraw · stayRun.fill · readback · submit)이다. 누르기 전에 멈추면 refused(저장 안 됨)
-  async function saveRows(ctx, review, rows) {
+  async function saveRows(ctx, review, rows, dates) {
     var root = function () { return document.querySelector('[data-stay-screen="calendar-bulk"]'); };
     var modeOf = function (r) { var h = r.querySelector('input[type="hidden"][name="link_mode"]'); return h ? h.value : ''; };
     var pick = review.querySelector('select[name="link_mode_pick"]');
@@ -1071,6 +1133,16 @@
       ctx.check();
       if (!redrawn) fail('`연동 방식` 을 「' + MANUAL + '」 으로 바꾸지 못했습니다 — 저장하지 않았습니다', { refused: true, saved: false, pressed: false });
     }
+    // 무엇이든 치기 전에 — 쓰는 칸마다 지금 화면의 「기존」 값이 읽은 값(was)인지. 줄이 표에 없으면 그 날들에 칸이 없는 것이다
+    var screen = root(), moved = [];
+    rows.forEach(function (row) {
+      var shown = existingOf(screen, row.occupancy, row.nights);
+      dates.forEach(function (day) {
+        var now = shown ? shown[day] : NO_CELL;
+        if (!now || !sameCell(row.expected[day], now)) moved.push({ day: day, line: lineName(row.occupancy, row.nights), was: row.expected[day], now: now });
+      });
+    });
+    if (moved.length) refuseMoved(moved, '아무것도 치지 않았고 누르지 않았습니다');
     var fields = [];
     rows.forEach(function (row) {
       BULK_COLS.forEach(function (c) {
@@ -1095,10 +1167,11 @@
         fail('`dates` 는 겹치지 않는 오름차순 날짜 목록이어야 합니다');
       }
       if (!Array.isArray(want.rows) || !want.rows.length) fail('`rows` 가 비었습니다');
-      want.rows.forEach(function (row) {
+      want.rows = want.rows.map(function (row) {
         if (typeof row.occupancy !== 'string' || !(row.nights >= 1 && row.nights === Math.floor(row.nights))) fail('줄마다 `occupancy`(글자)와 `nights`(1 이상 정수)가 있어야 합니다');
         var values = BULK_COLS.filter(function (c) { return row[c.key] !== null && row[c.key] !== undefined; });
         if (!values.length || values.some(function (c) { return !AMOUNT.test(String(row[c.key])); })) fail('줄 ' + (row.occupancy || '인원 무관') + ' · ' + row.nights + '박 에 넣을 금액이 없거나 숫자가 아닙니다');
+        return Object.assign({}, row, { expected: wasByDay(row.was, want.dates, lineName(row.occupancy, row.nights)) });
       });
       var span = spanOf(want.dates);
       await toPair(ctx, want.offer, want.room, want.ratePlan);
@@ -1106,7 +1179,7 @@
       // 읽기와 같은 길로 연다 — ② 가 그 오퍼 · 요금제 · 그 날들인지 본 뒤에만 칸을 친다
       var review = await openBulkReview(ctx, { offer: want.offer, ratePlan: want.ratePlan, from: span.from, to: span.to, weekdays: span.weekdays }, span);
       var stamp = saveStamp();
-      var sub = await saveRows(ctx, review, want.rows);
+      var sub = await saveRows(ctx, review, want.rows, want.dates);
       var pressed = ctx.wall.pressed('bulkSave');
       // 저장됨은 서버의 표지로만 안다. 드로어가 닫혔어도(사람의 Esc) 요청이 아직 돌면 표지가 오거나 요청이 끝날 때까지 기다린다.
       // 페이지가 떠나는 중이면(새로 고침) 기다리지 않는다 — 표지는 오지 않는다
@@ -1154,6 +1227,8 @@
       var targets = {};
       want.clear.forEach(function (name) { if (!CELL_FIELDS[name]) fail('셀 창에서는 정가(list)·공급 원가(supply)만 비웁니다: ' + name); targets[name] = ''; });
       if (!Object.keys(targets).length) fail('비울 칸이 없습니다');
+      var was = cellOf(p.was);
+      if (!was) fail('`was`(읽은 값 [판매가, 정가, 공급 원가])가 없거나 금액이 아닙니다 — 명령(calls)이 낸 값을 그대로 넣습니다');
       var cellName = want.room + ' · ' + want.ratePlan + ' · ' + want.date + ' · ' + (want.occupancy || '인원 무관') + ' · ' + want.nights + '박 이상';
 
       await toPair(ctx, want.offer, want.room, want.ratePlan);
@@ -1179,6 +1254,12 @@
       });
       if (rows.length !== 1) fail('셀 창에 `' + (want.occupancy || '인원 무관') + ' · ' + want.nights + '박 이상` 줄이 ' + (rows.length ? rows.length + '개라' : '없어') + ' 저장하지 않았습니다', { refused: true });
       var row = rows[0], rowId = row.getAttribute('data-stay-row');
+      // 무엇이든 치기 전에 — 그 줄의 지금 값이 읽은 값(was)인지(셀 창은 금액을 통화 자릿수 · 쉼표로 적는다 — 수로 견준다)
+      var now = ['price', 'original_price', 'net_amount'].map(function (name) {
+        var el = row.querySelector('input[name="' + name + '"]');
+        return el && C(el.value) !== '' ? C(el.value) : null;
+      });
+      if (!sameCell(was, now)) refuseMoved([{ day: want.date, line: lineName(want.occupancy, want.nights), was: was, now: now }], '아무것도 바꾸지 않았습니다');
       Object.keys(targets).forEach(function (name) {
         var el = row.querySelector('input[name="' + CELL_FIELDS[name] + '"]');
         if (!el) fail('셀 창 줄에 ' + name + ' 칸이 없습니다');

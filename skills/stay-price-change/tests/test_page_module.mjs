@@ -3,13 +3,13 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, charsOf, OFFER, RUNNER_STEPS, RUNNER_CURSOR, HOTEL } from './page_harness.mjs';
+import { erpPage, inPage, plain, charsOf, bulkWas, noCell, cellWas, OFFER, RUNNER_STEPS, RUNNER_CURSOR, HOTEL } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
 const PAIR = { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
 const RESERVED = { hotel: HOTEL, offer: OFFER, rooms: ['디럭스'], ratePlans: ['조식 포함'], from: '2026-12-24', to: '2026-12-31', weekdays: ALL_WEEK, occupancy: '*', nights: 'all' };
-const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00' }] };
-const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] };
+const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', was: bulkWas(['2026-07-01']) }] };
+const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'], was: cellWas('') };
 
 test('B1 · 러너의 도우미·부트 없이 올리면 작업마다 무엇이 없는지 말하고 아무것도 누르지 않는다', async () => {
   const page = erpPage({ withScripts: false });
@@ -73,7 +73,7 @@ test('B16 · 길게 늘어진 오류·막힌 클릭·줄 목록이 있어도 답
   const cases = [
     ['readPair', Object.assign({}, PAIR, { room: long })],
     ['readReserved', Object.assign({}, RESERVED, { rooms: [long, long + '2', long + '3'] })],
-    ['applyBulk', Object.assign({}, BULK, { rows: Array.from({ length: 30 }, (_, i) => ({ occupancy: 'A' + (i + 2) + 'C1_' + long.slice(0, 20), nights: i + 1, sell: '1000', list: '2000', supply: '500' })) })],
+    ['applyBulk', Object.assign({}, BULK, { rows: Array.from({ length: 30 }, (_, i) => ({ occupancy: 'A' + (i + 2) + 'C1_' + long.slice(0, 20), nights: i + 1, sell: '1000', list: '2000', supply: '500', was: noCell(['2026-07-01']) })) })],
     ['applyCell', Object.assign({}, CELL, { occupancy: long })]
   ];
   for (const [name, input] of cases) {

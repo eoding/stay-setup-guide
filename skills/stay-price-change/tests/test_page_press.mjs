@@ -5,10 +5,10 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, runFixture, PAGE, OFFER, HOTEL } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, bulkWas, cellWas, PAGE, OFFER, HOTEL } from './page_harness.mjs';
 
-const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] };
-const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-08-01', occupancy: '', nights: 1, clear: ['list'] };
+const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null, was: bulkWas(['2026-07-01']) }] };
+const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-08-01', occupancy: '', nights: 1, clear: ['list'], was: cellWas('') };
 const READ = { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', weekdays: ['월', '화', '수', '목', '금', '토', '일'] };
 // 다른 칩이 골라진 채로 연다 — 작업이 [디럭스 · 조식 포함] 칩을 눌러 달력을 갈아야 한다(2차 실험과 같은 길)
 const startOn = (name) => (html) => html.replace(/<button\b[^>]*data-stay-entity="rate_plan"[^>]*>/g, (tag) =>
@@ -58,7 +58,7 @@ test('P1·P3 · 달을 넘긴 뒤 늦게 연결되는 날짜 칸을 열고, 저�
 });
 
 // 「기준 조합만 입력」 으로 열리는 ② (캡처는 7/1 · 7/2 두 날, 조합 A2 · A3)
-const LINKED = Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-02'], rows: [{ occupancy: 'A2', nights: 1, sell: '160000', list: null, supply: null }] });
+const LINKED = Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-02'], rows: [{ occupancy: 'A2', nights: 1, sell: '160000', list: null, supply: null, was: [['2026-07-01', '2026-07-01', '150000.00', null, null], ['2026-07-02', '2026-07-02', null, null, null]] }] });
 // ② 의 저장 단추 앞에는 러너 fill 이 칸마다 60ms 쉰다 — 5ms 틈은 그 사이에 저절로 닫히므로 저장 단추의 기다림을 보려면 틈을 400ms 로 연다
 for (const [what, ms, late, opts, step] of [
   ['드로어 ① 의 [다음]', 5, ['drawer'], {}, BULK],

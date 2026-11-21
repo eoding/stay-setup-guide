@@ -71,6 +71,12 @@ const ROWS = [
   { pk: '502', key: 'A2', label: 'A2 · 성인 2', los: '1', price: '150000.00', list: '', net: '110000.00' }
 ];
 
+// 저장 단계가 싣는 읽은 값(`was`, 명령 `step_calls`) — 받침의 화면과 같은 값. 가격 수정 ② 캡처(price-step2)의 인원 무관 1박 줄은
+// 날마다 판매가 120000.00 · 정가 · 공급 원가 없음이고(받은 날짜대로 다시 그려도 같다), 셀 창의 줄은 ROWS 의 그 줄이다
+export const bulkWas = (dates, sell = '120000.00') => [[dates[0], dates[dates.length - 1], sell, null, null]];
+export const noCell = (dates) => [[dates[0], dates[dates.length - 1], null, null, null]];
+export const cellWas = (occupancy = '') => { const r = ROWS.find((x) => x.key === occupancy); return r ? [r.price, r.list || null, r.net || null] : [null, null, null]; };
+
 // 셀 창 — `_calendar_cell_edit.html` 의 뿌리·머리·[닫기]·행·[저장]·추가 줄 표식
 export function cellWindow({ date = '2026-07-01', room = '〈오퍼 관리용 이름〉 · 디럭스', plan = '조식 포함', rows = ROWS, notice = '', error = '' } = {}) {
   const body = rows.map((r) => `
@@ -127,6 +133,19 @@ function echoDays(html, ranges) {
     .replace('<tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>',
       lines.map((d) => `<tr data-stay-existing><td>${d}</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>`).join(''));
 }
+// 가격 수정 ② 를 받은 날마다 한 줄씩 — 날마다 값이 다를 수 있다(bulkValues). 값이 없는 날은 「가격 없음」
+function dayRows(html, ranges, values) {
+  const days = [];
+  String(ranges || '').split('\n').map((x) => x.trim()).filter(Boolean).forEach((line) => {
+    const [a, b] = line.split(' ~ ');
+    for (let d = Date.parse(`${a}T00:00:00Z`); d <= Date.parse(`${b || a}T00:00:00Z`); d += 86400000) days.push(new Date(d).toISOString().slice(0, 10));
+  });
+  const cell = (day) => (values[day] ? `<td class="stay-numeric">${values[day]}</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td>` : '<td class="stay-numeric">가격 없음</td><td></td><td></td>');
+  return html
+    .replace('<tbody><tr><td>2026-07-01</td><td>가격 판매 가능</td></tr></tbody>', `<tbody>${days.map((d) => `<tr><td>${d}</td><td>${values[d] ? '가격 판매 가능' : '가격 없음'}</td></tr>`).join('')}</tbody>`)
+    .replace('<tr data-stay-existing><td>2026-07-01</td><td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td></tr>',
+      days.map((d) => `<tr data-stay-existing><td>${d}</td>${cell(d)}</tr>`).join(''));
+}
 const formValues = (root, names) => Object.fromEntries(names.map((name) => [name, [...root.querySelectorAll(`[name="${name}"]`)]
   .filter((el) => !(el.type === 'checkbox' || el.type === 'radio') || el.checked).map((el) => el.value)]));
 
@@ -142,6 +161,8 @@ const formValues = (root, names) => Object.fromEntries(names.map((name) => [name
  *   drawerStuck  true 면 드로어가 닫혀도 내용이 비지 않는다(쉬는 화면이 오지 않는다)
  *   cell         셀 창 그리기 값 {date, plan, rows} · cellSave 'ok'|'error'
  *   echoDays     true 면 가격 수정 ② 의 상태 표·기존 값 줄을 받은 날짜 구간대로 다시 그린다
+ *   bulkValues   {날짜: 판매가} — 주면 가격 수정 ② 의 인원 무관 1박 줄을 받은 날마다 그 값으로 그리고(없는 날은 가격 없음), 저장하면
+ *                그 날들의 값을 보낸 판매가로 바꾼다(서버처럼). 시험 중에 `page.opts.bulkValues` 를 고치면 다른 사람이 저장한 것이다
  *   panelEdit · adjustSelectEdit  캘린더 판 · 가감 ① 조각을 바꾸는 함수(객실 이름 변형 등)
  *   withScripts  false 면 도우미·부트 없이 `stay_price.js` 만 올린다 · bare 면 아무것도 올리지 않는다(올리개 시험)
  *   lateWire     {ms, on, untracked} — `on` 의 조각('calendar' 칩·오퍼·보기·달·셀 창 닫기 | 'drawer' 드로어 ① | 'step' 드로어 ② ·
@@ -239,7 +260,8 @@ export function erpPage(opts = {}) {
       swap('drawer', () => put((o.adjustSelectEdit || ((html) => html))(runFixture('calendar-adjust--step1.html'))));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="next"]')) {
       const sent = formValues(body, ['date_selection_0']);
-      swap('step', () => put(echoHidden(o.echoDays ? echoDays(o.bulkReview, sent.date_selection_0[0]) : o.bulkReview, sent)));
+      const review = o.bulkValues ? dayRows(o.bulkReview, sent.date_selection_0[0], o.bulkValues) : o.echoDays ? echoDays(o.bulkReview, sent.date_selection_0[0]) : o.bulkReview;
+      swap('step', () => put(echoHidden(review, sent)));
     } else if (b.closest('[data-stay-screen="calendar-bulk"]') && b.matches('[data-stay-action="save"]')) {
       const root = b.closest('[data-stay-screen="calendar-bulk"]');
       const post = { screen: 'calendar-bulk' };
@@ -262,6 +284,12 @@ export function erpPage(opts = {}) {
         return;
       }
       closeDrawer();
+      if (o.bulkValues && post['prices-0-price']) {
+        String(post.date_selection_0 || '').split('\n').map((x) => x.trim()).filter(Boolean).forEach((line) => {
+          const [a, b] = line.split(' ~ ');
+          for (let d = Date.parse(`${a}T00:00:00Z`); d <= Date.parse(`${b || a}T00:00:00Z`); d += 86400000) o.bulkValues[new Date(d).toISOString().slice(0, 10)] = post['prices-0-price'];
+        });
+      }
       const mark = doc.getElementById('stay_save_result');
       mark.setAttribute('data-stay-result', 'saved'); mark.setAttribute('data-stay-saved-at', String(Date.now()) + log.posts.length);
       fire('htmx:after:swap', {}); fire('htmx:after:settle', {}); fire('htmx:finally:request', {});
@@ -306,7 +334,7 @@ export function erpPage(opts = {}) {
   w.localStorage.setItem('stayRunCursor', RUNNER_CURSOR);
   if (o.withScripts && !o.bare) { w.eval(HELPER); w.eval(BOOT); }
   if (!o.bare) w.eval(PAGE);
-  return { dom, w, doc, log, render, closeDrawer, drawerOpen: () => drawer.classList.contains('is-open') };
+  return { dom, w, doc, log, render, closeDrawer, opts: o, drawerOpen: () => drawer.classList.contains('is-open') };
 }
 
 // 페이지 안에서 만든 값으로 바꿔 넘긴다(다른 realm 의 객체는 scrub 이 평범한 객체로 보지 않을 수 있다)

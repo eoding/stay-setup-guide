@@ -4,7 +4,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, takeAll, HELPER, BOOT, PAGE, LOADER, OFFER } from './page_harness.mjs';
+import { erpPage, inPage, plain, takeAll, bulkWas, cellWas, HELPER, BOOT, PAGE, LOADER, OFFER } from './page_harness.mjs';
 
 const DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2,}$/;
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
@@ -53,8 +53,8 @@ test('T4 · R3 · 페이지의 모든 작업 답과 쪽에는 도구가 가리�
   assert.equal(resv.ok, true, resv.error);
   answers.push(pair, resv, ...takeAll(page.w, pair).takes, ...takeAll(page.w, resv).takes);
   assert.equal(takeAll(page.w, pair).body.hotel.name, 'demo.hotel.one', 'A2 — 조각 안의 이름은 바꾸지 않는다(쪽 글자는 도구가 가리지 않는 모양 — 아래 blocked)');
-  answers.push(await call('applyBulk', { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] }));
-  answers.push(await call('applyCell', { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] }));
+  answers.push(await call('applyBulk', { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null, was: bulkWas(['2026-07-01']) }] }));
+  answers.push(await call('applyCell', { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'], was: cellWas('') }));
   answers.push(await call('readPair', { hotel: { id: '2', name: 'other.hotel.two' }, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK }));
   answers.push(plain(sp.take(pair.body.id, 0)), plain(sp.take('없는.조각.id', 0)), plain(sp.last()), plain(sp.idle()), plain(sp.config()),
     plain(sp.standDown()), plain(sp.standUp()));

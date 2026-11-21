@@ -4,10 +4,11 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, runFixture, charsOf, OFFER, HOTEL } from './page_harness.mjs';
+import { erpPage, inPage, plain, runFixture, charsOf, bulkWas, noCell, cellWas, OFFER, HOTEL } from './page_harness.mjs';
 
-const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null }] };
-const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'] };
+const ROW = { occupancy: '', nights: 1, sell: '125000.00', list: null, supply: null };
+const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [Object.assign({ was: bulkWas(['2026-07-01']) }, ROW)] };
+const CELL = { no: 2, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', date: '2026-07-01', occupancy: '', nights: 1, clear: ['list'], was: cellWas('') };
 const LEAKS = ['erp.example.test', '?month', '/stay/', 'offer=9', 'stay_tab_calendar'];
 const priceOf = (post, key, col) => {
   const n = Object.keys(post).map((k) => /^prices-(\d+)-los_nights$/.exec(k)).filter(Boolean).map((m) => m[1])
@@ -37,9 +38,10 @@ test('B7 · applyBulk — 러너의 가격 수정 단계로 넣을 값만 친 �
 
 test('B7 · applyBulk — 화면이 「기준 조합만 입력」 으로 열려도 「조합마다 직접 입력」 으로 바꿔 줄마다 값을 친다', async () => {
   const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-link-step2.html') });
+  const gone = ['2026-07-02', '2026-07-02', null, null, null];
   const step = Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-02'], rows: [
-    { occupancy: 'A2', nights: 1, sell: '160000', list: null, supply: null },
-    { occupancy: 'A3', nights: 1, sell: '190000', list: null, supply: '120000' }] });
+    { occupancy: 'A2', nights: 1, sell: '160000', list: null, supply: null, was: [['2026-07-01', '2026-07-01', '150000.00', null, null], gone] },
+    { occupancy: 'A3', nights: 1, sell: '190000', list: null, supply: '120000', was: [['2026-07-01', '2026-07-01', '180000.00', null, null], gone] }] });
   const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, step)));
   assert.equal(r.saved, true, r.error);
   const post = page.log.posts[0];
@@ -54,7 +56,7 @@ test('B7 · applyBulk — 화면이 「기준 조합만 입력」 으로 열려�
 
 test('B7 · applyBulk — 드로어 표에 없는 줄이 필요한 단계는 저장하지 않고 까닭을 말한다', async () => {
   const page = erpPage();
-  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, Object.assign({}, BULK, { rows: [{ occupancy: 'A2', nights: 1, sell: '150000' }] }))));
+  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, Object.assign({}, BULK, { rows: [{ occupancy: 'A2', nights: 1, sell: '150000', was: noCell(['2026-07-01']) }] }))));
   assert.equal(r.ok, false);
   assert.equal(r.saved, false);
   assert.equal(r.pressed, false);
@@ -113,7 +115,8 @@ test('B7 · applyBulk — 드로어가 다른 객실·날짜를 열었으면 칸
 
 test('T7 · applyBulk — 떨어진 날들도 그 날들만 골라 한 번에 저장한다(날은 숨은 구간 줄이 정한다)', async () => {
   const page = erpPage({ echoDays: true });
-  const step = Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-03', '2026-07-04', '2026-07-10'] });
+  const dates = ['2026-07-01', '2026-07-03', '2026-07-04', '2026-07-10'];
+  const step = Object.assign({}, BULK, { dates, rows: [Object.assign({ was: bulkWas(dates) }, ROW)] });
   const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, step)));
   assert.equal(r.saved, true, r.error);
   assert.equal(r.clicks.bulkSave, 1);
@@ -279,4 +282,78 @@ test('A5 · 사람이 연 드로어가 있으면 작업은 그것을 닫지 않�
   assert.equal(again.ok, true, again.error);
   assert.equal(left.drawerOpen(), false);
   left.w.close();
+});
+
+test('A1 · applyBulk — ② 의 「기존」 이 읽은 값과 다르면(읽을 때 120,000 · 지금 130,000) 한 칸도 치지 않고 누르지 않고, 그 날 · 줄 · 두 값을 대며 거절한다', async () => {
+  const page = erpPage({ bulkReview: runFixture('calendar-bulk--price-step2.html').replace('<td class="stay-numeric">120000.00</td>', '<td class="stay-numeric">130000.00</td>') });
+  const typed = [];
+  page.doc.addEventListener('input', (e) => { if (/^prices-/.test(e.target.name || '')) typed.push(e.target.name); }, true);
+  page.doc.addEventListener('change', (e) => { if (/^prices-/.test(e.target.name || '')) typed.push(e.target.name); }, true);
+  const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
+  assert.deepEqual([r.ok, r.refused, r.saved, r.pressed, r.moved], [false, true, false, false, 1], r.error);
+  assert.match(r.error, /^ERP 화면의 값이 읽은 값과 다릅니다\(1칸\) — 2026-07-01 인원 무관 · 1박 이상 — 읽은 값 판매가 120000\.00 · 화면 판매가 130000\.00/);
+  assert.deepEqual(r.differ, ['2026-07-01 인원 무관 · 1박 이상 — 읽은 값 판매가 120000.00 · 화면 판매가 130000.00']);
+  assert.deepEqual(typed, [], '가격 칸에 아무것도 치지 않았다');
+  assert.ok(!r.clicks.bulkSave);
+  assert.deepEqual(page.log.posts, [], '저장 요청이 없다');
+  assert.equal(page.drawerOpen(), false);
+  page.w.close();
+});
+
+test('A1 · applyBulk — 칸이 생기거나 사라졌거나 정가 · 공급 원가만 달라도 거절하고, 같은 수를 다르게 적은 것(120,000.0)은 같은 값이다', async () => {
+  const step2 = runFixture('calendar-bulk--price-step2.html');
+  const existing = '<td class="stay-numeric">120000.00</td><td class="stay-numeric">없음</td><td class="stay-numeric">없음</td>';
+  const cases = [
+    [existing.replace('<td class="stay-numeric">없음</td><td', '<td class="stay-numeric">150000.00</td><td'), /읽은 값 판매가 120000\.00 · 화면 판매가 120000\.00 · 정가 150000\.00/],
+    ['<td class="stay-numeric">가격 없음</td><td></td><td></td>', /읽은 값 판매가 120000\.00 · 화면 칸 없음/]
+  ];
+  for (const [shown, why] of cases) {
+    const page = erpPage({ bulkReview: step2.replace(existing, shown) });
+    const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, BULK)));
+    assert.deepEqual([r.refused, r.saved, r.pressed, r.moved], [true, false, false, 1], r.error);
+    assert.match(r.error, why);
+    assert.deepEqual(page.log.posts, []);
+    page.w.close();
+  }
+  const born = erpPage();
+  const r = plain(await born.w.stayPrice.applyBulk(inPage(born.w, Object.assign({}, BULK, { rows: [Object.assign({}, BULK.rows[0], { was: noCell(['2026-07-01']) })] }))));
+  assert.match(r.error, /읽은 값 칸 없음 · 화면 판매가 120000\.00/, '읽을 때 없던 칸이 생겼다');
+  born.w.close();
+  const same = erpPage({ bulkReview: step2.replace(existing, existing.replace('120000.00', '120,000.0')) });
+  const ok = plain(await same.w.stayPrice.applyBulk(inPage(same.w, BULK)));
+  assert.equal(ok.saved, true, ok.error);
+  same.w.close();
+});
+
+test('A1 · applyBulk — `was` 가 없거나 단계의 날짜를 꼭 한 번씩 덮지 않으면 화면을 만지기 전에 거절한다', async () => {
+  const page = erpPage();
+  const rowWith = (was) => Object.assign({}, BULK, { dates: ['2026-07-01', '2026-07-03'], rows: [Object.assign({}, ROW, { was })] });
+  for (const was of [undefined, [], [['2026-07-01', '2026-07-01', '1', null, null]], [['2026-07-01', '2026-07-03', '1', null]],
+    [['2026-07-01', '2026-07-02', '1', null, null], ['2026-07-03', '2026-07-03', '1', null, null]], [['2026-07-01', '2026-07-03', '1,000', null, null]]]) {
+    const r = plain(await page.w.stayPrice.applyBulk(inPage(page.w, rowWith(was))));
+    assert.match(r.error, /`was`\(읽은 값\)가 단계의 날짜와 맞지 않습니다/, JSON.stringify(was));
+    assert.deepEqual(r.clicks, {});
+  }
+  assert.deepEqual(page.log.reached, []);
+  page.w.close();
+});
+
+test('A1 · applyCell — 셀 창의 그 줄이 읽은 값과 다르면 칸을 비우지 않고 [저장] 도 누르지 않는다 · 쉼표로 적힌 같은 수는 같은 값이다', async () => {
+  const page = erpPage();
+  const r = plain(await page.w.stayPrice.applyCell(inPage(page.w, Object.assign({}, CELL, { was: ['120000.00', '140000.00', '90000.00'] }))));
+  assert.deepEqual([r.refused, r.saved, r.pressed, r.moved], [true, false, false, 1], r.error);
+  assert.match(r.error, /2026-07-01 인원 무관 · 1박 이상 — 읽은 값 판매가 120000\.00 · 정가 140000\.00 · 공급 원가 90000\.00 · 화면 판매가 120000\.00 · 정가 150000\.00/);
+  assert.deepEqual(page.log.posts, []);
+  assert.ok(!r.clicks.cellSave && r.clicks.cellClose === 1, '저장은 누르지 않고 창만 닫았다');
+  page.w.close();
+
+  const commas = erpPage({ cell: { rows: [{ pk: '501', key: '', label: '인원 무관 단일가', los: '1', price: '120,000.00', list: '150,000.00', net: '90,000.00' }] } });
+  const ok = plain(await commas.w.stayPrice.applyCell(inPage(commas.w, CELL)));
+  assert.equal(ok.saved, true, ok.error);
+  commas.w.close();
+  const bare = erpPage();
+  const none = plain(await bare.w.stayPrice.applyCell(inPage(bare.w, Object.assign({}, CELL, { was: undefined }))));
+  assert.match(none.error, /`was`\(읽은 값/);
+  assert.deepEqual(bare.log.reached, []);
+  bare.w.close();
 });

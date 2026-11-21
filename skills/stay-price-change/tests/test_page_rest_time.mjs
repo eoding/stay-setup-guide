@@ -3,11 +3,11 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { erpPage, inPage, plain, OFFER, HOTEL } from './page_harness.mjs';
+import { erpPage, inPage, plain, bulkWas, OFFER, HOTEL } from './page_harness.mjs';
 
 const ALL_WEEK = ['월', '화', '수', '목', '금', '토', '일'];
 const PAIR = { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01', weekdays: ALL_WEEK };
-const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00' }] };
+const BULK = { no: 1, hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', dates: ['2026-07-01'], rows: [{ occupancy: '', nights: 1, sell: '125000.00', was: bulkWas(['2026-07-01']) }] };
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const SAVE = '[data-stay-screen="calendar-bulk"] [data-stay-action="save"]';
 
