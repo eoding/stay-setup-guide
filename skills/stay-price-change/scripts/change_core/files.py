@@ -180,13 +180,15 @@ def _short_time(moment: str) -> str:
 def confirm_line(entry: dict) -> str:
     """장부 목록의 한 줄을 담당자에게 확인받을 때 읽어 주는 말 — 「장부 3번 · 11/21 10:05 적용 · <범위>」. 저장해 둔 상태는 그 값을
     ERP 에서 읽은 때와 「저장」, 적용을 시작하지 않은 미리보기는 만든 때와 「미리보기」, 적용 중이거나 멈춘 변경은 시작한 때와 그 말.
-    세 도우미가 같은 말로 묻는다(되돌리기 · 견주기의 「이것 맞나요?」)."""
+    멈춘 변경을 뒤에 되돌려도(모두 · 일부) ERP 에 넣은 칸이 있던 변경이라 「적용하다 멈춤」과 그 시각 그대로다 — 다 적용한 뒤 되돌린
+    변경이 「적용」 그대로인 것과 같다. 세 도우미가 같은 말로 묻는다(되돌리기 · 견주기의 「이것 맞나요?」)."""
+    stopped_then_undone = entry["status"] in ("rolled_back", "partly_rolled_back") and entry.get("written")
     if entry["kind"] == "snapshot":
         moment, word = entry["read_at"], "저장"
     elif entry.get("applied_at"):
         moment, word = entry["applied_at"], "적용"
-    elif entry["status"] in ("applying", "stopped"):
-        moment, word = entry["created_at"], "적용하다 멈춤" if entry["status"] == "stopped" else "적용 중"
+    elif entry["status"] in ("applying", "stopped") or stopped_then_undone:
+        moment, word = entry["created_at"], "적용 중" if entry["status"] == "applying" else "적용하다 멈춤"
     else:
         moment, word = entry["created_at"], "미리보기"
     return f"장부 {entry['id']}번 · {_short_time(moment)} {word} · {entry['scope']}"

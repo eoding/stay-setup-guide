@@ -18,7 +18,15 @@ import scene  # noqa: E402
 from change_core.chrome import page_text  # noqa: E402
 from change_core.files import confirm_line, load_results  # noqa: E402
 from change_core.money import example_step  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
+from change_core.rules import Resolution  # noqa: E402
+from price_change import listed  # noqa: E402
+from price_model import encode_request  # noqa: E402
 from price_pages import render_prices  # noqa: E402
+from price_plan import (  # noqa: E402
+    cell_filter, plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, rollback_rows, rollback_writes, save_steps,
+    step_plans,
+)
 
 
 class ConfirmLineTest(unittest.TestCase):
@@ -35,6 +43,68 @@ class ConfirmLineTest(unittest.TestCase):
         self.assertEqual(confirm_line(self.entry(status="stopped", applied_at=None)),
                          "장부 7번 · 11/21 09:40 적용하다 멈춤 · 디럭스 · 판매가 +10%")
 
+
+
+class StoppedThenUndoneLineTest(unittest.TestCase):
+    """F4 — 저장 하나를 넣고 멈춘 변경을 뒤에 되돌려도 목록의 줄은 「미리보기」가 아니다. ERP 에 칸을 넣었던 변경이라 되돌리기 전의
+    말과 시각(「적용하다 멈춤」, 시작한 때) 그대로이고, 끝에 되돌린 만큼이 붙는다. 다 적용한 뒤 되돌린 변경은 「적용」 그대로다."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ledger = Ledger(Path(self.tmp.name) / DB_NAME, now=scene.clock)
+        self.before = scene.snapshot()
+        plan = resolve(plan_change(self.before, scene.request()), [Resolution("ABOVE_LIST", "raise_list")])
+        self.steps = plan_steps(plan)
+        self.change = self.ledger.record_preview(hotel=scene.HOTEL, hotel_id=scene.HOTEL_ID, offer=scene.OFFER, currency="USD",
+                                                 sentence=scene.SENTENCE, read_at=plan.read_at, rows=preview_rows(plan),
+                                                 request=encode_request(plan.request))
+        self.ledger.begin(self.change, step_plans(self.steps), read_at=scene.READ_AGAIN)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def line(self, change_id):
+        return confirm_line(listed(self.ledger, change_id)[0])
+
+    def undo(self, saved, **choose):
+        """저장된 단계(`saved` 번까지)의 칸 가운데 고른 칸을 되돌리는 되돌리기를 적용한다."""
+        select, _scope = cell_filter(**choose)
+        now = scene.applied(self.before, self.steps[:saved], "2026-11-25T09:00:00+09:00")
+        rollback = plan_cell_rollback(self.ledger.recorded_change(self.change), self.ledger.later_writes(self.change), now,
+                                      select=select)
+        rid = self.ledger.record_preview(hotel=rollback.hotel, hotel_id=rollback.hotel_id, offer=rollback.offer,
+                                         currency=rollback.currency, sentence="되돌려", read_at=rollback.read_at,
+                                         rows=rollback_rows(rollback), reverses=self.change)
+        steps = save_steps(rollback_writes(rollback))
+        self.ledger.begin(rid, step_plans(steps), read_at=scene.read_after(rollback.read_at))
+        for index in range(1, len(steps) + 1):
+            self.ledger.record_step(rid, index, saved=True)
+        return rid
+
+    def test_a_stopped_change_keeps_its_word_and_time_after_a_partial_and_then_a_full_rollback(self):
+        self.ledger.record_step(self.change, 1, saved=True)
+        self.ledger.record_step(self.change, 2, saved=False, note="드로어 표에 없는 줄")
+        stopped = self.line(self.change)
+        head = stopped.split(" · 객실 가격 · ")[0]
+        self.assertTrue(head.endswith(" 적용하다 멈춤"), stopped)
+        self.assertTrue(stopped.endswith("저장 8번 중 1번 하고 멈춤"), stopped)
+        first = self.undo(1, occupancies=["A2"])
+        partly = self.line(self.change)
+        self.assertEqual(partly.split(" · 객실 가격 · ")[0], head, "일부 되돌린 뒤에도 같은 말과 시각")
+        self.assertIn(f"일부 되돌림 4/12칸 (장부 {first}번)", partly)
+        second = self.undo(1)
+        undone = self.line(self.change)
+        self.assertEqual(undone.split(" · 객실 가격 · ")[0], head, "모두 되돌린 뒤에도 「미리보기」가 아니다")
+        self.assertIn(f"모두 되돌림 12/12칸 (장부 {first}번, {second}번)", undone)
+        self.assertEqual(listed(self.ledger, self.change)[0]["status"], "rolled_back")
+
+    def test_an_applied_then_rolled_back_change_keeps_applied(self):
+        for index in range(1, len(self.steps) + 1):
+            self.ledger.record_step(self.change, index, saved=True)
+        applied = self.line(self.change).split(" · 객실 가격 · ")[0]
+        self.undo(len(self.steps))
+        self.assertEqual(self.line(self.change).split(" · 객실 가격 · ")[0], applied)
+        self.assertTrue(applied.endswith(" 적용"), applied)
 
 class AnswerFileTest(unittest.TestCase):
     def test_only_the_operation_s_answer_is_read_from_a_file_the_tool_added_text_to(self):
