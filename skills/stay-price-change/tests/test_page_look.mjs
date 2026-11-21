@@ -90,7 +90,8 @@ test('G1 · look() — 칩이 많아 800자를 넘으면 목록은 조각으로 
   try {
     writeFileSync(join(dir, 'look-1.json'), JSON.stringify(r));
     takeAll(page.w, r).takes.forEach((piece, i) => writeFileSync(join(dir, `look-1-${i}.json`), JSON.stringify(piece)));
-    const done = spawnSync('python3', [join(SKILL, 'scripts', 'price_change.py'), 'look', '--answers', dir], { encoding: 'utf8' });
+    const done = spawnSync('python3', [join(SKILL, 'scripts', 'price_change.py'), 'look', '--answers', dir],
+      { encoding: 'utf8', env: Object.assign({}, process.env, { STAY_PRICE_LEDGER_DIR: join(dir, 'ledger') }) });
     assert.equal(done.status, 0, done.stderr);
     const joined = JSON.parse(done.stdout);
     assert.deepEqual([joined.hotel, joined.offer, joined.pairs.length], [HOTEL, OFFER, 30]);
