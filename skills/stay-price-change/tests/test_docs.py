@@ -224,6 +224,13 @@ class SkillBudgetTest(unittest.TestCase):
             if "--look" in flags:
                 self.assertIn(f"`{name}`", said, f"--look 을 받는 {name} 을 준비에서 댄다")
 
+    def test_a_person_asking_what_changed_since_a_saved_state_reaches_compare_from_skill_md(self):
+        """H4 — 「아침에 저장해 둔 것과 뭐가 달라졌어?」는 요금표 참고 파일을 거치지 않고 SKILL.md 에서 compare 에 닿는다."""
+        job = section(self.skill, "## 6. 저장해 둔 상태와 견주기")
+        self.assertIn("6 저장해 둔 상태와 견주기", self.skill.split("## 반드시 지킬 것")[0], "하는 일 목록에 있다")
+        for said in ("아침에 저장해 둔 것과 뭐가 달라졌어?", "`compare`", "](references/sheet.md)"):
+            self.assertIn(said, job)
+
 class SheetDocsTest(unittest.TestCase):
     """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
 

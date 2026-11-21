@@ -12,7 +12,7 @@ metadata:
 
 호텔 하나의 가격 캘린더 값을 담당자의 로그인된 크롬 탭에서 읽고, 미리보기를 보여 주고, 담당자가 "적용"이라고 한 뒤에만 저장한다. 저장 전 값과 넣은 값은 이 컴퓨터의 장부에 남아 되돌릴 수 있다. 담당자에게는 이 스킬을 **도우미**라고 부른다.
 
-하는 일은 다섯이다. 1 지금 가격 보기 · 2 지금 상태만 저장 · 3 가격 바꾸기 · 4 되돌리기 · 5 새 요금표로 맞추기.
+하는 일은 여섯이다. 1 지금 가격 보기 · 2 지금 상태만 저장 · 3 가격 바꾸기 · 4 되돌리기 · 5 새 요금표로 맞추기 · 6 저장해 둔 상태와 견주기.
 
 - 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다. JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 내고 온 결과는 그 파일에 둔다. 도우미는 짧은 답으로 말하고 정한다. 결과 파일을 통째로 읽지 않는다.
 - 페이지: 탭에 올린 `window.stayPrice`.
@@ -45,7 +45,7 @@ metadata:
 
 담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 같은 세션에서 방금 멈춘 변경을 이어서 할 때만 그 일의 폴더를 그대로 쓴다. 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` 다.
 
-1. **브라우저 도구.** Claude in Chrome 이면 `javascript_tool`(JS 실행) · `file_upload`(파일 올리기) · `computer`(스크린샷) · `tabs_context_mcp`(탭). 다른 도구면 JS 로 값 받기 · 파일 칸에 파일 넣기 · 스크린샷이 되는지 먼저 본다.
+1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`)마다.
    1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체 뒤에 한 줄 `stayPriceLoader.again()` 을 붙여 한 번에 실행한다. 이 탭에 적어 둔 원본이 설치된 도우미와 같을 때만 실행하므로 안전하다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다.
    2. 거절하면(`적어 둔 원본이 없습니다` · `…설치된 도우미와 다릅니다` — 아무것도 실행되지 않았다) 답의 `want` 세 파일 — 러너의 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js` — 을 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load()`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 경로를 거절하거나 `load()` 가 `ok: true` 가 아니면 page.md 「올리기」.
@@ -68,7 +68,7 @@ metadata:
 4. **지금 값으로 묶기.** `price_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. 답의 `read_at` 이 ERP 에서 읽은 시각이다(페이지 작업이 끝난 시각 가운데 가장 이른 것 — 15분 창도 여기서 잰다).
 5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고, 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이고, `bad` 는 다시 받는 쪽과 까닭이다(failures.md). 잘렸어도 그대로 저장한다.
 
-답이 `started: false` 면 아무것도 하지 않았다 — 저장하지 않고 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 작업(`look`·`readPair`·`readReserved`)의 답을 잃었으면(끊김 · 잘림) `stayPrice.last()` 의 답을 새 파일로 저장하거나 같은 값으로 다시 불러 저장한다 — 둘 다 된다. 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
+답이 `started: false` 면 아무것도 하지 않았다 — `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 작업(`look`·`readPair`·`readReserved`)의 답을 잃었으면(끊김 · 잘림) `stayPrice.last()` 의 답을 새 파일로 저장하거나 같은 값으로 다시 불러 저장한다. 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
 
 ## 1. 지금 가격 보기
 
@@ -80,7 +80,7 @@ metadata:
 
 ## 2. 지금 상태만 저장
 
-말한 범위만 저장한다. "호텔 전체"면 시간이 걸린다고 먼저 말하고 한다. 1 의 1~4 를 한다 — 지금 가격 페이지도 열어 담당자가 무엇을 저장했는지 보게 한다. 그리고 이렇게 말한다(○시 ○분은 ERP 에서 읽은 시각 `read_at`). "지금 값을 장부 S번(○시 ○분)으로 적어 두었습니다. 나중에 'S번 상태로 되돌려'라고 하시면 그 값으로 되돌리는 미리보기를 보여 드립니다."
+말한 범위로 1 의 1~4 를 하고(지금 가격 페이지도 연다) 말한다: "지금 값을 장부 S번(○시 ○분)으로 적어 두었습니다. 나중에 'S번 상태로 되돌려'라고 하시면 되돌리는 미리보기를, 'S번과 견주어 줘'라고 하시면 달라진 칸을 보여 드립니다."
 
 ## 3. 가격 바꾸기
 
@@ -103,7 +103,7 @@ metadata:
 **읽고 미리보기.**
 
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」). 이것을 범위 파일로 「읽기」 → `<R>/snapshot.json`.
-2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 는 저장 횟수(빨간 줄이 남았으면 null)다. 그 작업에서 k 번째 계산은 `<작업>/plan-<k>.json` 이다(계산 파일은 기록이라 덮어쓰지 않는다).
+2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 는 저장 횟수(빨간 줄이 남았으면 null)다. k 번째 계산은 `<작업>/plan-<k>.json` 이다(기록이라 덮어쓰지 않는다).
 3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
 4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸(`will_change`)·적용할 수 없는 칸·예약 있는 날의 칸·판매 마감인 칸·새로 생기는 칸 수를 말한다(0 인 것은 뺀다). 해당되면 덧붙인다: 예약 있는 날도 바꾸고 이미 받은 예약의 금액은 그대로 · 마감인 날은 값만 바뀌고 마감은 그대로 · 새로 생기는 칸은 되돌려도 지울 수 없음 · (인원 · 박수가 없던 목표 값 표면) 미리보기 머리의 「칸」이 넣는 줄. 그다음은 빨간 줄에 따라 다르다.
    - **빨간 줄이 남아 있으면**(`counts.red` 가 0 보다 큼, `saves` 가 null) [references/red-lines.md](references/red-lines.md) 를 열어 그대로 말하고 고르게 한다. 저장 횟수는 아직 말하지 않는다. 고름은 담당자의 말에서만 나오고 도우미가 대신 고르지 않는다. 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다.
@@ -112,7 +112,7 @@ metadata:
 
 ## 4. 되돌리기
 
-「준비」 5 의 목록을 본다. 상태가 `previewed`(미리보기만)·`empty`(저장할 것이 없던 미리보기)·`replaced`(바뀐 미리보기)·`rolled_back`(이미 모두 되돌림)인 줄은 되돌릴 것이 없고, `partly_rolled_back` 은 나머지를 되돌릴 수 있다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. 맞는 줄이 하나뿐이어도 묻는다. "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>". 담당자가 "응"·"맞아"처럼 분명히 답한 뒤에 읽는다.
+「준비」 5 의 목록을 본다. 상태가 `previewed`(미리보기만)·`empty`(저장할 것이 없던 미리보기)·`replaced`(바뀐 미리보기)·`rolled_back`(이미 모두 되돌림)인 줄은 되돌릴 것이 없고, `partly_rolled_back` 은 나머지를 되돌릴 수 있다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. 맞는 줄이 하나뿐이어도 묻는다. "이것 맞나요? 장부 <`id`>번 · <`applied_at` 의 월/일 시:분> 적용 · <`scope`>".
 
 **"원래 값으로 되돌려"는 둘로 들린다.** 변경 되돌리기는 그 변경이 넣은 칸만 넣기 전 값으로(그 사이 바뀐 칸은 그대로), 저장해 둔 상태로 되돌리기는 그 저장의 범위 전체를 저장한 때의 값으로 맞춘다. 번호를 말했으면 그 번호, "방금 · 어제 바꾼 거"처럼 바꾼 일을 말하면 맞는 변경, "아침 상태로" · "저장해 둔 걸로"처럼 때나 저장을 말하면 맞는 `snapshot` 이다. 둘 다 맞으면 견주어 묻는다: "장부 12번 변경(<`scope`>)만 되돌릴까요, 장부 9번에 저장해 둔 상태(<그 줄의 `read_at` 의 월 · 일 · 시 · 분>, <`scope`>)로 모두 맞출까요?" 어느 쪽이든 고른 줄의 종류 · 번호 · `scope` 를 말하고 "응"을 받은 뒤에 읽는다.
 
@@ -124,8 +124,8 @@ metadata:
    python3 scripts/price_change.py restore --saved <S> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"
    ```
 
-   짧은 답의 `change_id` 가 이 되돌리기의 번호다(아래 M). 나머지 칸의 뜻은 commands.md 의 `rollback`. 그 작업에서 k 번째 되돌리기 계산은 `<작업>/rollback-<k>.json` 이다(있는 파일을 덮어쓰지 않는다).
-3. `render rollback --plan "<작업>/rollback-<k>.json"` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(가격이 없던 칸에 새로 생긴 칸 — ERP 에 지우는 길이 없다), 예약 있는 날의 칸이 있으면 그 날도 되돌리고 받은 예약의 금액은 그대로라는 것, `undone` 이 있으면 이미 되돌린 칸 수와 그 번호. 그대로 두는 칸(`kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭(`kept_why`)을 말한다. `restored` 가 0 이면 되돌릴 칸이 없다고 하고 "되돌려"를 청하지 않는다.
+   짧은 답의 `change_id` 가 이 되돌리기의 번호 M 이다(나머지 칸은 commands.md 의 `rollback`). k 번째 계산은 `<작업>/rollback-<k>.json` 이다.
+3. `render rollback --plan "<작업>/rollback-<k>.json"` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(새로 생긴 칸 — ERP 에 지우는 길이 없다), 예약 있는 날의 칸이 있으면 그 날도 되돌리고 받은 예약의 금액은 그대로라는 것, `undone` 이 있으면 이미 되돌린 칸 수와 그 번호. 그대로 두는 칸(`kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭(`kept_why`)을 말한다. `restored` 가 0 이면 되돌릴 칸이 없다고 하고 "되돌려"를 청하지 않는다.
 4. "되돌려" → 「적용하기」(이 되돌리기의 번호 M, 계산 파일 `rollback-<k>.json`). "○칸도 포함해서 되돌려"면 2 의 `rollback` 에 `--include-kept --replaces <M>` 을 붙여 다음 이름으로 다시 계산하고 3 부터 한다(앞 번호 M 은 `replaced` 가 되어 `begin` 이 받지 않는다).
 
 ## 5. 새 요금표로 맞추기
@@ -134,6 +134,10 @@ metadata:
 
 - 도우미는 셈하지 않는다. 요금표에 적힌 숫자만 옮기고, 차이로 적힌 값("성인 추가 +60", "3박 이상 -10%")은 차이 그대로 적는다. 셈은 명령이 한다. 읽지 못한 숫자 · 뜻이 둘인 줄은 짐작하지 않고 담당자에게 묻는다.
 - 요금표로 날짜별 가격을 맞추는 미리보기 · 결과를 말할 때는 이 문장을 꼭 붙인다: "여기서 날짜별로 바꾼 가격은 누가 ERP 시즌 화면에서 그 시즌의 [가격]을 '덮기'(이미 값이 있는 날도 덮기)로 다시 채우면 옛 요금으로 돌아갑니다."
+
+## 6. 저장해 둔 상태와 견주기
+
+"아침에 저장해 둔 것과 뭐가 달라졌어?"처럼 저장해 둔 상태(목록의 `snapshot` 줄)와 지금을 견주라고 하면 그 줄을 골라 확인받고(번호 S) [references/sheet.md](references/sheet.md) 「(가) 시즌 원판 바꾸기」 3 의 `compare` 와 그 말하기를 그대로 한다. 아무것도 바꾸지 않고 장부에도 적지 않는다.
 
 ## 적용하기 — 바꾸기·되돌리기 공통
 
@@ -147,7 +151,7 @@ metadata:
    - 답이 `started: false` 이거나, 호출이 답 없이 끊겼거나 잘렸으면 [references/failures.md](references/failures.md) 「적용」. 어느 때든 같은 저장을 두 번 누르지 않는다 — 한 번 부른 저장은 다시 부르지 않고, 답을 잃었으면 `stayPrice.last()` 로 받는다.
 3. **뒤에 다시 읽기.** 다 저장되면 `read-calls --record N` 으로 「읽기」 → S3. `verify --change N --snapshot "<S3>"`.
 4. `render result --change N` → `page` 를 연다.
-   - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."
+   - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."
    - `same: false`(종료 1)면 "적용했지만 다시 읽었더니 <`mismatches` 의 수>칸이 넣은 값과 다릅니다. 페이지의 빨간 칸을 ERP 에서 확인해 주세요." 다시 저장하지 않는다.
 
 ## 중간에 멈췄을 때

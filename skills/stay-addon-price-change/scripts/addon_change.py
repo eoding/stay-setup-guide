@@ -8,11 +8,12 @@
     work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
     look          stayAddonPrice.look() 의 답과 그 조각(take 답들) → 호텔의 부가옵션 · 가격 줄 전부(목록이 보인 그대로). 기록 폴더의
                   다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
-    read-calls    요청 파일(필요하면 --look), 또는 장부 번호 → readLine 부를 값(calls.json)
+    read-calls    요청 파일(필요하면 --look), 장부 번호, 또는 가격 줄 번호(--line, 바꾸지 않고 설정만 볼 때 · --look 과 같이)
+                  → readLine 부를 값(calls.json)
     read          calls.json + readLine 답과 조각(폴더째) → 지금 값(snapshot.json). 읽은 시각은 그 답들이 끝난 시각 가운데 가장
                   이른 것. 기록 폴더의 앞선 읽기 폴더(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다
-    render        preview | result | rollback | prices 페이지(HTML)
+    render        preview | result | rollback | prices | window 페이지(HTML) — window 는 읽은 가격 줄의 편집 창 칸 전부
     begin         적용 시작 — 적용 직전에 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어 한 줄이라도(딸린 칸까지)
                   다르면 아무것도 시작하지 않고 다른 줄을 댄다(종료 1). 같으면 저장 단계를 장부에 적는다
     calls         아직 저장되지 않은 단계 → applyLine 부를 값. 멈춘 변경은 다시 읽어 check 가 이어서 해도 된다고 한 뒤에만 낸다
@@ -49,7 +50,7 @@ from addon_model import (
 )
 from addon_pages import (
     blocked_lines, chosen_lines as chosen_said, red_lines, render_preview, render_prices, render_result, render_rollback,
-    scope_card,
+    render_window, scope_card,
 )
 from addon_plan import (
     LineChange, Plan, PlanError, counts, decode_step, encode_step, line_filter, plan_change, plan_line_rollback, plan_steps,
@@ -71,7 +72,7 @@ PREFIXES = ("look-", "line-", "take-")
 READS = ("readLine",)
 PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readLine 하나가 조각 하나다
 PAGE_NAMES = {"preview": "부가옵션 미리보기", "result": "부가옵션 적용 결과", "rollback": "부가옵션 되돌리기 미리보기",
-              "prices": "지금 부가옵션 가격"}
+              "prices": "지금 부가옵션 가격", "window": "가격 줄 설정"}
 
 
 def open_ledger() -> Ledger:
@@ -121,7 +122,21 @@ def read_calls(hotel: str, hotel_id: str, keys) -> dict:
     return dict(lines=[dict(hotel=encode_hotel(hotel, hotel_id), addon=key.addon, line=key.line) for key in keys])
 
 
+def listed_keys(listing, lines) -> list:
+    """가격 줄 번호들 → 줄 키 — 목록(look)에서 찾는다. 바꾸지 않고 설정만 볼 때(render window) 쓴다."""
+    found = {line.key.line: line.key for line in listing.lines}
+    unknown = [str(line) for line in lines if str(line) not in found]
+    if unknown:
+        raise ModelError(f"목록에 없는 가격 줄 번호입니다: {', '.join(unknown)} — look 의 번호를 씁니다")
+    return [found[str(line)] for line in lines]
+
+
 def cmd_read_calls(args):
+    if args.line:
+        if not args.look:
+            raise ValueError("--line 으로 고를 때는 --look(이 일의 look.json)을 같이 줍니다 — 가격 줄의 부가옵션을 목록에서 찾습니다")
+        listing = decode_listing(load(args.look))
+        return read_calls(listing.hotel, listing.hotel_id, listed_keys(listing, args.line))
     if args.record:
         then = recorded_snapshot(open_ledger(), args.record)
         return read_calls(then.hotel, then.hotel_id, then.asked)
@@ -231,6 +246,9 @@ def cmd_render(args):
     elif args.kind == "prices":
         listing = decode_listing(load(args.look))
         html, hotel = render_prices(listing), listing.hotel
+    elif args.kind == "window":
+        snapshot = decode_snapshot(load(args.snapshot))
+        html, hotel = render_window(snapshot), snapshot.hotel
     else:
         ledger = open_ledger()
         record = ledger.change(args.change)
@@ -455,6 +473,7 @@ def parser() -> argparse.ArgumentParser:
     scope = sub.add_mutually_exclusive_group(required=True)
     scope.add_argument("--request", help="바꾸기 요청 파일(kind addon_change)")
     scope.add_argument("--record", type=int, help="장부 번호 — 그 번호의 계산이 바탕으로 삼은 줄을 다시 읽는다")
+    scope.add_argument("--line", action="append", help="가격 줄 번호(여러 번) — 바꾸지 않고 설정만 볼 때. --look 과 같이 준다")
     sub.add_argument("--look", help="look 명령이 낸 파일 — 요청이 부가옵션 · 전부로 고를 때")
     sub = command("read", cmd_read, "readLine 답 → 지금 값")
     sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
@@ -471,7 +490,7 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--plan", help="preview 는 plan-<k>.json, rollback 은 rollback-<k>.json")
     sub.add_argument("--look", help="prices 의 look 파일")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
-    sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값(그대로여야 할 칸이 달라졌는지도 보인다)")
+    sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값(그대로여야 할 칸이 달라졌는지도 보인다), window — 읽은 값")
     sub.add_argument("--text", action="store_true", help="페이지에 보이는 글만 답의 text 로 낸다 — 파일을 만들지 않는다")
     sub = command("begin", cmd_begin, "적용 시작")
     sub.add_argument("--change", type=int, required=True)
@@ -505,7 +524,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     if args.command == "render":
-        needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change"}[args.kind]
+        needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change", "window": "snapshot"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
     try:

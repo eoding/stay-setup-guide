@@ -180,6 +180,12 @@ class SkillShapeTest(unittest.TestCase):
         for path in REFERENCES:
             self.assertIn(f"](references/{path.name})", self.skill, f"SKILL.md 가 {path.name} 를 가리키지 않는다")
 
+    def test_a_whole_edit_window_can_be_shown_without_a_change_request(self):
+        """H4 — 「이 가격 줄 설정 다 보여줘」: 바꾸기 요청 없이 번호로 읽고 편집 창의 칸 전부를 보이는 길이 SKILL.md 에 있다."""
+        job = self.skill[self.skill.index("## 1. "):self.skill.index("## 2. ")]
+        for said in ("이 가격 줄 설정 다 보여줘", "read-calls --line ", "render window --snapshot"):
+            self.assertIn(said, job)
+
     def test_the_pointer_to_the_stopped_page_repeats_the_rule_that_must_not_be_missed(self):
         pointing = [line for line in self.skill.splitlines() if "](references/stopped.md)" in line]
         self.assertTrue(any("다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다" in line for line in pointing))

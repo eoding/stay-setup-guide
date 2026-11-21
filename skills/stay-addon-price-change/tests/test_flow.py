@@ -495,6 +495,25 @@ class LookReuseTest(Flow):
         self.assertEqual([item["id"] for item in error["refetch"]], ["blook3"])
 
 
+class WindowTest(Flow):
+    def test_one_price_line_s_whole_edit_window_can_be_shown_without_a_change_request(self):
+        """H4 — 「이 가격 줄 설정 다 보여줘」: 바꾸기 요청 없이 줄 번호로 읽고 편집 창의 칸 전부를 보여 준다. 장부에 적지 않는다."""
+        self.erp.lines["302"]["description"] = "갈라 디너 대신 고르는 조식"
+        folder = self.work / "읽기-설정"
+        folder.mkdir()
+        self.assertIn("--look", self.cli("read-calls", "--line", "302", "--out", folder / "calls.json", code=2)["error"])
+        short = self.cli("read-calls", "--line", "302", "--look", self.look(), "--out", folder / "calls.json")
+        self.assertEqual(short["lines"], [{"hotel": scene.HOTEL, "addon": "201", "line": "302"}], "부가옵션은 목록에서 찾는다")
+        scene.write_answers(folder, "line", [self.erp.read_line(call) for call in short["lines"]])
+        self.cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json")
+        text = self.cli("render", "window", "--snapshot", folder / "snapshot.json", "--text")["text"]
+        for said in ("아무것도 바꾸지 않았습니다", "판매가 | 35.50", "공급 원가 | 28.00", "이름 | 연말 조식",
+                     "설명 | 갈라 디너 대신 고르는 조식", "적용 대상 | 2026-12-31", "적용 범위 | 적용 범위 요금제 기존 범위 그대로"):
+            self.assertIn(said, text)
+        self.assertEqual(self.erp.posts, [])
+        self.assertEqual(self.cli("list", "--all")["changes"], [], "장부에 적지 않는다")
+
+
 class TrapLineTest(Flow):
     def test_a_line_whose_amount_records_the_screen_cannot_see_is_never_saved(self):
         request = self.file("request.json", dict(kind="addon_change", hotel=scene.HOTEL, all=True, field="sell", percent="5",

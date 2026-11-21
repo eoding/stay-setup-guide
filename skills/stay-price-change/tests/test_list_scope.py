@@ -226,3 +226,38 @@ class TabHotelListTest(unittest.TestCase):
         for path in made:
             self.assertTrue(path.is_dir())
             self.assertEqual(path.parent, self.dir / "기록" / "작업")
+
+
+class LookReuseTest(unittest.TestCase):
+    """H4 — 가격 캘린더 도우미의 look 도 앞선 작업 폴더의 look/ 에서 다 받은 같은 조각을 빌린다(다른 두 도우미 · 읽기와 같다)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.records = Path(self.tmp.name) / "기록"
+        self.env = scene.env(str(self.records))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def look(self, folder: Path, body_id: str, pieces: bool, pairs=(("디럭스", "조식 포함"), ("스위트", "조식 포함"))) -> subprocess.CompletedProcess:
+        from browser_replies import reply
+        keep = {"hotel": trial_scene.HOTEL_REF, "offer": trial_scene.OFFER, "offers": [trial_scene.OFFER],
+                "pairs": [{"room": room, "rate_plan": plan} for room, plan in pairs]}
+        answers = reply("look", {}, keep, pieces=3, body_id=body_id, login=False, hotel=trial_scene.HOTEL_REF,
+                        offer=trial_scene.OFFER, count={"offers": 1, "pairs": len(pairs)})
+        folder.mkdir(parents=True)
+        for index, answer in enumerate(answers if pieces else answers[:1], 1):
+            (folder / f"look-{index}.json").write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
+        return subprocess.run([sys.executable, str(SCRIPT), "look", "--answers", str(folder), "--out", str(folder.parent / "look.json")],
+                              capture_output=True, text=True, env=self.env)
+
+    def test_a_later_look_of_the_same_screen_borrows_the_pieces_an_earlier_look_folder_took(self):
+        work = self.records / "작업"
+        first = self.look(work / "2026-11-21 100000" / "look", "blook", pieces=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = self.look(work / "2026-11-21 103000" / "look", "blook2", pieces=False)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(len(json.loads((work / "2026-11-21 103000" / "look.json").read_text(encoding="utf-8"))["pairs"]), 2)
+        third = self.look(work / "2026-11-21 110000" / "look", "blook3", pieces=False, pairs=(("디럭스", "룸온리"),))
+        self.assertEqual(third.returncode, 2, "화면이 바뀌면 빌릴 것이 없어 받으라고 한다")
+        self.assertEqual([item["id"] for item in json.loads(third.stderr)["refetch"]], ["blook3"])

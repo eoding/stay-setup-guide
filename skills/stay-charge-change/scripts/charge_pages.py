@@ -1,4 +1,4 @@
-"""charge_pages.py — 부과금 도우미의 페이지(HTML): 지금 부과금 · 미리보기 · 적용 결과 · 되돌리기 미리보기.
+"""charge_pages.py — 부과금 도우미의 페이지(HTML): 지금 부과금 · 부과금 설정(편집 창 전부) · 미리보기 · 적용 결과 · 되돌리기 미리보기.
 
 페이지 틀(색 · 머리 숫자 · 저장 단계 목록 · 결과 띠 · 멈춤 선택지 · 되돌리기 머리 · 그대로 두는 것 표)은 change_core.chrome 이다.
 여기에는 부과금마다의 금액 칸 표와 이 종류만의 안내(저장하면 다시 만들어지는 줄 · 적용 범위 기록 · 무료가 되는 칸)를 둔다.
@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Sequence
 
-from charge_model import FIELD_LABELS, Charge, Listing, Place, part_of_key
+from charge_model import AGE, FIELD_LABELS, Charge, Listing, Place, Snapshot, part_of_key
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
     chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, names_banner, notes, page, result_banner, rollback_ask,
@@ -136,9 +136,9 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
         body.append(f'<div class="banner amber"><b>무료가 됩니다 — {len(free)}칸.</b> {esc(" · ".join(free))} 은(는) 저장하면 '
                     "0 이 되어 손님이 내는 금액이 없어집니다.</div>")
     body.append(names_banner(names))
-    body.append(stats([(found["will_change"], "바뀌는 칸"), (found["unchanged"], "그대로인 칸"), (found["blocked"], "바꿀 수 없는 칸"),
-                       (found["red"], "고를 빨간 줄")] + ([(found["missing"], "목록에 없는 부과금")] if found["missing"] else [])))
+    sent = 0
     by_place = {change.place: change for change in plan.changes}
+    tables = []
     for charge in plan.charges:
         rows = []
         for place in charge.places():
@@ -146,20 +146,31 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
             before = charge.value(place)
             if change is None and before is None:
                 continue
-            severity = RULES.severity(change.verdict) if change else None
-            shown = change.after if change and (change.writes or change.waiting or severity == BLOCKED) else None
-            cls = ("blocked" if severity == BLOCKED else "chosen" if change and change.choice else "red" if severity == RED
+            name = (f'<td class="text">{esc(charge.part_label(place.part, place.at).removeprefix(charge.label).strip(" ·") or "부과금")}'
+                    f' · {esc(place.field_label)}</td>')
+            if change is None:
+                sent += 1
+                why = unused(charge, place)
+                rows.append(f'<tr>{name}<td class="same"><span class="was">{_value(before, place, charge, currency)}</span></td>'
+                            f'<td class="text"><small>{"쓰이지 않는 값 · " if why else ""}그대로 보냄</small></td></tr>')
+                continue
+            severity = RULES.severity(change.verdict)
+            shown = change.after if change.writes or change.waiting or severity == BLOCKED else None
+            cls = ("blocked" if severity == BLOCKED else "chosen" if change.choice else "red" if severity == RED
                    else "same" if shown is None or shown == before else "")
-            why = unused(charge, place) if change and change.verdict == "NOT_USED" else ""
-            if change and change.verdict == "FORM_REFUSES":
-                    why = form_refusal(charge, {place: change.after}) or ""
-            rows.append(f'<tr><td class="text">{esc(charge.part_label(place.part, place.at).removeprefix(charge.label).strip(" ·") or "부과금")}'
-                        f' · {esc(place.field_label)}</td><td class="{cls}">{_move(before, shown, place, charge, currency)}</td>'
+            why = unused(charge, place) if change.verdict == "NOT_USED" else ""
+            if change.verdict == "FORM_REFUSES":
+                why = form_refusal(charge, {place: change.after}) or ""
+            rows.append(f'<tr>{name}<td class="{cls}">{_move(before, shown, place, charge, currency)}</td>'
                         f"{_verdict_cell(change, why)}</tr>")
-        body += [f"<h2>{esc(charge.label)} <small class=\"sub\">부과금 {esc(charge.id)}번</small></h2>",
-                 f'<p class="sub">{esc(_shape(charge))}</p>',
-                 '<div class="scroll"><table><tr><th>금액 칸</th><th>전 → 후</th><th>판정</th></tr>'
-                 f'{"".join(rows)}</table></div>']
+        tables += [f"<h2>{esc(charge.label)} <small class=\"sub\">부과금 {esc(charge.id)}번</small></h2>",
+                   f'<p class="sub">{esc(_shape(charge))}</p>',
+                   '<div class="scroll"><table><tr><th>금액 칸</th><th>전 → 후</th><th>판정</th></tr>'
+                   f'{"".join(rows)}</table></div>']
+    body.append(stats([(found["will_change"], "바뀌는 칸"), (found["unchanged"], "그대로인 칸"), (found["blocked"], "바꿀 수 없는 칸"),
+                       (found["red"], "고를 빨간 줄")] + ([(found["missing"], "목록에 없는 부과금")] if found["missing"] else [])
+                      + [(sent, "짚지 않아 그대로 보내는 금액 칸")]))
+    body += tables
     for offer, charge_id in plan.missing:
         body.append(f'<p class="sub">부과금 {esc(charge_id)}번(오퍼 {esc(offer)}) — 목록에 없습니다. 지워졌거나 번호가 바뀌었습니다. 바꾸지 않습니다.</p>')
     said = [KEPT_NOTE, REBUILT_NOTE, GUEST_NOTE]
@@ -243,6 +254,46 @@ def render_rollback(plan: RollbackPlan, scope: str = "") -> str:
             (f'<div class="scroll"><table><tr><th>금액 칸</th><th>지금 → 적어 둔 값</th></tr>{"".join(rows)}</table></div>'
              if rows else '<p class="sub">되돌릴 칸이 없습니다.</p>'),
             notes([REBUILT_NOTE]), rollback_ask(plan, KEEPS, UNIT)]
+    return page(title, "\n".join(body), MAKER)
+
+
+def _held(value: Decimal | None, place: Place, charge: Charge, currency: str) -> str:
+    """편집 창의 금액 칸 하나를 창의 말로 — 빈 칸은 「미정」 · 「성인가와 같음」 · 「현장 금액 미정」."""
+    if value is not None:
+        return _value(value, place, charge, currency)
+    if place.part == AGE:
+        return "성인가와 같음" if place.field == "amount" else "현장 금액 미정"
+    return "현장 금액 미정" if place.field == "onsite" else "미정"
+
+
+def render_window(snapshot: Snapshot) -> str:
+    """부과금 설정 — 읽은 부과금마다 편집 창의 칸 전부(창이 보인 그대로). 아무것도 바꾸지 않았다. 도우미가 바꾸는 것은 금액 칸뿐이다."""
+    currency = snapshot.currency
+    title = f"부과금 설정 · {snapshot.hotel}"
+    body = [f"<h1>{esc(title)}</h1>",
+            f'<p class="sub">{esc(fmt_time(snapshot.read_at))} 에 ERP 편집 창에서 읽었습니다. 아무것도 바꾸지 않았습니다. '
+            "도우미가 바꿀 수 있는 것은 금액 칸뿐이고, 나머지 칸은 ERP 화면에서 사람이 바꿉니다.</p>"]
+    for charge in snapshot.charges.values():
+        labels = charge.labels
+        dates = charge.one("date_scope").strip()
+        settings = [("종류", labels.get("kind", "")), ("이름", charge.name), ("부과 방식", labels.get("basis", "")),
+                    ("부과 단위", labels.get("per", "")),
+                    ("의무 · 선택", ("의무 — " + (dates or "오퍼 전 기간")) if charge.one("date_mode") == "mandatory" else "선택"),
+                    ("적용 룸 · 적용 범위", charge.listed.scope or "—"), ("현장 결제 통화", charge.onsite_currency or "없음"),
+                    ("설명", "\n".join(text for _name, text in charge.form if _name == "description").strip() or "없음")]
+        amounts = []
+        for place in charge.places():
+            why = unused(charge, place)
+            amounts.append(f'<tr><td class="text">{esc(charge.part_label(place.part, place.at).removeprefix(charge.label).strip(" ·") or "부과금")}'
+                           f' · {esc(place.field_label)}</td><td class="text">{esc(_held(charge.value(place), place, charge, currency))}</td>'
+                           f'<td class="text">{esc(why) if why else "쓰임"}</td></tr>')
+        body += [f"<h2>{esc(charge.label)} <small class=\"sub\">부과금 {esc(charge.id)}번</small></h2>",
+                 '<div class="scroll"><table><tr><th>칸</th><th>지금 값</th></tr>'
+                 + "".join(f'<tr><td class="text">{esc(name)}</td><td class="text">{esc(value)}</td></tr>' for name, value in settings)
+                 + "</table></div>",
+                 '<div class="scroll"><table><tr><th>금액 칸</th><th>지금 값</th><th>계산에</th></tr>' + "".join(amounts) + "</table></div>"]
+    for offer, charge_id in snapshot.missing():
+        body.append(f'<p class="sub">부과금 {esc(charge_id)}번(오퍼 {esc(offer)}) — 목록에 없습니다. 지워졌거나 번호가 바뀌었습니다.</p>')
     return page(title, "\n".join(body), MAKER)
 
 

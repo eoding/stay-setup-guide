@@ -12,7 +12,7 @@ metadata:
 
 호텔 하나의 부과금(오퍼마다 붙은 얼리 체크인 · 레이트 체크아웃 · 갈라 디너 · 리조트피 같은 것)의 **금액만** 담당자의 로그인된 크롬 탭에서 읽고, 미리보기를 보여 주고, "적용"이라고 한 뒤에만 저장한다. 저장 전 값과 넣은 값은 다른 두 도우미와 같은 장부에 남아 되돌릴 수 있다. 담당자에게는 이 스킬을 **도우미**라고 부른다.
 
-하는 일은 셋이다. 1 지금 부과금 보기 · 2 부과금 금액 바꾸기 · 3 되돌리기.
+하는 일은 셋이다. 1 지금 부과금 보기(한 부과금의 설정 전부도) · 2 부과금 금액 바꾸기 · 3 되돌리기.
 
 - 명령: 이 스킬 폴더의 `scripts/charge_change.py`. 아래의 `python3 scripts/charge_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
 - 페이지: 탭에 올린 `window.stayCharge`. 가격 캘린더 도우미의 페이지 파일 위에 올린다(「준비」).
@@ -36,7 +36,7 @@ metadata:
 ## 담당자에게 말할 때
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷 · 플랜 · JSON · 명령 · 스크립트 · DB · payload · stale · verify · 티어. 대신 지금 값 · 미리보기 · 장부 · 저장 · 금액 칸 · 시간대 줄 · ERP 화면이라고 한다.
-- 숫자는 명령의 짧은 답에서 말하고, 페이지는 시스템의 여는 명령으로 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 글을 옮겨야 하면 같은 `render` 를 `--out` 없이 `--text` 로 하고 답의 `text` 에서 옮긴다(파일은 생기지 않는다).
+- 숫자는 명령의 짧은 답에서 말하고, 페이지는 시스템의 여는 명령으로 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 글을 옮길 때는 같은 `render` 를 `--text` 로 하고 답의 `text` 에서 옮긴다.
 
 ## 준비 — 시킨 일마다 3 부터
 
@@ -55,13 +55,15 @@ metadata:
 1. `python3 scripts/charge_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"`(장부 번호가 있는 일은 `--record <번호>`).
 2. 답의 `charges` 값마다(i = 1, 2 …) `await stayCharge.readCharge(<값 그대로>)` 의 답을 `<R>/charge-<i>.json` 에 저장한다. 읽기는 창을 열어 보고 닫을 뿐 저장하지 않는다.
 3. `python3 scripts/charge_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. `read_at` 이 ERP 에서 읽은 시각, `missing` 은 목록에 없는 부과금이다.
-4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayCharge.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayCharge.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이다. `bad` 가 있으면 그 쪽을 옮겨 적다 틀린 것이다 — 그 쪽만 이렇게 다시 받으면 되고, 틀린 파일은 그대로 둔다.
+4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayCharge.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayCharge.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름, `bad` 는 옮겨 적다 틀린 쪽이다 — 그 쪽만 다시 받고 틀린 파일은 그대로 둔다.
 
 답이 `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 답을 잃었으면 `stayCharge.last()` 의 답을 새 파일로 저장하거나 다시 불러 저장한다.
 
 ## 1. 지금 부과금 보기
 
 「준비」 다음 `python3 scripts/charge_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 부과금입니다. 아무것도 바꾸지 않았습니다."
+
+"이 부과금 설정 다 보여줘"면 「읽기」를 `read-calls --charge <번호> --look "<작업>/look.json" --out "<R>/calls.json"` 으로 하고 `python3 scripts/charge_change.py render window --snapshot "<R>/snapshot.json"` → `page` 를 연다. 바꾸지 않고 장부에도 적지 않는다.
 
 ## 2. 부과금 금액 바꾸기
 
@@ -79,7 +81,7 @@ metadata:
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」 · 「금액 칸」). 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/charge_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 가 저장 횟수(빨간 줄이 남았으면 null). 다시 계산하면 `plan-2.json` 처럼 새 이름에 쓰고 `--replaces <앞 번호>` 를 붙인다.
 3. `python3 scripts/charge_change.py render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
-4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 칸 · 그대로인 칸 · 바꿀 수 없는 칸(`blocked` 의 칸마다 `name` 과 `why`)을 말한다. `free` 가 있으면 칸마다 "저장하면 무료가 됩니다"라고 말한다. `names` 가 있으면 그 문장을 그대로 말한다(알림이다). 그리고 꼭 말한다: "저장하면 ERP 가 시간대 줄과 연령별 단가를 다시 만들어 그 ERP 번호가 바뀌고, 되돌려도 번호는 돌아오지 않습니다(금액은 돌아옵니다)." `scope_card` 가 true 면 "저장할 때 ERP 가 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
+4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 칸 · 그대로인 칸 · 바꿀 수 없는 칸(`blocked` 의 칸마다 `name` 과 `why`)을 말한다. `free` 가 있으면 칸마다 "저장하면 무료가 됩니다"라고 말한다. `names` 가 있으면 그 문장을 그대로 말한다(알림이다). 그리고 꼭 말한다: "저장하면 ERP 가 시간대 줄과 연령별 단가를 다시 만들어 그 번호가 바뀌고, 되돌려도 번호는 돌아오지 않습니다(금액은 돌아옵니다)." `scope_card` 가 true 면 "저장할 때 적용 범위 기록이 하나 생길 수 있고(가격 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 칸과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 칸은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다(고름마다 담당자의 말을 `said` 에 그대로).
    - **저장할 것이 없으면**(`saves` 가 0) "바뀌는 칸이 없어 저장할 것이 없습니다"라고 하고 "적용"을 묻지 않는다.
    - **그 밖에는** 저장 횟수(`saves`, 부과금마다 한 번)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
@@ -93,7 +95,7 @@ metadata:
 필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려").
 
 1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `python3 scripts/charge_change.py begin --change N --plan "<계산 파일>" --snapshot "<S2>"`. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)이면 아무것도 저장하지 않았다 — "미리보기 뒤에 ERP 의 값이 바뀌었습니다(<`differences` 의 부과금>)." 하고 「2」 의 읽기부터 새 미리보기를 만든다.
-2. `python3 scripts/charge_change.py calls --change N` 의 `calls` 를 차례로 하나씩: `await stayCharge.applyCharge(<payload 그대로>)` → 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장 → `python3 scripts/charge_change.py record-result --change N --result "<그 파일>"`. `saved: true` 이고 `status: applying` 이면 다음, `applied` 면 3. 그 밖이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다. 같은 저장을 두 번 누르지 않는다.
+2. `python3 scripts/charge_change.py calls --change N` 의 `calls` 를 차례로 하나씩: `await stayCharge.applyCharge(<payload 그대로>)` → 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장 → `python3 scripts/charge_change.py record-result --change N --result "<그 파일>"`. `saved: true` 이고 `status: applying` 이면 다음, `applied` 면 3. 그 밖이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
 3. **뒤에 다시 읽기.** `read-calls --record N` 으로 「읽기」 → S3. `python3 scripts/charge_change.py verify --change N --snapshot "<S3>"`.
 4. `python3 scripts/charge_change.py render result --change N --snapshot "<S3>"` → `page` 를 연다. 3 의 `names` 가 있으면 그 문장도 그대로 말한다.
    - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 그 부과금의 다른 금액과 칸도 그대로입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."

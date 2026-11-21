@@ -418,6 +418,59 @@ class NameNoteTest(Flow):
         self.assertNotIn("바꾸기 전 값", self.cli("render", "preview", "--plan", plan, "--text")["text"])
 
 
+class SmallFindingsTest(Flow):
+    """H4 — 시운전의 작은 것들: 다음 작업의 look 은 앞 작업이 받은 쪽을 빌리고, 미리보기의 수와 표가 맞으며(계산에 쓰이지 않는 값은
+    그렇게 적는다), 바꾸지 않고 부과금 하나의 설정을 다 볼 수 있다."""
+
+    def test_a_later_look_of_the_same_screen_borrows_the_pieces_an_earlier_look_folder_took(self):
+        work = Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "작업"
+        first, second = work / "2026-11-21 100000" / "look", work / "2026-11-21 103000" / "look"
+        scene.write_answers(first, "look", [scene.look_answer(self.erp)])
+        self.cli("look", "--answers", first, "--out", first.parent / "look.json")
+        scene.write_answers(second, "look", [scene.look_answer(self.erp, body_id="blook2")[:1]])
+        short = self.cli("look", "--answers", second, "--out", second.parent / "look.json")
+        self.assertEqual((short["offers"], short["charges"]), (2, 6), "같은 화면이면 쪽을 다시 받지 않는다")
+        self.erp.charge("703")["amount"] = "91.00"            # 화면이 바뀌면 빌릴 것이 없어 받으라고 한다
+        third = work / "2026-11-21 110000" / "look"
+        scene.write_answers(third, "look", [scene.look_answer(self.erp, body_id="blook3")[:1]])
+        error = self.cli("look", "--answers", third, "--out", third.parent / "look.json", code=2)
+        self.assertEqual([item["id"] for item in error["refetch"]], ["blook3"])
+
+    def test_the_preview_counts_what_its_table_shows_and_names_a_value_the_erp_does_not_use(self):
+        _change, plan = self.preview(self.request(LATE_BAND, value="60"))
+        counts = json.loads(plan.read_text(encoding="utf-8"))["counts"]
+        self.assertEqual((counts["will_change"], counts["unchanged"]), (1, 0))
+        text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
+        self.assertIn("0 그대로인 칸", text)
+        rows = [line for line in text.splitlines() if line.count("|") == 2 and "금액 칸" not in line]
+        self.assertFalse([line for line in rows if line.split("|")[1].strip().endswith("그대로")],
+                         "「그대로인 칸」 0 이면 표의 전 → 후 칸에도 「그대로」가 없다")
+        sent = [line for line in rows if line.endswith("그대로 보냄")]
+        self.assertIn(f"{len(sent)} 짚지 않아 그대로 보내는 금액 칸", text, "수와 표가 맞는다")
+        top = next(line for line in rows if line.startswith("부과금 · 정률(%)"))
+        self.assertIn("쓰이지 않는 값", top, "시간대 줄이 있는 부과금의 맨 위 정률은 「그대로」가 아니라 쓰이지 않는 값이다")
+
+    def test_one_charge_s_whole_edit_window_can_be_shown_without_a_change_request(self):
+        self.erp.charge("701")["description"] = "늦은 체크아웃은 프런트에 미리 말해 주세요"
+        folder = self.work / "읽기-설정"
+        folder.mkdir()
+        self.assertIn("--look", self.cli("read-calls", "--charge", "701", "--out", folder / "calls.json", code=2)["error"])
+        self.assertIn("999", self.cli("read-calls", "--charge", "999", "--look", self.look(), "--out", folder / "x.json", code=2)["error"])
+        short = self.cli("read-calls", "--charge", "701", "--look", self.look(), "--out", folder / "calls.json")
+        self.assertEqual(short["charges"], [{"hotel": scene.HOTEL, "offer": "601", "charge": "701"}], "오퍼는 목록에서 찾는다")
+        scene.write_answers(folder, "charge", [self.erp.read_charge(call) for call in short["charges"]])
+        self.cli("read", "--calls", folder / "calls.json", "--answers", folder, "--out", folder / "snapshot.json")
+        text = self.cli("render", "window", "--snapshot", folder / "snapshot.json", "--text")["text"]
+        for said in ("아무것도 바꾸지 않았습니다", "종류 | 레이트 체크아웃", "이름 | 레이트 체크아웃 (14시 이후 · 1박 요금의 50%)",
+                     "부과 방식 | 1박 요금의 %", "의무 · 선택 | 선택", "적용 룸 · 적용 범위 | 이 오퍼의 모든 객실 · 객실: 기존 범위 그대로",
+                     "설명 | 늦은 체크아웃은 프런트에 미리 말해 주세요", "12:01~14:00 시간대 · 정액 금액 | 0.00 USD | 쓰임",
+                     "14:01~18:00 시간대 · 정률(%) | 50.00% | 쓰임", "부과금 · 정률(%) | 50.00% | 시간대별 요율이 있어"):
+            self.assertIn(said, text)
+        self.assertEqual(self.erp.posts, [], "읽기만 한다")
+        db = Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3"
+        self.assertFalse(db.exists() and self.cli("list", "--all")["changes"], "장부에 적지 않는다")
+
+
 class LedgerListTest(Flow):
     """H3 — 저장할 것이 없는 미리보기는 그렇게 적히고 그렇게 보이며, 목록은 탭의 호텔 것을 먼저, 다른 호텔 것은 청할 때만 싣는다."""
 

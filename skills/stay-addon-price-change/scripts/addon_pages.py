@@ -1,4 +1,4 @@
-"""addon_pages.py — 부가옵션 가격 도우미의 페이지(HTML): 지금 가격 · 미리보기 · 적용 결과 · 되돌리기 미리보기.
+"""addon_pages.py — 부가옵션 가격 도우미의 페이지(HTML): 지금 가격 · 가격 줄 설정(편집 창 전부) · 미리보기 · 적용 결과 · 되돌리기 미리보기.
 
 페이지 틀(색 · 머리 숫자 · 저장 단계 목록 · 결과 띠 · 멈춤 선택지 · 되돌리기 머리 · 그대로 두는 것 표)은 change_core.chrome 이다.
 여기에는 가격 줄 표와 이 종류만의 안내(값의 출처 표시 · 적용 범위 기록 · 금액 기록이 안 보이는 줄)를 둔다.
@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Mapping, Sequence
 
 from addon_model import (
-    DOUBT_LABELS, FIELD_LABELS, FIELDS, FORM_NAMES, NET_POINT, SELL_POINT, Line, Listing, key_of_item,
+    DOUBT_LABELS, FIELD_LABELS, FIELDS, FORM_NAMES, NET_POINT, SELL_POINT, Line, Listing, Snapshot, key_of_item,
 )
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
@@ -257,6 +257,30 @@ def render_rollback(plan: RollbackPlan, scope: str = "") -> str:
             (f'<div class="scroll"><table><tr><th>가격 줄</th><th>판매가</th><th>공급 원가</th></tr>{"".join(rows)}</table></div>'
              if rows else '<p class="sub">되돌릴 줄이 없습니다.</p>'),
             notes([SOURCE_NOTE]), rollback_ask(plan, KEEPS, UNIT)]
+    return page(title, "\n".join(body), MAKER)
+
+
+def render_window(snapshot: Snapshot) -> str:
+    """가격 줄 설정 — 읽은 줄마다 편집 창의 칸 전부(창이 보인 그대로). 아무것도 바꾸지 않았다. 도우미가 바꾸는 것은 판매가 · 공급 원가뿐이다."""
+    currency = snapshot.currency
+    title = f"가격 줄 설정 · {snapshot.hotel}"
+    body = [f"<h1>{esc(title)}</h1>",
+            f'<p class="sub">{esc(fmt_time(snapshot.read_at))} 에 ERP 편집 창에서 읽었습니다. 아무것도 바꾸지 않았습니다. 통화 {esc(currency)}. '
+            "도우미가 바꿀 수 있는 것은 판매가와 공급 원가뿐이고, 나머지 칸은 ERP 화면에서 사람이 바꿉니다.</p>"]
+    for line in snapshot.lines.values():
+        names = [name for name, _value in line.form]
+        rows = [("판매가", fmt_money(line.sell, currency)), ("공급 원가", _money(line.supply, currency))]
+        rows += [(word, line.labels.get(name) or "\n".join(value for key, value in line.form if key == name).strip() or "—")
+                 for name, word in SENT_LABELS.items() if name in names]
+        rows += [("적용 대상", line.listed.target or "—"), ("적용 범위", _scope_sent(line) or line.listed.scope or "—")]
+        if line.doubt:
+            rows.append(("확인할 것", DOUBT_LABELS[line.doubt]))
+        body += [f"<h2>{esc(line.label)} <small class=\"sub\">가격 줄 {esc(line.key.line)}번</small></h2>",
+                 '<div class="scroll"><table><tr><th>칸</th><th>지금 값</th></tr>'
+                 + "".join(f'<tr><td class="text">{esc(name)}</td><td class="text">{esc(value)}</td></tr>' for name, value in rows)
+                 + "</table></div>"]
+    for key in snapshot.missing():
+        body.append(f'<p class="sub">가격 줄 {esc(key.line)}번(부가옵션 {esc(key.addon)}) — 목록에 없습니다. 지워졌거나 번호가 바뀌었습니다.</p>')
     return page(title, "\n".join(body), MAKER)
 
 
