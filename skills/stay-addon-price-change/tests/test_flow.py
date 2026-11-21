@@ -323,6 +323,30 @@ class LedgerListTest(Flow):
         self.cli("list", code=2)
 
 
+class RolledBackLineTest(Flow):
+    """N2 — 되돌린 변경은 목록의 줄(범위 `scope`, 그래서 확인받을 때 읽어 주는 `line` 도)이 되돌렸다고 말한다. 시운전의 부과금 줄은 되돌린
+    변경을 「… · 정률(%) 60 으로」로 끝내 그 값이 살아 있는 것처럼 읽혔다. 세 도우미가 같은 말이다(files.record_progress)."""
+
+    def test_a_partly_then_fully_rolled_back_change_says_so_with_the_records_that_did_it(self):
+        change, plan = self.preview(self.request())
+        self.apply(change, plan)
+        part = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--line", "301", "--record",
+                        "--sentence", "조식만 되돌려", "--out", self.work / "rollback-1.json")
+        self.apply(part["change_id"], self.work / "rollback-1.json")
+        entry = self.listed()[change]
+        self.assertEqual(entry["status"], "partly_rolled_back")
+        self.assertTrue(entry["line"].endswith(f"판매가 +10% · 일부 되돌림 1/2줄 (장부 {part['change_id']}번) · 나머지 1줄은 넣은 값 "
+                                               "그대로"), entry["line"])
+        rest = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--line", "304", "--record",
+                        "--sentence", "나머지도 되돌려", "--out", self.work / "rollback-2.json")
+        self.apply(rest["change_id"], self.work / "rollback-2.json")
+        entry = self.listed()[change]
+        self.assertEqual(entry["status"], "rolled_back")
+        self.assertTrue(entry["line"].endswith(f"판매가 +10% · 모두 되돌림 2/2줄 (장부 {part['change_id']}번, {rest['change_id']}번)"),
+                        entry["line"])
+        self.assertTrue(entry["scope"].endswith(entry["line"].split(" · ", 2)[2]), "읽어 주는 줄 = 「장부 N번 · 때 · <범위>」")
+
+
 class OneLedgerTest(Flow):
     def test_the_price_calendar_helper_neither_lists_nor_touches_an_add_on_change_in_the_same_ledger(self):
         change, plan = self.preview(self.request())

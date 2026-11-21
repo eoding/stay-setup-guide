@@ -48,7 +48,7 @@ from addon_model import (
     encode_snapshot, hotel_label, key_of_item, keys_text, line_item_key, line_of, listing_of, name_notes_of, snapshot_items,
 )
 from addon_pages import (
-    blocked_lines, chosen_lines as chosen_said, red_lines, render_preview, render_prices, render_result, render_rollback,
+    UNIT, blocked_lines, chosen_lines as chosen_said, red_lines, render_preview, render_prices, render_result, render_rollback,
     render_window, scope_card,
 )
 from addon_plan import (
@@ -375,23 +375,22 @@ def record_what(request: dict | None, reverses: int | None) -> str:
     return ""
 
 
-def scope_line(rows, did: str, stopped: str = "") -> str:
-    """범위 한 줄 — 저장이 값을 넣는(넣을) 줄이 몇 줄인지와 처음 줄 이름, 한 일, 멈췄으면 어디까지. 안 바꾸기로 고른 줄 · 아직
-    고르지 않은 빨간 줄 · 적용할 수 없는 줄은 세지 않는다(가격 도우미의 「N칸」과 같은 셈 — 되돌리기 확인이 이 줄을 읽어 준다).
+def scope_line(rows, did: str, progress: str = "") -> str:
+    """범위 한 줄 — 저장이 값을 넣는(넣을) 줄이 몇 줄인지와 처음 줄 이름, 한 일, 어디까지 갔는지(`progress`). 안 바꾸기로 고른 줄 ·
+    아직 고르지 않은 빨간 줄 · 적용할 수 없는 줄은 세지 않는다(가격 도우미의 「N칸」과 같은 셈 — 되돌리기 확인이 이 줄을 읽어 준다).
     넣는 줄이 없으면 이름은 고른 줄의 것이다."""
     written = {row.item_key for row in rows if row.action}
     labels = [(row.label, row.item_key in written) for row in rows if row.field == FIELDS[0]]
     names = list(dict.fromkeys(label for label, writes in labels if writes))
     shown = names or list(dict.fromkeys(label for label, _writes in labels))
     head = f"부가옵션 가격 줄 {len(names)}개" + (f" ({shown[0]}{' 외' if len(shown) > 1 else ''})" if shown else "")
-    return " · ".join(part for part in (head, did, stopped) if part)
+    return " · ".join(part for part in (head, did, progress) if part)
 
 
 def record_scope(entry: dict, rows) -> str:
-    """장부 한 줄의 범위(scope_line) — 멈췄으면 어디까지, 저장할 것이 없는 미리보기면 그렇다고."""
-    stopped = (f"{entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped"
-               else "저장할 것 없음" if entry["status"] == "empty" else "")
-    return scope_line(rows, record_what(entry.get("request"), entry.get("reverses")), stopped)
+    """장부 한 줄의 범위(scope_line) — 어디까지 갔는지는 세 도우미가 같은 말이다(멈춤 · 적용 중 · 모두 · 일부 되돌림 · 저장할 것
+    없음 — files.record_progress)."""
+    return scope_line(rows, record_what(entry.get("request"), entry.get("reverses")), files.record_progress(entry, UNIT))
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:

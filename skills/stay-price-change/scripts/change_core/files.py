@@ -177,6 +177,27 @@ def confirm_line(entry: dict) -> str:
     return f"장부 {entry['id']}번 · {_short_time(moment)} {word} · {entry['scope']}"
 
 
+def record_progress(entry: dict, unit: str) -> str:
+    """장부 목록의 한 줄(`Ledger.list_changes`)이 어디까지 갔는지 — 세 도우미의 범위 한 줄(`scope`, 그래서 `line` 도)이 끝에 같은 말로
+    단다(`unit` 은 그 도우미가 세는 것 — 칸 · 줄). 멈췄거나 적용 중이면 저장 몇 번 중 몇 번, 되돌렸으면 「모두 되돌림 a/b칸 (장부 N번)」
+    · 「일부 되돌림 a/b칸 (장부 N번) · 나머지 c칸은 넣은 값 그대로」 — 읽어 주어도 넣은 값이 살아 있는 것처럼 들리지 않는다. 저장할
+    것이 없는 미리보기면 그렇다고. 그 밖(미리보기 · 다 적용 · 저장해 둔 상태)은 상태(`status`)가 말한다 — 빈 글자."""
+    status, steps, saved = entry["status"], entry["steps"], entry["saved_steps"]
+    by = ", ".join(f"{number}번" for number in entry["undone_by"])
+    done, back = entry["written"], entry["rolled_back"]
+    if status == "stopped":
+        return f"저장 {steps}번 중 {saved}번 하고 멈춤"
+    if status == "applying":
+        return f"저장 {steps}번 중 {saved}번 함 · 적용 중"
+    if status == "rolled_back":
+        return f"모두 되돌림 {back:,}/{done:,}{unit} (장부 {by})"
+    if status == "partly_rolled_back":
+        return f"일부 되돌림 {back:,}/{done:,}{unit} (장부 {by}) · 나머지 {done - back:,}{unit}은 넣은 값 그대로"
+    if status == "empty":
+        return "저장할 것 없음"
+    return ""
+
+
 def hotel_list(ledger_path: Path, entries: list[dict], look: str | None, every: bool) -> dict:
     """장부 목록의 답 — 탭에 열린 호텔(`look`, look 명령이 낸 파일)의 번호만. `every` 면 그 뒤에 다른 호텔의 번호도 싣는다(탭의
     호텔이 먼저, 저마다 새것부터). 둘 다 없으면 거절한다 — 다른 호텔의 기록은 담당자가 청할 때만 본다. `others` 는 싣지 않은

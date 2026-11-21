@@ -26,6 +26,7 @@ from change_core.chrome import (
     chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, notes, page, result_banner, rollback_ask, rollback_head,
     stats, steps_list, stopped_choices, unremovable_table,
 )
+from change_core.files import record_progress
 from change_core.ledger import ChangeRecord
 from change_core.money import example_step, scale_of
 from change_core.rollback import RollbackPlan
@@ -402,29 +403,12 @@ def record_what(kind: str, request: Mapping | None, reverses: int | None, curren
     return operation_label(parsed, currency) + (f" ({narrow})" if narrow else "")
 
 
-def record_progress(entry: Mapping) -> str:
-    """장부 목록의 한 줄(`Ledger.list_changes`)이 어디까지 갔는지 — 멈췄거나 적용 중이면 저장 몇 번 중 몇 번, 되돌렸으면 몇 칸을
-    어느 번호가. 그 밖(미리보기 · 다 적용 · 저장해 둔 상태)은 상태(`status`)가 말한다."""
-    status, steps, saved = entry["status"], entry["steps"], entry["saved_steps"]
-    by = ", ".join(f"{number}번" for number in entry["undone_by"])
-    if status == "stopped":
-        return f"저장 {steps}번 중 {saved}번 하고 멈춤"
-    if status == "applying":
-        return f"저장 {steps}번 중 {saved}번 함 · 적용 중"
-    if status == "rolled_back":
-        return f"모두 되돌림 {entry['rolled_back']:,}/{entry['written']:,}칸 (장부 {by})"
-    if status == "empty":
-        return "저장할 것 없음"
-    if status == "partly_rolled_back":
-        return f"일부 되돌림 {entry['rolled_back']:,}/{entry['written']:,}칸 (장부 {by}) · 나머지 {entry['written'] - entry['rolled_back']:,}칸은 넣은 값 그대로"
-    return ""
-
-
 def record_scope(entry: Mapping, keys: Iterable[CellKey]) -> str:
-    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지."""
+    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지(세 도우미가 같은 말 —
+    files.record_progress)."""
     return " · ".join(part for part in (cells_scope(keys), record_what(entry["kind"], entry["request"], entry["reverses"],
                                                                       entry["currency"], entry["planned"]),
-                                         record_progress(entry)) if part)
+                                         record_progress(entry, "칸")) if part)
 
 
 def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:

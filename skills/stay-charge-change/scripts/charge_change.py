@@ -48,8 +48,8 @@ from charge_model import (
     known_charges, listing_of, name_notes_of, part_of_key, refs_text, snapshot_items,
 )
 from charge_pages import (
-    blocked_amounts, chosen_amounts, free_amounts, red_lines, render_preview, render_prices, render_result, render_rollback,
-    render_window,
+    UNIT, blocked_amounts, chosen_amounts, free_amounts, red_lines, render_preview, render_prices, render_result,
+    render_rollback, render_window,
 )
 from charge_plan import (
     PlanError, charge_filter, counts, decode_plan, decode_step, encode_plan, encode_step, plan_change, plan_charge_rollback,
@@ -343,8 +343,8 @@ def cmd_rollback(args):
 
 
 def record_scope(entry: dict, labels: list[str]) -> str:
-    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일, 멈췄으면 어디까지,
-    저장할 것이 없는 미리보기면 그렇다고."""
+    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일, 어디까지
+    갔는지(멈춤 · 적용 중 · 모두 · 일부 되돌림 · 저장할 것 없음 — 세 도우미가 같은 말, files.record_progress)."""
     names = list(dict.fromkeys(labels))
     head = f"부과금 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
     request = entry.get("request") or {}
@@ -356,8 +356,8 @@ def record_scope(entry: dict, labels: list[str]) -> str:
             did = ""
     elif entry.get("reverses"):
         did = f" · {entry['reverses']}번 되돌리기"
-    stopped = f" · {entry['saved_steps']}/{entry['steps']}번 저장하고 멈춤" if entry["status"] == "stopped" else ""
-    return head + did + stopped + (" · 저장할 것 없음" if entry["status"] == "empty" else "")
+    progress = files.record_progress(entry, UNIT)
+    return head + did + (f" · {progress}" if progress else "")
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
