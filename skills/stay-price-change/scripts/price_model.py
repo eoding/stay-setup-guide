@@ -781,8 +781,18 @@ def encode_plan(plan: Plan) -> dict:
                 coverage=[encode_gap(gap) for gap in plan.coverage],
                 tiers=[dict(encode_key(key), sell=money_text(sell)) for key, sell in sorted(plan.tiers.items())],
                 above_one_night_before=plan.above_one_night_before,
-                unused=[dict(rule=item.rule, choice=item.choice, said=item.said, why=item.why, words=item.words,
-                             cells=[encode_key(key) for key in item.cells]) for item in plan.unused])
+                unused=[encode_unused(item) for item in plan.unused])
+
+
+def encode_unused(item: UnusedChoice) -> dict:
+    """쓰지 않는 고름 하나 — 계산 파일(plan.json)과 장부(결과 페이지의 「고르신 빨간 줄」)가 같은 모양으로 둔다."""
+    return dict(rule=item.rule, choice=item.choice, said=item.said, why=item.why, words=item.words,
+                cells=[encode_key(key) for key in item.cells])
+
+
+def decode_unused(item: Mapping) -> UnusedChoice:
+    return UnusedChoice(str(item["rule"]), str(item["choice"]), str(item.get("said") or ""), str(item["why"]), str(item["words"]),
+                        tuple(decode_key(key) for key in item.get("cells") or ()))
 
 
 def decode_plan(data: Mapping) -> Plan:
@@ -795,6 +805,4 @@ def decode_plan(data: Mapping) -> Plan:
                 tuple(decode_gap(item) for item in data.get("coverage") or ()),
                 {decode_key(item): money(item["sell"]) for item in data.get("tiers") or ()},
                 int(data.get("above_one_night_before") or 0),
-                tuple(UnusedChoice(str(item["rule"]), str(item["choice"]), str(item.get("said") or ""), str(item["why"]),
-                                   str(item["words"]), tuple(decode_key(key) for key in item.get("cells") or ()))
-                      for item in data.get("unused") or ()))
+                tuple(decode_unused(item) for item in data.get("unused") or ()))

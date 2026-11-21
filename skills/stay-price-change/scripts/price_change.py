@@ -76,7 +76,8 @@ from change_core.rules import BLOCKED
 from price_model import (
     CELL_RULES, FIELDS, ITEM_KIND, CellKey, ReadRange, Snapshot, TargetTable, cell_state, decode_hotel, decode_plan, decode_request,
     decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_key, encode_plan, encode_request,
-    encode_snapshot, encode_step, hotel_label, iso_day, key_of_item, line_label, request_range, same_hotel, snapshot_reading,
+    encode_snapshot, encode_step, encode_unused, hotel_label, iso_day, key_of_item, line_label, request_range, same_hotel,
+    snapshot_reading,
 )
 from price_compare import compare_counts, compare_saved, decode_comparison, encode_comparison
 from price_pages import (
@@ -298,7 +299,8 @@ def cmd_plan(args):
                                         currency=plan.currency,
                                         sentence=request.sentence, read_at=plan.read_at, rows=preview_rows(plan),
                                         request=encode_request(plan.request), reading=encode_snapshot(snapshot),
-                                        replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
+                                        replaces=args.replaces, empty=steps is not None and not steps,
+                                        unused=[encode_unused(item) for item in plan.unused]) if args.record else None
     result = dict(change_id=change_id, replaces=args.replaces, counts=counts(plan.changes, len(plan.skipped)), plan=encode_plan(plan),
                   red=red_lines(plan), chosen=chosen_lines(plan), unused=unused_lines(plan),
                   above_one_night_before=plan.above_one_night_before,

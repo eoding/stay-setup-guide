@@ -26,6 +26,8 @@
                  가운데 그 계산의 읽은 값과 지금 값이 다른 것(지금 값). 결과 페이지가 멈춘 변경을 이것으로 말한다. 그 뒤에
                  저장 결과가 적히면 다 쓴 것(`spent`)이 된다 — 그 check 는 그 저장을 모른다
     begins       적용을 시작한 변경 하나에 한 줄 — begin 이 처음 받아들인 때. 목록의 「적용 중」 · 「적용하다 멈춤」이 이 시각이다
+    unused_choices  미리보기 하나에 한 줄(있을 때만) — 담당자가 고른 빨간 줄 고름 가운데 어느 항목도 쓰지 않은 것(JSON, 고르며 한
+                 말과 그 까닭). 항목 줄에는 남지 않아, 결과 페이지의 「고르신 빨간 줄」이 미리보기처럼 이것으로 댄다
 
 되돌리기와 저장 상태로 되돌리기는 다시 되돌리지 않는다(`_undoable`). 되돌리기를 되돌리면 그 되돌리기가 단 표지(`rolled_back_by`)를
 풀어야 하고, 그것을 또 되돌리면 다시 달아야 한다 — 장부가 ERP 에 살아 있는 값을 말하지 못하게 된다(ERP 의 [되돌리기]도 한 번만
@@ -146,7 +148,12 @@ CREATE TABLE IF NOT EXISTS begins (
   begun_at TEXT NOT NULL
 );
 CREATE TRIGGER IF NOT EXISTS keep_checks BEFORE DELETE ON checks BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
+CREATE TABLE IF NOT EXISTS unused_choices (
+  change_id INTEGER PRIMARY KEY REFERENCES changes(id),
+  choices TEXT NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS keep_begins BEFORE DELETE ON begins BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
+CREATE TRIGGER IF NOT EXISTS keep_unused BEFORE DELETE ON unused_choices BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_meta BEFORE DELETE ON meta BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_changes BEFORE DELETE ON changes BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_values BEFORE DELETE ON item_values BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
@@ -305,7 +312,8 @@ class Checked:
 @dataclass(frozen=True)
 class ChangeRecord:
     """장부의 변경 하나. `status` · `cause` · `checked` 는 장부를 읽은 때(`as_of` — 장부의 시계) 기준이다(15분 멈춤). 결과 페이지는
-    그때를 오늘로 삼는다 — 그날이 아닌 check 의 시각에는 날짜를 붙인다."""
+    그때를 오늘로 삼는다 — 그날이 아닌 check 의 시각에는 날짜를 붙인다. `unused` 는 고른 빨간 줄 고름 가운데 어느 항목도 쓰지
+    않은 것(`unused_choices`, 도우미가 준 모양 그대로)."""
     id: int
     kind: str
     status: str
@@ -326,6 +334,7 @@ class ChangeRecord:
     replaces: int | None = None
     checked: Checked | None = None
     as_of: str | None = None
+    unused: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -461,14 +470,16 @@ class Ledger:
     def record_preview(self, *, hotel: str, offer: str, currency: str, sentence: str, read_at: str,
                        hotel_id: str, rows: Iterable[ValueRow], request: Mapping | None = None,
                        reverses: int | None = None, reading: Mapping | None = None, replaces: int | None = None,
-                       empty: bool = False) -> int:
+                       empty: bool = False, unused: Sequence[Mapping] = ()) -> int:
         """미리보기를 적는다. `reverses` 를 주면 그 변경을 되돌리는 변경(rollback)이다. `reading` 은 그 계산이 바탕으로 삼은
         읽은 값 — 적용 직전 낡음 확인과 다시 읽을 범위가 이것으로 정해진다. `empty` 는 저장 단계가 하나도 없는 미리보기(바뀌는
         항목이 없거나 빨간 줄을 모두 안 바꾸기로 고름)다 — 상태 empty 로 적고, 넣는 값이 있는 줄이 있으면 거절한다.
 
         `replaces` 는 이 미리보기가 바꾸는 앞 미리보기 번호다(빨간 줄을 고른 뒤 · 그대로 둔 칸도 되돌릴 때 · 적용 직전에 값이 달라
         다시 계산함). 같은 것을 하는(`_acts` — 가격 바꾸기 · 같은 변경 되돌리기 · 같은 저장 상태로 되돌리기) 같은 호텔 · 오퍼의,
-        아직 적용을 시작하지 않은 미리보기여야 하고, 그 번호는 `replaced` 가 되어 begin 이 받지 않는다."""
+        아직 적용을 시작하지 않은 미리보기여야 하고, 그 번호는 `replaced` 가 되어 begin 이 받지 않는다.
+
+        `unused` 는 고른 빨간 줄 고름 가운데 어느 항목도 쓰지 않은 것(도우미의 모양 그대로) — `unused_choices` 에 둔다."""
         kind = "rollback" if reverses is not None else "change"
         rows = list(rows)
         if empty and any(row.action for row in rows):
@@ -478,8 +489,11 @@ class Ledger:
                 self._undoable(db, reverses)
             if replaces is not None:
                 self._replace(db, replaces, self._acts(kind, reverses, request), hotel_id, offer)
-            return self._insert(db, kind, "empty" if empty else "previewed", hotel, hotel_id, offer, currency, sentence,
-                                read_at, rows, reverses, request, reading, replaces)
+            change_id = self._insert(db, kind, "empty" if empty else "previewed", hotel, hotel_id, offer, currency, sentence,
+                                     read_at, rows, reverses, request, reading, replaces)
+            if unused:
+                db.execute("INSERT INTO unused_choices (change_id, choices) VALUES (?, ?)", (change_id, _body(list(unused))))
+            return change_id
 
     @staticmethod
     def _acts(kind: str, reverses: int | None, request: Mapping | None) -> str:
@@ -921,6 +935,7 @@ class Ledger:
                 for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
             last = db.execute("SELECT * FROM checks WHERE change_id = ? AND spent = 0 ORDER BY rowid DESC LIMIT 1",
                               (change_id,)).fetchone()
+            unused = db.execute("SELECT choices FROM unused_choices WHERE change_id = ?", (change_id,)).fetchone()
         cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps])
         status = self._status(header)
         checked = None
@@ -931,7 +946,7 @@ class Ledger:
                             header["offer"], header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
                             None if header["request"] is None else json.loads(header["request"]), steps, rows, cause,
-                            header["replaces"], checked, self._stamp())
+                            header["replaces"], checked, self._stamp(), tuple(json.loads(unused["choices"])) if unused else ())
 
     def reading(self, change_id: int) -> dict:
         """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""

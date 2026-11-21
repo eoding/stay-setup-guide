@@ -36,8 +36,8 @@ from change_core.rules import BLOCKED, RED
 
 from price_model import (
     CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
-    CellValue, ChangeRequest, Gap, ITEM_KIND, Plan, Snapshot, cell_item_key, cell_name, day_label, decode_request, key_of_item, line_label, nights_label,
-    occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
+    CellValue, ChangeRequest, Gap, ITEM_KIND, Plan, Snapshot, cell_item_key, cell_name, day_label, decode_request, decode_unused, key_of_item,
+    line_label, nights_label, occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
 from price_compare import MOVED, Comparison, compare_counts
 from price_plan import counts, day_runs, days_summary
@@ -813,14 +813,21 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
 
 
 def _chosen_table(record: ChangeRecord) -> str:
-    """고르신 빨간 줄마다 — 빨간 줄 · 고르신 것 · 칸 수 · 고르실 때 하신 말(장부의 줄에서)."""
+    """고르신 빨간 줄마다 — 빨간 줄 · 고르신 것 · 칸 수 · 고르실 때 하신 말(장부의 줄에서). 고르셨지만 어느 칸도 쓰지 않은 고름도
+    그 까닭과 하신 말과 함께 0칸으로 싣는다(장부의 `unused_choices` — 미리보기의 「고르신 빨간 줄」과 같은 고름)."""
     request = decode_request(record.request) if record.request and record.request.get("kind") in ("change", "targets") else None
-    entries = []
-    for verdict, choice, said, keys in chosen_groups(record.rows):
-        rule = CELL_RULES.by_code.get(verdict)
-        words = (choice_words(request, choice, record.currency, [key_of_item(key) for key in keys]) if request
-                 else CHOICE_LABELS[choice])
-        entries.append((rule.label if rule else str(verdict), words, len(keys), said))
+
+    def words(choice: str, keys) -> str:
+        return choice_words(request, choice, record.currency, keys) if request else CHOICE_LABELS[choice]
+
+    def label(code: str) -> str:
+        rule = CELL_RULES.by_code.get(code)
+        return rule.label if rule else str(code)
+
+    entries = [(label(verdict), words(choice, [key_of_item(key) for key in keys]), len(keys), said)
+               for verdict, choice, said, keys in chosen_groups(record.rows)]
+    for item in map(decode_unused, record.unused):
+        entries.append((label(item.rule), f"{words(item.choice, item.cells)} — 고르셨지만 쓰지 않았습니다: {item.words}", 0, item.said or None))
     return chosen_table(entries)
 
 

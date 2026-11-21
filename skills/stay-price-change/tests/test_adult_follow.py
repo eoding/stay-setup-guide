@@ -31,9 +31,11 @@ import scene  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, CellValue, ChangeRequest, Snapshot, Target, TargetTable, cell_item_key, encode_key, encode_request, encode_snapshot,
+    encode_unused,
 )
-from price_pages import render_preview, unused_lines  # noqa: E402
-from price_plan import counts, plan_change, plan_steps, plan_targets, preview_rows, resolve  # noqa: E402
+from change_core.ledger import DB_NAME, Ledger  # noqa: E402
+from price_pages import render_preview, render_result, unused_lines  # noqa: E402
+from price_plan import counts, plan_change, plan_steps, plan_targets, preview_rows, resolve, step_plans  # noqa: E402
 from test_pages import visible  # noqa: E402
 
 DAY = "2026-12-24"
@@ -240,6 +242,27 @@ class UnusedChoiceTest(unittest.TestCase):
                          [("clear_list", "replaced", 0), ("raise_list", "pinned", 0)])
         self.assertEqual(unused_lines(plan)[1]["label"], "그 빨간 줄의 칸을 모두 칸마다 따로 고르셨습니다")
 
+    def test_the_result_page_of_an_applied_change_lists_a_choice_no_cell_used_with_the_words(self):
+        """시운전 8 U6 — 결과 페이지의 「고르신 빨간 줄」도 미리보기처럼 쓰지 않은 고름을 하신 말과 함께 싣는다(장부에 남는다)."""
+        plan = resolve(plan_change(snap({("A2", 1): ("100.00", "110.00"), (CHILD, 1): ("115.00", "125.00")}), ask("percent", "5")),
+                       [Resolution("BELOW_COST", "include", said="원가 아래도 그대로")])
+        self.assertEqual([(line["why"], line["said"]) for line in unused_lines(plan)], [("none", "원가 아래도 그대로")])
+        steps = plan_steps(plan)
+        with tempfile.TemporaryDirectory() as folder:
+            ledger = Ledger(Path(folder) / DB_NAME, now=scene.clock)
+            change = ledger.record_preview(hotel="H", hotel_id="9", offer="O", currency="USD", sentence="5% 올려줘", read_at=plan.read_at,
+                                           rows=preview_rows(plan), request=encode_request(plan.request),
+                                           unused=[encode_unused(item) for item in plan.unused])
+            ledger.begin(change, step_plans(steps), read_at=scene.READ_AGAIN)
+            for index in range(1, len(steps) + 1):
+                ledger.record_step(change, index, saved=True)
+            record = ledger.change(change)
+        self.assertEqual(record.status, "applied")
+        text = visible(render_result(record))
+        self.assertIn("고르신 빨간 줄", text)
+        self.assertIn("공급 원가보다 싸집니다 이대로 바꿈 — 고르셨지만 쓰지 않았습니다: 이번 계산에는 그 빨간 줄에 걸린 칸이 없습니다 0 “원가 아래도 그대로”",
+                      text)
+
     def test_the_command_s_short_answer_carries_unused(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
@@ -258,6 +281,18 @@ class UnusedChoiceTest(unittest.TestCase):
             short = json.loads(done.stdout)
             self.assertEqual([(line["choice"], line["cells"], line["why"]) for line in short["unused"]], [("raise_list", 2, "held_kept")])
             self.assertEqual([line["choice"] for line in short["chosen"]], ["keep"])
+            # 장부에 적으면 그 번호의 결과 페이지도 그 고름과 하신 말을 싣는다
+            env = scene.env(folder / "기록")
+            done = subprocess.run([sys.executable, "-B", str(SCRIPT), "plan", "--snapshot", folder / "s.json", "--request", folder / "r.json",
+                                   "--resolutions", folder / "c.json", "--record", "--out", folder / "plan-3.json"],
+                                  capture_output=True, text=True, env=env)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            change = json.loads(done.stdout)["change_id"]
+            done = subprocess.run([sys.executable, "-B", str(SCRIPT), "render", "result", "--change", str(change), "--text"],
+                                  capture_output=True, text=True, env=env)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("정가보다 비싸집니다 | 정가도 12% 올림 (아동이 있는 칸은 아동 추가분은 그대로) — 고르셨지만 쓰지 않았습니다: 성인만 "
+                          f"있는 칸을 그대로 두셔서 같이 그대로 둡니다 | 0 | “{ChildTierCellTest.SAID}”", json.loads(done.stdout)["text"])
 
 
 class TierChoiceTest(unittest.TestCase):
