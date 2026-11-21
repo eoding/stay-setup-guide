@@ -11,7 +11,7 @@
     Gap          요금표로 맞출 때 넣지 않는 것 하나(요금표에 없는 칸 · 없는 인원 조합 · 판매일 없는 날 · 없는 객실) — Plan.coverage
     CellChange   칸 하나의 전 → 저장한 뒤 · 표시(예약 있는 날 · 마감) · 규칙 표의 판정 하나 · 빨간 줄에 고른 것.
                  저장 단계와 장부의 줄은 이것에서만 나온다
-    CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red)
+    CELL_RULES   칸 판정 규칙 표 — 적용할 수 없음(blocked) · 빨간 줄(red) · 같이 그대로(held)
     CellWrite    칸 하나에 넣을 값(필드마다 새 값 또는 비움)
     BulkStep     [선택 날짜 가격 수정] 저장 한 번 — 객실 × 요금제 × 줄과 값이 같은 날들(떨어져 있어도), 줄(RowWrite)마다 새 값
     CellEditStep 날짜 칸을 눌러 여는 셀 창 저장 한 번 — 칸 하나의 정가·공급 원가를 비운다
@@ -349,8 +349,8 @@ class CellChange:
 
     @property
     def writes(self) -> dict[str, Decimal | None]:
-        """저장이 이 칸에 넣는 필드 → 값(비우면 None). 적용할 수 없는 칸 · 아직 고르지 않은 빨간 줄은 넣지 않는다."""
-        if CELL_RULES.severity(self.verdict) == BLOCKED or self.waiting:
+        """저장이 이 칸에 넣는 필드 → 값(비우면 None). 적용할 수 없는 칸 · 같이 그대로 두는 칸 · 아직 고르지 않은 빨간 줄은 넣지 않는다."""
+        if CELL_RULES.severity(self.verdict) in (BLOCKED, HELD) or self.waiting:
             return {}
         return {name: getattr(self.after, name) for name in self.changed}
 
@@ -374,6 +374,8 @@ CHOICE_LABELS = {
 # 차례를 따른다 — 정가보다 비싸짐 → 1박 가격보다 비싸짐(`bulk_price_adjust.build_preview`). 공급 원가 · 30% 는 ERP 에 없는 도우미의
 # 확인이라 그 뒤다.
 TIER_RULE = "ABOVE_ONE_NIGHT"
+HELD = "held"           # 같이 그대로 — 다른 칸을 따라 저장하지 않는다(고를 것이 아니고, ERP 가 받지 않는 값도 아니다)
+HELD_RULE = "ADULT_HELD"
 CELL_RULES = RuleTable(
     Rule("NOT_POSITIVE", "0 이하가 됩니다", BLOCKED, (),
          lambda before, after, lacking, tier: after is not None and after.sell <= 0),
@@ -387,6 +389,10 @@ CELL_RULES = RuleTable(
          lambda before, after, lacking, tier: lacking == "sell"),
     Rule("NEW_NOT_SHOWN", "이 객실·요금제에 없는 인원 조합·박수라 칸을 새로 만들지 않습니다", BLOCKED, (),
          lambda before, after, lacking, tier: lacking == "row"),
+    # 아동이 든 칸은 같은 객실 · 요금제 · 날짜 · 박수 층의 성인만 있는 칸이 새 값을 받지 않으면 같이 그대로 둔다 — 칸 하나로 정할 수
+    # 없어(같은 날 성인 칸의 고름 · 판정 · 박수 층 규칙) 계산(price_plan.resolve)이 정해 단다. ERP `_skip_followers_of_skipped_adult_cells`.
+    Rule(HELD_RULE, "성인만 있는 칸을 바꾸지 않아 같이 그대로 둡니다", HELD, (),
+         lambda before, after, lacking, tier: False),
     Rule("ABOVE_LIST", "정가보다 비싸집니다", RED, ("raise_list", "clear_list", "keep"),
          lambda before, after, lacking, tier: after is not None and after.list is not None and after.sell > after.list),
     Rule(TIER_RULE, "박수 층이 1박 이상 가격보다 비싸집니다", RED, ("include", "keep"),

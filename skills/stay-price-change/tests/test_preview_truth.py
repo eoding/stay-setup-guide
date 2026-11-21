@@ -219,22 +219,44 @@ class PreviewTruthTest(CommandCase):
         sea = [key for key in over if key.room == "스탠다드 바다 전망"]
         # 1박 이상 줄을 안 바꾸면 스탠다드의 성인 2 · 3박 이상(90.00 → 100.80)이 그날 1박 이상(100.00)보다 비싸진다 — 박수 층 빨간 줄(Y2).
         # 안 바꿈은 네 날 모두, 섞음은 1박 이상을 안 바꾼 12/7 하루. 아동 줄의 3박 이상은 1박 이상보다 싸게 남는다.
+        # 검토 2 — 섞음에서 12/7 스탠다드 성인 2 · 1박 이상을 안 바꾸면 그날 아동 줄의 1박 이상 둘(정가도 같이 올림을 골랐어도)은 같이
+        # 그대로다: 고른 칸 25 → 23, 같이 그대로 2. 저장 횟수는 그대로 6.
         cases = {
-            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}], 2, 24),
-            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워"}], 26, 24),
-            "keep": ([{"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬"}, {"rule": "ABOVE_ONE_NIGHT", "choice": "keep", "said": "그 칸은 그냥 둬"}], 1, 28),
+            "raise": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}], 2, 24, 0),
+            "clear": ([{"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워"}], 26, 24, 0),
             "mixed": ([{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"},
                        {"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가는 지워", "cells": [encode_key(sea[0])]},
                        {"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬", "cells": [encode_key(over[0]), encode_key(sea[-1])]},
-                       {"rule": "ABOVE_ONE_NIGHT", "choice": "include", "said": "그대로 바꿔"}], 6, 25),
+                       {"rule": "ABOVE_ONE_NIGHT", "choice": "include", "said": "그대로 바꿔"}], 6, 23, 2),
         }
-        for name, (choices, saves, chosen) in cases.items():
+        for name, (choices, saves, chosen, held) in cases.items():
             with self.subTest(name):
                 planned, page = self.check(f"trial-{name}", snapshot, request, choices)
                 self.assertEqual(len(planned["steps"]), saves)
-                self.assertEqual((planned["counts"]["cells"], planned["counts"]["red"], planned["counts"]["chosen"]), (36, 0, chosen))
-                self.assertEqual(planned["counts"]["ABOVE_ONE_NIGHT"], chosen - 24)
+                self.assertEqual((planned["counts"]["cells"], planned["counts"]["red"], planned["counts"]["chosen"], planned["counts"]["held"]),
+                                 (36, 0, chosen, held))
+                self.assertEqual(planned["counts"]["ABOVE_ONE_NIGHT"], 1 if name == "mixed" else 0)
                 self.assertNotIn("골라 주세요", page)
+
+    def test_the_trial_shape_kept_on_every_red_line_saves_nothing_as_the_erp_would(self):
+        """검토 2 — 안 바꿈은 예전에 1번 저장했다: 성인 2 · 3박 이상을 박수 층 규칙으로 그대로 두고도 아동 줄의 3박 이상 8칸을 옮겨
+        아동 추가분이 13.50 → 23.30 이 됐다. ERP 는 성인 칸을 건너뛰면 아동 칸도 따라 건너뛴다 — 이제 그 8칸은 같이 그대로이고 저장할 것이
+        없다."""
+        snapshot, request = trial_scene.snapshot(), trial_scene.request()
+        folder = self.dir / "trial-keep"
+        folder.mkdir()
+        keep = [{"rule": "ABOVE_LIST", "choice": "keep", "said": "그 칸은 그냥 둬"}, {"rule": "ABOVE_ONE_NIGHT", "choice": "keep", "said": "그 칸은 그냥 둬"}]
+        short = self.run_cli("plan", "--snapshot", self.write("trial-keep/snapshot.json", encode_snapshot(snapshot)),
+                             "--request", self.write("trial-keep/request.json", encode_request(request)),
+                             "--resolutions", self.write("trial-keep/choices.json", keep), "--record", "--out", folder / "plan.json")
+        self.assertEqual((short["saves"], short["counts"]["will_change"], short["counts"]["chosen"], short["counts"]["held"]), (0, 0, 28, 8))
+        page = Path(self.run_cli("render", "preview", "--plan", folder / "plan.json", "--out", folder / "preview.html")["page"])
+        grid = read_grid(page.read_text(encoding="utf-8"))
+        for occupancy in ("성인 2 + 아동 1 · 3박 이상", "성인 2 + 아동 2 · 3박 이상"):
+            for day in ("12/7 월", "12/8 화", "12/10 목", "12/14 월"):
+                cell = [text for _tag, _cls, text in grid[("스탠다드 · 조식 포함", day, occupancy)]]
+                self.assertIn("성인 칸 따라 그대로", cell, (day, occupancy))
+                self.assertNotIn("→", cell)
 
     def test_the_trial_shape_says_the_raised_list_price_in_the_red_line_box_and_the_cell(self):
         planned, page = self.check("trial-words", trial_scene.snapshot(), trial_scene.request(),

@@ -33,7 +33,7 @@ from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 
 from price_model import (
-    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
+    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
     CellValue, ChangeRequest, Gap, Plan, Snapshot, cell_name, day_label, decode_request, key_of_item, line_label, nights_label,
     occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
@@ -233,6 +233,9 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
         if severity == BLOCKED:
             was = "가격 없음" if change.before.sell is None else fmt_money(change.before.sell, currency)
             return "blocked", f'<span class="was">{was}</span><span class="tag blocked">적용할 수 없음</span>'
+        if severity == HELD:
+            return "none", (f'<span class="was">{fmt_money(change.before.sell, currency)}</span><small class="more">그대로</small>'
+                            '<span class="tag chosen">성인 칸 따라 그대로</span>')
         if change.choice == "keep":
             was = "가격 없음" if change.before.sell is None else fmt_money(change.before.sell, currency)
             return "chosen", (f'<span class="was">{was}</span>'
@@ -258,7 +261,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
             f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>' if sheet else "", _preview_banners(plan, tally),
             stats([(tally["will_change"], "바뀌는 칸"), (tally["red"], "빨간 줄 (고르기 전)")]
                   + ([(tally["chosen"], "고른 빨간 줄")] if tally["chosen"] else [])
-                  + [(tally["blocked"], "적용할 수 없는 칸")]
+                  + [(tally["blocked"], "적용할 수 없는 칸")] + ([(tally["held"], HELD_STAT)] if tally["held"] else [])
                   + ([(tally["reserved"], "예약 있는 날의 칸 (바꿉니다)")] if tally["reserved"] else [])
                   + ([(tally["closed"], "판매 마감인 칸 (값만 바뀌고 마감은 그대로)")] if tally["closed"] else [])
                   + [(tally["skipped"], "건너뛰는 칸")] + ([(tally["new"], "새로 생기는 칸")] if tally["new"] else [])),
@@ -469,6 +472,9 @@ CHOSEN_GROUPS = {   # 고른 빨간 줄 띠의 머리 — 고르기 전에 계�
     "OVER_30": "30% 넘게 바뀌던 칸",
 }
 RAISE_WITHOUT_ERP = "ERP 에는 이런 바꾸기의 정가 규칙이 없어, 판매가가 오른 만큼 정가도 올려 저장합니다."
+HELD_STAT = "성인 칸을 따라 그대로 두는 칸"
+HELD_NOTE = ("아동이 든 칸은 같은 날 · 같은 박수 층의 성인만 있는 칸과 같이 움직여야 아동 추가분이 그대로 남습니다(ERP [선택 날짜 "
+             "가격 가감]과 같습니다). 그 성인 칸을 바꾸면 이 칸도 바뀝니다.")
 
 
 def red_lines(plan: Plan) -> list[dict]:
@@ -520,6 +526,9 @@ def _preview_banners(plan: Plan, tally: Mapping) -> str:
         reasons = " · ".join(f"{rule.label} {tally[rule.code]}칸" for rule in blocked)
         out.append(f'<div class="banner amber"><b>적용할 수 없음 · {tally["blocked"]}칸</b> ERP 가 받지 않는 값이라 이 칸은 '
                    f'바꾸지 않습니다. ({esc(reasons)})</div>')
+    if tally["held"]:
+        out.append(f'<div class="banner amber"><b>같이 그대로 · {tally["held"]}칸</b> {esc(CELL_RULES.by_code["ADULT_HELD"].label)} '
+                   f'— {esc(HELD_NOTE)}</div>')
     messages = {
         "ABOVE_LIST": ("정가(줄 그은 값)를 넘습니다.", "ERP 는 판매가가 정가보다 비싼 것을 받지 않습니다. 이 칸은 골라 주세요: "),
         "ABOVE_ONE_NIGHT": (f"같은 날 {nights_label(1)} 가격보다 비싼 박수 층이 됩니다.",
@@ -555,7 +564,7 @@ def _flagged_section(plan: Plan, currency: str) -> str:
     rows = []
     for change in flagged:
         rule = CELL_RULES.by_code[change.verdict]
-        after = change.after or change.before
+        after = change.before if rule.severity == HELD else change.after or change.before
         if change.choice == "keep":
             moved = "그대로"
         else:
@@ -564,6 +573,10 @@ def _flagged_section(plan: Plan, currency: str) -> str:
             why = (f'<span class="tag chosen">고름</span> '
                    f'{esc(choice_words(plan.request, change.choice, currency, [change.key]))}')
             choices = "고르신 대로 그대로 둡니다(저장하지 않습니다)" if change.choice == "keep" else "고르신 대로 저장합니다"
+        elif rule.severity == HELD:
+            moved = "그대로"
+            why = f'<span class="tag chosen">그대로</span> {esc(rule.label)}'
+            choices = "성인만 있는 칸을 바꾸면 같이 바뀝니다(저장하지 않습니다)"
         else:
             kind, word = ("blocked", "적용할 수 없음") if rule.severity == BLOCKED else ("red", "빨간 줄")
             why = f'<span class="tag {kind}">{word}</span> {esc(rule.label)}'

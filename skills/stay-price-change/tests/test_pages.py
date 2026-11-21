@@ -91,9 +91,12 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
 
         kept = resolve(plan_change(scene.snapshot(), scene.request()), [Resolution("ABOVE_LIST", "keep")])
         text = visible(render_preview(kept, steps=plan_steps(kept)))
-        self.assertIn("88 바뀌는 칸", text, "안 바꾸기로 고른 칸은 바뀌는 칸에서 빠진다")
+        self.assertIn("86 바뀌는 칸", text, "안 바꾸기로 고른 칸과 그 칸을 따라 그대로 두는 아동 칸은 바뀌는 칸에서 빠진다")
+        self.assertIn("2 성인 칸을 따라 그대로 두는 칸", text)
         self.assertIn("480.00 그대로 그 칸은 안 바꿈", text)
+        self.assertIn("510.00 그대로 성인 칸 따라 그대로", text, "검토 2 — 성인 2 를 480.00 에 두면 성인 2 + 아동 1 도 510.00 그대로")
         self.assertNotIn("480.00 → 528.00", text)
+        self.assertNotIn("510.00 → 558.00", text)
 
     def test_y3_the_preview_ends_with_what_is_needed_first_and_never_invites_apply_while_a_choice_is_open(self):
         def ending(plan):
