@@ -95,7 +95,7 @@ def open_ledger() -> Ledger:
 
 
 PAGE_NAMES = {"preview": "미리보기", "result": "적용 결과", "rollback": "되돌리기 미리보기", "prices": "지금 가격",
-              "sheet": "요금표 읽은 것",   # result 는 되돌리기의 결과면 「되돌리기 결과」(price_pages.result_name)
+              "sheet": "요금표 읽은 것",   # result 는 되돌리기면 「되돌리기 결과」, 멈췄으면 「적용하다 멈춤」(price_pages.result_name)
               "compare": "저장해 둔 상태와 견주기"}
 
 

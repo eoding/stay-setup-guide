@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import html
+import re
 from datetime import date, datetime
 from html.parser import HTMLParser
 from typing import Iterable, Mapping
@@ -189,13 +190,17 @@ def steps_list(steps, sizes: Mapping[int, int] | None = None, unit: str = "칸")
 
 
 MOVED_ERRORS = ("ERP 화면의 값이 읽은 값과 다릅니다", "창의 값이 읽은 값과 다릅니다")   # 페이지가 누르기 전에 화면이 읽은 값과 달라 거절한 답의 머리(stay_price.js)
-MOVED_NOTE = "미리보기 뒤에 ERP 에서 그 저장의 값이 바뀌어 아무것도 넣지 않았습니다"
+MOVED_NOTE = "미리보기 뒤에 ERP 에서 그 저장의 {what} 바뀌어 아무것도 넣지 않았습니다"
+MOVED_COUNT = re.compile(re.escape(MOVED_ERRORS[0]) + r"\((\d+)칸\)")   # 묶음 저장의 거절은 칸 수를 댄다 — 창 하나의 거절은 그 하나다
 
 
 def plain_note(note: str | None) -> str | None:
     """저장 메모를 담당자가 읽을 말로 — 그 사이 화면이 바뀌어 페이지가 거절한 답(인원 조합 키 · 「읽은 값 … 화면 …」이 든 글)은 쉬운 한
-    문장으로 바꾼다. 장부에는 페이지의 글 그대로 남는다(기록)."""
-    return MOVED_NOTE if note and note.startswith(MOVED_ERRORS) else note
+    문장으로 바꾼다(묶음 저장이면 바뀐 칸 수와 함께 — 도우미가 하는 말과 같다, stopped.md 2). 장부에는 페이지의 글 그대로 남는다(기록)."""
+    if not (note and note.startswith(MOVED_ERRORS)):
+        return note
+    count = MOVED_COUNT.match(note)
+    return MOVED_NOTE.format(what=f"칸 {count.group(1)}개가" if count else "값이")
 
 
 def stop_view(record):
@@ -277,6 +282,14 @@ def _stop_banner(record, cause: str | None) -> str:
     note = plain_note(failed.note)
     why = f"({esc(note.rstrip('.'))})" if note else ""
     return f'<div class="banner red"><b>{failed.index}번째 저장에서 멈췄습니다</b>{why}. {now}</div>'
+
+
+def result_word(record, undoes: bool) -> str:
+    """결과 페이지의 이름(제목과 파일 이름) — 「적용 결과」 · 되돌리기(`undoes`)면 「되돌리기 결과」. 멈춘 변경(stop_view)이면
+    「적용하다 멈춤」 · 「되돌리다 멈춤」이다 — 기록 폴더의 파일 목록이 다 적용한 것처럼 읽히지 않게."""
+    if stop_view(record) is not None:
+        return "되돌리다 멈춤" if undoes else "적용하다 멈춤"
+    return "되돌리기 결과" if undoes else "적용 결과"
 
 
 def result_banner(record, written: int, mismatched: int, unit: str = "칸") -> str:

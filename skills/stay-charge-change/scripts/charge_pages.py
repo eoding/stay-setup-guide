@@ -13,7 +13,8 @@ from charge_model import AGE, FIELD_LABELS, ITEM_KIND, Charge, Listing, Place, S
 from charge_plan import CHOICE_LABELS, RULES, AmountChange, Plan, counts, form_refusal, unused
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner, nothing_left,
-    notes, page, reread, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices, times_word,
+    notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices,
+    times_word,
     unremovable_table,
 )
 from change_core.ledger import ChangeRecord
@@ -187,12 +188,15 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     return page(title, "\n".join(body), MAKER)
 
 
+def result_name(record: ChangeRecord) -> str:
+    """결과 페이지의 이름(제목과 파일 이름) — 「적용 결과」 · 「되돌리기 결과」, 멈췄으면 「…하다 멈춤」(chrome.result_word)."""
+    return result_word(record, record.kind == "rollback")
+
+
 def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None, names: Sequence[str] = ()) -> str:
     """장부의 변경 하나의 결과 — 칸마다 넣은 값과 다시 읽어 맞았는지. `moved` 는 그대로여야 할 칸이 달라진 것(verify 의 답)."""
     currency = record.currency
-    rollback = record.kind == "rollback"
-    name = "되돌리기 결과" if rollback else "적용 결과"
-    title = f"{name} · {record.hotel} · 부과금"
+    title = f"{result_name(record)} · {record.hotel} · 부과금"
     written = [row for row in record.rows if row.written and row.action and not row.rolled_back_by]
     mismatched = [row for row in written if record.verified_at and not row.verified]
     waiting = [row for row in record.rows if row.action and not row.written]
@@ -243,8 +247,12 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     if nothing_left(record):   # ERP 에 이 변경의 값이 하나도 없다 — 손님 화면 · 되돌리는 법은 말하지 않는다
         body.append(notes([f"기록: {ledger_path}"]) if ledger_path else "")
     elif record.status in ("applied", "stopped"):
-        said = [GUEST_NOTE, UNDO_ONCE if record.kind == "rollback"
-                else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+        undo = [UNDO_ONCE] if record.kind == "rollback" else []
+        if stop is None:
+            said = [GUEST_NOTE, *(undo or [f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.'])]
+        else:   # 멈췄다 — 새 금액은 저장한 칸만이고, 되돌리는 법은 위의 「어떻게 할까요?」가 말한다
+            said = [f"저장한 {len(written):,}칸은 손님 화면에 곧(길어야 몇 분) 새 금액으로 보입니다. 이미 받은 예약의 금액은 바뀌지 않습니다.",
+                    *undo]
         if ledger_path:
             said.insert(1, f"기록: {ledger_path}")
         body.append(notes(said))

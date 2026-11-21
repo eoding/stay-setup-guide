@@ -50,7 +50,7 @@ from charge_model import (
 )
 from charge_pages import (
     UNIT, blocked_amounts, chosen_amounts, free_amounts, red_lines, render_preview, render_prices, render_result,
-    render_rollback, render_window,
+    render_rollback, render_window, result_name,
 )
 from charge_plan import (
     PlanError, charge_filter, counts, decode_plan, decode_step, encode_plan, encode_step, plan_change, plan_charge_rollback,
@@ -235,7 +235,7 @@ def cmd_render(args):
         record = ledger.change(args.change)
         moved = moved_since(ledger, args.change, decode_snapshot(load(args.snapshot))) if args.snapshot else ()
         html, hotel = render_result(record, moved, str(ledger.path), written_names(ledger, record)), record.hotel
-        name = "부과금 되돌리기 결과" if record.kind == "rollback" else name
+        name = f"부과금 {result_name(record)}"
     if args.text:           # 글만 옮길 때 — 페이지 파일을 하나 더 만들지 않는다
         return dict(text=page_text(html))
     path = files.write_out(args.out or page_path(hotel, name), html)

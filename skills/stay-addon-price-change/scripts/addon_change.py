@@ -50,7 +50,7 @@ from addon_model import (
 )
 from addon_pages import (
     UNIT, blocked_lines, chosen_lines as chosen_said, red_lines, render_preview, render_prices, render_result, render_rollback,
-    render_window, scope_card,
+    render_window, result_name, scope_card,
 )
 from addon_plan import (
     LineChange, Plan, PlanError, counts, decode_step, encode_step, line_filter, plan_change, plan_line_rollback, plan_steps,
@@ -255,7 +255,7 @@ def cmd_render(args):
         record = ledger.change(args.change)
         moved = moved_since(ledger, args.change, decode_snapshot(load(args.snapshot))) if args.snapshot else ()
         html, hotel = render_result(record, moved, str(ledger.path), written_names(ledger, record)), record.hotel
-        name = "부가옵션 되돌리기 결과" if record.kind == "rollback" else name
+        name = f"부가옵션 {result_name(record)}"
     if args.text:           # 글만 옮길 때 — 페이지 파일을 하나 더 만들지 않는다
         return dict(text=page_text(html))
     path = files.write_out(args.out or page_path(hotel, name), html)

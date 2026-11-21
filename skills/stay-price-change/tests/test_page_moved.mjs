@@ -71,6 +71,11 @@ test('A1 · 첫 저장 뒤 다른 사람이 두 번째 저장의 칸을 바꿨�
     assert.ok(!/지금 [\d,.]+/.test(text), text);
     assert.match(text, /도우미는 이 칸에 아무것도 넣지 않았습니다\./);
     assert.ok(!/로그인|읽은 값 판매가|화면 판매가|미리보기를 새로 만듭니다/.test(text), text);
+    // 시운전 8 F3 — 멈춘 변경의 페이지는 이름도 파일 이름도 「적용하다 멈춤」, 첫 줄은 바뀐 칸 수를 댄다
+    assert.match(text, /^적용하다 멈춤 · /);
+    assert.match(text, /2번째 저장에서 멈췄습니다 \(미리보기 뒤에 ERP 에서 그 저장의 칸 1개가 바뀌어 아무것도 넣지 않았습니다\)/);
+    const { page: file } = flow.must('render', 'result', '--change', change);
+    assert.match(file, / · 적용하다 멈춤\.html$/);
   } finally {
     flow.close();
     page.w.close();

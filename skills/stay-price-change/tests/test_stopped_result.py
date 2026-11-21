@@ -30,7 +30,7 @@ from dataclasses import replace  # noqa: E402
 from price_model import (  # noqa: E402
     CellKey, decode_resolution_items, encode_key, encode_request, encode_snapshot, encode_step, snapshot_reading,
 )
-from price_pages import render_result  # noqa: E402
+from price_pages import render_result, result_name  # noqa: E402
 from price_plan import (  # noqa: E402
     plan_cell_rollback, plan_change, plan_steps, preview_rows, resolve, rollback_rows, rollback_writes, save_steps, step_plans,
 )
@@ -222,8 +222,8 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
     def test_before_any_check_the_page_does_not_promise_that_continuing_is_possible(self):
         self.refuse()
         text = self.page()
-        self.assertIn("2번째 저장에서 멈췄습니다 (미리보기 뒤에 ERP 에서 그 저장의 값이 바뀌어 아무것도 넣지 않았습니다). "
-                      "지금은 일부만 바뀐 상태입니다.", text)
+        self.assertIn("2번째 저장에서 멈췄습니다 (미리보기 뒤에 ERP 에서 그 저장의 칸 1개가 바뀌어 아무것도 넣지 않았습니다). "
+                      "지금은 일부만 바뀐 상태입니다.", text, "U3 — 첫 줄이 바뀐 칸 수를 댄다(도우미의 말과 같다)")
         self.assertIn("이어서 할 수 있는지는 ERP 를 다시 읽어 봐야 압니다 — 그 사이 바뀐 칸이 있으면 이어서 하지 않습니다.", text)
         self.assertIn("이어서 — 남은 저장 한 번을 마저 적용합니다(아래 표의 「아직 저장 안 함」 12칸이 그 값으로 바뀝니다). "
                       "다시 읽어 그 사이 바뀐 칸이 없을 때만 합니다.", text)
@@ -253,11 +253,24 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
         self.assertIn("아직 저장 안 함 · 2번째 저장", tags(other), "바뀌지 않은 칸은 넣으려던 값 그대로 보인다")
         self.assertNotIn("로그인", text)
         self.assert_plain(text)
+        self.assert_stopped_ends(text)
+
+    def assert_stopped_ends(self, text):
+        """시운전 8 F3 — 멈춘 변경의 페이지는 이름이 「적용하다 멈춤」이고, 손님 화면 · 손입력 줄은 저장한 칸을 그 수로 말하고, 되돌리는
+        법은 위의 「어떻게 할까요?」 한 곳에서만 말한다."""
+        self.assertEqual(text.splitlines()[0], "적용하다 멈춤 · 시운전 모양 호텔 · 기본 오퍼")
+        self.assertEqual(result_name(self.ledger(7).change(self.change)), "적용하다 멈춤", "파일 이름도")
+        self.assertIn("저장한 24칸은 손님 화면에 길어야 5분 안에 새 가격으로 보입니다. 결제 금액은 바로 새 가격입니다.", text)
+        self.assertIn("저장한 24칸은 ERP 에서 '손입력'으로 표시됩니다.", text)
+        self.assertNotIn("이 칸들은", text)
+        self.assertNotIn("되돌리려면 대화창에서", text, "되돌리기는 고를 것에 있다 — 두 번 말하지 않는다")
+        self.assertIn("된 것까지 되돌리기 —", text)
 
     def test_after_a_check_that_allows_it_the_page_offers_continuing(self):
         self.refuse(note="드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다")
         self.assertTrue(self.check(moved=False).can_continue)
         text = self.page()
+        self.assertEqual(text.splitlines()[0], "적용하다 멈춤 · 시운전 모양 호텔 · 기본 오퍼", "이어서 할 수 있어도 아직 멈춘 변경이다")
         self.assertIn("2번째 저장에서 멈췄습니다 (드로어 표에 없는 줄이나 칸이 있어 저장하지 않았습니다). 지금은 일부만 바뀐 상태입니다.", text)
         self.assertIn("10시 6분에 ERP 를 다시 읽어 보니 남은 저장의 칸이 미리보기 때와 같았습니다 — 이어서 할 수 있습니다.", text)
         self.assertIn("이어서 — 남은 저장 한 번을 마저 적용합니다(아래 표의 「아직 저장 안 함」 12칸이 그 값으로 바뀝니다).", text)
@@ -303,6 +316,16 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
         for index in range(1, len(steps) + 1):
             self.ledger(minutes + 0.5).record_step(rid, index, saved=True)
         return rid
+
+    def test_a_change_that_finished_keeps_its_name_its_footer_and_the_undo_hint(self):
+        self.ledger(2).record_step(self.change, 2, saved=True)
+        record = self.ledger(3).change(self.change)
+        text = page_text(render_result(record))
+        self.assertEqual((record.status, result_name(record)), ("applied", "적용 결과"))
+        self.assertEqual(text.splitlines()[0], "적용 결과 · 시운전 모양 호텔 · 기본 오퍼")
+        self.assertIn("손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.", text)
+        self.assertIn("이 칸들은 ERP 에서 '손입력'으로 표시됩니다.", text)
+        self.assertIn('되돌리려면 대화창에서 "1번 되돌려" 또는 "방금 것 되돌려"라고 하세요.', text)
 
     def test_the_login_sentence_comes_only_when_the_cause_can_be_a_lost_login(self):
         self.refuse(note="모름", unknown=True)

@@ -24,7 +24,8 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
     MOVED_TAG, UNDO_ONCE, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
-    notes, page, reread, result_banner, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view, stopped_choices,
+    notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view,
+    stopped_choices,
     unremovable_table,
 )
 from change_core.files import record_progress
@@ -680,10 +681,15 @@ def _waiting_tag(view: CellView, steps: Mapping) -> str:
     return f'<span class="tag wait">{"저장됐는지 모름" if unknown else "아직 저장 안 함"}{where}</span>'
 
 
+def _undoes(record: ChangeRecord) -> bool:
+    """되돌리기인가 — 변경 되돌리기 · 저장해 둔 상태로 되돌리기."""
+    return record.kind == "rollback" or (record.request or {}).get("kind") == "restore_snapshot"
+
+
 def result_name(record: ChangeRecord) -> str:
-    """결과 페이지의 이름 — 되돌리기(변경 되돌리기 · 저장해 둔 상태로 되돌리기)면 「되돌리기 결과」, 아니면 「적용 결과」."""
-    restore = (record.request or {}).get("kind") == "restore_snapshot"
-    return "되돌리기 결과" if record.kind == "rollback" or restore else "적용 결과"
+    """결과 페이지의 이름(제목과 파일 이름) — 「적용 결과」 · 「되돌리기 결과」, 멈춘 변경이면 「적용하다 멈춤」 · 「되돌리다 멈춤」
+    (chrome.result_word)."""
+    return result_word(record, _undoes(record))
 
 
 def _moved_cell(before: CellValue, now, currency: str, seen_at: str) -> str:
@@ -791,10 +797,15 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
     if nothing_left(record):   # ERP 에 이 변경의 값이 하나도 없다 — 손님 화면 · 되돌리는 법은 말하지 않는다
         body.append(notes([f"기록: {ledger_path}"]) if ledger_path else "")
     elif record.status in ("applied", "stopped"):
-        lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
-                 "이미 받은 예약의 금액은 그대로입니다.",
-                 MARK_ON_ROLLBACK if result_name(record) == "되돌리기 결과" else MARK,
-                 UNDO_ONCE if result_name(record) == "되돌리기 결과" else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+        undoes = _undoes(record)
+        if stop is None:
+            lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
+                     "이미 받은 예약의 금액은 그대로입니다.", MARK_ON_ROLLBACK if undoes else MARK,
+                     UNDO_ONCE if undoes else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+        else:   # 멈췄다 — 새 가격 · 출처 표시는 저장한 칸만이고, 되돌리는 법은 위의 「어떻게 할까요?」가 말한다
+            saved = f"저장한 {len(written):,}칸은"
+            lines = [f"{saved} 손님 화면에 길어야 5분 안에 새 가격으로 보입니다. 결제 금액은 바로 새 가격입니다.",
+                     "이미 받은 예약의 금액은 그대로입니다.", f"{saved} ERP 에서 '손입력'으로 표시됩니다.", *([UNDO_ONCE] if undoes else [])]
         if ledger_path:
             lines.insert(3, f"기록: {ledger_path}")
         body.append(notes(lines))

@@ -375,6 +375,12 @@ class StoppedTest(Flow):
         self.assertIn("다시 읽은 값은 그때 ERP 에 있던 값이고, 그 뒤에 또 바뀌었을 수 있습니다.", text)
         self.assertNotRegex(text, r"지금 [\d,.]+")
         self.assertNotIn("로그인", text)
+        # 시운전 8 F3 — 이름은 「적용하다 멈춤」, 손님 화면 줄은 저장한 칸을 그 수로, 되돌리는 법은 고를 것에만
+        self.assertTrue(text.splitlines()[0].startswith("적용하다 멈춤 · "), text)
+        self.assertRegex(text, r"저장한 \d+칸은 손님 화면에 곧\(길어야 몇 분\) 새 금액으로 보입니다\.")
+        self.assertNotIn("되돌리려면 대화창에서", text)
+        page = self.cli("render", "result", "--change", change)["page"]
+        self.assertTrue(page.endswith(" · 부과금 적용하다 멈춤.html"), page)
 
     def test_a_saved_step_is_never_handed_out_again(self):
         change, plan = self.preview(self.request(LATE_BAND, value="60"))
