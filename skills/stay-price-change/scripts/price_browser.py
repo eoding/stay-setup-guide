@@ -8,7 +8,8 @@
     reserved_round(probes, results)       물음과 답 → 남은 물음, 다 끝났으면 쓸 가감 확인 단계(숨긴 줄 0)
     reading_time(results)                 읽기 한 번이 ERP 를 읽은 시각 — readPair · readReserved 답의 끝난 시각 가운데 가장 이른 것
     pair_reads(results)                   readPair 답 → PairRead — 객실은 물은(캘린더 칩의) 이름, 화면의 오퍼·요금제가 다르면 거절
-    step_call(no, hotel, offer, kind, body)  장부의 저장 단계 하나 → applyBulk / applyCell 부를 값
+    step_call(no, hotel, offer, kind, body)  장부의 저장 단계 하나 → applyBulk / applyCell 부를 값(쓰는 값만)
+    step_calls(hotel, offer, steps, reading)  장부의 저장 단계들 → 부를 값들 — 칸마다 누르기 전에 화면에 있어야 할 값(`was`)을 싣는다
 
 부를 값에는 언제나 `hotel`({id, name} — stayPrice.look() 의 hotel)이 든다. 페이지는 무엇이든 누르기 전에 탭이 그 번호의 호텔인지
 보고, 아니면 두 호텔을 대며 거절한다.
@@ -20,7 +21,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Iterable, Mapping
 
@@ -28,7 +29,8 @@ from change_core import answers as shared
 from change_core.answers import BrowserError, ask_sum, attach_bodies
 from change_core.money import money_text
 from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
-from price_model import ERP_MAX_DAYS, FIELDS, WEEKDAYS, day_windows, decode_step, iso_day
+from price_model import (ERP_MAX_DAYS, FIELDS, MISSING, WEEKDAYS, CellKey, CellValue, RowWrite, Snapshot, day_windows, decode_step,
+                         iso_day)
 
 READ_SPAN = 186                      # readPair 한 번의 기간 — 달마다 달력 칸을 보므로(판매일 확인) 여섯 달 남짓으로 끊어 45초 안에
 # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES). 읽기는 readPair · readReserved 를 다 부른 뒤에 조각을 받으므로(take),
@@ -227,3 +229,52 @@ def step_call(no: int, hotel: Mapping, offer: str, kind: str, body: Mapping) -> 
     return {"no": no, "op": OPS[step.kind], "payload": payload}
 
 
+def _shown(value: CellValue) -> list:
+    """칸 하나가 화면에 보일 값 — [판매가, 정가, 공급 원가] 금액 글자(없으면 null). 판매가가 null 이면 칸이 없다(가격 없음)."""
+    return [money_text(getattr(value, name)) for name in FIELDS]
+
+
+def _runs(dates, values) -> list[list]:
+    """단계의 날짜(차례대로)와 날마다 있어야 할 값 → `[첫 날, 끝 날, 판매가, 정가, 공급 원가]` 목록. 단계의 날짜 목록에서 잇달아 같은
+    값인 날들을 한 줄로 묶는다(끝 날까지의 단계 날짜가 그 줄의 날이다 — 사이의 고르지 않은 날은 들지 않는다)."""
+    runs: list[list] = []
+    for day, value in zip(dates, values):
+        shown = _shown(value)
+        if runs and runs[-1][2:] == shown:
+            runs[-1][1] = day
+        else:
+            runs.append([day, day, *shown])
+    return runs
+
+
+def _after(value: CellValue, row: RowWrite) -> CellValue:
+    """묶음 저장 한 줄이 칸 하나에 넣은 뒤의 값 — 넣은 필드만 바뀐다. 없던 칸은 판매가를 넣으면 생긴다."""
+    written = {name: getattr(row, name) for name in FIELDS if getattr(row, name) is not None}
+    if value.state == "missing":
+        return CellValue(written["sell"], written.get("list"), written.get("supply"), "open") if "sell" in written else value
+    return replace(value, **written)
+
+
+def step_calls(hotel: Mapping, offer: str, steps: Iterable[tuple[int, str, Mapping]], reading: Snapshot) -> list[dict]:
+    """장부의 저장 단계들(번호 · 종류 · `encode_step` 모양, 차례대로) → 부를 값들. 단계가 쓰는 칸마다 누르는 순간 화면에 있어야 할
+    값을 `was` 로 싣는다 — 그 계산이 바탕으로 삼은 읽은 값(`reading`, 장부에 적힌 것) 위에 앞 단계들이 넣은 값을 얹은 것이다(같은
+    칸을 셀 창이 먼저 비우고 묶음 저장이 판매가를 넣는 때가 있다). 묶음 저장은 줄마다 `was: [[첫 날, 끝 날, 판매가, 정가, 공급
+    원가], …]`(`_runs`), 셀 창은 `was: [판매가, 정가, 공급 원가]`. 페이지는 무엇이든 치기 전에 화면의 값(가격 수정 ② 의 「기존」 줄 ·
+    셀 창의 줄)과 견주고, 다르면 치지도 누르지도 않고 거절한다 — 그 사이 다른 손이 바꾼 값을 낡은 계산으로 덮지 않는다. 그래서
+    저장된 칸의 장부 「전 값」은 누른 순간 화면에 있던 값이다."""
+    seen = dict(reading.cells)
+    calls = []
+    for no, kind, body in steps:
+        call, step = step_call(no, hotel, offer, kind, body), decode_step(dict(body, kind=kind))
+        if step.kind == "cell_edit":
+            value = seen.get(step.key, MISSING)
+            call["payload"]["was"] = _shown(value)
+            if value.state != "missing":
+                seen[step.key] = replace(value, **{name: None for name in step.clear})
+        else:
+            for row, sent in zip(step.rows, call["payload"]["rows"]):
+                keys = [CellKey(step.room, step.rate_plan, day, row.occupancy, row.nights) for day in step.dates]
+                sent["was"] = _runs(step.dates, [seen.get(key, MISSING) for key in keys])
+                seen.update({key: _after(seen.get(key, MISSING), row) for key in keys})
+        calls.append(call)
+    return calls

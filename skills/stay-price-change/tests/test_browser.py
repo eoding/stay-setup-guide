@@ -20,8 +20,10 @@ from erp_read import ParseError  # noqa: E402
 from change_core.answers import (  # noqa: E402
     BrowserError, CutAnswer, Outcome, ask_sum, attach_bodies, fnv1a, step_outcome, unanswered,
 )
-from price_browser import page_hotel, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call  # noqa: E402
-from price_model import BulkStep, CellEditStep, CellKey, RowWrite, encode_step  # noqa: E402
+from price_browser import (  # noqa: E402
+    page_hotel, pair_reads, periods, read_calls, reserved_probes, reserved_round, step_call, step_calls,
+)
+from price_model import MISSING, BulkStep, CellEditStep, CellKey, CellValue, RowWrite, Snapshot, encode_step  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"
 REJECTED = (ERP / "adjust-rejected.html").read_text(encoding="utf-8")
@@ -172,11 +174,51 @@ BULK = BulkStep("디럭스", "조식 포함", ("2026-07-01",), (RowWrite("", 1, 
 CELL = CellEditStep(CellKey("디럭스", "조식 포함", "2026-07-01", "", 1), ("list",))
 
 
+def reading(cells) -> Snapshot:
+    return Snapshot("데모 호텔", OFFER, "USD", "2026-11-21T10:00:00+09:00", cells, frozenset(), frozenset({("디럭스", "조식 포함")}),
+                    hotel_id=HOTEL["id"])
+
+
+def key(day, occupancy=""):
+    return CellKey("디럭스", "조식 포함", day, occupancy, 1)
+
+
 class StepCallTest(unittest.TestCase):
     def test_ledger_steps_become_the_page_payloads_pinned_for_the_node_test(self):
-        calls = [step_call(1, HOTEL, OFFER, BULK.kind, encode_step(BULK)), step_call(2, HOTEL, OFFER, CELL.kind, encode_step(CELL))]
+        # 페이지 시험의 화면과 같은 값 — 가격 수정 ② 의 7/1 인원 무관 줄(정가 · 원가 없음)과 셀 창의 7/1 A2 줄(page_harness ROWS)
+        cell = CellEditStep(key("2026-07-01", "A2"), ("supply",))
+        seen = reading({key("2026-07-01"): CellValue(D("120000.00"), None, None, "open"),
+                        key("2026-07-01", "A2"): CellValue(D("150000.00"), None, D("110000.00"), "open")})
+        calls = step_calls(HOTEL, OFFER, [(1, BULK.kind, encode_step(BULK)), (2, cell.kind, encode_step(cell))], seen)
         self.assertEqual(calls, json.loads(CONTRACT.read_text(encoding="utf-8")))
-        self.assertEqual(calls[0]["payload"]["rows"], [{"occupancy": "", "nights": 1, "sell": "125000.00", "list": None, "supply": None}])
+        self.assertEqual(calls[0]["payload"]["rows"], [{"occupancy": "", "nights": 1, "sell": "125000.00", "list": None, "supply": None,
+                                                        "was": [["2026-07-01", "2026-07-01", "120000.00", None, None]]}])
+        self.assertEqual(calls[1]["payload"]["was"], ["150000.00", None, "110000.00"])
+
+    def test_a1_each_step_carries_what_the_screen_must_show_with_the_earlier_steps_laid_over_the_reading(self):
+        seen = reading({key("2026-07-01"): CellValue(D("120.00"), D("150.00"), None, "open"),
+                        key("2026-07-02"): CellValue(D("120.00"), D("150.00"), None, "closed"),
+                        key("2026-07-03"): CellValue(D("125.00"), D("150.00"), None, "open"),
+                        key("2026-07-04"): MISSING})
+        clear = CellEditStep(key("2026-07-01"), ("list",))
+        bulk = BulkStep("디럭스", "조식 포함", ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-06"),
+                        (RowWrite("", 1, D("130.00")), RowWrite("A2", 1, D("160.00"))))
+        again = BulkStep("디럭스", "조식 포함", ("2026-07-04",), (RowWrite("", 1, None, D("140.00")),))
+        calls = step_calls(HOTEL, OFFER, [(1, clear.kind, encode_step(clear)), (2, bulk.kind, encode_step(bulk)),
+                                          (3, again.kind, encode_step(again))], seen)
+        self.assertEqual(calls[0]["payload"]["was"], ["120.00", "150.00", None], "셀 창은 읽은 값 그대로")
+        self.assertEqual(calls[1]["payload"]["rows"][0]["was"], [
+            ["2026-07-01", "2026-07-01", "120.00", None, None],       # 앞 단계(셀 창)가 정가를 비웠다
+            ["2026-07-02", "2026-07-02", "120.00", "150.00", None],   # 마감인 칸도 값으로 본다
+            ["2026-07-03", "2026-07-03", "125.00", "150.00", None],
+            ["2026-07-04", "2026-07-06", None, None, None],           # 가격 없음 · 읽은 값에 없는 칸은 칸이 없는 것 — 잇달면 한 줄
+        ])
+        self.assertEqual(calls[1]["payload"]["rows"][1]["was"], [["2026-07-01", "2026-07-06", None, None, None]],
+                         "읽은 값에 없는 줄은 날마다 칸이 없다")
+        self.assertEqual(calls[2]["payload"]["rows"][0]["was"], [["2026-07-04", "2026-07-04", "130.00", None, None]],
+                         "앞 묶음 저장이 판매가를 넣어 만든 칸")
+        self.assertEqual([call["payload"]["no"] for call in calls], [1, 2, 3])
+        self.assertEqual(calls[1]["payload"]["rows"][0]["sell"], "130.00", "넣는 값은 step_call 그대로")
 
     def test_an_unknown_step_kind_or_a_bad_body_is_refused(self):
         with self.assertRaises(ValueError):

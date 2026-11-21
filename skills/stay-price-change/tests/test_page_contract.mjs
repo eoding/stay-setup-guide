@@ -26,7 +26,7 @@ test('B7 · 장부의 저장 단계로 만든 부를 값을 페이지가 받아 
     const r = plain(await page.w.stayPrice[call.op](inPage(page.w, call.payload)));
     assert.equal(r.saved, true, r.error);
     if (call.op === 'applyBulk') assert.equal(page.log.posts[0]['prices-0-price'], call.payload.rows[0].sell);
-    else assert.equal(page.log.posts[0].original_price, '');
+    else assert.deepEqual([page.log.posts[0].row, page.log.posts[0].net_amount], ['502', '']);
     assert.deepEqual(python('(lambda o: [o.saved, o.note])(a.step_outcome(args["call"], args["result"]))', { call, result: r }), [true, r.note]);
     page.w.close();
   }

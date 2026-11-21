@@ -20,7 +20,16 @@
           "nights": 1,
           "sell": "125000.00",
           "list": null,
-          "supply": null
+          "supply": null,
+          "was": [
+            [
+              "2026-07-01",
+              "2026-07-01",
+              "120000.00",
+              null,
+              null
+            ]
+          ]
         }
       ]
     }
@@ -38,10 +47,15 @@
       "room": "디럭스",
       "ratePlan": "조식 포함",
       "date": "2026-07-01",
-      "occupancy": "",
+      "occupancy": "A2",
       "nights": 1,
       "clear": [
-        "list"
+        "supply"
+      ],
+      "was": [
+        "150000.00",
+        null,
+        "110000.00"
       ]
     }
   }
