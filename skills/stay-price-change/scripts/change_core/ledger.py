@@ -28,6 +28,10 @@ snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 
 종류의 번호를 주면 어느 도우미의 기록인지 대며 거절한다. 도우미의 `list` 명령은 종류 없이 열어 세 도우미의 기록을 모두 싣는다
 (files.listed). 번호의 종류는 그 번호에 적힌 항목 줄의 종류다(표의 모양은 그대로다 — `_kind_of`).
 
+적용을 시작하거나(begin) 멈춘 변경을 이어 가는(check) 읽은 값은 다시 읽은 값이어야 한다 — begin 은 그 번호를 계산한 뒤에 읽은
+값만, check 는 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 값만 받는다(`_read_after`). 미리보기의 읽은 값
+그대로나 그보다 앞선 읽은 값, 앞선 읽기 폴더의 답을 다시 쓴 읽기는 견줄 것이 없어 다시 읽은 것이 아니다.
+
 적용 중인 변경이 `IDLE`(15분) 동안 아무 일이 없으면 멈춘 변경이다 — 목록 · calls · check · 결과 페이지 어디서나. 세션이
 저장 사이에서 끊겨도 장부는 적용 중으로 남는데, 그 사이 ERP 값이 바뀌었을 수 있어 다시 읽지 않고는 남은 저장을 내지 않는다.
 멈춘 뒤에 적힌 저장 결과는 적기만 하고 변경을 다시 살리지 않는다. 다시 살리는 것은 방금 읽은 값으로 이어서 해도 된다고 본
@@ -155,6 +159,17 @@ def now_text() -> str:
 
 def _minutes(span: timedelta) -> int:
     return int(span.total_seconds() // 60)
+
+
+def _when(text: str) -> str:
+    return _moment(text).strftime("%m/%d %H:%M:%S")
+
+
+def _read_after(read_at: str, moments: Iterable[str | None]) -> str | None:
+    """읽은 시각(`read_at`)이 `moments` 의 모두보다 나중이면 None, 아니면 그 가운데 가장 늦은 것. 장부의 시각은 초까지 적히므로 초까지
+    견주고, 같은 초는 나중이 아니다(계산한 그 초에 다시 읽은 값은 없다)."""
+    latest = max((moment for moment in moments if moment), key=_moment)
+    return None if _moment(read_at).replace(microsecond=0) > _moment(latest) else latest
 
 
 @dataclass(frozen=True)
@@ -514,8 +529,8 @@ class Ledger:
 
         단계가 쓰는 값은 미리보기 때 적은 줄(넣는 필드 · 넣는 값 · 비움)과 꼭 같아야 한다. 미리보기에 없던 값, 다른 값, 두 번
         쓰는 값, 그리고 미리보기가 넣는다고 보였는데 어느 단계도 쓰지 않는 값이 하나라도 있으면 시작하지 않는다.
-        `read_at` 은 적용 직전에 읽어 미리보기 때 값과 같다고 본 읽은 값의 시각이다. IDLE 보다 오래된 읽은 값으로는 시작하지
-        않는다. 그 시각이 첫 활동이다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은
+        `read_at` 은 적용 직전에 읽어 미리보기 때 값과 같다고 본 읽은 값의 시각이다. 그 번호를 계산한 뒤에 IDLE 안에 읽은 값으로만
+        시작한다(_check_fresh). 그 시각이 첫 활동이다. 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. `request` 를 주면 미리보기 때 적은
         요청과 같은 계산인지 본다.
         """
         encoded = [(step.kind, _body(step.body)) for step in steps]
@@ -536,9 +551,7 @@ class Ledger:
                 if stored == encoded:
                     return
                 raise LedgerError(f"{change_id}번 변경은 이미 다른 저장 단계로 적용을 시작했습니다")
-            if self._age(read_at) > IDLE:
-                raise LedgerError(f"적용 직전에 읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — "
-                                  f"{_minutes(IDLE)}분 안에 읽은 값으로만 시작합니다. 다시 읽고 begin 을 부릅니다")
+            self._check_fresh(header, read_at)
             for index, step in enumerate(steps, 1):
                 for write in step.writes:
                     row = db.execute(f"SELECT label, after, action, step FROM item_values WHERE change_id = ? AND {ROW}",
@@ -562,13 +575,27 @@ class Ledger:
             db.execute("UPDATE changes SET status = 'applying', updated_at = ?, active_at = ? WHERE id = ?",
                        (self._stamp(), read_at, change_id))
 
+    def _check_fresh(self, header, read_at: str) -> None:
+        """적용 직전에 읽은 값이 그 번호를 계산한 뒤에(_read_after), IDLE 안에 읽은 것이 아니면 거절한다."""
+        since = _read_after(read_at, (header["created_at"], header["read_at"]))
+        if since is not None:
+            raise LedgerError(f"이 읽은 값({_when(read_at)})은 {header['id']}번을 계산한 때({_when(since)}) 뒤에 읽은 것이 아닙니다 — "
+                              "적용 직전에 다시 읽은 값이 아닙니다(미리보기의 읽은 값이거나 그보다 앞선 것, 또는 앞선 읽기 폴더의 답을 "
+                              "다시 쓴 읽기). 같은 범위를 새 읽기 폴더에 다시 읽고 begin 을 부릅니다")
+        if self._age(read_at) > IDLE:
+            raise LedgerError(f"적용 직전에 읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — "
+                              f"{_minutes(IDLE)}분 안에 읽은 값으로만 시작합니다. 다시 읽고 begin 을 부릅니다")
+
     def begin_fresh(self, change_id: int, steps: Sequence[StepPlan], then: Reading, now: Reading, *, read_at: str,
                     request: Mapping | None = None) -> tuple[Difference, ...]:
-        """적용 직전에 다시 읽고 시작하기(결정 18) — 방금 읽은 값(`now`, 읽은 시각 `read_at`)을 그 번호의 계산이 바탕으로 삼은 읽은
-        값(`then`)과 견주어, 한 항목이라도(딸린 칸까지) 다르면 아무것도 시작하지 않고 다른 항목들을 돌려준다. 같으면 begin 하고 빈
-        것을 돌려준다(읽은 값이 IDLE 보다 오래됐으면 begin 이 거절한다). 이미 적용을 시작한 번호는 견주지 않고 begin 에 넘긴다 — 같은
-        단계로 다시 부르면 아무것도 바꾸지 않는다."""
-        if self.change(change_id).status == "previewed":
+        """적용 직전에 다시 읽고 시작하기(결정 18) — 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 그 번호를 계산한 뒤에 IDLE 안에 읽은
+        것인지 먼저 보고(아니면 견주지 않고 거절한다), 그 번호의 계산이 바탕으로 삼은 읽은 값(`then`)과 견주어 한 항목이라도(딸린
+        칸까지) 다르면 아무것도 시작하지 않고 다른 항목들을 돌려준다. 같으면 begin 하고 빈 것을 돌려준다. 이미 적용을 시작한 번호는
+        견주지 않고 begin 에 넘긴다 — 같은 단계로 다시 부르면 아무것도 바꾸지 않는다."""
+        with self._db() as db:
+            header = self._header(db, change_id)
+        if header["status"] == "previewed":
+            self._check_fresh(header, read_at)
             differences = stale_items(then, now)
             if differences:
                 return differences
@@ -656,6 +683,9 @@ class Ledger:
         """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
         해도 되는지, 어디까지 됐고 왜 멈췄는지.
 
+        읽은 값은 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 것이어야 한다(_read_after) — 아니면 아무것도
+        가리거나 적지 않고 거절한다(적용 직전의 읽은 값은 그 뒤의 저장을 모른다).
+
         「모름」(눌렸고 저장됐는지 모르는 단계)은 읽은 값이 넣은 값 그대로면 저장됨으로, 전 값 그대로면 저장 안 됨으로 가려 적는다.
         남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
         바탕으로 삼은 읽은 값(`then`)과 모두 같고, 읽은 값이 IDLE 안의 것일 때뿐이다. 그러면 변경을 적용 중으로 두고 그 읽은
@@ -668,6 +698,13 @@ class Ledger:
             steps = db.execute("SELECT * FROM steps WHERE change_id = ? ORDER BY idx", (change_id,)).fetchall()
             if not steps:
                 raise LedgerError(f"{change_id}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
+            finished = [step["finished_at"] for step in steps if step["finished_at"]]
+            since = _read_after(read_at, (header["created_at"], header["read_at"], *finished))
+            if since is not None:
+                what = "저장 결과" if since in finished else "계산"
+                raise LedgerError(f"이 읽은 값({_when(read_at)})은 장부가 {change_id}번에 마지막으로 적은 {what}({_when(since)}) 뒤에 "
+                                  "읽은 것이 아닙니다 — 그 뒤의 ERP 를 모르는 읽은 값이라 저장마다 됐는지 가리지 못합니다. 같은 범위를 새 "
+                                  "읽기 폴더에 다시 읽고 check 를 부릅니다")
             rows = {step["idx"]: db.execute("SELECT * FROM item_values WHERE change_id = ? AND step = ? ORDER BY rowid",
                                             (change_id, step["idx"])).fetchall() for step in steps}
         cause = self._cause(header, steps)
