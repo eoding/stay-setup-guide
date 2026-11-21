@@ -23,9 +23,10 @@
     rollback      장부의 변경 하나(또는 --charge 로 고른 부과금)를 되돌리는 계산. --record 면 장부에 적는다
     list          장부에 적힌 부과금 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
 
-결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령(look · read-calls · read · plan · rollback)은
-`--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(begin · verify) · 2 입력이나 순서가 맞지 않음
-(표준 오류에 {"error": "…"}, 조각을 받아야 하면 "refetch").
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다(기록 폴더 안이면 없는 폴더를 만들며). 파일에 쓰는 명령(look ·
+read-calls · read · plan · rollback)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(begin · verify) ·
+2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"} 한 줄, 조각을 받아야 하면 "refetch" — 예상하지 못한 오류도 이 한 줄이다,
+change_core.cli).
 
 예:
     python3 charge_change.py work
@@ -39,9 +40,7 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from pathlib import Path
 
 from charge_model import (
     ITEM_KIND, OFFERLESS, ModelError, Snapshot, charge_of, charge_of_key, decode_hotel, decode_listing, decode_request,
@@ -56,7 +55,7 @@ from charge_plan import (
     PlanError, charge_filter, counts, decode_plan, decode_step, encode_plan, encode_step, plan_change, plan_charge_rollback,
     plan_steps, preview_rows, resolve, rollback_rows, rollback_steps, step_call, step_plans,
 )
-from change_core import files
+from change_core import cli, files
 from change_core.answers import BrowserError, answers_for, attach_bodies, reading_time, step_outcome, unanswered
 from change_core.chrome import page_text
 from change_core.files import load, page_path
@@ -237,8 +236,7 @@ def cmd_render(args):
         name = "부과금 되돌리기 결과" if record.kind == "rollback" else name
     if args.text:           # 글만 옮길 때 — 페이지 파일을 하나 더 만들지 않는다
         return dict(text=page_text(html))
-    path = Path(args.out) if args.out else page_path(hotel, name)
-    path.write_text(html, encoding="utf-8")
+    path = files.write_out(args.out or page_path(hotel, name), html)
     return dict(page=str(path.resolve()))
 
 
@@ -489,22 +487,7 @@ def main(argv=None) -> int:
         needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change", "window": "snapshot"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
-    try:
-        result = args.handler(args)
-    except (ModelError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:
-        message = str(error) if not isinstance(error, (KeyError, TypeError)) else f"입력 JSON 에 필요한 칸이 없습니다: {error}"
-        payload = dict(error=message)
-        if getattr(error, "refetch", None):
-            payload["refetch"] = error.refetch
-        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
-        return 2
-    text = json.dumps(result, ensure_ascii=False, indent=2)
-    if args.out and args.command != "render":
-        Path(args.out).write_text(text + "\n", encoding="utf-8")
-        if args.command in SHORT:
-            text = json.dumps(dict(out=str(Path(args.out).resolve()), **SHORT[args.command](result)), ensure_ascii=False, indent=2)
-    print(text)
-    return 1 if result.get("same") is False else 0
+    return cli.run(args, SHORT)
 
 
 if __name__ == "__main__":

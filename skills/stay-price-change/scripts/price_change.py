@@ -34,10 +34,11 @@
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
 
-결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 여덟(rooms · read-calls · read · sheet · plan ·
-rollback · restore · compare)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일
-자리이고, 칸 목록은 싣지 않는다(SHORT). 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
-2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다(기록 폴더 안이면 없는 폴더를 만들며 — 읽기 폴더 `읽기-2` 를
+미리 만들지 않아도 된다). 파일에 쓰는 명령 여덟(rooms · read-calls · read · sheet · plan · rollback · restore · compare)은 `--out` 을 주면
+표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일 자리이고, 칸 목록은 싣지 않는다(SHORT).
+종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) · 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"} 한 줄 — 예상하지 못한
+오류도 이 한 줄이다, change_core.cli). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
 
 장부 번호마다(미리보기 · 지금 상태 저장 · 되돌리기) 그 계산이 바탕으로 삼은 읽은 값을 적어 둔다. 그래서 같은 범위를 다시 읽을 때는
 `read-calls --record N`, 적용 직전 확인은 `begin --change N --snapshot <방금 읽은 값>` 처럼 번호만 준다.
@@ -56,7 +57,7 @@ import json
 import sys
 from pathlib import Path
 
-from change_core import files
+from change_core import cli, files
 from change_core.answers import BrowserError, answers_for, attach_bodies, step_outcome, unanswered
 from change_core.chrome import page_text
 from change_core.files import load, page_path
@@ -65,7 +66,7 @@ from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
 from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback, holds
 from change_core.rules import Resolution, said_in
-from erp_read import PairRead, ParseError, build_snapshot, parse_adjust_page, parse_price_page
+from erp_read import PairRead, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
     page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_call, too_big,
 )
@@ -327,8 +328,7 @@ def cmd_render(args):
         html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
     if args.text:   # 페이지의 글을 읽기만 한다 — 파일을 쓰지 않는다(같은 페이지가 「… (2).html」로 또 생기지 않게)
         return dict(text=page_text(html))
-    path = Path(args.out) if args.out else page_path(hotel, name)
-    path.write_text(html, encoding="utf-8")
+    path = files.write_out(args.out or page_path(hotel, name), html)
     return dict(page=str(path.resolve()))
 
 
@@ -771,23 +771,7 @@ def main(argv=None) -> int:
                   "compare": "plan"}[args.kind]
         if getattr(args, needed) is None:
             parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
-    try:
-        result = args.handler(args)
-    except (ParseError, PlanError, LedgerError, BrowserError, ValueError, KeyError, TypeError) as error:
-        message = str(error) if not isinstance(error, (KeyError, TypeError)) else f"입력 JSON 에 필요한 칸이 없습니다: {error}"
-        payload = dict(error=message)
-        for extra in ("refetch", "choose", "ask"):   # 받을 조각 · 고를 줄(아동 밴드가 여럿) · 물을 것(아동이 든 값의 퍼센트)
-            if getattr(error, extra, None):
-                payload[extra] = getattr(error, extra)
-        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
-        return 2
-    text = json.dumps(result, ensure_ascii=False, indent=2)
-    if args.out and args.command != "render":
-        Path(args.out).write_text(text + "\n", encoding="utf-8")
-        if args.command in SHORT:
-            text = json.dumps(dict(out=str(Path(args.out).resolve()), **SHORT[args.command](result)), ensure_ascii=False, indent=2)
-    print(text)
-    return 1 if result.get("same") is False else 0
+    return cli.run(args, SHORT)
 
 
 if __name__ == "__main__":

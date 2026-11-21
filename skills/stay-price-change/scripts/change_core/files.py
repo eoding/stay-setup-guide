@@ -1,9 +1,9 @@
-"""기록 폴더의 파일 — 도우미 명령들이 같이 쓰는 파일 읽기 · 페이지 자리 · 작업 폴더 · 답 폴더 · 앞선 읽기와 look 에서 조각
-빌리기 · 계산 파일 지키기 · 탭의 호텔로 좁힌 장부 목록.
+"""기록 폴더의 파일 — 도우미 명령들이 같이 쓰는 파일 읽기 · 결과 파일 쓰기 · 페이지 자리 · 작업 폴더 · 답 폴더 · 앞선 읽기와
+look 에서 조각 빌리기 · 계산 파일 지키기 · 탭의 호텔로 좁힌 장부 목록.
 
 기록 폴더는 장부가 있는 곳이다(`ledger.ledger_dir`). 담당자가 시킨 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`(new_work), 그 안의 look
-답은 `look/`, 읽기마다 `읽기-1/` … 를 쓴다. 답 파일은 이름의 머리(`look-` · `pair-` · `line-` · `take-` …)로 알아본다 — 머리는
-도우미마다 정한다.
+답은 `look/`, 읽기마다 `읽기-1/` … 를 쓴다. 읽기 폴더는 아무도 미리 만들지 않는다 — 그 안에 쓰는 첫 명령(`read-calls --out`)이
+만든다(write_out). 답 파일은 이름의 머리(`look-` · `pair-` · `line-` · `take-` …)로 알아본다 — 머리는 도우미마다 정한다.
 """
 
 from __future__ import annotations
@@ -188,6 +188,35 @@ def hotel_list(ledger_path: Path, entries: list[dict], look: str | None, every: 
     mine = [entry for entry in entries if hotel is not None and str(entry["hotel_id"]) == hotel["id"]]
     rest = [entry for entry in entries if hotel is None or str(entry["hotel_id"]) != hotel["id"]]
     return dict(ledger=str(ledger_path), hotel=hotel, changes=mine + rest if every else mine, others=0 if every else len(rest))
+
+
+def _out_folder(out) -> Path | None:
+    """`--out` 의 폴더가 없으면 그 폴더, 있으면 None. 기록 폴더 밖이면서 없으면 거절한다 — 밖에는 아무것도 몰래 만들지 않는다."""
+    folder = Path(out).resolve().parent
+    if folder.is_dir():
+        return None
+    records = ledger_dir().resolve()
+    if not folder.is_relative_to(records):
+        raise ValueError(f"쓸 파일의 폴더가 없습니다: {folder} — 기록 폴더({records}) 밖에는 폴더를 만들지 않습니다. 작업 폴더(`work` 의 "
+                         "답) 안의 경로를 주거나, 이미 있는 폴더를 줍니다")
+    return folder
+
+
+def check_out(out: str | None) -> None:
+    """무엇이든 셈하거나 장부에 적기 전에 — `--out` 이 쓸 수 없는 자리(기록 폴더 밖의 없는 폴더)면 거절한다. 만들지는 않는다."""
+    if out:
+        _out_folder(out)
+
+
+def write_out(path, text: str) -> Path:
+    """명령의 결과 파일(`--out` · 페이지)을 쓴다. 기록 폴더 안이면 없는 폴더(`<작업>/읽기-2/` …)를 만들며 쓰고, 밖의 없는 폴더는
+    만들지 않고 거절한다(밖의 있는 폴더에는 쓴다)."""
+    folder = _out_folder(path)
+    if folder is not None:
+        folder.mkdir(parents=True, exist_ok=True)
+    path = Path(path)
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 def fresh_record(out: str | None, replaces: int | None, record: bool, name: str) -> None:
