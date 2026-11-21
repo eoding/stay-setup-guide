@@ -240,6 +240,33 @@ class SkillBudgetTest(unittest.TestCase):
             self.assertIn(said, talk)
         self.assertNotIn("시즌", talk.replace("시즌 채우기", ""), "시즌 다시 채우기를 전제로 말하지 않는다")
 
+    def test_n3_the_two_everyday_requests_have_their_own_short_section(self):
+        """N3 — 「장부 보여줘」는 준비 1~5 와 `line` 을 새것부터 그대로, 되돌린 것을 또 되돌리라면 목록으로만(그 문장 그대로) 답한다."""
+        ledger = self.skill[self.skill.index("## 장부 보여줘"):]
+        ledger = ledger[:ledger.index("\n## ", 1)]
+        for said in ("「준비」 1~5 만", "새것부터", "`line` 그대로", "덧붙이지 않고", "읽지도 장부에 적지도 않는다"):
+            self.assertIn(said, ledger)
+        none = self.skill[self.skill.index("## 되돌릴 것이 없을 때"):]
+        none = none[:none.index("\n## ", 1)]
+        for said in ("`rolled_back`", "읽지도 장부에 적지도 않고", "\"장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다.\"",
+                     "`previewed` · `empty` · `replaced`"):
+            self.assertIn(said, none)
+
+    def test_n5_compare_and_skill_md_give_one_folder_rule_and_one_one_word_question(self):
+        """N5 — 견주기 뒤의 되돌리기: 준비의 폴더 규칙과 compare.md 5 가 같은 말을 하고, 변경 되돌리기와 저장 상태로 되돌리기 사이의
+        고름은 한 낱말로 답하는 물음 하나다(SKILL.md 「4」, compare.md 5 가 그것을 묻는다)."""
+        prep = self.skill[self.skill.index("## 준비"):self.skill.index("## 읽기")]
+        self.assertIn("그 일의 폴더를 그대로 쓰는 때는 둘뿐이다 — 방금 멈춘 변경을 이어서 할 때, 견주기 바로 다음에 되돌릴 때(compare.md 5)", prep)
+        compare = (SKILL / "references" / "compare.md").read_text(encoding="utf-8")
+        step = compare[compare.index("5. **되돌리기(원할 때만).**"):]
+        for said in ("이 작업 폴더에서 한다", "새 작업 폴더를 만들지 않는다", "「4. 되돌리기」의 한 낱말 물음"):
+            self.assertIn(said, step)
+        ask = section(self.skill, "## 4. 되돌리기")
+        self.assertIn("'변경'이라고 하시면", ask)
+        self.assertIn("'저장'이라고 하시면", ask)
+        self.assertIn("어느 쪽으로 할까요?", ask)
+        self.assertNotIn("이 변경만 되돌릴까요", self.skill + compare, "두 줄을 읽어 주는 긴 물음은 없앴다")
+
 class SheetDocsTest(unittest.TestCase):
     """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
 

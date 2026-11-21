@@ -24,7 +24,7 @@ metadata:
 - 담당자가 미리보기를 보고 분명히 "적용"(되돌리기는 "되돌려")이라고 하기 전에는 아무것도 저장하지 않는다. 대답이 없거나 애매하면 적용이 아니다. 다시 묻는다.
 - 한 번에 호텔 하나.
 - 값은 명령이 셈하고 견준다. 도우미는 금액 · 퍼센트 · 새 값을 담당자의 말 그대로 요청 파일에 적을 뿐이다.
-- 호텔 · 오퍼 · 부가옵션 · 가격 줄의 이름과 번호는 `look` 명령의 답에서만 옮긴다. 오퍼마다 이름이 같은 부가옵션 · 줄이 있으니 고를 때는 번호로 적고, 담당자에게 줄을 말할 때는 오퍼 이름(`offer`)부터 댄다 — 명령의 답과 페이지도 줄을 「오퍼 · 부가옵션 · 줄」로 부른다.
+- 호텔 · 오퍼 · 부가옵션 · 가격 줄의 이름과 번호는 `look` 명령의 답(짧은 답의 `items` — 길면 같은 `look` 에 `--find <담당자의 낱말>` 을 붙여 좁힌다)에서만 옮긴다. 오퍼마다 이름이 같은 부가옵션 · 줄이 있으니 고를 때는 번호로 적고, 담당자에게 줄을 말할 때는 오퍼 이름(`offer`)부터 댄다 — 명령의 답과 페이지도 줄을 「오퍼 · 부가옵션 · 줄」로 부른다.
 - 페이지를 만지는 것은 `stayAddonPrice.look()` 과 작업 둘(`readLine` · `applyLine`)뿐이다. `take` · `last` · `idle` 은 읽기만 한다. `stayPrice` 의 작업과 러너의 함수(`stayRun.*` · `cal…`)는 부르지 않는다.
 - 브라우저 도구의 클릭 · 글자 입력 · 폼 채우기 도구를 ERP 탭에 쓰지 않는다. 화면은 스크린샷과 페이지 읽기로만 본다. 파일 올리기 도구는 도우미를 올릴 때만 쓴다.
 - 같은 저장을 두 번 누르지 않는다. 한 번 부른 `applyLine` 을 스스로 다시 부르지 않는다. 답이 `started: false`(아무것도 누르지 않음)일 때만 `wait` 초 뒤 같은 값으로 다시 부른다.
@@ -46,8 +46,8 @@ metadata:
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 답이 `stayAddonPrice is not defined`)마다.
    1. JS 실행 도구로 가격 캘린더 도우미의 `../stay-price-change/scripts/page/stay_price_loader.js` 내용 전체 **뒤에 한 줄 `stayPriceLoader.again('addon')` 을 붙여** 한 번에 실행한다. 그래서 첫 답이 이 도우미의 묶음(네 파일)의 것이다. `ok: true` 와 `addon` 판 번호가 오면 됐다.
-   2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 가 올릴 네 파일이다. 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 네 파일 — `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js` — 을 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
-3. **작업 폴더.** `python3 scripts/addon_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. 새 폴더의 look 은 앞선 폴더에서 받아 둔 같은 조각을 빌려 오므로 받을 쪽이 거의 없다. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다).
+   2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 에 든 파일만(이 탭에 없거나 예전 판인 것 — 넷은 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js`) 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
+3. **작업 폴더.** `python3 scripts/addon_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>` — 폴더는 명령이 만든다)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. 새 폴더의 look 은 앞선 폴더에서 받아 둔 같은 조각을 빌려 오므로 받을 쪽이 거의 없다. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다).
 4. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 가 받을 조각이다 — 「읽기」 4 처럼 받아 `<작업>/look/` 에 두고 이 명령을 다시 한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾거나 짧은 답의 `hotel` 이 말한 호텔이 아니면 "○○ 호텔의 Stay 화면을 열어 주세요".
 5. **장부 보기.** `python3 scripts/addon_change.py list --look "<작업>/look.json"` — 이 호텔의 기록만 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `empty` 는 저장할 것이 없던 미리보기다.
 
@@ -68,7 +68,7 @@ metadata:
 
 ## 2. 부가옵션 가격 바꾸기
 
-**묻고 확인한다.** 빠진 것(어느 부가옵션 · 줄, 판매가인지 공급 원가인지, 금액 · 퍼센트 · 새 값)을 묻는다. 그다음 아래 꼴로 보여 주고 "응"을 받은 뒤에 읽는다. 스스로 채운 것은 괄호로 밝힌다.
+**묻고 확인한다.** 빠진 것(어느 부가옵션 · 줄, 금액 · 퍼센트 · 새 값)을 묻는다. 판매가인지 공급 원가인지 말이 없으면 묻지 않고 판매가로 하고 확인 상자에 그렇게 밝힌다(아래 보기). 그다음 아래 꼴로 보여 주고 "응"을 받은 뒤에 읽는다. 스스로 채운 것은 괄호로 밝힌다.
 
 ```
 이렇게 이해했습니다. 맞으면 지금 가격을 읽어 미리보기를 만들겠습니다.
@@ -82,19 +82,27 @@ metadata:
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」 — 줄은 `lines` · `addons` · `all` 가운데 하나). 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 가 저장 횟수(빨간 줄이 남았으면 null). 다시 계산하면 `plan-2.json` 처럼 새 이름에 쓰고 `--replaces <앞 번호>` 를 붙인다.
 3. `python3 scripts/addon_change.py render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
-4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 줄 · 그대로인 줄 · 바꿀 수 없는 줄(`blocked` 의 줄마다 `label`)을 말한다. `names` 가 있으면 그 문장을 그대로 말한다(알림이다). `saves` 가 0 이 아니면 꼭 말한다: "저장하면 ERP 가 이 줄들의 금액 출처를 'ERP 손입력'으로 적고, 되돌려도 그 표시는 돌아오지 않습니다." 짧은 답의 `scope_card` 가 true 면(저장할 줄의 편집 창에 적용 범위 카드가 있음) "저장할 때 ERP 가 그 줄의 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
+4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 줄 · 그대로인 줄 · 바꿀 수 없는 줄(`blocked` 의 줄마다 `label`)을 말한다. `names` 가 있으면 그 문장을 그대로 말한다(알림이다). 짧은 답의 `scope_card` 가 true 면(저장할 줄의 편집 창에 적용 범위 카드가 있음) "저장할 때 ERP 가 그 줄의 적용 범위 기록을 하나 만들 수 있고(가격에는 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 줄과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 줄은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 고름은 담당자의 말에서만 나온다. 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다(고름마다 담당자가 한 말을 `said` 에 그대로 — commands.md 「판정」).
-   - **빨간 줄이 없고 저장할 것이 있으면**(`saves` 가 1 이상) 저장 횟수(`saves`)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
+   - **빨간 줄이 없고 저장할 것이 있으면**(`saves` 가 1 이상 — 빨간 줄을 고른 뒤의 계산도) 저장 횟수(`saves`)를 말하고 꼭 덧붙인다: "저장하면 ERP 가 이 줄들의 금액 출처를 'ERP 손입력'으로 적고, 되돌려도 그 표시는 돌아오지 않습니다." 그리고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
    - **`saves` 가 0 이면 저장할 것이 없다** — 빨간 줄을 모두 안 바꾸기로 골랐거나 바뀌는 줄이 없다(`counts.will_change` 가 0). 이렇게만 말한다: "고르신 대로면 바꿀 줄이 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다." 저장 횟수를 말하지 않고 "적용"을 청하지 않는다. 미리보기 페이지도 그렇게 말하고, 그 번호는 `begin` 이 받지 않는다. 다른 값으로 바꾸려면 담당자의 새 말로 처음부터 한다.
 
 ## 3. 되돌리기
 
-「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? <그 줄의 `line`>".
+「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? <그 줄의 `line`>". `rolled_back` · `previewed` · `empty` · `replaced` 는 「되돌릴 것이 없을 때」다.
 
 1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.
 3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept` — 그 사이 값이 달라진 줄)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
 4. "되돌려" → 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그 줄도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.
+
+## 되돌릴 것이 없을 때
+
+되돌리라고 한 줄이 목록에서 `rolled_back` 이면 읽지도 장부에 적지도 않고 목록으로만 답한다: "장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다." `previewed` · `empty` · `replaced` 면: "장부 <`id`>번은 미리보기만 하고 적용하지 않아 ERP 에 넣은 것이 없습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다."
+
+## 장부 보여줘
+
+"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
 
 ## 적용하기 — 바꾸기 · 되돌리기 공통
 

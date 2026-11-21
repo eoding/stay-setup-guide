@@ -17,7 +17,7 @@ metadata:
 
 - 명령: 이 스킬 폴더의 `scripts/charge_change.py`. 아래의 `python3 scripts/charge_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
 - 페이지: 탭에 올린 `window.stayCharge`. 가격 캘린더 도우미의 페이지 파일 위에 올린다(「준비」).
-- 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 금액 칸 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/rollback.md](references/rollback.md) 되돌리기, [references/not-done.md](references/not-done.md) 하지 않는 일.
+- 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 금액 칸 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/rollback.md](references/rollback.md) 되돌리기, [references/apply.md](references/apply.md) 적용하기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
 ## 반드시 지킬 것
 
@@ -25,7 +25,7 @@ metadata:
 - 한 번에 호텔 하나.
 - 값은 명령이 셈하고 견준다. 도우미는 금액 · 퍼센트 · 새 값을 담당자의 말 그대로 요청 파일에 적을 뿐이다.
 - 금액만 바꾼다. 부과금의 종류 · 이름 · 부과 방식(정액/정률) · 단위 · 의무/선택 · 날짜 · 객실 · 설명 · 적용 범위는 바꾸지 않고, 시간대 줄이나 연령별 단가를 더하거나 지우지 않는다. 빈 금액(「미정」 · 성인가와 같음)은 채우지 않고 찬 금액은 비우지 않는다. [삭제] · [부과금 추가] · [정보 수집 폼] · [요율 행 추가] · 편집 창의 고르는 칸 · 다른 탭은 하지 않는다. 시키면 not-done.md 대로 답한다.
-- 오퍼 · 부과금의 이름과 번호, 시간대 줄의 시각은 `look` 명령의 답에서만 옮기고, 고를 때는 번호로 적는다(이름이 같은 부과금이 있다).
+- 오퍼 · 부과금의 이름과 번호, 시간대 줄의 시각은 `look` 명령의 답(짧은 답의 `items` — 길면 같은 `look` 에 `--find <담당자의 낱말>` 을 붙여 좁힌다)에서만 옮기고, 고를 때는 번호로 적는다(이름이 같은 부과금이 있다).
 - 페이지를 만지는 것은 `stayCharge.look()` 과 작업 둘(`readCharge` · `applyCharge`)뿐이다. `take` · `last` · `idle` 은 읽기만 한다. `stayPrice` · `stayAddonPrice` 의 작업과 러너의 함수(`stayRun.*` · `cal…`)는 부르지 않는다.
 - 브라우저 도구의 클릭 · 글자 입력 · 폼 채우기 도구를 ERP 탭에 쓰지 않는다. 화면은 스크린샷과 페이지 읽기로만 본다. 파일 올리기는 도우미를 올릴 때만.
 - 같은 저장을 두 번 누르지 않는다. 한 번 부른 `applyCharge` 를 스스로 다시 부르지 않는다. 답이 `started: false`(아무것도 누르지 않음)일 때만 `wait` 초 뒤 같은 값으로 다시 부른다.
@@ -46,8 +46,8 @@ metadata:
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다.
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 답이 `stayCharge is not defined`)마다.
    1. JS 실행 도구로 `../stay-price-change/scripts/page/stay_price_loader.js` 내용 전체 뒤에 한 줄 `stayPriceLoader.again('charge')` 을 붙여 한 번에 실행한다. `ok: true` 와 `charge` 판 번호가 오면 됐다.
-   2. 거절하면 답의 `want` 네 파일 — `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_charge.js` — 을 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load('charge')`. 막히면 page.md 「올리기」.
-3. **작업 폴더.** `python3 scripts/charge_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>`)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
+   2. 거절하면 답의 `want` 에 든 파일만(이 탭에 없거나 예전 판인 것 — 넷은 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_charge.js`) 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load('charge')`. 막히면 page.md 「올리기」.
+3. **작업 폴더.** `python3 scripts/charge_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>` — 폴더는 명령이 만든다)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
 4. **어디인지 보기.** `await stayCharge.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/charge_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 가 받을 조각이다 — 「읽기」 4 처럼 받아 `<작업>/look/` 에 두고 이 명령을 다시 한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾거나 짧은 답의 `hotel` 이 말한 호텔이 아니면 "○○ 호텔의 Stay 화면을 열어 주세요".
 5. **장부 보기.** `python3 scripts/charge_change.py list --look "<작업>/look.json"` — 이 호텔의 기록만 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `empty` 는 저장할 것이 없던 미리보기다.
 
@@ -56,7 +56,7 @@ metadata:
 1. `python3 scripts/charge_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"`(장부 번호가 있는 일은 `--record <번호>`).
 2. 답의 `charges` 값마다(i = 1, 2 …) `await stayCharge.readCharge(<값 그대로>)` 의 답을 `<R>/charge-<i>.json` 에 저장한다. 읽기는 창을 열고 닫을 뿐 저장하지 않는다.
 3. `python3 scripts/charge_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. `read_at` 은 ERP 에서 읽은 시각, `missing` 은 목록에 없는 부과금.
-4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayCharge.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayCharge.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름, `bad` 는 옮겨 적다 틀린 쪽이다 — 그 쪽만 다시 받고 틀린 파일은 그대로 둔다.
+4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayCharge.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`(답의 `next` 가 `until` 보다 작으면 `take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어서) 받고 그 명령을 다시 한다. `bad` 의 쪽만 다시 받고 틀린 파일은 그대로 둔다.
 
 답이 `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 답을 잃었으면 `stayCharge.last()` 의 답을 새 파일로 저장하거나 다시 불러 저장한다.
 
@@ -89,18 +89,19 @@ metadata:
 
 ## 3. 되돌리기
 
-"어제 바꾼 부과금 되돌려줘"처럼 말하면 [references/rollback.md](references/rollback.md) 대로 한다 — 「준비」 5 의 목록에서 맞는 줄을 골라 확인받고(하나뿐이어도 묻는다), 되돌리기 미리보기를 연다. 분명한 "되돌려" 없이는 「적용하기」로 가지 않는다. 되돌릴 것이 없으면(`restored` 0) "되돌려"를 청하지 않는다.
+"어제 바꾼 부과금 되돌려줘"면 [references/rollback.md](references/rollback.md) 대로 — 목록에서 맞는 줄을 골라 확인받고(하나뿐이어도), 되돌리기 미리보기를 연다. 분명한 "되돌려" 없이는 「적용하기」로 가지 않는다. `restored` 가 0 이면 "되돌려"를 청하지 않는다. 줄이 `rolled_back` · `previewed` · `empty` · `replaced` 면 「되돌릴 것이 없을 때」.
+
+## 되돌릴 것이 없을 때
+
+되돌리라고 한 줄이 목록에서 `rolled_back` 이면 읽지도 장부에 적지도 않고 목록으로만 답한다: "장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다." `previewed` · `empty` · `replaced` 면: "장부 <`id`>번은 미리보기만 하고 적용하지 않아 ERP 에 넣은 것이 없습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다."
+
+## 장부 보여줘
+
+"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
 
 ## 적용하기 — 바꾸기 · 되돌리기 공통
 
-필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려").
-
-1. **직전에 다시 읽고 시작하기.** `read-calls --record N` 으로 「읽기」 → S2. `python3 scripts/charge_change.py begin --change N --plan "<계산 파일>" --snapshot "<S2>"`. `status: applying` 이면 "적용 직전에 ERP 를 다시 읽었습니다. 미리보기 때와 모든 칸이 같아서 그대로 적용합니다." 종료 1(`same: false`)이면 아무것도 저장하지 않았다 — "미리보기 뒤에 ERP 의 값이 바뀌었습니다(<`differences` 의 부과금>)." 하고 「2」 의 읽기부터 새 미리보기를 만든다.
-2. `python3 scripts/charge_change.py calls --change N` 의 `calls` 를 차례로 하나씩: `await stayCharge.applyCharge(<payload 그대로>)` → 답을 그대로 `<작업>/적용-N/<no>.json` 에 저장 → `python3 scripts/charge_change.py record-result --change N --result "<그 파일>"`. `saved: true` 이고 `status: applying` 이면 다음, `applied` 면 3. 그 밖이면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
-3. **뒤에 다시 읽기.** `read-calls --record N` 으로 「읽기」 → S3. `python3 scripts/charge_change.py verify --change N --snapshot "<S3>"`.
-4. `python3 scripts/charge_change.py render result --change N --snapshot "<S3>"` → `page` 를 연다. 3 의 `names` 가 있으면 그 문장도 그대로 말한다.
-   - `same: true` 면 "적용했고, 다시 읽어 확인했습니다. 그 부과금의 다른 금액과 칸도 그대로입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."
-   - `same: false`(종료 1)면 "적용했지만 다시 읽었더니 다른 곳이 있습니다" 하고 `mismatches`(넣은 값과 다름) · `moved`(그대로여야 할 것이 달라짐)를 하나씩 말한다. 다시 저장하지 않는다.
+필요한 것: 장부 번호 N, 그 번호를 낸 계산 파일, 그 미리보기에 담당자가 분명히 한 "적용"(되돌리기는 "되돌려"). 그다음 [references/apply.md](references/apply.md) 대로 한다 — 직전에 다시 읽어 `begin`(미리보기 때와 다르면 아무것도 저장하지 않는다), 저장을 하나씩(`calls` → `stayCharge.applyCharge` → `record-result`), 뒤에 다시 읽어 `verify`, 결과 페이지. 저장이 안 됐거나 `status: stopped` 면 다음 저장을 하지 않고 [references/stopped.md](references/stopped.md) 로 간다 — 다시 읽어 `check` 가 이어서 해도 된다고 하기 전에는 이어서 하지 않는다. 답을 잃었으면 다시 부르지 말고 `stayCharge.last()` 로 받는다.
 
 ## 하지 않는 것
 

@@ -19,4 +19,4 @@ SKILL.md 「6. 저장해 둔 상태와 견주기」와 [sheet.md](sheet.md) 「(
    - `reserved` 가 있으면: 예약 있는 날의 칸도 바뀌었고, 이미 받은 예약의 금액은 바뀌지 않는다.
    - `new` 가 있으면: 새로 생긴 칸은 저장해 둔 상태로 되돌려도 지울 수 없다(ERP 에 칸을 지우는 길이 없다).
    - 모두 0 이면: "저장해 둔 때와 모든 칸이 같습니다." 하고 끝낸다.
-5. **되돌리기(원할 때만).** "S번 상태로 되돌려"면 SKILL.md 「4. 되돌리기」의 저장해 둔 상태로 되돌리기다. 1 의 읽기는 2 의 `<R>/snapshot.json` 을 그대로 쓰고 그 2 부터 한다: `restore --saved S --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`. 바뀐 칸이 모두 한 변경의 것이면 그 변경만 되돌리는 길(「4」의 `rollback`)도 있다고 말하고 고르게 한다.
+5. **되돌리기(원할 때만).** 견주기 바로 다음에 되돌리라고 하면 이 작업 폴더에서 한다 — SKILL.md 「준비」 가 그 일의 폴더를 그대로 쓰는 두 때 가운데 하나다(새 작업 폴더를 만들지 않는다). "S번 상태로 되돌려"면 저장해 둔 상태로 되돌리기이고, 읽기는 2 의 `<R>/snapshot.json` 을 그대로 쓴다: `restore --saved S --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"` 다음 [rollback.md](rollback.md) 3 부터. 바뀐 칸이 모두 한 변경의 것이면(`written_by` 가 하나이고 `counts.outside` 가 0) SKILL.md 「4. 되돌리기」의 한 낱말 물음을 그대로 묻는다(N 은 그 `change_id`) — '저장'이면 위의 `restore`, '변경'이면 `read-calls --record N` 으로 이 폴더에 새 읽기를 하고(`읽기-2` — 그 변경의 범위는 S 의 범위와 다를 수 있다) [rollback.md](rollback.md) 2 의 `rollback` 부터.

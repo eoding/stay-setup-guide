@@ -17,7 +17,7 @@ metadata:
 
 - 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
 - 페이지: 탭에 올린 `window.stayPrice`.
-- 필요할 때만 여는 파일(이 글의 그 자리에서 연다): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/compare.md](references/compare.md) 견주기, [references/not-done.md](references/not-done.md) 하지 않는 일.
+- 필요할 때만 여는 파일(이 글의 그 자리에서 연다): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/compare.md](references/compare.md) 견주기, [references/rollback.md](references/rollback.md) 되돌리기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
 ## 반드시 지킬 것
 
@@ -44,14 +44,14 @@ metadata:
 
 ## 준비 — 시킨 일마다 3 부터
 
-담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 같은 세션에서 방금 멈춘 변경을 이어서 할 때만 그 일의 폴더를 그대로 쓴다. 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` · `rooms` 다.
+담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 그 일의 폴더를 그대로 쓰는 때는 둘뿐이다 — 방금 멈춘 변경을 이어서 할 때, 견주기 바로 다음에 되돌릴 때(compare.md 5). 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` · `rooms` 다.
 
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`)마다.
    1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체 뒤에 한 줄 `stayPriceLoader.again()` 을 붙여 한 번에 실행한다. 이 탭에 적어 둔 원본이 설치된 도우미와 같을 때만 실행하므로 안전하다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다.
-   2. 거절하면(`적어 둔 원본이 없습니다` · `…설치된 도우미와 다릅니다` — 아무것도 실행되지 않았다) 답의 `want` 세 파일 — 러너의 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js` — 을 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load()`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 경로를 거절하거나 `load()` 가 `ok: true` 가 아니면 page.md 「올리기」.
-3. **작업 폴더.** `python3 scripts/price_change.py work` 의 `work` 가 이 일의 `<작업>` 이다(장부가 있는 기록 폴더 안). 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` …. 경로에 빈칸과 `·` 가 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다(`--out "<작업>/plan-1.json"`).
-4. **어디인지 보기.** `await stayPrice.look()`(다른 오퍼는 `stayPrice.look({offer: "<이름>"})`)의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/price_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 는 「읽기」 5 처럼 받아 `<작업>/look/` 에 두고 다시 한다. 답의 `offers` 는 오퍼, `offer` 는 고른 오퍼, `pairs` 는 그 오퍼의 객실 · 요금제다.
+   2. 거절하면(`적어 둔 원본이 없습니다` · `…설치된 도우미와 다릅니다` — 아무것도 실행되지 않았다) 답의 `want` 파일(이 탭에 없거나 예전 판인 것만 — 셋은 러너의 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js`)을 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load()`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 경로를 거절하거나 `load()` 가 `ok: true` 가 아니면 page.md 「올리기」.
+3. **작업 폴더.** `python3 scripts/price_change.py work` 의 `work` 가 이 일의 `<작업>` 이다(장부가 있는 기록 폴더 안). 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` …(폴더는 명령이 만든다). 경로에 빈칸과 `·` 가 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다(`--out "<작업>/plan-1.json"`).
+4. **어디인지 보기.** `await stayPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/price_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 는 「읽기」 5 처럼 받아 `<작업>/look/` 에 두고 다시 한다. 답의 `offers` 는 오퍼, `offer` 는 탭에 열린 오퍼, `pairs` 는 그 오퍼의 객실 · 요금제다 — 고를 이름은 모두 이 답에서 옮긴다. 담당자가 말한 오퍼가 `offer` 가 아니면 `stayPrice.look({offer: "<이름>"})` 의 답을 `look-2.json` 에 저장하고 같은 명령을 다시 한다(명령은 가장 늦게 끝난 답을 쓴다).
    - `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 돌아오면 2 와 4.
    - `호텔 번호를 찾지 못했습니다` 면 "크롬의 ERP 탭에서 ○○ 호텔의 Stay 화면을 열어 주세요". 도우미는 ERP 주소를 모른다.
    - `hotel.name` 이 말한 호텔이 아니면 "지금 탭에는 △△ 호텔이 열려 있습니다. ○○ 호텔 화면을 열어 주세요."
@@ -113,21 +113,17 @@ metadata:
 
 ## 4. 되돌리기
 
-「준비」 5 의 목록을 본다. 상태가 `previewed`(미리보기만)·`empty`(저장할 것이 없던 미리보기)·`replaced`(바뀐 미리보기)·`rolled_back`(이미 모두 되돌림)인 줄은 되돌릴 것이 없고, `partly_rolled_back` 은 나머지를 되돌릴 수 있다. "어제 바꾼 거"처럼 말하면 맞는 줄을 골라 확인받는다. 맞는 줄이 하나뿐이어도 묻는다. "이것 맞나요? <그 줄의 `line`>"(변경은 적용한 때, 저장해 둔 상태는 값을 읽은 때와 「저장」).
+「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다 — 맞는 줄이 하나뿐이어도 묻는다: "이것 맞나요? <그 줄의 `line`>"(변경은 적용한 때, 저장해 둔 상태는 값을 읽은 때와 「저장」). `partly_rolled_back` 은 나머지를 되돌릴 수 있다. `rolled_back` · `previewed` · `empty` · `replaced` 는 「되돌릴 것이 없을 때」다.
 
-**"원래 값으로 되돌려"는 둘로 들린다.** 변경 되돌리기는 그 변경이 넣은 칸만 넣기 전 값으로(그 사이 바뀐 칸은 그대로), 저장해 둔 상태로 되돌리기는 그 저장의 범위 전체를 저장한 때의 값으로 맞춘다. 번호를 말했으면 그 번호, "방금 · 어제 바꾼 거"처럼 바꾼 일을 말하면 맞는 변경, "아침 상태로" · "저장해 둔 걸로"처럼 때나 저장을 말하면 맞는 `snapshot` 이다. 둘 다 맞으면 견주어 묻는다: "<12번 줄의 `line`> — 이 변경만 되돌릴까요, <9번 줄의 `line`> — 이 저장 상태로 모두 맞출까요?" 어느 쪽이든 고른 줄의 종류 · 번호 · `scope` 를 말하고 "응"을 받은 뒤에 읽는다.
+**"원래 값으로 되돌려"는 둘로 들린다.** 변경 되돌리기(`rollback`)는 그 변경이 넣은 칸만 넣기 전 값으로(그 사이 바뀐 칸은 그대로), 저장해 둔 상태로 되돌리기(`restore`)는 그 저장의 범위 전체를 저장한 때의 값으로 맞춘다. 번호를 말했으면 그 번호, "방금 · 어제 바꾼 거"처럼 바꾼 일을 말하면 맞는 변경, "아침 상태로" · "저장해 둔 걸로"처럼 때나 저장을 말하면 맞는 `snapshot` 이다. 둘 다 맞으면(견주기에서 바뀐 칸이 모두 한 변경의 것일 때도) 한 낱말로 답하게 묻는다:
 
-1. `read-calls --record <번호>` 로 「읽기」 → `<R>/snapshot.json`.
-2. 되돌리기 계산 — 변경(`change`·`rollback`)은 `rollback`, 저장해 둔 상태(`snapshot`)는 `restore`. 일부만이면 고르기 플래그를 붙인다: `--room`·`--rate-plan`(여러 번)·`--from`·`--to`(날짜)·`--occupancy`(읽은 값의 인원 조합 키, 성인 2 는 `A2`).
+"두 가지로 되돌릴 수 있습니다. '변경'이라고 하시면 장부 <N>번이 넣은 칸만 넣기 전 값으로 돌리고, 그 사이 다른 데서 바뀐 칸은 그대로 둡니다. '저장'이라고 하시면 장부 <S>번에 저장해 둔 범위 전체를 저장한 때의 값으로 맞춥니다. 어느 쪽으로 할까요?"
 
-   ```bash
-   python3 scripts/price_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"
-   python3 scripts/price_change.py restore --saved <S> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"
-   ```
+'변경'이면 N 의 `rollback`, '저장'이면 S 의 `restore` 다 — 답한 낱말이 확인이다. 그다음 [references/rollback.md](references/rollback.md) 대로 읽고 되돌리기 미리보기를 연다. 분명한 "되돌려" 없이는 「적용하기」로 가지 않는다.
 
-   짧은 답의 `change_id` 가 이 되돌리기의 번호 M 이다(나머지 칸은 commands.md 의 `rollback`). k 번째 계산은 `<작업>/rollback-<k>.json` 이다.
-3. `render rollback --plan "<작업>/rollback-<k>.json"` → `page` 를 연다. 그리고 말한다: "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 칸 수, 지울 수 없는 칸 수(새로 생긴 칸 — ERP 에 지우는 길이 없다), 예약 있는 날의 칸이 있으면 그 날도 되돌리고 받은 예약의 금액은 그대로라는 것, `undone` 이 있으면 이미 되돌린 칸 수와 그 번호. 그대로 두는 칸(`kept`, 그 사이 값이 달라진 칸)이 있으면 반드시 그 수와 까닭(`kept_why`)을 말한다. `restored` 가 0 이면 되돌릴 칸이 없다고 하고 "되돌려"를 청하지 않는다.
-4. "되돌려" → 「적용하기」(이 되돌리기의 번호 M, 계산 파일 `rollback-<k>.json`). "○칸도 포함해서 되돌려"면 2 의 `rollback` 에 `--include-kept --replaces <M>` 을 붙여 다음 이름으로 다시 계산하고 3 부터 한다(앞 번호 M 은 `replaced` 가 되어 `begin` 이 받지 않는다).
+## 되돌릴 것이 없을 때
+
+되돌리라고 한 줄이 목록에서 `rolled_back` 이면 읽지도 장부에 적지도 않고 목록으로만 답한다: "장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다." `previewed` · `empty` · `replaced` 면: "장부 <`id`>번은 미리보기만 하고 적용하지 않아 ERP 에 넣은 것이 없습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다."
 
 ## 5. 새 요금표로 맞추기
 
@@ -139,6 +135,10 @@ metadata:
 ## 6. 저장해 둔 상태와 견주기
 
 "아침에 저장해 둔 것과 뭐가 달라졌어?"처럼 저장해 둔 상태(목록의 `snapshot` 줄)와 지금을 견주라고 하면 [references/compare.md](references/compare.md) 대로 `compare` 하고 말한다 — 다른 칸마다 누가 바꿨는지(장부 번호 · 장부에 없는 변화) 댄다. 아무것도 바꾸지 않는다.
+
+## 장부 보여줘
+
+"장부 보여줘" · "뭐 바꿨는지 보여줘"면 「준비」 1~5 만 하고, 5 의 `changes` 를 새것부터 줄마다 `line` 그대로 읽어 준다. 5 의 알림 말고는 덧붙이지 않고, 읽지도 장부에 적지도 않는다.
 
 ## 적용하기 — 바꾸기·되돌리기 공통
 

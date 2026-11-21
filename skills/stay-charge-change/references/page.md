@@ -58,7 +58,7 @@
 | `pressed` · `refused` · `differ` | 저장 단추를 눌렀는지 · 누르기 전에 스스로 거절했는지 · 읽은 값과 다른 칸 이름 |
 | `missing` | 목록에 그 오퍼의 그 부과금이 없다 |
 | `body` | look · readCharge 의 읽은 것 `{id, chars, bytes, crc32, fnv}`. 명령이 `refetch` 로 댄 조각만 `take` 로 받는다 |
-| `what` · `note` · `error` · `errors` | 무엇을 했는지 · 메모 · 까닭 · 화면이 보인 오류 줄 |
+| `what` · `note` · `error` · `errors` | 무엇을 했는지(`what` 은 「오퍼 · 부과금」) · 메모 · 까닭 · 화면이 보인 오류 줄 |
 | `clicks` · `blocked` | 누른 것 수 · 막은 클릭 |
 | `rest` · `warn` · `ms` · `doneAt` | 화면이 정리됐는지 · 걸린 시간 · 끝난 시각(명령은 읽기 답들의 가장 이른 `doneAt` 을 ERP 에서 읽은 시각으로 삼는다) |
 
