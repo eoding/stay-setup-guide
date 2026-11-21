@@ -298,7 +298,9 @@ def chosen_table(entries: Iterable[tuple[str, str, int, str | None]], unit: str 
             f'<th>고르실 때 하신 말</th></tr>{rows}</table></div>')
 
 
-ROLLBACK_NOTE = "이 되돌리기도 장부에 한 번의 변경으로 적혀서, 다시 되돌릴 수 있습니다."
+ROLLBACK_NOTE = ("이 되돌리기도 장부에 적힙니다. 되돌리기는 다시 되돌리지 않습니다 — 되돌린 값으로 다시 바꾸려면 같은 내용으로 새로 "
+                 "바꿔 달라고 하세요.")
+UNDO_ONCE = ("이 되돌리기는 다시 되돌리지 않습니다. 되돌린 값으로 다시 바꾸려면 같은 내용으로 새로 바꿔 달라고 하세요.")   # 되돌리기 · 저장 상태로 되돌리기의 결과 페이지 끝(세 도우미)
 
 
 def rollback_ask(plan: RollbackPlan, kind_notes: Iterable[str], unit: str = "칸") -> str:
