@@ -319,6 +319,11 @@ The bundled Pretendard font is separately under the SIL Open Font License
   `python3 skills/stay-price-change/scripts/loader_identity.py` and commit the loader in the same commit. The price
   calendar suite fails until you do, and a partner's tab refuses the files.
 - Each helper's `SKILL.md` has a size budget in its `tests/test_docs.py`; detail goes to its `references/`.
+- The ledger lives under `~/Documents`. When that folder is synced by a cloud service (for example iCloud "Desktop &
+  Documents" on macOS, or OneDrive folder backup on Windows), set `STAY_PRICE_LEDGER_DIR` to a folder that is not synced
+  and move the record folder there: a synced file can be evicted to the cloud or split into conflict copies. A command
+  that finds work folders or pages in the record folder but no ledger file stops and says so instead of starting an empty
+  ledger; `work` creates the ledger together with the first work folder.
 
 ## Repository rules
 
