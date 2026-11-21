@@ -186,16 +186,20 @@ charge amounts including a time band and a pay-at-property amount; a page answer
 one retake; the new piece form in a real browser tool; a rate sheet whose child rows were matched by the command and whose
 percentage on child rows was asked; comparing a saved state with the present and restoring it; the note on a name that
 states the old amount; two same-named add-ons told apart by their offer; the ledger list by hotel; a comparison that names
-the helper's own ledger record; a restore to a saved state that settles the change it undid. Not yet run on a real ERP:
-creating new cells, the failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real
-rate-sheet file from a hotel, and a comparison after an actual season refill in the ERP. What changed after the final trial
-has run in the test suites only: a command makes a missing reading folder inside the record folder and ends any failure
-with one JSON line instead of a traceback; every helper's list line says "모두 되돌림" or "일부 되돌림" with the record
-that did it; `look` lists the items to choose from (with `--find`) and binds the newest look answer; the loader asks only
-for the files a tab is missing; add-on answers and previews name the offer and the words said for a chosen red line; and
-the instructions for showing the ledger, for a change already rolled back, and for a restore after a comparison. Other
-follow-ups of the fifth trial (a work folder per request, the edit-window view, room names taken from earlier readings,
-the one-line confirmations) are not counted above as run on a real ERP.
+the helper's own ledger record; a restore to a saved state that settles the change it undid. A read-only run on a real
+tab after the final trial confirmed that a command makes its missing reading folder, that the loader asks only for the
+file a tab is missing, and that `look` hands over the ids and names to choose from. Not yet run on a real ERP: creating
+new cells, the failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real rate-sheet file
+from a hotel, and a comparison after an actual season refill in the ERP. Run in the test suites only: a failure ends in
+one JSON line instead of a traceback; every helper's list line says "모두 되돌림" or "일부 되돌림" with the record that
+did it; `look --find` and the newest look answer winning; add-on answers and previews naming the offer and the words
+said for a chosen red line; the instructions for showing the ledger, for a change already rolled back, and for a restore
+after a comparison. The last unit before handover has also run in the test suites only: every helper's list shows the
+hotel's whole ledger with each record's kind in plain words, an empty list has its own sentence, the price list line
+names the offer, `work` makes the `look/` folder and `calls --out` the folder for saved apply answers, and the wording of
+the add-on and charge views and of the price view's ledger entry. Other follow-ups of the fifth trial (a work folder per
+request, the edit-window view, room names taken from earlier readings, the one-line confirmations) are not counted above
+as run on a real ERP.
 
 ## Optional room inventory
 
