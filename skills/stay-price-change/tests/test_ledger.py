@@ -63,6 +63,18 @@ class LocationTest(unittest.TestCase):
             with self.assertRaises(LedgerError):
                 Ledger(path)
 
+    def test_a_ledger_from_an_older_trial_helper_is_refused_with_a_sentence_instead_of_failing_later(self):
+        # 판 3 은 상태 empty 를 더했다. SQLite 는 표의 CHECK 를 고쳐 쓰지 못해, 앞 판 장부를 열면 나중에 적을 때 깨진다 — 열 때 거절한다
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / DB_NAME
+            Ledger(path)
+            db = sqlite3.connect(path)
+            db.execute("UPDATE meta SET value = ? WHERE name = 'schema_version'", (str(SCHEMA_VERSION - 1),))
+            db.commit()
+            db.close()
+            with self.assertRaisesRegex(LedgerError, "시험 판 도우미가 만든 것입니다.*STAY_PRICE_LEDGER_DIR"):
+                Ledger(path)
+
     def test_an_older_layout_is_not_upgraded(self):
         # 아무것도 내보낸 적이 없어 앞 판 장부는 없다 — 여는 일은 있는 표의 칸을 바꾸지 않는다(옮기는 코드가 없다)
         with tempfile.TemporaryDirectory() as folder:
