@@ -5,6 +5,11 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { chargePage, plain, charsOf, takeAll, HOTEL, DB, LISTED } from './charge_harness.mjs';
 
 test('C1 · 부과금 탭이면 아무것도 누르지 않고, 오퍼 둘과 부과금 여섯을 목록의 글자 · 차례 그대로 조각으로 돌려준다', async () => {
@@ -119,6 +124,28 @@ test('C1 · 부과금이 많아도 답과 쪽은 800자 안이고(쪽 크기 200
     for (const piece of takes) assert.ok(charsOf(piece) <= 800, `${size}: ${charsOf(piece)}`);
     assert.equal(body.offers.flatMap((o) => o.charges).length, 54, String(size));
     assert.deepEqual(body.offers[0].charges.map((c) => c.id), ['845', '844', '846', '847'], '번호 큰 오퍼가 먼저, 줄은 종류 · 번호 차례');
+  }
+  page.w.close();
+});
+
+test('H4 · 적용 범위 칸은 조각마다 ` · ` 로 잇고(「객실 객실」이 아니다), 이름의 & 는 명령의 목록에 & 로 온다', async () => {
+  const page = chargePage({ hotel: { id: '1', name: '데모 리조트 & 빌라' } });
+  const r = plain(await page.w.stayCharge.look());
+  assert.equal(r.ok, true, r.error);
+  const { takes, body } = takeAll(page.w, r);
+  assert.ok(!JSON.stringify(body).includes('객실 객실'), '칸의 글과 저장된 범위가 붙지 않는다');
+  assert.ok(takes.map((piece) => piece.text).join('').includes('&#38;'), '쪽 안에서는 & 가 &#38; 로 싸여 온다(조각의 모양)');
+  const dir = mkdtempSync(join(tmpdir(), 'charge-look-'));
+  try {
+    [r, ...takes].forEach((answer, i) => writeFileSync(join(dir, `look-${i + 1}.json`), JSON.stringify(answer)));
+    const done = spawnSync('python3', [fileURLToPath(new URL('../scripts/charge_change.py', import.meta.url)), 'look', '--answers', dir,
+      '--out', join(dir, 'look.json')], { encoding: 'utf8', env: { ...process.env, STAY_PRICE_LEDGER_DIR: join(dir, '기록') } });
+    assert.equal(done.status, 0, done.stderr);
+    const listing = JSON.parse(readFileSync(join(dir, 'look.json'), 'utf8'));
+    assert.equal(listing.hotel.name, '데모 리조트 & 빌라', '명령이 푼 목록에는 & 그대로');
+    assert.ok(listing.charges.every((c) => !c.scope.includes('객실 객실')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
   page.w.close();
 });

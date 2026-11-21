@@ -129,7 +129,7 @@ def row_of(offer: dict, charge: dict) -> dict:
     else:
         dates = "선택 항목 (고객이 고를 때만)"
     return {"id": charge["id"], "name": charge["name"], "kind": KINDS[charge["kind"]], "basis": BASES[charge["basis"]],
-            "amount": amount_lines(offer, charge), "scope": f"{', '.join(rooms) if rooms else '이 오퍼의 모든 객실'} 객실: 기존 범위 그대로",
+            "amount": amount_lines(offer, charge), "scope": f"{', '.join(rooms) if rooms else '이 오퍼의 모든 객실'} · 객실: 기존 범위 그대로",
             "dates": dates}
 
 
@@ -278,10 +278,10 @@ def write_answers(folder: Path, prefix: str, answers) -> None:
         (folder / f"{prefix}-{index}.json").write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
 
 
-def look_answer(erp: Erp):
-    """look 의 답(작은 답 + take 답들) — 지금 상태의 오퍼와 부과금 전부."""
+def look_answer(erp: Erp, body_id: str = "blook"):
+    """look 의 답(작은 답 + take 답들) — 지금 상태의 오퍼와 부과금 전부. `body_id` 는 페이지가 조각에 붙이는 이름(부를 때마다 다르다)."""
     offers = [{"id": offer["id"], "name": offer["name"], "charges": [row_of(offer, charge) for charge in charges]}
               for offer, charges in erp.offers()]
     keep = {"hotel": HOTEL, "offers": offers}
-    return reply("look", {}, keep, pieces=4, body_id="blook", login=False, hotel=HOTEL,
+    return reply("look", {}, keep, pieces=4, body_id=body_id, login=False, hotel=HOTEL,
                  count={"offers": len(offers), "charges": sum(len(o["charges"]) for o in offers)}, doneAt=erp.tick())

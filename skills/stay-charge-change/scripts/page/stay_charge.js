@@ -124,7 +124,7 @@
       kind: shownText(td[1]),
       basis: C(td[2].textContent),
       amount: linesOf(td[3]),
-      scope: C(td[4].textContent),
+      scope: K.scopeText(td[4]),
       dates: C(td[5].textContent)
     };
   }

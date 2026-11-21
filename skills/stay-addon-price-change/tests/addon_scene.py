@@ -35,7 +35,7 @@ _replies = _price_test_helper("browser_replies")
 done_at, reply = _replies.done_at, _replies.reply
 
 HOTEL = {"id": "1", "name": "데모 호텔"}
-SCOPE_TEXT = "요금제: 기존 범위 그대로 객실: 기존 범위 그대로 부가옵션 범위와 모두 일치하는 대상에만 적용"
+SCOPE_TEXT = "요금제: 기존 범위 그대로 · 객실: 기존 범위 그대로 · 부가옵션 범위와 모두 일치하는 대상에만 적용"
 START = datetime(2026, 11, 21, 1, 0, tzinfo=timezone.utc)
 
 

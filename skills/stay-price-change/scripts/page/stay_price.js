@@ -1277,12 +1277,26 @@
     return { clicks: wall.log.clicks.slice(), blocked: wall.log.blocked.slice() };
   }
 
+  // 목록의 「적용 범위」 칸(`_saved_scope.html`) — 칸의 글(「이 오퍼의 모든 객실」 …)과 저장된 범위의 축마다(`[data-stay-saved-scope]`
+  // 안의 div — 「객실: 기존 범위 그대로」)를 화면의 차례대로 한 조각씩 ` · ` 로 잇는다. 축 안의 줄(br)은 ` / ` 로. 칸의 글자를 통째로
+  // 이으면 「… 모든 객실 객실: …」처럼 붙는다
+  function scopeText(cell) {
+    var copy = cell.cloneNode(true), CUT = '\u0001';
+    all('br', copy).forEach(function (br) { br.replaceWith(document.createTextNode(' / ')); });
+    all('[data-stay-saved-scope]', copy).forEach(function (saved) {
+      var rows = [].slice.call(saved.children).filter(function (el) { return el.localName === 'div'; });
+      saved.replaceWith(document.createTextNode(CUT + (rows.length ? rows : [saved]).map(function (el) { return el.textContent; }).join(CUT) + CUT));
+    });
+    return copy.textContent.split(CUT).map(function (part) { return C(part).replace(/^(\/\s*)+|(\s*\/)+$/g, ''); })
+      .filter(Boolean).join(' · ');
+  }
+
   // 다른 페이지 모듈(부가옵션 가격 `stay_addon_price.js` · 부과금 `stay_charge.js`)이 이 파일을 베끼지 않고 쓰는 부품 — 벽 · 작업 틀 ·
   // 누르기 · 답 거르기 · 조각 · 바쁨 표지 · 편집 창 부품이 하나라 모듈을 통틀어 작업은 한 번에 하나다. 이 파일을 다시 올리면 새로 선다
   window.stayPageKit = Object.freeze({
     run: run, press: press, settle: settle, fail: fail, Stop: Stop,
     scrub: function (value) { return scrub(value); }, fit: fit, take: take, last: last, idle: idleState,
-    C: C, all: all, clip: clip, quiet: quiet,
+    C: C, all: all, clip: clip, quiet: quiet, scopeText: scopeText,
     drawerOpen: drawerOpen, closeDrawer: closeDrawer, atRest: atRest, pageHotel: pageHotel, guard: guard,
     sent: sent, differs: differs, pairs: pairs, errors: windowErrors, fill: fill, saveOnce: saveOnce
   });

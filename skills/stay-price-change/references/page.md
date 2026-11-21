@@ -6,7 +6,7 @@
 
 | 부르는 것 | 답 |
 |---|---|
-| `scripts/page/stay_price_loader.js` 전체 실행 | `{ok: true, bridge: "stay_price_bridge", label: "stay price file bridge", want: ["stay_helper.js", "stay_boot.js", "stay_price.js"]}`. 파일 칸은 1px · 거의 투명이라 화면에 안 보이지만 접근성 트리에 그 이름으로 있다 |
+| `scripts/page/stay_price_loader.js` 전체 실행 | `{ok: true, bridge: "stay_price_bridge", label: "stay price file bridge", sets: {price: [세 파일], addon: [네 파일], charge: [네 파일]}}` — 묶음마다 올릴 파일 이름. 뒤에 `stayPriceLoader.again()` 을 붙여 실행했으면 답은 그 `again()` 의 것이다. 파일 칸은 1px · 거의 투명이라 화면에 안 보이지만 접근성 트리에 그 이름으로 있다 |
 | (파일 올리기 도구) 그 칸에 세 파일 | 한 번에 셋이든 하나씩이든 모인다. 이름이 `stay_helper.js`·`stay_boot.js`·`stay_price.js` 인 파일만 고른다 |
 | `await stayPriceLoader.load()` | `{ok, label, helper, price, stored, loaded}`. 세 파일을 도우미 → 부트 → 가격 도우미 차례로 실행하고 `stayPrice…` 키 셋에만 적어 둔다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다. 올라온 파일이 설치된 것과 다르면 아무것도 실행하지도 적지도 않고 `{ok: false, wrong: ["stay_price.js"], error: "올라온 파일이 설치된 도우미의 것과 다릅니다: stay_price.js — 올린 폴더에 남은 예전 복사본일 수 있습니다. …"}` |
 | `stayPriceLoader.again()` | 적어 둔 원본을 같은 차례로 다시 실행한다 — 탭에 올릴 때마다 먼저 부른다(설치된 것과 같을 때만 실행하므로 안전하다). 원본이 없으면 `적어 둔 원본이 없습니다`. 적어 둔 원본이 설치된 것과 다르면(도우미를 새로 깔기 전에 적어 둔 예전 판) 아무것도 실행하지 않고 `{ok: false, wrong, error: "적어 둔 원본이 설치된 도우미와 다릅니다: … — … 세 파일을 다시 올립니다(load)"}` |

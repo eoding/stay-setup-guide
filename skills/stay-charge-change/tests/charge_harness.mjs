@@ -323,20 +323,20 @@ export const LISTED = [
   { id: '602', name: '데모 연말 오퍼', charges: [
     { id: '705', name: '연말 갈라 디너 (12/31 · 의무 · 연령별)', kind: '기타', basis: '정액',
       amount: ['100.00 USD', '인당', '연령별 단가: 유아 · 소아', '유아: 0.00 USD', '소아: 50.00 USD'],
-      scope: `이 오퍼의 모든 객실 ${LEGACY}`, dates: '의무 지정 1일 2026-12-31' },
+      scope: `이 오퍼의 모든 객실 · ${LEGACY}`, dates: '의무 지정 1일 2026-12-31' },
     { id: '706', name: '공항 픽업 (금액 미정)', kind: '기타', basis: '정액', amount: ['미정', '체류당 1회'],
-      scope: `이 오퍼의 모든 객실 ${LEGACY}`, dates: OPTIONAL }] },
+      scope: `이 오퍼의 모든 객실 · ${LEGACY}`, dates: OPTIONAL }] },
   { id: '601', name: '데모 오퍼 2027', charges: [
     { id: '702', name: '얼리 체크인 (07시부터 · 1박 요금의 30%)', kind: '얼리 체크인', basis: '1박 요금의 %',
       amount: ['00:00 ~ 06:59 · 1박 요금의 %: 100.00%', '07:00 ~ 12:00 · 1박 요금의 %: 30.00%', '체류당 1회'],
-      scope: `이 오퍼의 모든 객실 ${LEGACY}`, dates: OPTIONAL },
+      scope: `이 오퍼의 모든 객실 · ${LEGACY}`, dates: OPTIONAL },
     { id: '701', name: '레이트 체크아웃 (14시 이후 · 1박 요금의 50%)', kind: '레이트 체크아웃', basis: '1박 요금의 %',
       amount: ['12:01 ~ 14:00 · 정액: 0.00 USD', '14:01 ~ 18:00 · 1박 요금의 %: 50.00%', '체류당 1회'],
-      scope: `이 오퍼의 모든 객실 ${LEGACY}`, dates: OPTIONAL },
+      scope: `이 오퍼의 모든 객실 · ${LEGACY}`, dates: OPTIONAL },
     { id: '703', name: '크리스마스 갈라 디너 (12/24 · 의무 · 성인)', kind: '기타', basis: '정액', amount: ['90.00 USD', '인당'],
-      scope: `디럭스 ${LEGACY}`, dates: '의무 지정 1일 2026-12-24' },
+      scope: `디럭스 · ${LEGACY}`, dates: '의무 지정 1일 2026-12-24' },
     { id: '704', name: '현장 결제 리조트피', kind: '기타', basis: '정액', amount: ['0.00 USD', '체류당 1회', '현장 결제: 15.00 USD'],
-      scope: `이 오퍼의 모든 객실 ${LEGACY}`, dates: OPTIONAL }] }
+      scope: `이 오퍼의 모든 객실 · ${LEGACY}`, dates: OPTIONAL }] }
 ];
 export const rowOf = (id) => LISTED.flatMap((o) => o.charges).find((c) => c.id === id);
 export const offerOfCharge = (id) => LISTED.find((o) => o.charges.some((c) => c.id === id)).id;

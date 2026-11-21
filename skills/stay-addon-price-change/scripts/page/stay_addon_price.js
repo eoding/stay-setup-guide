@@ -103,7 +103,7 @@
       sell: C(td[1].textContent),
       values: [].slice.call(td[2].children).filter(function (el) { return el.localName === 'div'; }).map(function (el) { return C(el.textContent); }),
       target: C(td[3].textContent),
-      scope: C(td[4].textContent),
+      scope: K.scopeText(td[4]),
       band: C(td[5].textContent)
     };
   }

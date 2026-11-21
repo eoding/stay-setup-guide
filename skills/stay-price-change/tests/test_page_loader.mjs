@@ -47,7 +47,13 @@ test('B10 · 올리개를 실행하면 숨은 파일 칸이 생기고, 세 파�
   runnerLeftovers(page);
   const before = Object.keys(page.w.localStorage);
   const started = plain(page.w.eval(LOADER));
-  assert.deepEqual(started, { ok: true, bridge: 'stay_price_bridge', label: 'stay price file bridge', want: ['stay_helper.js', 'stay_boot.js', 'stay_price.js'] });
+  assert.deepEqual(started, { ok: true, bridge: 'stay_price_bridge', label: 'stay price file bridge', sets: {
+    price: ['stay_helper.js', 'stay_boot.js', 'stay_price.js'],
+    addon: ['stay_helper.js', 'stay_boot.js', 'stay_price.js', 'stay_addon_price.js'],
+    charge: ['stay_helper.js', 'stay_boot.js', 'stay_price.js', 'stay_charge.js'] } },
+    'H4 · 첫 답은 묶음 셋의 파일을 모두 댄다 — 넷이 필요한 도우미에게 셋을 말하지 않는다');
+  assert.deepEqual(plain(page.w.stayPriceLoader.bridge('charge')).want, ['stay_helper.js', 'stay_boot.js', 'stay_price.js', 'stay_charge.js'],
+    '묶음을 대면 그 묶음의 파일만 댄다');
   const input = page.doc.getElementById('stay_price_bridge');
   assert.ok(input.type === 'file' && input.multiple);
   upload(page, [['stay_price.js', PAGE]]);

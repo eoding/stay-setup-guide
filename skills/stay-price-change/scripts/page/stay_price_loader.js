@@ -4,6 +4,8 @@
  * 쓰는 법(브라우저 도구 셋):
  *   1. JS 실행 도구로 이 파일 전체를 실행한다 → 파일 칸 `input#stay_price_bridge`(접근성 이름 `stay price file bridge`)가 생기고
  *      `window.stayPriceLoader` 가 선다. 칸은 1px · 거의 투명이라 보이지 않지만 접근성 트리에는 남아 도구가 이름으로 찾는다.
+ *      이 첫 답(`sets`)은 묶음 셋의 파일을 모두 댄다 — 어느 도우미가 붙여 넣어도 제 묶음의 파일 수를 잘못 듣지 않는다. 도우미는 보통
+ *      이 파일 뒤에 `stayPriceLoader.again('<묶음>')` 한 줄을 붙여 한 번에 실행하므로, 실제로 보는 답은 제 묶음의 것이다.
  *   2. 업로드 도구로 **그 이름의** 칸에 파일을 올린다(ERP 의 사진 올리기 칸과 헷갈리지 않게 — 한 번에 모두든 하나씩이든):
  *      가격 캘린더는 러너의 `stay_helper.js`·`stay_boot.js`, 그리고 `stay_price.js` 셋. 부가옵션 가격은 그 셋에
  *      `stay_addon_price.js` 를 더한 넷.
@@ -45,9 +47,9 @@
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 98583, crc32: '38bdbfa3', fnv: 'd47076f9' },
-    'stay_addon_price.js': { bytes: 16410, crc32: '455612e3', fnv: '044d5bf7' },
-    'stay_charge.js': { bytes: 19860, crc32: 'ce1d29b3', fnv: 'f38659fb' }
+    'stay_price.js': { bytes: 99693, crc32: '47469c1d', fnv: '49ad812a' },
+    'stay_addon_price.js': { bytes: 16408, crc32: '37505989', fnv: 'fb4a2d2e' },
+    'stay_charge.js': { bytes: 19858, crc32: 'b1e9a054', fnv: 'a806ff00' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
 
@@ -108,6 +110,7 @@
     return clean({ ok: false, label: LABEL, error: '모르는 묶음입니다: ' + String(set).slice(0, 40) + ' — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격, "charge" 면 부과금입니다' });
   }
 
+  // 칸을 세운다. 묶음을 대면 그 묶음의 파일 이름(`want`), 대지 않으면 묶음마다의 파일 이름(`sets`)을 댄다
   function bridge(set) {
     var files = filesOf(set);
     if (!files) return unknownSet(set);
@@ -125,7 +128,13 @@
     input.hidden = false;
     input.setAttribute('aria-label', LABEL);
     input.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;z-index:2147483647;';
-    return clean({ ok: true, bridge: BRIDGE, label: LABEL, want: files.map(function (f) { return f.name; }) });
+    var names = function (list) { return list.map(function (f) { return f.name; }); };
+    if (set === undefined || set === null) {
+      var sets = {};
+      Object.keys(SETS).forEach(function (name) { sets[name] = names(SETS[name]); });
+      return clean({ ok: true, bridge: BRIDGE, label: LABEL, sets: sets });
+    }
+    return clean({ ok: true, bridge: BRIDGE, label: LABEL, want: names(files) });
   }
   // 브라우저 도구는 점으로 이은 조각 셋 이상뿐인 글자(판 번호 `0.15.0`)를 토큰으로 보고 가린다 — 점을 `·` 로 바꾼다.
   // 가격 도우미가 올라오기 전의 답도 지나므로 `stayPrice.scrub` 과 따로 둔다(그 scrub 도 같은 규칙이다)

@@ -231,7 +231,7 @@ ${o.addons === 'stub' ? stub(hotelId) : panel(db, hotelId)}
   };
 }
 
-const LEGACY = '요금제: 기존 범위 그대로 객실: 기존 범위 그대로 부가옵션 범위와 모두 일치하는 대상에만 적용';
+const LEGACY = '요금제: 기존 범위 그대로 · 객실: 기존 범위 그대로 · 부가옵션 범위와 모두 일치하는 대상에만 적용';
 // fixtures/erp/addons.json 이 그리는 목록 — 화면의 글자 그대로(손으로 적은 기대값)
 export const LISTED = [
   { id: '201', name: '조식 추가 (성인)', offer: '데모 오퍼 2027', lines: [
@@ -243,7 +243,7 @@ export const LISTED = [
     { id: '304', name: '엑스트라베드 1개', sell: '30.00 USD', values: ['판매가: 30.00 USD', '공급 원가: 25.00 USD'], target: '전체', scope: LEGACY, band: '전체' }] },
   { id: '204', name: '엑스트라베드', offer: '데모 연말 오퍼', lines: [
     { id: '305', name: '엑스트라베드 1개', sell: '33.00 USD', values: ['판매가: 33.00 USD', '공급 원가: 27.50 USD'], target: '연말 시즌',
-      scope: '요금제: 지정한 대상만 포함: 데모 연말 오퍼 · 디럭스 · 조식 포함 객실: 기존 범위 그대로 부가옵션 범위와 모두 일치하는 대상에만 적용', band: '전체' }] }
+      scope: '요금제: 지정한 대상만 / 포함: 데모 연말 오퍼 · 디럭스 · 조식 포함 · 객실: 기존 범위 그대로 · 부가옵션 범위와 모두 일치하는 대상에만 적용', band: '전체' }] }
 ];
 
 // 답의 조각을 take 로 자리(at)를 따라 모두 받아 잇는다
