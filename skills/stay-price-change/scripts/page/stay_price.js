@@ -12,7 +12,7 @@
  *   stayPrice.applyBulk({no, offer, room, ratePlan, dates, rows})              [선택 날짜 가격 수정] 저장 한 번 — 고른 날들이
  *                                                                              떨어져 있어도 그 날들만 고른다
  *   stayPrice.applyCell({no, offer, room, ratePlan, date, occupancy, nights,
- *                        clear, set})                                          셀 창 저장 한 번(정가·공급 원가 비우기·넣기)
+ *                        clear})                                               셀 창 저장 한 번(정가·공급 원가 비우기)
  *   stayPrice.take(id, at, size)                                               읽은 조각의 한 쪽 — at=0 부터 next 를 따라 end 까지
  *   stayPrice.last()                                                           마지막 작업의 결과(45초에 잘렸을 때 읽는다)
  *   stayPrice.standDown() · standUp() · idle()                                 작업 밖의 쉬는 벽 내리기 · 다시 세우기 · 보기
@@ -1079,16 +1079,13 @@
   function applyCell(input) {
     return run('applyCell', input, async function (p, ctx) {
       var want = { offer: text(p.offer, 'offer'), room: text(p.room, 'room'), ratePlan: text(p.ratePlan, 'ratePlan'), date: p.date, occupancy: p.occupancy, nights: p.nights,
-        clear: Array.isArray(p.clear) ? p.clear.slice() : [], set: p.set && typeof p.set === 'object' ? Object.assign({}, p.set) : {} };
+        clear: Array.isArray(p.clear) ? p.clear.slice() : [] };
       if (!/^\d{4}-\d{2}-\d{2}$/.test(want.date || '')) fail('`date` 는 YYYY-MM-DD 입니다');
       if (typeof want.occupancy !== 'string' || !(want.nights >= 1 && want.nights === Math.floor(want.nights))) fail('`occupancy`(글자)와 `nights`(1 이상 정수)가 있어야 합니다');
+      // 셀 창은 비우기만 한다 — 넣는 값은 묶음 저장(applyBulk)이 한다
       var targets = {};
       want.clear.forEach(function (name) { if (!CELL_FIELDS[name]) fail('셀 창에서는 정가(list)·공급 원가(supply)만 비웁니다: ' + name); targets[name] = ''; });
-      Object.keys(want.set).forEach(function (name) {
-        if (!CELL_FIELDS[name] || targets[name] !== undefined || !AMOUNT.test(String(want.set[name]))) fail('`set` 은 정가(list)·공급 원가(supply)의 금액이고 비우기와 겹치지 않아야 합니다');
-        targets[name] = String(want.set[name]);
-      });
-      if (!Object.keys(targets).length) fail('비우거나 넣을 칸이 없습니다');
+      if (!Object.keys(targets).length) fail('비울 칸이 없습니다');
       var cellName = want.room + ' · ' + want.ratePlan + ' · ' + want.date + ' · ' + (want.occupancy || '인원 무관') + ' · ' + want.nights + '박 이상';
 
       await toPair(ctx, want.offer, want.room, want.ratePlan);

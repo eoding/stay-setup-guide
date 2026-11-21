@@ -148,13 +148,16 @@ test('B7 · applyCell — 인원·박수 줄을 찾아 정가를 비우고 그 �
   assert.equal(page.log.posts[0].net_amount, '90000.00', '다른 칸은 그대로 실린다');
   assert.equal(page.doc.getElementById('stay_cell_edit'), null);
   page.w.close();
+});
 
-  const two = erpPage();
-  const r2 = plain(await two.w.stayPrice.applyCell(inPage(two.w, Object.assign({}, CELL, { occupancy: 'A2', clear: [], set: { supply: '100000.00' } }))));
-  assert.equal(r2.saved, true, r2.error);
-  assert.equal(two.log.posts[0].row, '502');
-  assert.equal(two.log.posts[0].net_amount, '100000.00');
-  two.w.close();
+test('A6 · applyCell — 셀 창은 비우기만 한다(넣는 값 `set` 은 받지 않고 화면을 만지지 않는다)', async () => {
+  const page = erpPage();
+  const r = plain(await page.w.stayPrice.applyCell(inPage(page.w, Object.assign({}, CELL, { occupancy: 'A2', clear: [], set: { supply: '100000.00' } }))));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /비울 칸이 없습니다/);
+  assert.deepEqual(page.log.reached, []);
+  assert.deepEqual(page.log.posts, []);
+  page.w.close();
 });
 
 test('B7 · applyCell — 화면에 없는 줄은 거절하고, 저장이 거절되면 다시 누르지 않는다', async () => {
