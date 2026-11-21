@@ -287,10 +287,8 @@ class CheckReport:
 def _kind_of(db, change_id: int | None) -> str | None:
     """번호의 종류 — 그 번호에 적힌 항목 줄의 종류. 항목 줄이 없는 번호(넣을 것이 없던 미리보기 · 되돌리기)는 오퍼 칸이 찼으면 가격
     캘린더의 것이고(오퍼 칸은 가격 캘린더 도우미만 채운다), 되돌리기면 되돌리는 번호의 종류다. 그래도 모르면 None — 어느 도우미든
-    받고, 목록에는 종류 없이 나온다."""
-    seen = set()
-    while change_id is not None and change_id not in seen:
-        seen.add(change_id)
+    받고, 목록에는 종류 없이 나온다. 되돌리기는 앞선 번호만 가리키므로 따라가기는 끝난다."""
+    while change_id is not None:
         row = db.execute("SELECT item_kind FROM item_values WHERE change_id = ? LIMIT 1", (change_id,)).fetchone()
         if row is not None:
             return row["item_kind"]

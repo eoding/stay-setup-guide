@@ -404,8 +404,8 @@ def record_what(kind: str, request: Mapping | None, reverses: int | None, curren
 
 
 def record_scope(entry: Mapping, keys: Iterable[CellKey]) -> str:
-    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 오퍼, 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지(세 도우미가 같은
-    말 — files.record_progress). 오퍼는 늘 댄다 — 같은 객실 · 요금제가 두 오퍼에 있으면 오퍼 없이는 두 번호가 같은 줄이 되고, 되돌리기
+    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 「객실 가격」, 오퍼, 객실 · 요금제, 날짜 구간, 한 일, 어디까지
+    갔는지(scope_text — 어디까지는 세 도우미가 같은 말, files.record_progress). 오퍼는 늘 댄다 — 같은 객실 · 요금제가 두 오퍼에 있으면 오퍼 없이는 두 번호가 같은 줄이 되고, 되돌리기
     확인이 이 줄을 읽어 준다."""
     return scope_text(entry["offer"], keys, record_what(entry["kind"], entry["request"], entry["reverses"], entry["currency"],
                                                         entry["planned"]), record_progress(entry, "칸"))
