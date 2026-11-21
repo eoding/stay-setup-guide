@@ -230,6 +230,16 @@ class UnusedChoiceTest(unittest.TestCase):
                          [("ABOVE_LIST", "held_kept", 2), ("BELOW_COST", "none", 0)],
                          "성인 3박의 「안 바꿈」은 쓰인다 · 공급 원가 빨간 줄은 이 계산에 없다")
 
+    def test_a_rule_wide_choice_covered_by_pinned_cells_or_by_a_later_rule_wide_choice_says_which(self):
+        cell = self.scene.cell
+        plan = resolve(plan_change(snap(ChildTierCellTest.CELLS), ask("percent", "12")), (
+            Resolution("ABOVE_LIST", "clear_list", said="정가 지워"),                      # 뒤의 규칙 전체 고름이 앞선다
+            Resolution("ABOVE_LIST", "raise_list", said="아니 정가 올려"),                # 칸마다 고른 것이 모두 앞선다
+            Resolution("ABOVE_LIST", "keep", (cell("A2", 1), cell("A2C1_CHD", 1), cell("A2C2_CHD", 1)), "1박은 다 그대로")))
+        self.assertEqual([(line["choice"], line["why"], line["cells"]) for line in unused_lines(plan)],
+                         [("clear_list", "replaced", 0), ("raise_list", "pinned", 0)])
+        self.assertEqual(unused_lines(plan)[1]["label"], "그 빨간 줄의 칸을 모두 칸마다 따로 고르셨습니다")
+
     def test_the_command_s_short_answer_carries_unused(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
