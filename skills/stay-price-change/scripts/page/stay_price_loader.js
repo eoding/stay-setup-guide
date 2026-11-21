@@ -47,7 +47,7 @@
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 100246, crc32: '1862b86a', fnv: '683600c4' },
+    'stay_price.js': { bytes: 101223, crc32: 'ca5ac3dd', fnv: '18a3050d' },
     'stay_addon_price.js': { bytes: 16645, crc32: '8503dfcd', fnv: '9083ec41' },
     'stay_charge.js': { bytes: 19858, crc32: 'b1e9a054', fnv: 'a806ff00' }
   };

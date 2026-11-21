@@ -56,3 +56,34 @@ test('B13 · 작업 중에는 그 작업의 허용 목록이 판단하고, 끝�
   assert.equal(page.log.reached.length, reached, '작업이 끝난 뒤 스크립트 클릭은 다시 막힌다');
   page.w.close();
 });
+
+// 브라우저의 사람 움직임 표지 — 사람이 누른 뒤 몇 초 켜진다. jsdom 에는 없어 시험이 세운다
+const activation = (w, on) => Object.defineProperty(w.navigator, 'userActivation', { configurable: true, value: { isActive: on, hasBeenActive: true } });
+
+test('A4 · 작업 밖에서 사람이 방금 움직였으면 화면 스크립트의 클릭(확인창이 누르는 저장 · 탭 링크)이 지나고, 아니면 막힌다', () => {
+  const page = erpPage();
+  const save = page.doc.querySelector('#stay_calendar [data-calendar-bulk-action="price"]');
+  activation(page.w, false);
+  save.click();
+  assert.deepEqual(page.log.reached, [], '사람이 움직이지 않았을 때(도구의 스크립트) 스크립트 클릭은 막힌다');
+  assert.equal(plain(page.w.stayPrice.idle()).count, 1);
+  // 사람이 누른 [그래도 새로 만들기] 의 처리 안에서 ERP 가 저장 단추를 `.click()` 한다 — 그 클릭은 isTrusted 가 아니지만 사람이 방금 움직였다
+  const confirm = page.doc.createElement('button');
+  confirm.textContent = '그래도 새로 만들기';
+  page.doc.body.appendChild(confirm);
+  confirm.addEventListener('click', () => { activation(page.w, true); save.click(); });
+  personClick(page.w, confirm);
+  assert.deepEqual([...page.log.reached].sort(), ['button', 'calendar-bulk-action=price'], '사람의 클릭과 그것이 부른 화면 스크립트의 클릭이 닿았다');
+  assert.equal(plain(page.w.stayPrice.idle()).count, 1, '더 막은 것이 없다');
+  page.w.close();
+});
+
+test('A4 · 작업 안의 벽은 사람이 방금 움직였어도 허용 목록에 없는 스크립트 클릭을 막는다', async () => {
+  const page = erpPage();
+  activation(page.w, true);
+  const close = page.doc.querySelector('#stay_calendar [data-calendar-bulk-action="close"]');
+  const seen = await page.w.stayPrice.guard('readPair', () => { close.click(); });
+  assert.deepEqual(plain(seen).blocked.map((b) => b.why), ['판매 마감·마감 해제 창 — 이 도우미는 누르지 않습니다']);
+  assert.deepEqual(page.log.reached, []);
+  page.w.close();
+});

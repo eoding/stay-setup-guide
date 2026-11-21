@@ -33,7 +33,8 @@
  *  - 작업이 도는 동안 페이지 맨 바깥(window, 캡처 단계)에서 모든 클릭과 폼 제출을 먼저 보고, 그 작업의
  *    허용 목록(ALLOW)에 없는 것은 막고 적는다. 러너 코드가 직접 부르는 `.click()` 도 여기에 걸린다. 막힌 것이
  *    하나라도 있으면 그 작업은 실패다. 버튼은 글자가 아니라 화면 뿌리 + `data-stay-*`·`data-calendar-*` 표식으로 찾는다.
- *    작업 밖에서도 이 파일이 올라 있는 동안은 스크립트가 만든 클릭을 막는다(사람의 클릭은 지난다) — `standDown()` 으로 내린다.
+ *    작업 밖에서도 이 파일이 올라 있는 동안은 스크립트가 만든 클릭을 막는다 — 사람의 클릭과, 사람이 방금 움직였을 때(브라우저의
+ *    userActivation) 화면 스크립트가 누른 클릭은 지난다. `standDown()` 으로 내린다.
  *  - 누르기는 `press` 하나다. 단추가 화면에 있고 막히지 않았고 htmx 가 연결했고 도는 요청이 없을 때 한 번 누른다 — 다시 누르지
  *    않는다. 화면을 바꾼 뒤(칩·오퍼·보기·탭·달·드로어 단계·셀 창)에는 바뀐 조각이 왔고 도는 요청이 없을 때(`settle`) 넘어간다.
  *  - 돌려주는 값은 전부 `scrub` 을 지난다 — 주소 같은 키, 주소·쿼리 붙은 경로·토큰 같은 글자는 나가지 않고, 점으로 이은
@@ -391,16 +392,21 @@
     return wall;
   }
 
-  /* ── 벽은 하나다: 작업이 돌면 그 작업의 허용 목록이, 작업 밖에서는 스크립트가 만든 클릭(isTrusted 아님)을 막는 쉬는 벽이 선다.
-     사람이 직접 누른 클릭은 쉬는 벽을 지난다. 러너 함수를 손으로 불러도 아무것도 누르지 못한다. `standDown()` 으로 내린다. */
+  /* ── 벽은 하나다: 작업이 돌면 그 작업의 허용 목록이, 작업 밖에서는 쉬는 벽이 선다. 쉬는 벽은 사람이 방금 움직이지 않았을 때 스크립트가
+     만든 클릭(isTrusted 아님)을 막는다. 사람이 직접 누른 클릭은 지나고, 사람의 클릭이 부른 ERP 화면 스크립트의 클릭(확인창의
+     [그래도 새로 만들기] 가 누르는 저장 · 탭을 바꾸는 링크 · 뒤로/앞으로)도 지난다 — 브라우저가 사람의 움직임 뒤 몇 초 동안
+     `navigator.userActivation.isActive` 를 켜 둔다(실측: 사람의 클릭 처리 안에서는 켜짐, 브라우저 도구의 스크립트에서는 꺼짐, 사람의
+     클릭 6.5초 뒤에는 다시 꺼짐). 그래서 사람이 누른 지 몇 초 안에 도구의 스크립트가 누르면 쉬는 벽은 그것을 가리지 못한다. 작업 안의
+     벽은 이 표지를 보지 않는다(허용 목록만 본다). 러너 함수를 손으로 불러도 아무것도 누르지 못한다. `standDown()` 으로 내린다. */
   var GUARD = window.__stayPriceGuard || { wall: null };
   window.__stayPriceGuard = GUARD;
   if (GUARD.listen) { window.removeEventListener('click', GUARD.listen, true); window.removeEventListener('submit', GUARD.listen, true); }
   GUARD.idle = true;                 // 이 파일을 올릴 때마다 다시 선다
   GUARD.idleBlocked = [];
+  function personActing() { var ua = window.navigator && window.navigator.userActivation; return !!(ua && ua.isActive); }
   GUARD.listen = function (e) {
     if (GUARD.wall) return GUARD.wall.handle(e);
-    if (!GUARD.idle || e.isTrusted) return;
+    if (!GUARD.idle || e.isTrusted || personActing()) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     var target = e.type === 'submit' ? (e.submitter || e.target) : e.target;
