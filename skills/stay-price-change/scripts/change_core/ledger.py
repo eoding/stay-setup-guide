@@ -36,7 +36,7 @@ snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 
 (files.listed). 번호의 종류는 그 번호에 적힌 항목 줄의 종류다(표의 모양은 그대로다 — `_kind_of`).
 
 적용을 시작하거나(begin) 멈춘 변경을 이어 가는(check) 읽은 값은 다시 읽은 값이어야 한다 — begin 은 그 번호를 계산한 뒤에 읽은
-값만, check 는 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 값만 받는다(`_read_after`). 미리보기의 읽은 값
+값만, check 는 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 값만 받는다(`_read_before`). 미리보기의 읽은 값
 그대로나 그보다 앞선 읽은 값, 앞선 읽기 폴더의 답을 다시 쓴 읽기는 견줄 것이 없어 다시 읽은 것이 아니다.
 
 적용 중인 변경이 `IDLE`(15분) 동안 아무 일이 없으면 멈춘 변경이다 — 목록 · calls · check · 결과 페이지 어디서나. 세션이
@@ -184,11 +184,15 @@ def _when(text: str) -> str:
     return _moment(text).strftime("%m/%d %H:%M:%S")
 
 
-def _read_after(read_at: str, moments: Iterable[str | None]) -> str | None:
-    """읽은 시각(`read_at`)이 `moments` 의 모두보다 나중이면 None, 아니면 그 가운데 가장 늦은 것. 장부의 시각은 초까지 적히므로 초까지
-    견주고, 같은 초는 나중이 아니다(계산한 그 초에 다시 읽은 값은 없다)."""
+def _read_before(read_at: str, own: str, moments: Iterable[str | None]) -> str | None:
+    """읽은 값이 다시 읽은 값이 아니면 장부의 그 시각, 맞으면 None. 그 번호가 바탕으로 삼은 읽은 값(`own` — 미리보기 · 되돌리기의
+    읽은 시각)과 같거나 앞선 시각이면 그 읽은 값 자체이거나 더 오래된 것이고(앞선 읽기 폴더의 답을 다시 묶어도 시각은 그대로다),
+    장부가 적은 때(`moments`) 가운데 가장 늦은 것보다 앞선 초에 읽었으면 그 기록을 모르는 값이다. 장부의 시각은 초까지라 같은 초에
+    일어난 둘의 앞뒤는 가릴 수 없어, 같은 초는 앞서지 않은 것으로 본다(도우미는 장부에 적은 뒤에 다시 읽는다)."""
+    if _moment(read_at) <= _moment(own):
+        return own
     latest = max((moment for moment in moments if moment), key=_moment)
-    return None if _moment(read_at).replace(microsecond=0) > _moment(latest) else latest
+    return latest if _moment(read_at).replace(microsecond=0) < _moment(latest) else None
 
 
 @dataclass(frozen=True)
@@ -598,10 +602,9 @@ class Ledger:
                        (self._stamp(), read_at, change_id))
 
     def _check_fresh(self, header, read_at: str) -> None:
-        """적용 직전에 읽은 값이 그 번호를 계산한 뒤에(_read_after), IDLE 안에 읽은 것이 아니면 거절한다."""
-        since = _read_after(read_at, (header["created_at"], header["read_at"]))
-        if since is not None:
-            raise LedgerError(f"이 읽은 값({_when(read_at)})은 {header['id']}번을 계산한 때({_when(since)}) 뒤에 읽은 것이 아닙니다 — "
+        """적용 직전에 읽은 값이 그 번호를 계산한 뒤에(_read_before), IDLE 안에 읽은 것이 아니면 거절한다."""
+        if _read_before(read_at, header["read_at"], (header["created_at"],)) is not None:
+            raise LedgerError(f"이 읽은 값({_when(read_at)})은 {header['id']}번을 계산한 때({_when(header['created_at'])}) 뒤에 읽은 것이 아닙니다 — "
                               "적용 직전에 다시 읽은 값이 아닙니다(미리보기의 읽은 값이거나 그보다 앞선 것, 또는 앞선 읽기 폴더의 답을 "
                               "다시 쓴 읽기). 같은 범위를 새 읽기 폴더에 다시 읽고 begin 을 부릅니다")
         if self._age(read_at) > IDLE:
@@ -705,7 +708,7 @@ class Ledger:
         """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
         해도 되는지, 어디까지 됐고 왜 멈췄는지.
 
-        읽은 값은 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 것이어야 한다(_read_after) — 아니면 아무것도
+        읽은 값은 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 것이어야 한다(_read_before) — 아니면 아무것도
         가리거나 적지 않고 거절한다(적용 직전의 읽은 값은 그 뒤의 저장을 모른다).
 
         「모름」(눌렸고 저장됐는지 모르는 단계)은 읽은 값이 넣은 값 그대로면 저장됨으로, 전 값 그대로면 저장 안 됨으로 가려 적는다.
@@ -721,7 +724,7 @@ class Ledger:
             if not steps:
                 raise LedgerError(f"{change_id}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
             finished = [step["finished_at"] for step in steps if step["finished_at"]]
-            since = _read_after(read_at, (header["created_at"], header["read_at"], *finished))
+            since = _read_before(read_at, header["read_at"], (header["created_at"], *finished))
             if since is not None:
                 what = "저장 결과" if since in finished else "계산"
                 raise LedgerError(f"이 읽은 값({_when(read_at)})은 장부가 {change_id}번에 마지막으로 적은 {what}({_when(since)}) 뒤에 "
