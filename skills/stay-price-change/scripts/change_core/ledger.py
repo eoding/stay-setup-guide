@@ -20,6 +20,10 @@
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
+되돌리기와 저장 상태로 되돌리기는 다시 되돌리지 않는다(`_undoable`). 되돌리기를 되돌리면 그 되돌리기가 단 표지(`rolled_back_by`)를
+풀어야 하고, 그것을 또 되돌리면 다시 달아야 한다 — 장부가 ERP 에 살아 있는 값을 말하지 못하게 된다(ERP 의 [되돌리기]도 한 번만
+된다). 되돌린 값으로 다시 바꾸는 길은 같은 요청의 새 변경이다.
+
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 다(적용한 것이 아니다 — 목록에서 적용된 변경과 갈린다).
 바뀌는 항목이 없거나 빨간 줄을 모두 안 바꾸기로 고른 미리보기는 적는 순간 상태가 empty 다 — 적용할 것이 없어 begin 이 받지 않고,
 목록에서 적용을 기다리는 미리보기(previewed)처럼 읽히지 않는다. 담당자가 마음을 바꿔 다시 계산하면 replaced 가 된다.
@@ -413,7 +417,7 @@ class Ledger:
             raise LedgerError("저장할 것이 없다는 미리보기에 넣는 값이 있습니다 — 미리보기를 다시 계산합니다")
         with self._db() as db:
             if reverses is not None:
-                self._header(db, reverses)
+                self._undoable(db, reverses)
             if replaces is not None:
                 self._replace(db, replaces, self._acts(kind, reverses, request), hotel_id, offer)
             return self._insert(db, kind, "empty" if empty else "previewed", hotel, hotel_id, offer, currency, sentence,
@@ -765,8 +769,25 @@ class Ledger:
                            saved[-1] if saved else None,
                            next((step for step in seen_steps if step.index == remaining[0]), None) if remaining else None, note)
 
+    def _undoable(self, db, change_id: int):
+        """되돌릴 수 있는 번호의 머리 — 지금 상태 저장 · 되돌리기 · 저장 상태로 되돌리기는 거절한다(모듈 머리글)."""
+        header = self._header(db, change_id)
+        if header["kind"] == "snapshot":
+            raise LedgerError(f"{change_id}번은 저장해 둔 상태입니다. 그 상태로 돌리려면 '저장해 둔 상태로 되돌리기'를 씁니다")
+        acts = self._acts(header["kind"], header["reverses"], None if header["request"] is None else json.loads(header["request"]))
+        if header["kind"] == "rollback" or acts.endswith("저장 상태로 되돌리기"):
+            raise LedgerError(f"{change_id}번은 {acts}입니다 — 되돌리기는 다시 되돌리지 않습니다. 되돌린 값으로 다시 바꾸려면 되돌린 "
+                              "변경(목록에서 이 번호가 되돌린 줄)과 같은 요청으로 새로 바꿉니다 — 지금 값을 다시 읽어 미리보기부터")
+        return header
+
+    def undoable(self, change_id: int) -> RecordedChange:
+        """되돌리기 계산의 재료(recorded_change) — 되돌릴 수 있는 번호일 때만(_undoable)."""
+        with self._db() as db:
+            self._undoable(db, change_id)
+        return self.recorded_change(change_id)
+
     def recorded_change(self, change_id: int) -> RecordedChange:
-        """되돌리기 계산의 재료 — 실제로 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만."""
+        """실제로 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만 — 되돌리기 계산(undoable) · 견주기가 누가 넣은 값인지 볼 때."""
         with self._db() as db:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
