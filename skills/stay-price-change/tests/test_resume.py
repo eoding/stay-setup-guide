@@ -109,6 +109,23 @@ class ResumeLedgerTest(unittest.TestCase):
         self.assertEqual((unknown.cause, unknown.steps[1].settled, unknown.last_saved.index, unknown.next.index),
                          ("unknown", "saved", 2, 3))
 
+    def test_check_takes_only_a_reading_made_after_the_last_thing_the_ledger_wrote_for_the_change(self):
+        """검토 1 — 멈춘 변경을 이어 가는 길도 다시 읽은 값만 받는다. 적용 직전의 읽은 값 · 마지막 저장 결과보다 앞선(같은 초 포함)
+        읽은 값은 그 뒤의 저장을 모르니, 「모름」을 가리거나 이어 가지 않고 거절한다."""
+        self.ledger(0).begin(self.change, step_plans(self.steps), read_at=at(0))
+        self.ledger(1).record_step(self.change, 1, saved=True)
+        self.ledger(3).record_step(self.change, 2, saved=False, note="모름", unknown=True)
+        for read_at in (at(0), at(2), at(3)):   # 적용 직전의 읽은 값 · 1번 저장 뒤 · 「모름」을 적은 그 초
+            with self.assertRaises(LedgerError) as caught:
+                self.ledger(5).check(self.change, self.reading(1), self.then, read_at=read_at)
+            self.assertIn("마지막으로 적은 저장 결과", str(caught.exception), read_at)
+            self.assertIn("새 읽기 폴더에 다시 읽고 check", str(caught.exception))
+        record = self.ledger(5).change(self.change)
+        self.assertEqual((record.steps[1].status, record.steps[1].unknown, record.status), ("failed", True, "stopped"),
+                         "「모름」을 가리지 않았고 변경은 멈춘 채다")
+        report = self.ledger(5).check(self.change, self.reading(1), self.then, read_at=at(4))
+        self.assertEqual((report.steps[1].settled, report.can_continue), ("not_saved", True), "그 뒤에 읽은 값이면 가린다")
+
     def test_a_check_on_an_old_reading_or_one_that_cannot_go_on_leaves_the_change_stopped(self):
         self.ledger(0).begin(self.change, step_plans(self.steps), read_at=at(0))
         self.ledger(1).record_step(self.change, 1, saved=True)
@@ -173,6 +190,9 @@ class ResumeCommandTest(unittest.TestCase):
         moved = scene.snapshot()
         key = next(iter(sorted(moved.cells)))
         moved = scene.with_cells(moved, {key: replace(moved.cells[key], sell=moved.cells[key].sell + 1)})
+        early = self.reading("early.json", moved, scene.NOW_TEXT)   # 미리보기를 적은 그 초에 읽은 값 — 견주기 전에 거절한다
+        self.assertIn("뒤에 읽은 것이 아닙니다", self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json",
+                                                   "--snapshot", early, code=2)["error"], "다른 칸을 대지 않는다 — 그 값으로 다시 계산하면 안 된다")
         refused = self.cli("begin", "--change", self.change, "--plan", self.dir / "plan.json", "--snapshot", self.reading("moved.json", moved),
                            code=1)
         self.assertEqual((refused["same"], refused["status"], [item["key"]["date"] for item in refused["differences"]]),

@@ -10,7 +10,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
+from decimal import Decimal as D
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -95,6 +97,49 @@ class BrowserCommandTest(unittest.TestCase):
         wrong = self.write("wrong.json", reply("readPair", wrong_asked, {"fragment": PRICE}))
         wrong_calls = self.write("wrong-calls.json", {"pairs": [wrong_asked], "reserved": []})
         self.assertIn("물었는데 화면은", self.run_cli("read", "--calls", wrong_calls, "--answers", wrong, code=2)["error"])
+
+    def test_b1_begin_takes_only_a_reading_made_after_the_preview_not_its_own_or_its_answers_bound_again(self):
+        """검토 1 — 미리보기의 읽은 값 그대로 begin 을 부르면 견줄 것이 없어 다른 손이 바꾼 값을 덮는다. 미리보기의 읽기 폴더를 다시
+        묶은 읽기(같은 폴더 · 그 답을 옮긴 새 폴더)도 같다. 셋 다 아무것도 시작하지 않고, 새로 읽은 값으로만 시작한다."""
+        asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일")}
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2026-12-24",
+                 "to": "2026-12-31", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+
+        def reading(name, moment, answers=None):
+            folder = self.dir / name
+            folder.mkdir()
+            calls = self.write(f"{name}/calls.json", {"pairs": [asked], "reserved": [probe]})
+            for item in answers or (reply("readPair", asked, {"fragment": PRICE}, doneAt=done_at(moment))
+                                    + reply("readReserved", probe, {"fragment": REJECTED}, doneAt=done_at(moment))):
+                self.write(f"{name}/{'pair' if item.get('op') == 'readPair' else 'resv' if item.get('op') == 'readReserved' else 'take'}"
+                           f"-{item.get('id') or 1}-{item.get('at', 0)}.json", item)
+            self.run_cli("read", "--calls", calls, "--answers", folder, "--out", folder / "snapshot.json")
+            return folder / "snapshot.json"
+
+        own = reading("읽기-1", scene.NOW - timedelta(minutes=1))   # 미리보기의 읽기 — 장부의 시계(NOW) 1분 전에 끝났다
+        snapshot = decode_snapshot(json.loads(own.read_text(encoding="utf-8")))
+        request = encode_request(replace(scene.request(), offer="샘플 오퍼", rooms=("디럭스",), rate_plans=("조식 포함",),
+                                         dates=snapshot.dates, operation="amount", value=D("5"), sentence="디럭스 5 올려줘"))
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
+        planned = self.run_cli("plan", "--snapshot", own, "--request", self.write("request.json", request), "--resolutions", choice,
+                               "--record", "--out", self.dir / "plan-1.json")
+        change = planned["change_id"]
+        self.assertTrue(planned["saves"], "저장할 것이 있는 미리보기")
+        bound_again = self.dir / "읽기-1" / "snapshot-again.json"
+        self.run_cli("read", "--calls", self.dir / "읽기-1" / "calls.json", "--answers", self.dir / "읽기-1", "--out", bound_again)
+        moved_in = reading("읽기-2", None, [json.loads(path.read_text(encoding="utf-8")) for path in sorted((self.dir / "읽기-1").glob("*-*.json"))
+                                           if path.name.startswith(("pair-", "resv-", "take-"))])
+        for name, path in (("미리보기의 읽은 값", own), ("같은 폴더를 다시 묶음", bound_again), ("앞선 답을 옮긴 새 폴더", moved_in)):
+            refused = self.run_cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", path, code=2)["error"]
+            self.assertIn(f"{change}번을 계산한 때", refused, name)
+            self.assertIn("뒤에 읽은 것이 아닙니다", refused, name)
+            self.assertIn("새 읽기 폴더에 다시 읽고 begin", refused, name)
+        self.assertIn("begin", self.run_cli("calls", "--change", change, code=2)["error"], "아무것도 시작하지 않았다")
+        self.assertEqual(self.run_cli("list", "--all")["changes"][0]["status"], "previewed")
+        again = reading("읽기-3", scene.NOW + timedelta(minutes=1))
+        self.assertEqual(self.run_cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", again)["status"],
+                         "applying", "미리보기 뒤에 새로 읽은 값으로는 시작한다")
 
     def test_z6_read_at_is_when_the_page_finished_the_earliest_operation_not_when_the_command_ran(self):
         asked = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "room": "디럭스", "ratePlan": "조식 포함", "from": "2026-12-24",

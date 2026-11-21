@@ -10,7 +10,7 @@ SKILL.md 가 이 파일을 여는 때: 적용하다 저장이 멈췄을 때, 담
 
 ## 1. 다시 읽고 `check`
 
-`read-calls --record N` 으로 「읽기」 → S4. 그리고:
+`read-calls --record N` 으로 「읽기」 → S4(새 읽기 폴더 — 적용 직전의 읽은 값이나 앞선 폴더의 답을 다시 쓰지 않는다. `check` 는 장부가 그 번호에 마지막으로 적은 것 뒤에 읽은 값만 받고, 아니면 `… 뒤에 읽은 것이 아닙니다` 로 아무것도 가리지 않고 거절한다 — 새로 읽어 다시 한다). 그리고:
 
 ```bash
 python3 scripts/price_change.py check --change N --snapshot "<S4>"

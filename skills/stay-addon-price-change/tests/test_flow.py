@@ -604,5 +604,30 @@ class TrapLineTest(Flow):
         self.assertNotIn("303", [step["line"] for step in steps])
 
 
+class ReadAgainTest(Flow):
+    """검토 1 — begin 은 그 번호를 계산한 뒤에 읽은 값만, check 는 장부가 그 번호에 마지막으로 적은 것 뒤에 읽은 값만 받는다
+    (change_core.ledger). 미리보기의 읽은 값 그대로, 그 읽기 폴더의 앞선 답을 다시 묶은 읽기, 저장 결과보다 앞선 적용 직전의 읽은 값은
+    거절하고 아무것도 시작하거나 가리지 않는다. 새로 읽으면 된다."""
+
+    def test_begin_and_check_take_only_a_reading_made_after_what_the_ledger_last_wrote(self):
+        change, plan = self.preview(self.request())
+        own = self.work / "읽기-1" / "snapshot.json"
+        bound_again = own.parent / "snapshot-again.json"
+        self.cli("read", "--calls", own.parent / "calls.json", "--answers", own.parent, "--out", bound_again)
+        for reading in (own, bound_again):
+            refused = self.cli("begin", "--change", change, "--plan", plan, "--snapshot", reading, code=2)["error"]
+            self.assertIn(f"{change}번을 계산한 때", refused, reading.name)
+            self.assertIn("뒤에 읽은 것이 아닙니다", refused, reading.name)
+        self.assertIn("begin", self.cli("calls", "--change", change, code=2)["error"], "아무것도 시작하지 않았다")
+
+        before = self.read(record=change)
+        self.assertEqual(self.cli("begin", "--change", change, "--plan", plan, "--snapshot", before)["status"], "applying")
+        call = self.cli("calls", "--change", change)["calls"][0]
+        self.cli("record-result", "--change", change, "--result", self.file("refused.json", self.erp.apply(call["payload"], False)))
+        refused = self.cli("check", "--change", change, "--snapshot", before, code=2)["error"]
+        self.assertIn("마지막으로 적은 저장 결과", refused, "적용 직전의 읽은 값은 그 뒤의 저장을 모른다")
+        self.assertEqual(self.cli("check", "--change", change, "--snapshot", self.read(record=change))["cause"], "failed")
+
+
 if __name__ == "__main__":
     unittest.main()
