@@ -539,6 +539,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    cli.utf8_streams()
     args = parser().parse_args(argv)
     if args.command == "render":
         needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change", "window": "snapshot"}[args.kind]

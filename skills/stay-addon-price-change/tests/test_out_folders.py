@@ -102,5 +102,30 @@ class UnexpectedErrorTest(Commands):
         self.assertNotIn("멈추고", said["error"])
 
 
+class ConsoleEncodingTest(Commands):
+    """명령의 글은 콘솔의 코드 페이지와 상관없이 UTF-8 이다 — 윈도의 파이썬은 파이프로 나가는 글을 그 컴퓨터의 코드 페이지
+    (cp949 · cp1252)로 쓰고 없는 글자에서 죽는다(가격 캘린더 도우미의 test_console_encoding). PYTHONIOENCODING 으로 같은 코드
+    페이지를 세운다. 인자를 잘못 준 알림도 UTF-8 이다(명령의 첫 줄에서 바꾼다)."""
+
+    def test_answers_are_utf8_on_a_korean_and_an_english_windows_code_page(self):
+        for page in ("cp949", "cp1252"):
+            with self.subTest(page):
+                env = dict(self.env, STAY_PRICE_TEST_NOW=self.erp.clock.isoformat(), PYTHONIOENCODING=page)
+
+                def run(*args, code=0):
+                    done = subprocess.run([sys.executable, "-B", str(SCRIPT), *map(str, args)], capture_output=True, env=env)
+                    self.assertEqual(done.returncode, code, done.stderr.decode("utf-8", "replace"))
+                    self.assertNotIn(b"Traceback", done.stderr)
+                    return done
+
+                work = Path(json.loads(run("work").stdout.decode("utf-8"))["work"])
+                scene.write_answers(work / "look", "look", [scene.look_answer(self.erp)])
+                look = work / "look.json"
+                run("look", "--answers", work / "look", "--out", look)
+                listed = json.loads(run("list", "--look", look).stdout.decode("utf-8"))
+                self.assertEqual(listed["hotel"]["name"], scene.HOTEL["name"])
+                self.assertIn("render preview 에는 --plan 가 필요합니다", run("render", "preview", code=2).stderr.decode("utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()
