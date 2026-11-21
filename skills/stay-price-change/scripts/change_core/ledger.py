@@ -16,7 +16,7 @@
     item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 후 값,
                  넣는 방법(set / clear, 넣지 않으면 비어 있음 — 미리보기 때 정해지고 begin 은 저장 단계가 이것과 같은지 본다),
                  판정 · 표시 · 빨간 줄에 고른 것과 그렇게 고르며 담당자가 한 말, 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값,
-                 되돌린 되돌리기 번호
+                 되돌린 되돌리기 번호(되돌리기, 또는 그 값을 저장해 둔 상태로 되돌린 저장 상태로 되돌리기)
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
 
@@ -456,15 +456,42 @@ class Ledger:
 
     @staticmethod
     def _mark_saved(db, header, index: int, note: str | None, stamp: str) -> None:
-        """단계 하나를 저장됨으로 적는다. 되돌리기의 저장이면 되돌린 변경의 그 값들에 이 번호를 단다."""
+        """단계 하나를 저장됨으로 적는다. 되돌리기의 저장이면 되돌린 변경의 그 값들에 이 번호를 단다. 저장 상태로 되돌리기의 저장이면
+        그 저장 상태 뒤에 이 장부가 넣은 값 가운데 이 저장이 덮어 되돌린 것에 이 번호를 단다(_settle_restored)."""
         db.execute("UPDATE steps SET status = 'saved', finished_at = ?, note = ?, unknown = 0 WHERE change_id = ? AND idx = ?",
                    (stamp, note, header["id"], index))
+        request = None if header["request"] is None else json.loads(header["request"])
+        if header["kind"] == "change" and request and request.get("kind") == "restore_snapshot":
+            Ledger._settle_restored(db, header, int(request["snapshot"]), index)
         if header["kind"] == "rollback":
             for row in db.execute("SELECT item_kind, item_key, field FROM item_values WHERE change_id = ? AND step = ?",
                                   (header["id"], index)).fetchall():
                 db.execute(f"UPDATE item_values SET rolled_back_by = ? WHERE change_id = ? AND {ROW}"
                            " AND action IS NOT NULL AND rolled_back_by IS NULL",
                            (header["id"], header["reverses"], row["item_kind"], row["item_key"], row["field"]))
+
+    @staticmethod
+    def _settle_restored(db, header, saved: int, index: int) -> None:
+        """저장 상태로 되돌리기의 저장 한 번이 넣은 필드마다 — 그 저장 상태(`saved`) 뒤 · 이 번호 앞에 같은 호텔 · 오퍼에 이 장부가 넣은
+        값 가운데 그 필드에 마지막으로 넣었고 아직 되돌리지 않은 것이, 이 저장이 덮은 값(이 줄의 전 값)과 같으면 그 값은 이 저장이 되돌린
+        것이다 — 되돌리기와 같이 그 줄에 이 번호를 단다. 그래서 목록의 상태 · 되돌린 칸 수 · 되돌린 번호가 되돌리기 때와 같고, 그
+        변경을 다시 되돌리자고 하면 되돌릴 것이 없다(일부만 덮었으면 나머지만). 그 값이 이미 다른 값으로 덮여 있었으면(이 저장이 덮은
+        것은 그 변경의 값이 아니다) 달지 않는다."""
+        for row in db.execute("SELECT item_kind, item_key, field, before FROM item_values WHERE change_id = ? AND step = ?"
+                              " AND action IS NOT NULL", (header["id"], index)).fetchall():
+            last = db.execute(
+                "SELECT item_values.change_id, item_values.after FROM item_values"
+                " JOIN changes ON changes.id = item_values.change_id"
+                " JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step AND steps.status = 'saved'"
+                " WHERE item_values.item_kind = ? AND item_values.item_key = ? AND item_values.field = ?"
+                " AND item_values.action IS NOT NULL AND item_values.rolled_back_by IS NULL"
+                " AND changes.id > ? AND changes.id < ? AND changes.kind != 'snapshot' AND changes.hotel_id = ? AND changes.offer = ?"
+                " ORDER BY steps.finished_at DESC, item_values.change_id DESC LIMIT 1",
+                (row["item_kind"], row["item_key"], row["field"], saved, header["id"], header["hotel_id"],
+                 header["offer"])).fetchone()
+            if last is not None and money(last["after"]) == money(row["before"]):
+                db.execute(f"UPDATE item_values SET rolled_back_by = ? WHERE change_id = ? AND {ROW}",
+                           (header["id"], last["change_id"], row["item_kind"], row["item_key"], row["field"]))
 
     def begin(self, change_id: int, steps: Sequence[StepPlan], request: Mapping | None = None, *, read_at: str) -> None:
         """적용 시작 — 저장 단계를 적고 단계가 쓰는 필드마다 단계 번호를 단다.
