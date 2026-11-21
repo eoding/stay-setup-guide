@@ -404,11 +404,16 @@ def record_what(kind: str, request: Mapping | None, reverses: int | None, curren
 
 
 def record_scope(entry: Mapping, keys: Iterable[CellKey]) -> str:
-    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지(세 도우미가 같은 말 —
-    files.record_progress)."""
-    return " · ".join(part for part in (cells_scope(keys), record_what(entry["kind"], entry["request"], entry["reverses"],
-                                                                      entry["currency"], entry["planned"]),
-                                         record_progress(entry, "칸")) if part)
+    """장부 목록의 한 줄 → 담당자에게 읽어 줄 수 있는 범위 — 오퍼, 객실 · 요금제, 날짜 구간, 한 일, 어디까지 갔는지(세 도우미가 같은
+    말 — files.record_progress). 오퍼는 늘 댄다 — 같은 객실 · 요금제가 두 오퍼에 있으면 오퍼 없이는 두 번호가 같은 줄이 되고, 되돌리기
+    확인이 이 줄을 읽어 준다."""
+    return scope_text(entry["offer"], keys, record_what(entry["kind"], entry["request"], entry["reverses"], entry["currency"],
+                                                        entry["planned"]), record_progress(entry, "칸"))
+
+
+def scope_text(offer: str, keys: Iterable[CellKey], what: str, progress: str = "") -> str:
+    """범위 한 줄의 차례 — 오퍼 · 칸들이 덮는 것 · 한 일 · 어디까지 갔는지. 장부에 적지 않은 되돌리기 계산도 같은 차례다."""
+    return " · ".join(part for part in (offer, cells_scope(keys), what, progress) if part)
 
 
 def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:

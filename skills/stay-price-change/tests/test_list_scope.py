@@ -31,6 +31,7 @@ from price_plan import plan_change, plan_steps, plan_targets, preview_rows, reso
 
 REAL = scene.NOW
 TRIAL = "스탠다드(조식 포함), 스탠다드 바다 전망(조식 포함) · 12/7 월 ~ 12/8 화 · 12/10 목 · 12/14 월 (4일, 2026년)"
+HEAD = f"{trial_scene.OFFER} · {TRIAL}"   # 범위 한 줄의 머리 — 오퍼부터(P3)
 
 
 class ListScopeTest(unittest.TestCase):
@@ -56,11 +57,11 @@ class ListScopeTest(unittest.TestCase):
         return next(item for item in listed(self.ledger(minutes)) if item["id"] == number)["scope"]
 
     def test_a_stopped_change_says_rooms_dates_what_and_how_far_without_the_sentence(self):
-        self.assertEqual(self.scope(0, self.change), f"{TRIAL} · 판매가 +12%", "미리보기만 — 어디까지는 상태가 말한다")
+        self.assertEqual(self.scope(0, self.change), f"{HEAD} · 판매가 +12%", "미리보기만 — 어디까지는 상태가 말한다")
         self.ledger(0).begin(self.change, step_plans(self.steps), read_at=self.snapshot.read_at)
         self.ledger(1).record_step(self.change, 1, saved=True)
-        self.assertEqual(self.scope(2, self.change), f"{TRIAL} · 판매가 +12% · 저장 2번 중 1번 함 · 적용 중")
-        self.assertEqual(self.scope(20, self.change), f"{TRIAL} · 판매가 +12% · 저장 2번 중 1번 하고 멈춤",
+        self.assertEqual(self.scope(2, self.change), f"{HEAD} · 판매가 +12% · 저장 2번 중 1번 함 · 적용 중")
+        self.assertEqual(self.scope(20, self.change), f"{HEAD} · 판매가 +12% · 저장 2번 중 1번 하고 멈춤",
                          "세션이 끊겨 멈춘 변경 — 문장에 날짜가 없어도 범위와 어디까지 갔는지")
         self.assertNotIn("request", listed(self.ledger(20))[0], "요청 원문은 싣지 않는다")
 
@@ -68,9 +69,20 @@ class ListScopeTest(unittest.TestCase):
         saved = self.ledger(0).record_snapshot(hotel=trial_scene.HOTEL, hotel_id=trial_scene.HOTEL_ID, offer=trial_scene.OFFER,
                                                currency="USD", sentence="응 저장해", read_at=self.snapshot.read_at,
                                                rows=snapshot_rows(self.snapshot), reading=encode_snapshot(self.snapshot))
-        self.assertEqual(self.scope(0, saved), f"{TRIAL} · 지금 상태 저장")
+        self.assertEqual(self.scope(0, saved), f"{HEAD} · 지금 상태 저장")
         many = [CellKey(f"객실 {n}", "조식 포함", "2026-12-07", "A2", 1) for n in range(1, 6)]
         self.assertEqual(cells_scope(many), "객실 1(조식 포함), 객실 2(조식 포함), 객실 3(조식 포함) 외 2객실 · 12/7 월 (1일, 2026년)")
+
+    def test_two_offers_with_the_same_room_and_rate_plan_read_as_two_lines_each_naming_its_offer(self):
+        """P3 — 읽기만 한 시운전: 「장부 1번 · 11/21 13:16 저장 · 디럭스(조식 포함) · 12/7 월 ~ 12/8 화 …」는 그 객실 · 요금제가 있는
+        두 오퍼를 가르지 못했다. 되돌리기 전에 담당자가 확인하는 줄이 이것이라 오퍼를 늘 댄다."""
+        other = replace(self.snapshot, offer="연말 오퍼")
+        numbers = [self.ledger(0).record_snapshot(hotel=trial_scene.HOTEL, hotel_id=trial_scene.HOTEL_ID, offer=snapshot.offer,
+                                                  currency="USD", sentence="지금 가격 보여줘", read_at=snapshot.read_at,
+                                                  rows=snapshot_rows(snapshot), reading=encode_snapshot(snapshot))
+                   for snapshot in (self.snapshot, other)]
+        lines = [self.scope(0, number) for number in numbers]
+        self.assertEqual(lines, [f"{trial_scene.OFFER} · {TRIAL} · 지금 상태 저장", f"연말 오퍼 · {TRIAL} · 지금 상태 저장"])
 
     def test_a_target_table_counts_the_cells_it_writes_not_the_ones_kept_on_a_red_line(self):
         """F5 — 요금표 시운전: 8칸을 넣고 4칸을 빨간 줄에 그대로 둔 변경을 「새 요금표 12칸」이라고 읽어 주었다."""
@@ -101,7 +113,7 @@ class ListScopeTest(unittest.TestCase):
                               capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
         report = json.loads(done.stdout)
-        self.assertEqual((report["can_continue"], report["scope"]), (True, f"{TRIAL} · 판매가 +12% · 저장 2번 중 1번 함 · 적용 중"))
+        self.assertEqual((report["can_continue"], report["scope"]), (True, f"{HEAD} · 판매가 +12% · 저장 2번 중 1번 함 · 적용 중"))
 
 
 class NarrowedScopeTest(unittest.TestCase):
@@ -146,9 +158,9 @@ class NarrowedScopeTest(unittest.TestCase):
 
     def test_r5_a_narrowed_change_says_which_cells_and_its_rollback_and_restore_answers_carry_the_scope(self):
         nights, after = self.applied_change("nights", nights=(1,))
-        self.assertEqual(self.line(nights), f"{TRIAL} · 판매가 -5% (1박 이상만)")
+        self.assertEqual(self.line(nights), f"{HEAD} · 판매가 -5% (1박 이상만)")
         both, _after = self.applied_change("both", nights=(1,), occupancies=("A2",))
-        self.assertEqual(self.line(both), f"{TRIAL} · 판매가 -5% (성인 2 / 1박 이상만)")
+        self.assertEqual(self.line(both), f"{HEAD} · 판매가 -5% (성인 2 / 1박 이상만)")
 
         back = self.cli("rollback", "--change", nights, "--snapshot", after, "--record", "--out", self.dir / "rollback-1.json")
         self.assertEqual(back["scope"], self.line(back["change_id"]), "짧은 답의 범위 = 장부 목록의 그 번호 줄")

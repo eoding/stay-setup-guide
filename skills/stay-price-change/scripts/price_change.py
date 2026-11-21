@@ -80,7 +80,7 @@ from price_model import (
 from price_compare import compare_counts, compare_saved, decode_comparison, encode_comparison
 from price_pages import (
     EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, render_compare, render_prices, render_preview,
-    render_result, render_rollback, render_sheet, result_name,
+    render_result, render_rollback, render_sheet, result_name, scope_text,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 from price_plan import (
@@ -457,7 +457,7 @@ def rollback_scope(ledger: Ledger, change_id: int | None, kind: str, request: di
     if change_id is not None:
         return listed(ledger, change_id)[0]["scope"]
     keys = {key_of_item(row.item_key) for row in rollback_rows(plan)}
-    return " · ".join((cells_scope(keys), record_what(kind, request, reverses, plan.currency)))
+    return scope_text(plan.offer, keys, record_what(kind, request, reverses, plan.currency))
 
 
 def cmd_rollback(args):

@@ -185,8 +185,8 @@ class PartialRollbackTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         result = json.loads(done.stdout)
         self.assertEqual((result["scope"], len(result["rollback"]["restored"]), len(result["steps"])),
-                         (f"스위트(룸온리) · 1/1 금 (1일, 2027년) · {self.change}번 되돌리기 (스위트 / 룸온리 / 1/1 금 ~ 끝만)", 6, 1),
-                         "범위는 되돌리는 칸 · 한 일 · 고른 칸 — 장부 목록의 줄과 같은 셈")
+                         (f"{scene.OFFER} · 스위트(룸온리) · 1/1 금 (1일, 2027년) · {self.change}번 되돌리기 (스위트 / 룸온리 / 1/1 금 ~ 끝만)", 6, 1),
+                         "범위는 오퍼 · 되돌리는 칸 · 한 일 · 고른 칸 — 장부 목록의 줄과 같은 셈")
 
 
 MARK_ON_ROLLBACK = "되돌린 칸도 ERP 에서 '손입력'으로 표시됩니다. 이 표시는 도우미가 읽지도 되돌리지도 못해, 넣기 전의 표시로 돌아가지 않습니다."
