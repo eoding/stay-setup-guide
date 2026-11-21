@@ -1,6 +1,6 @@
 ---
 name: stay-price-change
-description: "이미 판매 중인 호텔 하나의 ERP Stay 가격 캘린더 값(판매가·정가·공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌리고, 지금 상태를 저장해 둔다. '가격 올려줘', '요금 바꿔줘', '12월 디럭스 +10,000', '지금 가격 보여줘', '어제 바꾼 거 되돌려줘', '지금 상태 저장해 둬', '새 요금표로 가격 바꿔줘' 요청에 쓴다. 계약서로 새 호텔을 세팅하는 일은 stay-setup-guide(지시서)와 stay-setup-run(실행)이 맡는다. 부가옵션은 stay-addon-price-change, 부과금은 stay-charge-change 가 맡고 프로모션 할인은 다루지 않는다."
+description: "이미 판매 중인 호텔 하나의 ERP Stay 가격 캘린더 값(판매가·정가·공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌리고, 지금 상태를 저장해 둔다. '가격 올려줘', '요금 바꿔줘', '12월 디럭스 +10,000', '지금 가격 보여줘', '어제 바꾼 거 되돌려줘', '지금 상태 저장해 둬', '아침에 저장해 둔 것과 뭐가 달라졌어', '새 요금표로 가격 바꿔줘' 요청에 쓴다. 계약서로 새 호텔을 세팅하는 일은 stay-setup-guide(지시서)와 stay-setup-run(실행)이, 부가옵션 금액은 stay-addon-price-change, 부과금 금액은 stay-charge-change 가 맡는다. 프로모션 할인은 ERP 에서 사람이 바꾼다(화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어서)."
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -14,7 +14,7 @@ metadata:
 
 하는 일은 여섯이다. 1 지금 가격 보기 · 2 지금 상태만 저장 · 3 가격 바꾸기 · 4 되돌리기 · 5 새 요금표로 맞추기 · 6 저장해 둔 상태와 견주기.
 
-- 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다. JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 내고 온 결과는 그 파일에 둔다. 도우미는 짧은 답으로 말하고 정한다. 결과 파일을 통째로 읽지 않는다.
+- 명령: 이 스킬 폴더의 `scripts/price_change.py`. 아래의 `python3 scripts/price_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 `python3 "<이 스킬 폴더>/scripts/price_change.py" …` 처럼 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답(번호 · 수 · 빨간 줄 · 파일 자리)만 낸다. 도우미는 짧은 답으로 말하고 정하며, 결과 파일을 통째로 읽지 않는다.
 - 페이지: 탭에 올린 `window.stayPrice`.
 - 필요할 때만 여는 파일(여는 때는 이 글의 그 자리에): [references/commands.md](references/commands.md) 명령 · 파일 모양 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/red-lines.md](references/red-lines.md) 빨간 줄, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/failures.md](references/failures.md) 막힐 때, [references/sheet.md](references/sheet.md) 새 요금표, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
@@ -39,7 +39,7 @@ metadata:
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
 - 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말한다. 도우미가 만든 페이지(이 컴퓨터의 HTML 파일)는 브라우저 도구로 열지 못하므로 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text`(페이지에 보이는 글)에서 옮긴다.
-- 담당자가 "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
+- "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
 
 ## 준비 — 시킨 일마다 3 부터
 
@@ -137,7 +137,7 @@ metadata:
 
 ## 6. 저장해 둔 상태와 견주기
 
-"아침에 저장해 둔 것과 뭐가 달라졌어?"처럼 저장해 둔 상태(목록의 `snapshot` 줄)와 지금을 견주라고 하면 그 줄을 골라 확인받고(번호 S) [references/sheet.md](references/sheet.md) 「(가) 시즌 원판 바꾸기」 3 의 `compare` 와 그 말하기를 그대로 한다. 아무것도 바꾸지 않고 장부에도 적지 않는다.
+"아침에 저장해 둔 것과 뭐가 달라졌어?"처럼 저장해 둔 상태(목록의 `snapshot` 줄)와 지금을 견주라고 하면 그 줄을 골라 확인받고(번호 S) [references/sheet.md](references/sheet.md) 「(가) 시즌 원판 바꾸기」 3 의 `compare` 와 그 말하기를 그대로 한다. 아무것도 바꾸지 않는다.
 
 ## 적용하기 — 바꾸기·되돌리기 공통
 

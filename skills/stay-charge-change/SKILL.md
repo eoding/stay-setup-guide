@@ -1,6 +1,6 @@
 ---
 name: stay-charge-change
-description: "이미 판매 중인 호텔 하나의 ERP Stay 부과금 금액(얼리 체크인 · 레이트 체크아웃 시간대 요율, 갈라 디너 금액과 연령별 단가, 리조트피 현장 결제 금액)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌린다. '레이트 체크아웃 50% 를 60% 로', '갈라 디너 성인 요금 100 으로', '리조트피 현장 결제 20달러로', '갈라 디너 아동 요금 10% 올려줘', '부과금 보여줘', '어제 바꾼 부과금 되돌려줘' 요청에 쓴다. 가격 캘린더는 stay-price-change, 부가옵션 금액은 stay-addon-price-change, 새 호텔 세팅은 stay-setup-guide · stay-setup-run 이 맡는다. 부과금 만들기 · 지우기 · 모양(종류 · 방식 · 단위 · 의무 · 날짜 · 시간대 줄 · 연령 구간) 바꾸기와 프로모션 할인은 다루지 않는다."
+description: "이미 판매 중인 호텔 하나의 ERP Stay 부과금 금액(얼리 체크인 · 레이트 체크아웃 시간대 요율, 갈라 디너 금액과 연령별 단가, 리조트피 현장 결제 금액)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌린다. '레이트 체크아웃 50% 를 60% 로', '갈라 디너 성인 요금 100 으로', '리조트피 현장 결제 20달러로', '갈라 디너 아동 요금 10% 올려줘', '부과금 보여줘', '이 부과금 설정 다 보여줘', '어제 바꾼 부과금 되돌려줘' 요청에 쓴다. 객실 가격(가격 캘린더)은 stay-price-change, 부가옵션 금액은 stay-addon-price-change, 새 호텔 세팅은 stay-setup-guide · stay-setup-run 이 맡는다. 프로모션 할인은 ERP 에서 사람이 바꾼다(화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어서). 부과금 만들기 · 지우기 · 모양 바꾸기는 하지 않는다."
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -14,7 +14,7 @@ metadata:
 
 하는 일은 셋이다. 1 지금 부과금 보기(한 부과금의 설정 전부도) · 2 부과금 금액 바꾸기 · 3 되돌리기.
 
-- 명령: 이 스킬 폴더의 `scripts/charge_change.py`. 아래의 `python3 scripts/charge_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
+- 명령: 이 스킬 폴더의 `scripts/charge_change.py`. 아래의 `python3 scripts/charge_change.py …` 는 이 스킬 폴더에서 부르는 꼴이다. 다른 폴더에서는 절대 경로로 부른다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
 - 페이지: 탭에 올린 `window.stayCharge`. 가격 캘린더 도우미의 페이지 파일 위에 올린다(「준비」).
 - 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 금액 칸 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/rollback.md](references/rollback.md) 되돌리기, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
