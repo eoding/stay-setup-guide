@@ -300,6 +300,44 @@ class TrialSevenDocsTest(unittest.TestCase):
         self.assertIn("\"응 저장해\" · \"그 이틀 두 객실\"처럼 무엇을 적었는지 알 수 없으면 읽은 범위를 쓴다", job)
 
 
+class TrialEightDocsTest(unittest.TestCase):
+    """U1 · U4 · U5 · U6 — 시운전 8 의 빈틈 하나에 답 하나, 도우미가 그때 읽는 자리에. 세 도우미가 같은 말을 한다."""
+
+    def read(self, skill: str, place: str) -> str:
+        return (SKILL.parent / skill / place).read_text(encoding="utf-8")
+
+    def test_u1_the_value_a_check_read_is_told_with_its_time_never_as_now(self):
+        stopped = self.read("stay-price-change", "references/stopped.md")
+        step = stopped[stopped.index("## 2."):stopped.index("## 3.")]
+        self.assertIn("「미리보기 때 … · ○시 ○분에 다시 읽으니 … · 그 사이 ERP 에서 바뀜 · 넣지 않음」", step)
+        self.assertIn("「지금」이라고 하지 않는다", step)
+        self.assertNotIn("지금 …", stopped)
+
+    def test_u4_the_cause_the_moved_sentence_said_is_not_said_again_from_why(self):
+        step = self.read("stay-price-change", "references/stopped.md")
+        step = step[step.index("**미리보기 뒤에 칸이 바뀌어 멈췄을 때**"):step.index("## 3.")]
+        self.assertIn("`why` 의 「…미리보기 때 읽은 값과 다릅니다」는 다시 말하지 않는다", step)
+        rule = next(line for line in step.splitlines() if line.startswith("- `can_continue` 가 false 면"))
+        self.assertIn("다시 말하지 않고 남은 까닭만 전한다", rule, "까닭을 넘기라는 규칙이 그 예외를 말한다")
+
+    def test_u5_the_rollback_preview_ends_with_the_number_of_saves_and_asks_for_the_word(self):
+        for skill, place, start in (("stay-price-change", "references/rollback.md", "\n3. "),
+                                    ("stay-charge-change", "references/rollback.md", "\n3. "),
+                                    ("stay-addon-price-change", "SKILL.md", "\n3. `python3 scripts/addon_change.py render rollback")):
+            text = self.read(skill, place)
+            step = text[text.index(start):]
+            step = step[:step.index("\n4. ")]
+            self.assertIn("저장 횟수(`saves`)", step, skill)
+            self.assertIn("\"맞으면 '되돌려'라고 해 주세요.\"", step, skill)
+
+    def test_u6_the_add_on_and_charge_helpers_skip_the_stopped_notice_for_the_change_being_dealt_with(self):
+        for skill in ("stay-addon-price-change", "stay-charge-change"):
+            skill_md = self.read(skill, "SKILL.md")
+            prep = skill_md[skill_md.index("5. **장부 보기.**"):skill_md.index("## 읽기")]
+            self.assertIn("(지금 다루는 그 변경이면 하지 않는다)", prep, skill)
+            self.assertIn("「준비」 5 의 멈춘 변경 알림은 하지 않는다(지금 다루는 그 변경이다)", self.read(skill, "references/stopped.md"), skill)
+
+
 class SheetDocsTest(unittest.TestCase):
     """새 요금표 길(S7 · V6) — 안내문의 요금표 예, 덮기 한 문장, 넣지 않는 것의 종류, 읽기 값이 코드와 같다."""
 

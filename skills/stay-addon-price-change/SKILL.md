@@ -49,14 +49,14 @@ metadata:
    2. 거절하면(`ok: false` — 아무것도 실행되지 않았다) 답의 `want` 에 든 파일만(이 탭에 없거나 예전 판인 것 — 넷은 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · 이 스킬의 `scripts/page/stay_addon_price.js`) 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load('addon')`. 막히면 page.md 「올리기」.
 3. **작업 폴더.** `python3 scripts/addon_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>` — 폴더는 명령이 만든다)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다. 파일 이름은 폴더마다 처음부터다: `look/look-1.json` · `look.json` · `request.json` · `읽기-1` … · `plan-1.json` · `rollback-1.json`. `plan-2.json` · `--replaces <앞 번호>` 는 한 일 안에서 다시 계산할 때만 쓴다(새 요청의 계산에는 붙이지 않는다).
 4. **어디인지 보기.** `await stayAddonPrice.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고 `python3 scripts/addon_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 가 받을 조각이다 — 「읽기」 4 처럼 받아 `<작업>/look/` 에 두고 이 명령을 다시 한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾거나 짧은 답의 `hotel` 이 말한 호텔이 아니면 "○○ 호텔의 Stay 화면을 열어 주세요".
-5. **장부 보기.** `python3 scripts/addon_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 세 도우미(객실 가격 · 부가옵션 가격 · 부과금) 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?" `empty` 는 저장할 것이 없던 미리보기다.
+5. **장부 보기.** `python3 scripts/addon_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 세 도우미 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?"(지금 다루는 그 변경이면 하지 않는다) `empty` 는 저장할 것이 없던 미리보기다.
 
 ## 읽기 — 바꾸기 · 되돌리기 · 적용이 모두 이것으로 읽는다
 
 1. `python3 scripts/addon_change.py read-calls --request "<작업>/request.json" --look "<작업>/look.json" --out "<R>/calls.json"`(장부 번호가 있는 일은 `--record <번호>`).
 2. 답의 `lines` 값마다(i = 1, 2 …) `await stayAddonPrice.readLine(<값 그대로>)` 의 답을 `<R>/line-<i>.json` 에 저장한다. 읽기는 편집 창을 열어 보고 닫을 뿐 저장하지 않는다.
 3. `python3 scripts/addon_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. 답의 `read_at` 이 ERP 에서 읽은 시각, `doubt` 는 목록과 편집 창이 금액을 다르게 보이는 줄(바꾸지 않는다), `missing` 은 목록에 없는 줄이다.
-4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayAddonPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayAddonPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이다. `bad` 가 있으면 그 쪽을 옮겨 적다 틀린 것이다 — 그 쪽만 이렇게 다시 받으면 되고, 틀린 파일은 그대로 둔다.
+4. **조각 받기.** 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayAddonPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayAddonPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이다. `bad` 의 쪽만 이렇게 다시 받고 틀린 파일은 그대로 둔다.
 
 답이 `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 답을 잃었으면 `stayAddonPrice.last()` 의 답을 새 파일로 저장하거나 같은 값으로 다시 불러 저장한다.
 
@@ -93,7 +93,7 @@ metadata:
 
 1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.
-3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept`)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
+3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept`)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. 저장 횟수(`saves`)를 말하고 끝에 "맞으면 '되돌려'라고 해 주세요." `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
 4. "되돌려" → 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그 줄도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.
 
 ## 되돌릴 것이 없을 때
