@@ -162,6 +162,14 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     body += ["<h2>줄마다 전 → 후</h2>",
              '<div class="scroll"><table><tr><th>가격 줄</th><th>판매가</th><th>공급 원가</th><th>판정</th>'
              f'<th>그대로 다시 보내는 칸</th></tr>{"".join(rows)}</table></div>']
+    # 고르신 빨간 줄과 그때 하신 말 — 결과 페이지와 같은 표. 모두 「안 바꿈」이라 저장할 것이 없는 미리보기에서도 그 말이 보인다
+    chosen: dict[tuple, int] = {}
+    for change in plan.changes:
+        if change.choice:
+            key = (change.verdict, change.choice, change.said)
+            chosen[key] = chosen.get(key, 0) + 1
+    body.append(chosen_table([(LINE_RULES.by_code[verdict].label if verdict in LINE_RULES.by_code else str(verdict), CHOICE_LABELS[choice],
+                               count, said) for (verdict, choice, said), count in chosen.items()], UNIT))
     said = [SOURCE_NOTE, "저장은 줄마다 한 번이고, 편집 창의 다른 칸(이름 · 시즌 · 날짜 · 요금제 · 설명 · 적용 범위)은 창이 보인 그대로 "
             "보냅니다. 공급 원가는 바꾸라고 하지 않으면 지금 값 그대로 보냅니다.",
             "손님 화면에는 저장하면 곧(길어야 몇 분) 새 금액이 보입니다. 이미 받은 예약의 금액은 바뀌지 않습니다.", HIDDEN_NOTE]

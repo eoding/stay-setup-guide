@@ -410,6 +410,8 @@ class NothingToSaveTest(Flow):
         text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
         self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", text)
         self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "줄에서도 저장하지 않는다고 말한다")
+        self.assertIn("공급 원가보다 싸집니다 | 그 줄은 안 바꿈 | 1 | “그 칸은 그냥 둬”", text,
+                      "N6 — 안 바꾸기로 고르며 하신 말이 저장할 것이 없는 미리보기에도 보인다(장부에만 있지 않다)")
         for said in ("저장 0번", '"적용"이라고 해 주세요', "저장은 줄마다 한 번"):
             self.assertNotIn(said, text, "저장할 것이 없는 미리보기는 저장한다고도, 적용하라고도 말하지 않는다")
 
