@@ -47,7 +47,7 @@ class SharedMachineryTest(unittest.TestCase):
         mine = set().union(*(defined(path) for path in SCRIPTS.glob("*.py")))
         # 이름이 같아도 되는 것: 공유 함수를 이 종류의 키 · 접두로 부르는 명령의 얇은 덧뿐(아래에서 그 덧이 공유 함수를 부르는지 본다)
         wrappers = {"moved_since": "window_moved(", "fresh_record": "files.fresh_record(", "load_results": "files.load_results(",
-                    "recorded_snapshot": "ledger.reading("}
+                    "recorded_snapshot": "ledger.reading(", "listed": "files.listed("}
         self.assertEqual((shared & mine) - set(wrappers) - {"__post_init__"}, set())
         command = (SCRIPTS / "charge_change.py").read_text(encoding="utf-8")
         for name, call in wrappers.items():

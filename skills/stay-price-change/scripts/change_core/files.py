@@ -1,21 +1,29 @@
 """기록 폴더의 파일 — 도우미 명령들이 같이 쓰는 파일 읽기 · 결과 파일 쓰기 · 페이지 자리 · 작업 폴더 · 답 폴더 · 앞선 읽기와
-look 에서 조각 빌리기 · 계산 파일 지키기 · 탭의 호텔로 좁힌 장부 목록.
+look 에서 조각 빌리기 · 계산 파일 지키기 · 세 도우미의 기록을 탭의 호텔로 좁힌 장부 목록.
 
 기록 폴더는 장부가 있는 곳이다(`ledger.ledger_dir`). 담당자가 시킨 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`(new_work), 그 안의 look
 답은 `look/`, 읽기마다 `읽기-1/` … 를 쓴다. 읽기 폴더는 아무도 미리 만들지 않는다 — 그 안에 쓰는 첫 명령(`read-calls --out`)이
 만든다(write_out). 답 파일은 이름의 머리(`look-` · `pair-` · `line-` · `take-` …)로 알아본다 — 머리는 도우미마다 정한다.
+
+장부 목록(listed)은 번호마다 그 번호를 쓴 도우미가 범위 한 줄을 만든다. 다른 도우미의 것은 같은 플러그인의 그 도우미 폴더에서
+명령 모듈을 이름으로 불러(`described`) 만든다 — 목록을 만들 때만 부르므로, 이 패키지를 불러오는 것만으로는 도우미의 코드가 올라오지 않는다.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .answers import named
-from .ledger import clock, ledger_dir
+from .ledger import KIND_NAMES, Ledger, clock, ledger_dir
+
+HELPERS = {"price_cell": ("stay-price-change", "price_change"), "addon_price": ("stay-addon-price-change", "addon_change"),
+           "charge": ("stay-charge-change", "charge_change")}   # 항목 종류 → 그 기록을 쓰는 도우미의 스킬 폴더와 명령 모듈
 
 WORK = "작업"   # 기록 폴더 안의 작업 폴더들 — 일 하나에 `작업/<YYYY-MM-DD HHMMSS>/`, 그 안의 읽기마다 `읽기-1/` …
 LOOK = "look"   # 작업 폴더 안에서 look 답을 두는 폴더(SKILL.md 「준비」) — 다음 작업의 look 이 여기서 조각을 빌린다
@@ -196,6 +204,39 @@ def record_progress(entry: dict, unit: str) -> str:
     if status == "empty":
         return "저장할 것 없음"
     return ""
+
+
+Describe = Callable[[Ledger, dict], dict]   # 장부 목록의 한 줄(list_changes) → 범위 한 줄(`scope`)을 단 줄 — 도우미마다 하나
+
+
+def describer(kind: str) -> Describe:
+    """그 종류의 기록을 쓰는 도우미의 `described` — 같은 플러그인의 그 스킬 폴더(`HELPERS`)에서 명령 모듈을 이름으로 불러온다. 모듈
+    이름은 도우미마다 달라 서로 가리지 않는다."""
+    folder, module = HELPERS[kind]
+    scripts = str(Path(__file__).resolve().parents[3] / folder / "scripts")
+    if scripts not in sys.path:
+        sys.path.append(scripts)
+    return importlib.import_module(module).described
+
+
+def _kindless(ledger: Ledger, entry: dict) -> dict:
+    """항목 줄이 없어 종류를 모르는 번호(ledger._kind_of) — 담당자가 한 말과 어디까지 갔는지만."""
+    return dict(entry, scope=" · ".join(part for part in ("항목 없음", f"「{entry['sentence']}」", record_progress(entry, "개")) if part))
+
+
+def listed(ledger: Ledger, kind: str, own: Describe, change_id: int | None = None) -> list[dict]:
+    """장부 목록의 줄마다(`change_id` 를 주면 그 번호만) 그 번호를 쓴 도우미가 만든 범위 한 줄(`scope`)과 그 도우미(`helper`)를 단다 —
+    부르는 도우미(`kind`)의 줄은 `own` 이, 다른 두 도우미의 줄은 그 도우미의 `described` 가 만든다. 그래서 어느 도우미에 물어도 같은
+    번호는 같은 줄이다. 종류로 연 장부면 그 종류의 번호만 나온다(check · rollback 의 범위). 요청 원문은 싣지 않는다."""
+    out = []
+    for entry in ledger.list_changes(change_id):
+        found = entry["item_kind"]
+        describe = own if found == kind else _kindless if found is None else describer(found)
+        entry = describe(ledger, entry)
+        entry["helper"] = KIND_NAMES.get(found)
+        del entry["request"]
+        out.append(entry)
+    return out
 
 
 def hotel_list(ledger_path: Path, entries: list[dict], look: str | None, every: bool) -> dict:

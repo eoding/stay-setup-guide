@@ -2,8 +2,8 @@
 """charge_change.py — 부과금 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
 장부 · 낡음 확인 · 15분 멈춤 · 다시 읽어 견주기 · 되돌리기 계산 · 저장 한 걸음 · 페이지 틀은 다른 두 도우미와 같은 것을 쓴다
-(`../stay-price-change/scripts/change_core`). 장부는 같은 파일이고, 이 명령은 그 장부를 부과금(`charge`)의 장부로 연다 — 목록에는
-부과금 번호만 나오고, 다른 도우미의 번호는 거절한다.
+(`../stay-price-change/scripts/change_core`). 장부는 같은 파일이고, 이 명령은 그 장부를 부과금(`charge`)의 장부로 연다 — 다른
+도우미의 번호는 거절한다. `list` 만은 세 도우미의 기록을 모두 싣는다(줄은 저마다 그 도우미가 만든다).
 
     work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
     look          stayCharge.look() 의 답과 그 조각(take 답들) → 호텔의 오퍼마다 부과금 전부(목록이 보인 그대로). 기록 폴더의
@@ -21,7 +21,8 @@
     check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 해도 되는지
     verify        적용 뒤 다시 읽은 값과 견주기 — 넣은 값, 그리고 그 부과금의 다른 금액 · 칸이 그대로인지. 다르면 종료 1
     rollback      장부의 변경 하나(또는 --charge 로 고른 부과금)를 되돌리는 계산. --record 면 장부에 적는다
-    list          장부에 적힌 부과금 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
+    list          장부에 적힌 기록 목록 — 세 도우미(객실 가격 · 부가옵션 가격 · 부과금)의 것 모두, 탭의 호텔(--look) 것만,
+                  --all 이면 다른 호텔 것도 그 뒤에
 
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다(기록 폴더 안이면 없는 폴더를 만들며). 파일에 쓰는 명령(look ·
 read-calls · read · plan · rollback)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(begin · verify) ·
@@ -76,7 +77,7 @@ PAGE_NAMES = {"preview": "부과금 미리보기", "result": "부과금 적용 �
 
 
 def open_ledger() -> Ledger:
-    """부과금의 장부 — 다른 두 도우미와 같은 파일, 이 종류의 번호만."""
+    """부과금의 장부 — 다른 두 도우미와 같은 파일, 이 종류의 번호만(`list` 는 종류 없이 연다)."""
     return Ledger(kind=ITEM_KIND)
 
 
@@ -361,21 +362,23 @@ def record_scope(entry: dict, labels: list[str]) -> str:
     return head + did + (f" · {progress}" if progress else "")
 
 
+def described(ledger: Ledger, entry: dict) -> dict:
+    """부과금 기록 한 줄에 범위 한 줄(`scope`)을 단다. 다른 두 도우미의 `list` 도 이것으로 이 종류의 줄을 만든다."""
+    rows = ledger.change(entry["id"]).rows
+    touched = {charge_of_key(row.item_key) for row in rows if row.action} or {charge_of_key(row.item_key) for row in rows}
+    labels = [row.label for row in rows if part_of_key(row.item_key)[1] == "main" and row.field == "amount"
+              and charge_of_key(row.item_key) in touched]
+    return dict(entry, scope=record_scope(entry, labels))
+
+
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
-    out = []
-    for entry in ledger.list_changes(change_id):
-        rows = ledger.change(entry["id"]).rows
-        touched = {charge_of_key(row.item_key) for row in rows if row.action} or {charge_of_key(row.item_key) for row in rows}
-        labels = [row.label for row in rows if part_of_key(row.item_key)[1] == "main" and row.field == "amount"
-                  and charge_of_key(row.item_key) in touched]
-        entry["scope"] = record_scope(entry, labels)
-        del entry["request"]
-        out.append(entry)
-    return out
+    """장부 목록의 줄마다(`change_id` 를 주면 그 번호만) 범위 한 줄 — 종류로 연 장부면 부과금 기록만(files.listed)."""
+    return files.listed(ledger, ITEM_KIND, described, change_id)
 
 
 def cmd_list(args):
-    ledger = open_ledger()
+    """탭의 호텔의 기록 전부 — 세 도우미의 것을 모두, 저마다 그 도우미가 만든 줄로."""
+    ledger = Ledger()
     return files.hotel_list(ledger.path, listed(ledger), args.look, args.all)
 
 

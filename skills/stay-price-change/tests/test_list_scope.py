@@ -31,7 +31,7 @@ from price_plan import plan_change, plan_steps, plan_targets, preview_rows, reso
 
 REAL = scene.NOW
 TRIAL = "스탠다드(조식 포함), 스탠다드 바다 전망(조식 포함) · 12/7 월 ~ 12/8 화 · 12/10 목 · 12/14 월 (4일, 2026년)"
-HEAD = f"{trial_scene.OFFER} · {TRIAL}"   # 범위 한 줄의 머리 — 오퍼부터(P3)
+HEAD = f"객실 가격 · {trial_scene.OFFER} · {TRIAL}"   # 범위 한 줄의 머리 — 종류(P1) · 오퍼(P3)부터
 
 
 class ListScopeTest(unittest.TestCase):
@@ -82,7 +82,7 @@ class ListScopeTest(unittest.TestCase):
                                                   rows=snapshot_rows(snapshot), reading=encode_snapshot(snapshot))
                    for snapshot in (self.snapshot, other)]
         lines = [self.scope(0, number) for number in numbers]
-        self.assertEqual(lines, [f"{trial_scene.OFFER} · {TRIAL} · 지금 상태 저장", f"연말 오퍼 · {TRIAL} · 지금 상태 저장"])
+        self.assertEqual(lines, [f"객실 가격 · {trial_scene.OFFER} · {TRIAL} · 지금 상태 저장", f"객실 가격 · 연말 오퍼 · {TRIAL} · 지금 상태 저장"])
 
     def test_a_target_table_counts_the_cells_it_writes_not_the_ones_kept_on_a_red_line(self):
         """F5 — 요금표 시운전: 8칸을 넣고 4칸을 빨간 줄에 그대로 둔 변경을 「새 요금표 12칸」이라고 읽어 주었다."""

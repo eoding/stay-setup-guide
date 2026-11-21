@@ -32,7 +32,8 @@
     compare       지금 상태 저장으로 적어 둔 상태와 같은 범위를 방금 읽은 값 견주기 — 바뀐 · 새로 생긴 · 없어진 칸, 날짜별로 바꿔
                   두었다가 바뀐 칸, 예약 있는 날(ERP 시즌 [가격]을 다시 채운 뒤에 쓴다). 아무것도 바꾸지 않고 장부에도 적지 않는다
     save-snapshot 지금 값을 장부에만 적어 두기
-    list          장부에 적힌 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
+    list          장부에 적힌 기록 목록 — 세 도우미(객실 가격 · 부가옵션 가격 · 부과금)의 것 모두, 탭의 호텔(--look) 것만,
+                  --all 이면 다른 호텔 것도 그 뒤에
 
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다(기록 폴더 안이면 없는 폴더를 만들며 — 읽기 폴더 `읽기-2` 를
 미리 만들지 않아도 된다). 파일에 쓰는 명령 여덟(rooms · read-calls · read · sheet · plan · rollback · restore · compare)은 `--out` 을 주면
@@ -89,7 +90,7 @@ from price_plan import (
 )
 
 def open_ledger() -> Ledger:
-    """가격 칸의 장부 — 목록에는 가격 칸 번호만 나오고, 다른 도우미(부가옵션 가격 …)의 번호는 거절한다."""
+    """가격 칸의 장부 — 다른 도우미(부가옵션 가격 …)의 번호는 거절한다. `list` 만 종류 없이 열어 세 도우미의 기록을 모두 싣는다."""
     return Ledger(kind=ITEM_KIND)
 
 
@@ -537,20 +538,21 @@ def cmd_save_snapshot(args):
                                                    rows=snapshot_rows(snapshot), reading=encode_snapshot(snapshot)))
 
 
+def described(ledger: Ledger, entry: dict) -> dict:
+    """가격 칸 기록 한 줄에 범위 한 줄(`scope`)을 단다 — 장부가 가진 칸에서 「객실 가격」 · 오퍼 · 객실 · 요금제, 날짜 구간, 한 일(알면
+    "판매가 +12%" 처럼), 멈췄으면 어디까지 갔는지, 되돌렸으면 몇 칸을. 다른 두 도우미의 `list` 도 이것으로 이 종류의 줄을 만든다."""
+    keys = ledger.item_keys(ITEM_KIND, entry["id"]).get(entry["id"], ())
+    return dict(entry, scope=record_scope(entry, map(key_of_item, keys)))
+
+
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
-    """장부 목록의 줄마다(`change_id` 를 주면 그 번호만) 범위 한 줄(`scope`)을 단다 — 장부가 가진 칸에서 객실 · 요금제, 날짜 구간,
-    한 일(알면 "판매가 +12%" 처럼), 멈췄으면 어디까지 갔는지, 되돌렸으면 몇 칸을. 요청 원문은 싣지 않는다."""
-    keys = ledger.item_keys(ITEM_KIND, change_id)
-    out = []
-    for entry in ledger.list_changes(change_id):
-        entry["scope"] = record_scope(entry, map(key_of_item, keys.get(entry["id"], ())))
-        del entry["request"]
-        out.append(entry)
-    return out
+    """장부 목록의 줄마다(`change_id` 를 주면 그 번호만) 범위 한 줄 — 종류로 연 장부면 가격 칸 기록만(files.listed)."""
+    return files.listed(ledger, ITEM_KIND, described, change_id)
 
 
 def cmd_list(args):
-    ledger = open_ledger()
+    """탭의 호텔의 기록 전부 — 세 도우미의 것을 모두, 저마다 그 도우미가 만든 줄로."""
+    ledger = Ledger()
     return files.hotel_list(ledger.path, listed(ledger), args.look, args.all)
 
 

@@ -411,9 +411,13 @@ def record_scope(entry: Mapping, keys: Iterable[CellKey]) -> str:
                                                         entry["planned"]), record_progress(entry, "칸"))
 
 
+KIND_WORD = "객실 가격"   # 세 도우미의 기록이 한 목록에 나올 때 이 종류를 부르는 말(부가옵션 가격 줄 · 부과금은 범위의 머리가 말한다)
+
+
 def scope_text(offer: str, keys: Iterable[CellKey], what: str, progress: str = "") -> str:
-    """범위 한 줄의 차례 — 오퍼 · 칸들이 덮는 것 · 한 일 · 어디까지 갔는지. 장부에 적지 않은 되돌리기 계산도 같은 차례다."""
-    return " · ".join(part for part in (offer, cells_scope(keys), what, progress) if part)
+    """범위 한 줄의 차례 — 「객실 가격」 · 오퍼 · 칸들이 덮는 것 · 한 일 · 어디까지 갔는지. 장부에 적지 않은 되돌리기 계산도 같은
+    차례다."""
+    return " · ".join(part for part in (KIND_WORD, offer, cells_scope(keys), what, progress) if part)
 
 
 def pairs_label(pairs: Iterable[tuple[str, str]]) -> str:

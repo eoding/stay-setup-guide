@@ -24,8 +24,9 @@ snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 
 바뀌는 항목이 없거나 빨간 줄을 모두 안 바꾸기로 고른 미리보기는 적는 순간 상태가 empty 다 — 적용할 것이 없어 begin 이 받지 않고,
 목록에서 적용을 기다리는 미리보기(previewed)처럼 읽히지 않는다. 담당자가 마음을 바꿔 다시 계산하면 replaced 가 된다.
 
-도우미마다 자기 항목 종류로 장부를 연다(`Ledger(kind="price_cell")`). 그러면 목록에는 그 종류의 번호만 나오고, 다른 종류의 번호를
-주면 어느 도우미의 기록인지 대며 거절한다. 번호의 종류는 그 번호에 적힌 항목 줄의 종류다(표의 모양은 그대로다).
+도우미마다 자기 항목 종류로 장부를 연다(`Ledger(kind="price_cell")`). 그러면 `list_changes` 에는 그 종류의 번호만 나오고, 다른
+종류의 번호를 주면 어느 도우미의 기록인지 대며 거절한다. 도우미의 `list` 명령은 종류 없이 열어 세 도우미의 기록을 모두 싣는다
+(files.listed). 번호의 종류는 그 번호에 적힌 항목 줄의 종류다(표의 모양은 그대로다 — `_kind_of`).
 
 적용 중인 변경이 `IDLE`(15분) 동안 아무 일이 없으면 멈춘 변경이다 — 목록 · calls · check · 결과 페이지 어디서나. 세션이
 저장 사이에서 끊겨도 장부는 적용 중으로 남는데, 그 사이 ERP 값이 바뀌었을 수 있어 다시 읽지 않고는 남은 저장을 내지 않는다.
@@ -56,7 +57,8 @@ DB_NAME = "가격장부.sqlite3"
 SCHEMA_VERSION = 3                   # 3 — 상태 empty(저장할 것이 없는 미리보기)
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
-KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장)
+KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장 · 목록)
+OFFER_KIND = "price_cell"            # 장부의 오퍼 칸을 채우는 단 하나의 종류 — 부가옵션 · 부과금 도우미는 비운다(항목 줄이 없는 번호를 가른다)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -282,6 +284,25 @@ class CheckReport:
     note: str | None = None
 
 
+def _kind_of(db, change_id: int | None) -> str | None:
+    """번호의 종류 — 그 번호에 적힌 항목 줄의 종류. 항목 줄이 없는 번호(넣을 것이 없던 미리보기 · 되돌리기)는 오퍼 칸이 찼으면 가격
+    캘린더의 것이고(오퍼 칸은 가격 캘린더 도우미만 채운다), 되돌리기면 되돌리는 번호의 종류다. 그래도 모르면 None — 어느 도우미든
+    받고, 목록에는 종류 없이 나온다."""
+    seen = set()
+    while change_id is not None and change_id not in seen:
+        seen.add(change_id)
+        row = db.execute("SELECT item_kind FROM item_values WHERE change_id = ? LIMIT 1", (change_id,)).fetchone()
+        if row is not None:
+            return row["item_kind"]
+        header = db.execute("SELECT offer, reverses FROM changes WHERE id = ?", (change_id,)).fetchone()
+        if header is None:
+            return None
+        if header["offer"]:
+            return OFFER_KIND
+        change_id = header["reverses"]
+    return None
+
+
 def _absent(item) -> bool:
     return item is None or item.state == "missing"
 
@@ -423,13 +444,10 @@ class Ledger:
         row = db.execute("SELECT * FROM changes WHERE id = ?", (change_id,)).fetchone()
         if row is None:
             raise LedgerError(f"장부에 {change_id}번 변경이 없습니다")
-        if self.kind is not None:
-            other = db.execute("SELECT item_kind FROM item_values WHERE change_id = ? AND item_kind != ? LIMIT 1",
-                               (change_id, self.kind)).fetchone()
-            if other is not None:
-                owner = KIND_NAMES.get(other["item_kind"], other["item_kind"])
-                raise LedgerError(f"{change_id}번은 {owner}의 기록입니다 — 이 도우미는 {KIND_NAMES.get(self.kind, self.kind)}의 "
-                                  "기록만 다룹니다")
+        kind = _kind_of(db, change_id) if self.kind is not None else None
+        if kind is not None and kind != self.kind:
+            raise LedgerError(f"{change_id}번은 {KIND_NAMES.get(kind, kind)}의 기록입니다 — 이 도우미는 "
+                              f"{KIND_NAMES.get(self.kind, self.kind)}의 기록만 다룹니다")
         return row
 
     def _stamp(self) -> str:
@@ -796,7 +814,8 @@ class Ledger:
         return json.loads(header["reading"])
 
     def list_changes(self, change_id: int | None = None) -> list[dict]:
-        """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만, 종류로 열었으면 그 종류의 번호만). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
+        """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만, 종류로 열었으면 그 종류의 번호와 종류 없는 번호만).
+        `item_kind` 는 그 번호의 종류(`_kind_of`). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
         `partly_rolled_back` 이다(`written` · `rolled_back` 이 그 수, `undone_by` 가 되돌린 번호들) — 되돌린 변경이 살아 있는
         것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None).
         `planned` 는 적힌 항목 가운데 저장이 값을 넣는(넣을) 항목 수다 — 안 바꾸기로 고른 항목 · 적용할 수 없는 항목은 들지 않는다."""
@@ -805,12 +824,9 @@ class Ledger:
         if change_id is not None:
             where.append("changes.id = ?")
             params.append(change_id)
-        if self.kind is not None:
-            where.append("NOT EXISTS (SELECT 1 FROM item_values AS other WHERE other.change_id = changes.id AND other.item_kind != ?)")
-            params.append(self.kind)
         with self._db() as db:
             rows = db.execute(
-                f"SELECT changes.*, COUNT(DISTINCT {item}) AS items,"
+                f"SELECT changes.*, MIN(item_values.item_kind) AS item_kind, COUNT(DISTINCT {item}) AS items,"
                 f" COUNT(DISTINCT CASE WHEN item_values.action IS NOT NULL THEN {item} END) AS planned,"
                 f" COUNT(DISTINCT CASE WHEN steps.status = 'saved' THEN {item} END) AS written,"
                 f" COUNT(DISTINCT CASE WHEN item_values.rolled_back_by IS NOT NULL THEN {item} END) AS rolled_back,"
@@ -821,15 +837,17 @@ class Ledger:
                 " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 + (" WHERE " + " AND ".join(where) if where else "") + " GROUP BY changes.id ORDER BY changes.id DESC",
                 params).fetchall()
-        return [dict(id=row["id"], kind=row["kind"], status=self._listed_status(row), hotel=row["hotel"], hotel_id=row["hotel_id"],
-                     offer=row["offer"], currency=row["currency"],
+            kinds = {row["id"]: row["item_kind"] or _kind_of(db, row["id"]) for row in rows}
+        return [dict(id=row["id"], kind=row["kind"], item_kind=kinds[row["id"]], status=self._listed_status(row), hotel=row["hotel"],
+                     hotel_id=row["hotel_id"], offer=row["offer"], currency=row["currency"],
                      sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                      applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
                      replaces=row["replaces"], items=row["items"], planned=row["planned"], written=row["written"],
                      rolled_back=row["rolled_back"],
                      undone_by=sorted(int(number) for number in (row["undone_by"] or "").split(",") if number),
                      steps=row["step_count"], saved_steps=row["saved_steps"],
-                     request=None if row["request"] is None else json.loads(row["request"])) for row in rows]
+                     request=None if row["request"] is None else json.loads(row["request"]))
+                for row in rows if self.kind is None or kinds[row["id"]] in (self.kind, None)]
 
     def _listed_status(self, row) -> str:
         """목록의 상태 — 저장한 항목이 모두 되돌아갔으면 rolled_back, 일부면 partly_rolled_back, 아니면 장부의 상태."""

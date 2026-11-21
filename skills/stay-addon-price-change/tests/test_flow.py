@@ -2,7 +2,7 @@
 
 읽기 → 두 줄 10% → 미리보기 → 적용 직전 다시 읽기 → begin → 저장 → 다시 읽어 견주기 → 되돌리기 → 견주기. 그리고 그 길에서
 벗어나는 때: 적용 직전에 편집 창의 값이 달라짐(아무것도 저장 안 함), 저장이 공급 원가를 지움(견주기가 짚음), 그 사이 바뀐 줄은
-되돌리지 않고 세 값과 까닭을 댐, 멈춘 변경, 같은 장부의 가격 캘린더 도우미가 이 변경을 보지도 만지지도 않음.
+되돌리지 않고 세 값과 까닭을 댐, 멈춘 변경, 같은 장부의 가격 캘린더 도우미가 이 변경을 같은 줄로 읽어 주기만 하고 만지지 않음.
 
     python3 -m unittest discover -s tests
 """
@@ -380,10 +380,15 @@ class LookItemsTest(Flow):
 
 
 class OneLedgerTest(Flow):
-    def test_the_price_calendar_helper_neither_lists_nor_touches_an_add_on_change_in_the_same_ledger(self):
+    def test_the_price_calendar_helper_lists_an_add_on_change_with_the_same_line_and_does_not_touch_it(self):
+        """P1 — 장부는 하나다. 가격 캘린더 도우미의 목록에도 이 변경이 같은 줄로 나오고(종류 · 맡는 도우미까지), 그 번호로 무엇을
+        하려 하면 어느 도우미의 기록인지 대며 거절한다."""
         change, plan = self.preview(self.request())
         self.apply(change, plan)
-        self.assertEqual(self.cli("list", "--all", script=PRICE_SCRIPT)["changes"], [])
+        mine, = self.cli("list", "--all")["changes"]
+        theirs, = self.cli("list", "--all", script=PRICE_SCRIPT)["changes"]
+        self.assertEqual(theirs, mine)
+        self.assertEqual((theirs["item_kind"], theirs["helper"]), ("addon_price", "부가옵션 가격 도우미"))
         refused = self.cli("calls", "--change", change, script=PRICE_SCRIPT, code=2)
         self.assertIn("부가옵션 가격 도우미의 기록", refused["error"])
         db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")

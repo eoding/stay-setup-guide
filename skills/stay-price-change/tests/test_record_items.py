@@ -109,6 +109,27 @@ class KindLedgerTest(unittest.TestCase):
             self.ledger(LINE).recorded_change(cell_id)
         self.assertEqual(self.ledger(LINE).list_changes(cell_id), [])
 
+    def test_a_record_without_item_rows_takes_its_kind_from_the_offer_or_the_change_it_reverses(self):
+        """P1 — 목록은 번호마다 그 종류의 도우미가 줄을 만든다. 항목 줄이 없는 번호(넣을 것이 없던 미리보기 · 되돌리기)도 종류가
+        있다: 오퍼 칸이 찼으면 가격 캘린더(그 칸은 가격 캘린더 도우미만 채운다), 되돌리기면 되돌리는 번호의 종류. 둘 다 아니면 종류가
+        없고, 어느 도우미든 받으며 목록에는 담당자의 말과 함께 종류 없이 나온다."""
+        from change_core import files
+        line_id = preview(self.ledger(LINE), rows(D("22.00")))
+        empty = dict(hotel="데모 호텔", hotel_id="1", currency="USD", read_at=START.isoformat(), rows=[], empty=True)
+        back = self.ledger(LINE).record_preview(offer="", sentence="되돌려", reverses=line_id, **empty)
+        cell = self.ledger(CELL).record_preview(offer="오퍼", sentence="1/2 디럭스 100 으로", **empty)
+        bare = self.ledger(LINE).record_preview(offer="", sentence="조식 10% 올려줘", **empty)
+        self.assertEqual({entry["id"]: entry["item_kind"] for entry in self.ledger().list_changes()},
+                         {line_id: LINE, back: LINE, cell: CELL, bare: None})
+        with self.assertRaisesRegex(LedgerError, f"{back}번은 부가옵션 가격 도우미의 기록입니다"):
+            self.ledger(CELL).change(back)
+        with self.assertRaisesRegex(LedgerError, f"{cell}번은 가격 캘린더 도우미의 기록입니다"):
+            self.ledger(LINE).change(cell)
+        self.assertEqual(self.ledger(CELL).change(bare).id, bare, "종류가 없는 번호는 어느 도우미든 받는다")
+        self.assertEqual([entry["id"] for entry in self.ledger(CELL).list_changes()], [bare, cell])
+        entry, = files.listed(self.ledger(CELL), CELL, lambda ledger, entry: dict(entry, scope="가격 칸 줄"), bare)
+        self.assertEqual((entry["scope"], entry["helper"]), ("항목 없음 · 「조식 10% 올려줘」 · 저장할 것 없음", None))
+
     def test_begin_fresh_starts_nothing_when_a_named_field_moved_and_starts_when_everything_is_the_same(self):
         ledger = self.ledger(LINE)
         change = preview(ledger, rows(D("22.00")))

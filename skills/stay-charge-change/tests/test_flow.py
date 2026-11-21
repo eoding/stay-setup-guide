@@ -3,7 +3,7 @@
 모양 넷: 시간대 요율 둘인 정률 부과금(701), 날짜 하나에 붙는 인당 정액 의무 부과금(703), 현장 결제 부과금(704), 연령별 단가가 있는
 부과금(705). 넷 모두 읽기 → 바꾸기 → 미리보기 → 적용 직전 다시 읽기 → begin → 저장 → 다시 읽어 견주기 → 되돌리기 → 견주기.
 그리고 그 길에서 벗어나는 때: 적용 직전에 창의 값이 달라짐(아무것도 저장 안 함), 저장이 다른 칸을 바꿈(견주기가 짚음), 그 사이
-바뀐 칸은 되돌리지 않고 세 값과 까닭을 댐, 멈춘 변경, 같은 장부의 다른 도우미가 이 변경을 보지도 만지지도 않음.
+바뀐 칸은 되돌리지 않고 세 값과 까닭을 댐, 멈춘 변경, 같은 장부의 다른 도우미가 이 변경을 같은 줄로 읽어 주기만 하고 만지지 않음.
 
     python3 -m unittest discover -s tests
 """
@@ -587,12 +587,16 @@ class LookItemsTest(Flow):
 
 
 class OneLedgerTest(Flow):
-    def test_the_other_helpers_neither_list_nor_touch_a_charge_change_in_the_same_ledger(self):
+    def test_the_other_helpers_list_a_charge_change_with_the_same_line_and_do_not_touch_it(self):
+        """P1 — 장부는 하나다. 다른 두 도우미의 목록에도 이 변경이 같은 줄로 나오고, 그 번호로 무엇을 하려 하면 부과금 도우미의
+        기록이라며 거절한다."""
         change, plan = self.preview(self.request(LATE_BAND, value="60"))
         self.apply(change, plan)
-        for script, name in ((PRICE_SCRIPT, "부과금 도우미의 기록"), (ADDON_SCRIPT, "부과금 도우미의 기록")):
-            self.assertEqual(self.cli("list", "--all", script=script)["changes"], [])
-            self.assertIn(name, self.cli("calls", "--change", change, script=script, code=2)["error"])
+        mine, = self.cli("list", "--all")["changes"]
+        self.assertEqual((mine["item_kind"], mine["helper"]), ("charge", "부과금 도우미"))
+        for script in (PRICE_SCRIPT, ADDON_SCRIPT):
+            self.assertEqual(self.cli("list", "--all", script=script)["changes"], [mine])
+            self.assertIn("부과금 도우미의 기록", self.cli("calls", "--change", change, script=script, code=2)["error"])
         db = sqlite3.connect(Path(self.env["STAY_PRICE_LEDGER_DIR"]) / "가격장부.sqlite3")
         kinds = {row[0] for row in db.execute("SELECT DISTINCT item_kind FROM item_values")}
         keys = {row[0] for row in db.execute("SELECT DISTINCT item_key FROM item_values")}
