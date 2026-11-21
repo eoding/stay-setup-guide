@@ -3,6 +3,10 @@
 결과는 표준 출력에 JSON 으로, `--out` 을 주면 그 파일에도 쓴다(기록 폴더 안이면 없는 폴더를 만들며 — files.write_out). 파일에 쓰는
 명령 가운데 짧은 답이 있는 것(`short`)은 표준 출력에 짧은 답만 낸다.
 
+표준 출력 · 표준 오류는 UTF-8 이다 — 명령이 첫 줄에서 `utf8_streams` 를 부른다. 윈도의 파이썬은 파이프로 나가는 글을 그
+컴퓨터의 코드 페이지(한국어 윈도 cp949 · 영어 윈도 cp1252)로 쓰고, 그 코드 페이지에 없는 글자(— · 베트남 글자 · 한글)에서 죽는다 —
+장부를 이미 적은 뒤일 수 있다. 결과를 쓰는 것도 아래의 보호 안에 있다.
+
 종료 코드는 셋이다. 0 됨 · 1 다른 값이 있음(답의 `same` 이 false) · 2 입력이나 순서가 맞지 않음. 2 는 언제나 표준 오류에 JSON 한
 줄이다 — 파이썬의 Traceback 은 내지 않는다(failure):
 
@@ -31,9 +35,18 @@ FILE_WHY = {FileNotFoundError: "없습니다", IsADirectoryError: "파일이 아
             PermissionError: "이 컴퓨터가 그 자리를 읽거나 쓰는 것을 막습니다(권한)"}
 
 
+def utf8_streams() -> None:
+    """표준 출력 · 표준 오류를 UTF-8 로 — 명령(`main`)의 첫 줄에서 부른다(인자를 잘못 준 알림도 이 뒤에 나간다). 바꿀 수 없는
+    흐름(시험이 바꿔 낀 것)은 그대로 둔다."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
+
 def run(args, short: Mapping[str, Callable[[dict], dict]]) -> int:
     """`args.handler(args)` 를 부르고 결과를 쓴다 — 종료 코드를 돌려준다. `--out` 의 자리는 셈하기 전에 본다(기록 폴더 밖의 없는
-    폴더면 아무것도 셈하거나 장부에 적지 않고 거절한다)."""
+    폴더면 아무것도 셈하거나 장부에 적지 않고 거절한다). 결과를 표준 출력에 쓰다 실패해도 JSON 한 줄이다."""
     try:
         files.check_out(args.out)
         result = args.handler(args)
@@ -42,10 +55,10 @@ def run(args, short: Mapping[str, Callable[[dict], dict]]) -> int:
             path = files.write_out(args.out, text + "\n")
             if args.command in short:
                 text = json.dumps(dict(out=str(path.resolve()), **short[args.command](result)), ensure_ascii=False, indent=2)
+        print(text, flush=True)
     except Exception as error:   # noqa: BLE001 — 어떤 실패도 JSON 한 줄로(Traceback 없이)
         print(json.dumps(failure(error), ensure_ascii=False), file=sys.stderr)
         return 2
-    print(text)
     return 1 if result.get("same") is False else 0
 
 
