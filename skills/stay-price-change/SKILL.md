@@ -40,11 +40,11 @@ metadata:
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
 - 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말한다. 도우미가 만든 페이지(이 컴퓨터의 HTML 파일)는 브라우저 도구로 열지 못하므로 시스템의 여는 명령으로 담당자에게 열어 준다(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text`(페이지에 보이는 글)에서 옮긴다.
-- "날짜별로 펼쳐 줘"라고 하면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
+- "날짜별로 펼쳐 줘"면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
 
 ## 준비 — 시킨 일마다 3 부터
 
-담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 같은 세션에서 방금 멈춘 변경을 이어서 할 때만 그 일의 폴더를 그대로 쓴다. 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` 다.
+담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 같은 세션에서 방금 멈춘 변경을 이어서 할 때만 그 일의 폴더를 그대로 쓴다. 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` · `rooms` 다.
 
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
 2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`)마다.

@@ -9,6 +9,8 @@
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
                   읽은 시각(read_at)은 그 작업들이 끝난 시각 가운데 가장 이른 것이다. 시험용으로 ERP 화면 조각(HTML) 파일도 받는다
                   reserved · read 는 기록 폴더의 앞선 읽기 폴더(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
+    rooms         look 의 답 → 객실마다 ERP 가 부르는 두 이름(캘린더 칩 · 가격 수정 창). 기록 폴더의 앞선 읽기(같은 호텔 · 오퍼)가 아는
+                  이름을 모으고, 어느 읽기도 읽지 않은 객실만 읽을 범위로 낸다(요금표의 객실 이름을 맞출 때)
     sheet         요금표 파일(kind sheet) + look 의 답 → 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위와
                   페이지 작업 수(sheet-check.json). read-calls · plan · render sheet 가 이 파일을 받는다
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다.
@@ -32,7 +34,7 @@
     save-snapshot 지금 값을 장부에만 적어 두기
     list          장부에 적힌 변경 목록 — 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
 
-결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 일곱(read-calls · read · sheet · plan ·
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령 여덟(rooms · read-calls · read · sheet · plan ·
 rollback · restore · compare)은 `--out` 을 주면 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일
 자리이고, 칸 목록은 싣지 않는다(SHORT). 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) ·
 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"}). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
@@ -59,7 +61,7 @@ from change_core.answers import BrowserError, answers_for, attach_bodies, step_o
 from change_core.chrome import page_text
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
-from change_core.ledger import Ledger, LedgerError, now_text
+from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
 from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback, holds
 from change_core.rules import Resolution, said_in
@@ -198,13 +200,57 @@ def cmd_reserved(args):
     return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 
 
+def look_of(path: str) -> dict:
+    look = load(path)
+    if not isinstance(look, dict) or not isinstance(look.get("hotel"), dict) or not isinstance(look.get("pairs"), list):
+        raise ValueError("--look 은 hotel · offer · pairs 가 든 look 의 답입니다 — 목록이 길어 body 로 왔으면 look --answers 로 먼저 묶습니다")
+    return look
+
+
+def known_rooms(hotel_id: str, offer: str) -> tuple[dict[str, str], set[str]]:
+    """기록 폴더의 읽기(`작업/<작업>/<읽기>/snapshot.json`) 가운데 같은 호텔 · 오퍼를 읽은 것에서 — 캘린더 칩 이름 → 가격 수정 창
+    이름(새 읽기가 앞선다)과 읽은 적이 있는 객실. 읽지 못하는 파일 · 다른 도우미의 읽은 값은 건너뛴다(빌려 줄 뿐이다)."""
+    found = []
+    for path in (ledger_dir() / files.WORK).glob("*/*/snapshot.json"):
+        try:
+            snapshot = decode_snapshot(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        if snapshot.hotel_id == hotel_id and snapshot.offer == offer:
+            found.append((snapshot.read_at, snapshot.room_names, {room for room, _plan in snapshot.pairs}))
+    names, read = {}, set()
+    for _at, room_names, rooms in sorted(found, key=lambda item: item[0]):
+        names.update(room_names)
+        read |= rooms
+    return names, read
+
+
+def cmd_rooms(args):
+    """객실마다 ERP 가 부르는 두 이름 — 앞선 읽기가 아는 것은 다시 읽지 않는다. 어느 읽기도 읽지 않은 객실이 있으면 낸 파일이 그
+    객실만 `--date` 하루를 읽는 범위(kind range)다 — 그것으로 읽고 이 명령을 다음 이름으로 다시 한다."""
+    files.fresh_record(args.out, None, False, "rooms")
+    look = look_of(args.look)
+    name, hotel_id = decode_hotel(look["hotel"])
+    offer = str(look.get("offer") or "")
+    plans: dict[str, str] = {}
+    for item in look["pairs"]:
+        plans.setdefault(str(item["room"]), str(item["rate_plan"]))
+    names, read = known_rooms(hotel_id, offer)
+    unread = [room for room in plans if room not in read]
+    result = dict(kind="room_names", hotel=encode_hotel(name, hotel_id), offer=offer,
+                  rooms=[dict(room=room, drawer=names.get(room)) for room in plans], unread=unread)
+    if unread:
+        if not args.date:
+            raise ValueError(f"이름을 모르는 객실 {len(unread)}개({', '.join(unread)})를 읽을 날을 --date 로 줍니다(요금표의 첫 날)")
+        result.update(kind="range", pairs=[dict(room=room, rate_plan=plans[room]) for room in unread], dates=[iso_day(args.date)])
+    return result
+
+
 def cmd_sheet(args):
     """요금표를 읽기 전에 확인한다 — `--look` 은 look 명령의 답(짧으면 stayPrice.look() 의 답 파일 그대로도 된다). 낸 파일은 기록이라
     덮어쓰지 않는다(고친 요금표는 다음 이름 sheet-check-2.json …)."""
     files.fresh_record(args.out, None, False, "sheet-check")
-    look = load(args.look)
-    if not isinstance(look, dict) or not isinstance(look.get("hotel"), dict) or not isinstance(look.get("pairs"), list):
-        raise ValueError("--look 은 hotel · offer · pairs 가 든 look 의 답입니다 — 목록이 길어 body 로 왔으면 look --answers 로 먼저 묶습니다")
+    look = look_of(args.look)
     sheet = decode_sheet(load(args.sheet))
     name, hotel_id = decode_hotel(look["hotel"])
     if not same_hotel(sheet.hotel, sheet.hotel_id, name, hotel_id) or look.get("offer") != sheet.offer:
@@ -577,7 +623,12 @@ def short_compare(result: dict) -> dict:
                 written_by=result["written_by"], example=example)
 
 
-SHORT = {"read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,
+def short_rooms(result: dict) -> dict:
+    """맞출 때 필요한 것 — 객실마다 두 이름, 아무 읽기도 읽지 않은 객실, 그 객실들을 읽어야 하는지(낸 파일이 읽을 범위)."""
+    return dict(rooms=result["rooms"], unread=result["unread"], read=bool(result["unread"]))
+
+
+SHORT = {"rooms": short_rooms, "read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,
          "rollback": short_rollback, "restore": short_rollback, "compare": short_compare}
 
 
@@ -614,6 +665,10 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--hotel-id", help="시험용: 화면 조각 파일로 읽을 때의 호텔 번호")
     sub.add_argument("--price-page", action="append", help="시험용: '캘린더의 객실 이름=[선택 날짜 가격 수정] 확인 단계 HTML' (여러 번)")
     sub.add_argument("--adjust-page", action="append", help="시험용: [선택 날짜 가격 가감] 확인 단계 HTML (여러 번)")
+
+    sub = command("rooms", cmd_rooms, "객실마다 ERP 가 부르는 두 이름 — 앞선 읽기가 아는 것은 다시 읽지 않는다")
+    sub.add_argument("--look", required=True, help="look 의 답(hotel · offer · pairs)")
+    sub.add_argument("--date", help="이름을 모르는 객실을 읽을 날(ISO, 요금표의 첫 날) — 그런 객실이 있을 때만 쓴다")
 
     sub = command("sheet", cmd_sheet, "요금표 확인 — 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위")
     sub.add_argument("--sheet", required=True, help="요금표 파일(kind sheet) — 도우미가 요금표에서 숫자만 옮겨 적은 것")
