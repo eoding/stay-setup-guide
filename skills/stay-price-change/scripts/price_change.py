@@ -70,7 +70,7 @@ from change_core.rollback import decode_rollback, encode_rollback, holds
 from change_core.rules import Resolution, said_in
 from erp_read import PairRead, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_call, too_big,
+    page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_calls, too_big,
 )
 from change_core.rules import BLOCKED
 from price_model import (
@@ -384,30 +384,40 @@ def record_hotel(record) -> dict:
     return encode_hotel(record.hotel, record.hotel_id)
 
 
+def change_calls(ledger: Ledger, record) -> list[dict]:
+    """그 변경의 저장 단계 전부의 부를 값(차례대로) — 칸마다 누르기 전에 화면에 있어야 할 값(`was` — 장부에 적힌 그 계산의 읽은
+    값 위에 앞 단계들이 넣은 값을 얹은 것)이 든다. 페이지는 화면이 그 값이 아니면 치지도 누르지도 않는다."""
+    return step_calls(record_hotel(record), record.offer, [(step.index, step.kind, step.body) for step in record.steps],
+                      recorded_reading(ledger, record.id))
+
+
 def cmd_calls(args):
-    record = open_ledger().change(args.change)
+    ledger = open_ledger()
+    record = ledger.change(args.change)
     if not record.steps:
         raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
     if record.status == "stopped":
         raise LedgerError(f"{args.change}번 변경은 멈춰 있습니다(저장이 실패했거나 15분 동안 아무 일이 없었습니다) — 같은 범위를 "
                           f"다시 읽고(read-calls --record {args.change}) check 가 이어서 해도 된다고 하면 calls 를 다시 부릅니다")
-    return dict(change_id=record.id, status=record.status,
-                calls=[step_call(step.index, record_hotel(record), record.offer, step.kind, step.body)
-                       for step in record.steps if step.status != "saved"])
+    left = {step.index for step in record.steps if step.status != "saved"}
+    return dict(change_id=record.id, status=record.status, calls=[call for call in change_calls(ledger, record) if call["no"] in left])
 
 
 def cmd_record_result(args):
+    """`moved` 는 페이지가 누르기 전에 화면의 값이 그 단계의 `was` 와 달라 거절한 칸 수다(있을 때만) — 그 사이 다른 손이 탔다.
+    저장 안 됨으로 적혀 변경이 멈춘다. 다시 읽고 새 미리보기를 만든다(failures.md 「적용」)."""
     result = load(args.result)
     ledger = open_ledger()
     record = ledger.change(args.change)
     step = next((step for step in record.steps if step.index == result.get("no")), None)
     if step is None:
         raise LedgerError(f"{args.change}번 변경에 {result.get('no')}번째 저장이 없습니다")
-    outcome = step_outcome(step_call(step.index, record_hotel(record), record.offer, step.kind, step.body), result)
+    outcome = step_outcome(next(call for call in change_calls(ledger, record) if call["no"] == step.index), result)
     if not outcome.started:
         return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note,
                     status=record.status)
-    return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note,
+    moved = dict(moved=outcome.moved) if outcome.moved else {}
+    return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note, **moved,
                 status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note,
                                           unknown=outcome.saved == "unknown"))
 

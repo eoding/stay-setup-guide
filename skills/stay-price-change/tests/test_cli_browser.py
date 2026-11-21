@@ -20,7 +20,11 @@ sys.path.insert(0, str(SCRIPT.parent))
 import scene  # noqa: E402
 from browser_replies import done_at, reply  # noqa: E402
 from change_core.answers import ask_sum  # noqa: E402
-from price_model import decode_snapshot, encode_request, encode_snapshot  # noqa: E402
+from dataclasses import replace  # noqa: E402
+from decimal import Decimal as D  # noqa: E402
+
+from change_core.money import money_text  # noqa: E402
+from price_model import CellKey, decode_snapshot, decode_step, encode_request, encode_snapshot  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"
 PRICE = (ERP / "price-runs-closed-absent-list.html").read_text(encoding="utf-8")
@@ -218,6 +222,49 @@ class BrowserCommandTest(unittest.TestCase):
         self.assertIn("다시 읽어", stopped["note"])
         self.assertIn("check", self.run_cli("calls", "--change", change, code=2)["error"],
                       "멈춘 변경은 다시 읽어 check 가 이어서 해도 된다고 하기 전에는 남은 단계를 내지 않는다")
+
+    def test_a1_a_step_whose_screen_moved_is_refused_recorded_not_saved_and_stops_the_change_and_check_names_the_cell(self):
+        snapshot = self.write("snapshot.json", encode_snapshot(scene.snapshot()))
+        request = self.write("request.json", encode_request(scene.request()))
+        choice = self.write("choice.json", [{"rule": "ABOVE_LIST", "choice": "raise_list", "said": "정가도 같이 올려"}])
+        change = self.run_cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", choice, "--record",
+                              "--out", self.dir / "plan.json")["change_id"]
+        self.run_cli("begin", "--change", change, "--plan", self.dir / "plan.json", "--snapshot", self.fresh(snapshot))
+        calls = self.run_cli("calls", "--change", change)["calls"]
+        reading = scene.snapshot()
+        for call in calls:   # 저장 단계마다 칸이 읽은 값을 싣는다 — 날짜 줄마다 [첫 날, 끝 날, 판매가, 정가, 공급 원가]
+            payload = call["payload"]
+            for row in payload["rows"]:
+                spans = [day for first, last, *_ in row["was"] for day in payload["dates"] if first <= day <= last]
+                self.assertEqual(spans, payload["dates"], "was 의 줄들이 단계의 날짜를 차례대로 꼭 한 번씩 덮는다")
+                first, _last, sell, list_price, supply = row["was"][0]
+                value = reading.cells[CellKey(payload["room"], payload["ratePlan"], first, row["occupancy"], row["nights"])]
+                self.assertEqual([sell, list_price, supply], [money_text(value.sell), money_text(value.list), money_text(value.supply)])
+
+        def result(call, **over):
+            return dict({"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True,
+                         "note": "저장했습니다"}, **over)
+
+        self.assertEqual(self.run_cli("record-result", "--change", change, "--result", self.write("r1.json", result(calls[0])))["status"],
+                         "applying")
+        # 2번째 저장 — 누르기 전에 화면(가격 수정 ② 의 「기존」 줄)이 읽은 값과 달라 페이지가 치지도 누르지도 않았다
+        second = calls[1]["payload"]
+        moved_key = CellKey(second["room"], second["ratePlan"], second["dates"][0], second["rows"][0]["occupancy"], second["rows"][0]["nights"])
+        was = reading.cells[moved_key]
+        refused = result(calls[1], ok=False, saved=False, pressed=False, refused=True, moved=1, note=None,
+                         error=f"ERP 화면의 값이 읽은 값과 다릅니다(1칸) — {moved_key.date} 판매가 읽은 값 {was.sell} · 화면 999.00")
+        recorded = self.run_cli("record-result", "--change", change, "--result", self.write("r2.json", refused))
+        self.assertEqual((recorded["saved"], recorded["moved"], recorded["status"]), (False, 1, "stopped"))
+        self.assertIn("화면 999.00", recorded["note"])
+        self.assertIn("check", self.run_cli("calls", "--change", change, code=2)["error"], "멈춘 변경은 남은 저장을 내지 않는다")
+        # 다시 읽으니 그 칸이 999 다 — check 가 그 단계의 칸이 미리보기 때 읽은 값과 다르다고 말하고 이어서 하지 않는다
+        now = scene.with_cells(scene.applied(reading, [decode_step(dict(calls[0]["payload"], kind="bulk", rate_plan=calls[0]["payload"]["ratePlan"]))]),
+                               {moved_key: replace(was, sell=D("999.00"))}, read_at=scene.NOW_TEXT)
+        check = self.run_cli("check", "--change", change, "--snapshot", self.write("now.json", encode_snapshot(now)))
+        self.assertFalse(check["can_continue"])
+        self.assertEqual([(step["no"], step["ledger"], step["seen"], step["moved"]) for step in check["steps"][:2]],
+                         [(1, "saved", "saved", 0), (2, "failed", "changed", 1)])
+        self.assertTrue(any("2번째 저장" in why and "미리보기 때 읽은 값과 다릅니다" in why for why in check["why"]), check["why"])
 
     def test_g2_the_ledger_keeps_the_hotel_the_page_named_and_rollback_or_restore_elsewhere_is_refused(self):
         snapshot = encode_snapshot(scene.snapshot())
