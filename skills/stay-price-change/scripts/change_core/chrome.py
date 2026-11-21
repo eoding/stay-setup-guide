@@ -240,15 +240,25 @@ def _values(values: Mapping, field_labels: Mapping[str, str], currency: str, emp
 
 
 def kept_table(plan: RollbackPlan, field_labels: Mapping[str, str]) -> str:
-    """그대로 두는 항목 — 적어 둔 값 · 도우미가 넣은 값 · 지금 값과 까닭."""
-    if not plan.kept:
-        return ""
-    currency = plan.currency
+    """그대로 두는 항목 — 적어 둔 값 · 도우미가 넣은 값 · 지금 값과 까닭. 지금 저장하면 안 되는 항목(`cause.why`)은 같이 되돌리라고 해도
+    넣지 않으므로 따로 표 하나다."""
+    stays = [item for item in plan.kept if item.cause.why]
+    changed = [item for item in plan.kept if not item.cause.why]
     heading = ("그 사이 값이 달라졌지만 말씀대로 같이 되돌리는 것" if plan.include_kept
                else "그대로 두는 것 — 그 사이 값이 달라졌습니다")
+    return (_kept_rows(plan, changed, field_labels, heading)
+            + _kept_rows(plan, stays, field_labels, "그대로 두는 것 — 지금 저장하면 안 됩니다(같이 되돌리라고 하셔도 넣지 않습니다)"))
+
+
+def _kept_rows(plan: RollbackPlan, items, field_labels: Mapping[str, str], heading: str) -> str:
+    if not items:
+        return ""
+    currency = plan.currency
     rows = []
-    for item in plan.kept:
-        if item.cause.outside:
+    for item in items:
+        if item.cause.why:
+            why = esc(item.cause.why)
+        elif item.cause.outside:
             why = '도우미 밖에서 바뀜 <span class="sub">(ERP 에서 직접 고친 것으로 보임)</span>'
         else:
             why = (f'이 컴퓨터의 다른 변경 <span class="sub">({esc(fmt_time(item.cause.at))} '
@@ -308,9 +318,13 @@ def rollback_ask(plan: RollbackPlan, kind_notes: Iterable[str], unit: str = "칸
     판매 마감 · 값의 출처 표시 …), 그 뒤에 모든 종류에 같은 한 줄(ROLLBACK_NOTE)이 붙는다."""
     ask = (f'"되돌려"라고 하시면 {len(plan.restored):,}{unit}을 되돌립니다.' if plan.restored else
            f"되돌릴 {unit}이 없어 되돌릴 것이 없습니다. 아무것도 바뀌지 않았습니다.")   # 0{unit}을 되돌리자고 청하지 않는다
-    if plan.kept and not plan.include_kept:
-        ask += (f' 그 사이 달라진 {len(plan.kept):,}{unit}도 되돌리려면 "{len(plan.kept):,}{unit}도 포함해서 되돌려"라고 '
+    changed = [item for item in plan.kept if not item.cause.why]
+    stays = len(plan.kept) - len(changed)
+    if changed and not plan.include_kept:
+        ask += (f' 그 사이 달라진 {len(changed):,}{unit}도 되돌리려면 "{len(changed):,}{unit}도 포함해서 되돌려"라고 '
                 "해 주세요.")
+    if stays:
+        ask += f" 지금 저장하면 안 되는 {stays:,}{unit}은 그대로 둡니다(까닭은 위 표)."
     if plan.unremovable:
         ask += f" 지울 수 없는 {len(plan.unremovable):,}{unit}은 그대로 남습니다."
     return f'<div class="banner blue">{esc(ask)}</div>' + notes([*kind_notes, ROLLBACK_NOTE])
