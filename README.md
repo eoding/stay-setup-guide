@@ -184,12 +184,18 @@ reserved days, closed days, child rows and nights tiers; the three kinds of red 
 picked up by a new session; partial and full rollback; matching a short rate sheet by per-date prices; add-on price lines;
 charge amounts including a time band and a pay-at-property amount; a page answer miscopied on purpose and recovered with
 one retake; the new piece form in a real browser tool; a rate sheet whose child rows were matched by the command and whose
-percentage on child rows was asked; comparing a saved state with the present and restoring it. Not yet run on a real ERP:
+percentage on child rows was asked; comparing a saved state with the present and restoring it; the note on a name that
+states the old amount; two same-named add-ons told apart by their offer; the ledger list by hotel; a comparison that names
+the helper's own ledger record; a restore to a saved state that settles the change it undid. Not yet run on a real ERP:
 creating new cells, the failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real
-rate-sheet file from a hotel, and a comparison after an actual season refill in the ERP. What changed after the fifth trial
-has run in the test suites only: the note on names that state the old amount, a work folder per request, the ledger list
-by hotel, the edit-window view, the comparison naming the ledger record that changed each cell, a restore counting the
-changes it undid as rolled back, room names taken from earlier readings, and the one-line confirmations.
+rate-sheet file from a hotel, and a comparison after an actual season refill in the ERP. What changed after the final trial
+has run in the test suites only: a command makes a missing reading folder inside the record folder and ends any failure
+with one JSON line instead of a traceback; every helper's list line says "모두 되돌림" or "일부 되돌림" with the record
+that did it; `look` lists the items to choose from (with `--find`) and binds the newest look answer; the loader asks only
+for the files a tab is missing; add-on answers and previews name the offer and the words said for a chosen red line; and
+the instructions for showing the ledger, for a change already rolled back, and for a restore after a comparison. Other
+follow-ups of the fifth trial (a work folder per request, the edit-window view, room names taken from earlier readings,
+the one-line confirmations) are not counted above as run on a real ERP.
 
 ## Optional room inventory
 
