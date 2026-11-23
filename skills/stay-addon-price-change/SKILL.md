@@ -1,6 +1,6 @@
 ---
 name: stay-addon-price-change
-description: "이미 판매 중인 호텔 하나의 ERP Stay 부가옵션 가격 줄(판매가 · 공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌린다. '조식 추가 가격 5,000원 올려줘', '공항 픽업 120,000 으로', '부가옵션 전부 10% 올려줘', '부가옵션 가격 보여줘', '어제 바꾼 부가옵션 되돌려줘' 요청에 쓴다. 객실 가격(가격 캘린더)은 stay-price-change, 부과금 금액은 stay-charge-change, 새 호텔 세팅은 stay-setup-guide · stay-setup-run 이 맡는다. 프로모션 할인은 ERP 에서 사람이 바꾼다(화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어서)."
+description: "이미 판매 중인 호텔 하나의 ERP Stay 부가옵션 가격 줄(판매가 · 공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌린다. '조식 추가 가격 5,000원 올려줘', '공항 픽업 120,000 으로', '부가옵션 전부 10% 올려줘', '부가옵션 가격 보여줘', '어제 바꾼 부가옵션 되돌려줘' 요청에 쓴다. 객실 가격(가격 캘린더)은 stay-price-change, 부과금 금액은 stay-charge-change, 새 호텔 세팅은 stay-setup-guide · stay-setup-run 이 맡는다. 프로모션 할인 값은 stay-promotion-change 가 맡는다."
 version: 0.1.0
 platforms: [linux, macos, windows]
 metadata:

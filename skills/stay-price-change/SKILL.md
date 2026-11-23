@@ -1,6 +1,6 @@
 ---
 name: stay-price-change
-description: "이미 판매 중인 호텔 하나의 ERP Stay 가격 캘린더 값(판매가·정가·공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌리고, 지금 상태를 저장해 둔다. '가격 올려줘', '요금 바꿔줘', '12월 디럭스 +10,000', '지금 가격 보여줘', '어제 바꾼 거 되돌려줘', '지금 상태 저장해 둬', '아침에 저장해 둔 것과 뭐가 달라졌어', '새 요금표로 가격 바꿔줘' 요청에 쓴다. 계약서로 새 호텔을 세팅하는 일은 stay-setup-guide(지시서)와 stay-setup-run(실행)이, 부가옵션 금액은 stay-addon-price-change, 부과금 금액은 stay-charge-change 가 맡는다. 프로모션 할인은 ERP 에서 사람이 바꾼다(화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어서)."
+description: "이미 판매 중인 호텔 하나의 ERP Stay 가격 캘린더 값(판매가·정가·공급 원가)을 담당자가 로그인해 둔 크롬 탭에서 보여 주고, 미리보기를 거쳐 바꾸고, 되돌리고, 지금 상태를 저장해 둔다. '가격 올려줘', '요금 바꿔줘', '12월 디럭스 +10,000', '지금 가격 보여줘', '어제 바꾼 거 되돌려줘', '지금 상태 저장해 둬', '아침에 저장해 둔 것과 뭐가 달라졌어', '새 요금표로 가격 바꿔줘' 요청에 쓴다. 계약서로 새 호텔을 세팅하는 일은 stay-setup-guide(지시서)와 stay-setup-run(실행)이, 부가옵션 금액은 stay-addon-price-change, 부과금 금액은 stay-charge-change 가 맡는다. 프로모션 할인 값은 stay-promotion-change 가 맡는다."
 version: 0.1.0
 platforms: [linux, macos, windows]
 metadata:

@@ -438,10 +438,10 @@ class SheetDocsTest(unittest.TestCase):
 
 class RoutingTest(unittest.TestCase):
     """H7 — 담당자가 「가격 바꿔줘」라고 하면 세 도우미 가운데 어느 것이 열려도 된다. 그래서 설명(description)과 「하지 않는 일」이
-    다른 두 종류를 이름으로 그 도우미에 보내고, 프로모션 할인은 까닭 한 문장과 함께 「ERP 에서 사람이」로 보낸다(세 도우미가 같은 문장)."""
+    다른 두 종류를 이름으로 그 도우미에 보내고, 프로모션 할인 값은 프로모션 할인 도우미로 보낸다(세 도우미가 같은 문장)."""
 
     HELPERS = ("stay-price-change", "stay-addon-price-change", "stay-charge-change")
-    PROMO = "프로모션 할인은 ERP 에서 사람이 바꿔 주세요 — 화면으로 저장하면 화면에 보이지 않는 설정(할인 단계에 붙은 취소 규칙 같은 것)이 지워질 수 있어 도우미가 하지 않습니다."
+    PROMO = "프로모션 할인 값은 프로모션 할인 도우미(stay-promotion-change)가 합니다 — 화면에 안 보이는 설정을 지키는 표식이 있는 ERP 에서만 저장합니다."
 
     def test_the_description_and_the_not_done_page_route_the_other_kinds_and_promotions(self):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
@@ -454,7 +454,8 @@ class RoutingTest(unittest.TestCase):
         for setup in ("stay-setup-guide", "stay-setup-run"):
             self.assertIn(setup, description)
             self.assertIn(setup, not_done)
-        self.assertIn("프로모션 할인은 ERP 에서 사람이 바꾼다(화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어서)", description)
+        self.assertIn("프로모션 할인 값은 stay-promotion-change 가 맡는다.", description)
+        self.assertIn("stay-promotion-change", not_done)
         self.assertNotIn("프로모션 할인은 다루지 않는다", description)
         for helper in self.HELPERS:
             page = (SKILL.parent / helper / "references" / "not-done.md").read_text(encoding="utf-8")
