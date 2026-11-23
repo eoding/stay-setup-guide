@@ -177,18 +177,20 @@
 
   // 가격 줄 하나의 편집 창 — 연 창이 그 줄의 것인지 본 뒤 저장 단추가 보낼 칸(form) · select 의 보이는 글자 · 오류를 읽고 드로어를
   // `stay-drawer-close` 로 닫는다. 저장은 누르지 않는다. 목록에 그 줄이 없으면 {missing: true} 이고 더 누르지 않는다
+  // 결과를 못 본 이 창의 저장(saved "unknown")에 ERP 가 늦게 거절로 답했으면 그 한 문장(kit late)을 읽기 답의 `late` 로 한 번 싣는다
+  function withLate(result) { var said = K.late('addon-price'); if (said) result.late = said; return result; }
   function readLine(input) {
     return K.run('readLine', input, async function (p, ctx) {
       var want = ids(p);
       var win = await openLine(ctx, want, {});
-      if (!win) return { ok: true, missing: true, note: '목록에 그 부가옵션의 그 가격 줄이 없습니다 — 아무것도 열지 않았습니다' };
+      if (!win) return withLate({ ok: true, missing: true, note: '목록에 그 부가옵션의 그 가격 줄이 없습니다 — 아무것도 열지 않았습니다' });
       var form = K.sent(win.root);
       if (!form) fail('가격 편집 창의 저장 단추가 무엇을 보내는지 알 수 없어(hx-include) 읽지 않았습니다');
       var facts = windowFacts(win.root, form);
       await K.closeDrawer(Date.now() + 3000);
       if (K.drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
-      return { ok: true, what: clip(whatOf(win), 120),
-        keep: { hotel: ctx.hotel, addon: win.addon, line: win.line, window: facts } };
+      return withLate({ ok: true, what: clip(whatOf(win), 120),
+        keep: { hotel: ctx.hotel, addon: win.addon, line: win.line, window: facts } });
     }, SPEC);
   }
 
@@ -224,7 +226,7 @@
           if (hadNet && !nowNet && set.net_amount !== '') fail('공급 원가가 빈 채로 저장될 뻔했습니다(비면 저장된 원가가 지워집니다) — 저장하지 않았습니다', { refused: true });
         }
       });
-      return K.saveOnce(ctx, { root: win.root, panel: 'stay_addons', window: '가격 편집 창', what: clip(whatOf(win), 120) });
+      return K.saveOnce(ctx, { root: win.root, panel: 'stay_addons', window: '가격 편집 창', what: clip(whatOf(win), 120), no: p.no });
     }, SPEC);
   }
 

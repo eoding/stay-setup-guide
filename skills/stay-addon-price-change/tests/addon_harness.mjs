@@ -52,7 +52,9 @@ const money = (text) => { const [whole, part = ''] = text.split('.'); return `${
  *   addons     'loaded'(기본: 목록이 이미 왔다) | 'stub'(스텁만 있고, 스텁의 hx-trigger load 처럼 stubMs(기본 60ms) 뒤에 목록이 온다)
  *   db         addons.json 대신 쓸 데이터(복사해 쓴다)
  *   onSave     'ok'(기본: 폼처럼 검사해 저장 · 틀리면 오류와 함께 다시 그린다) | 'refuse'(늘 적용 범위 오류로 다시 그린다) |
- *              'silent'(요청은 끝나지만 아무것도 바뀌지 않는다) | 'morph'(저장하고 목록 요소는 그대로 둔 채 안만 갈아 끼운다)
+ *              'silent'(요청은 끝나지만 아무것도 바뀌지 않는다) | 'morph'(저장하고 목록 요소는 그대로 둔 채 안만 갈아 끼운다) |
+ *              'late'(요청이 lateMs(기본 1500ms) 동안 돌다가 'refuse' 처럼 거절된 창을 드로어 몸통에 넣는다 — 드로어가 닫혀 있어도.
+ *              ERP 는 거절에 드로어를 다시 열지 않는다)
  *   stamp      false 면 저장 응답이 `#stay_save_result` 를 갈아 끼우지 않는다(목록 배너만 표지)
  *   onType     'clearNet' 면 판매가 칸에 글자를 치면 화면 스크립트가 공급 원가 칸을 비운다
  *   windowFor  {줄 번호: 다른 줄 번호} — 서버가 그 줄의 [편집] 에 다른 줄의 창을 내준다(서버 결함 흉내)
@@ -151,8 +153,18 @@ ${o.addons === 'stub' ? stub(hotelId) : panel(db, hotelId)}
       return;
     }
     const get = (n) => (pairs.find(([k]) => k === n) || [])[1];
-    const errors = o.onSave === 'refuse' ? {} : check(get);
-    const scopeError = o.onSave === 'refuse' ? '가격 줄의 적용 범위는 부가옵션의 범위 안이어야 합니다 — 저장하지 않았습니다' : '';
+    const refusing = ['refuse', 'late'].includes(o.onSave);
+    const errors = refusing ? {} : check(get);
+    const scopeError = refusing ? '가격 줄의 적용 범위는 부가옵션의 범위 안이어야 합니다 — 저장하지 않았습니다' : '';
+    if (o.onSave === 'late') {
+      fire('htmx:before:request', {});
+      w.setTimeout(() => {
+        body.innerHTML = priceWindow(db, hotelId, lineId, { morph: morph(), values: boundValues(line, pairs), errors, scopeError });
+        fire('htmx:after:swap', {}); fire('htmx:after:settle', {}); wire(body);
+        fire('htmx:finally:request', {});
+      }, o.lateMs ?? 1500);
+      return;
+    }
     if (scopeError || Object.keys(errors).length) {   // 실패도 200 — 보낸 값으로 창을 다시 그린다(뿌리 id 가 새로 난다)
       swap(() => { body.innerHTML = priceWindow(db, hotelId, lineId, { morph: morph(), values: boundValues(line, pairs), errors, scopeError }); return body; });
       return;

@@ -195,3 +195,26 @@ test('M7 · 표식 없는 창의 [저장] 은 벽이 막는다(누르는 순간 
   assert.deepEqual(page.log.posts, []);
   page.w.close();
 });
+
+test('P2 · 결과를 못 본 저장을 ERP 가 늦게 거절해도(거절된 창이 닫힌 드로어에 남음) 다음 작업이 돌고, 다음 읽기 답의 late 가 그 거절 글을 그 저장의 결과로 한 번 말한다', async () => {
+  const refusal = '이 프로모션의 적용 범위가 맞지 않습니다 — 저장하지 않았습니다';
+  const page = promotionPage({ onSave: 'late', lateMs: 2500, refusal });
+  const win = await readWindow(page, '601', '9003');
+  page.w.stayPrice.config({ budgetMs: 1500, hardMs: 2000, restMs: 500 });
+  const r = await apply(page, '601', '9003', win, [['tiers_value', 0, '25']]);
+  assert.deepEqual([r.saved, r.pressed], ['unknown', true], r.error);
+  const body = page.doc.getElementById('stay_drawer_body');
+  assert.ok(await page.w.stayRun.waitFor(() => !!body.firstElementChild && !(page.w.stayRun.hx.pending > 0), 5000), '거절된 창이 늦게 들어왔다');
+  assert.equal(page.drawerOpen(), false, '드로어는 닫힌 채다');
+  const look = plain(await page.w.stayPromotion.look());
+  assert.equal(look.ok, true, look.error);
+  assert.equal(look.late, undefined, '보기 답에는 싣지 않는다(읽기가 싣는다)');
+  assert.equal(body.firstElementChild, null, '닫힌 드로어의 남은 창을 비웠다');
+  const read = plain(await page.w.stayPromotion.readPromotion(inPage(page.w, { hotel: HOTEL, offer: '601', promotion: '9003' })));
+  assert.equal(read.ok, true, read.error);
+  assert.equal(read.late, `앞서 저장됐는지 알 수 없던 1번째 저장은 ERP 가 거절했습니다 — ${refusal}`);
+  const again = plain(await page.w.stayPromotion.readPromotion(inPage(page.w, { hotel: HOTEL, offer: '601', promotion: '9003' })));
+  assert.deepEqual([again.ok, again.late], [true, undefined], '한 번만 말한다');
+  assert.equal(page.promotion('9003').trigger.tiers[0].amount, '20', '저장되지 않았다');
+  page.w.close();
+});

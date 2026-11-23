@@ -224,3 +224,22 @@ test('A3 · 다른 호텔의 탭이면 아무것도 누르기 전에 거절하�
   assert.equal(page.log.posts.length, 0);
   page.w.close();
 });
+
+test('P2 · 결과를 못 본 저장을 ERP 가 늦게 거절해도(거절된 창이 닫힌 드로어에 남음) 다음 작업이 돌고, 다음 읽기 답의 late 가 그 거절 글을 그 저장의 결과로 한 번 말한다', async () => {
+  const page = addonPage({ onSave: 'late', lateMs: 2500 });
+  const form = await readForm(page, '201', '301');
+  page.w.stayPrice.config({ budgetMs: 1500, hardMs: 2000, restMs: 500 });
+  const r = await apply(page, Object.assign({ form, set: { price: '22.00' } }, LINE));
+  assert.deepEqual([r.saved, r.pressed], ['unknown', true], r.error);
+  const body = page.doc.getElementById('stay_drawer_body');
+  assert.ok(await page.w.stayRun.waitFor(() => !!body.firstElementChild && !(page.w.stayRun.hx.pending > 0), 5000), '거절된 창이 늦게 들어왔다');
+  const look = plain(await page.w.stayAddonPrice.look());
+  assert.deepEqual([look.ok, look.late], [true, undefined], look.error);
+  const read = plain(await page.w.stayAddonPrice.readLine(inPage(page.w, Object.assign({ hotel: HOTEL }, LINE))));
+  assert.equal(read.ok, true, read.error);
+  assert.equal(read.late, '앞서 저장됐는지 알 수 없던 7번째 저장은 ERP 가 거절했습니다 — 가격 줄의 적용 범위는 부가옵션의 범위 안이어야 합니다 — 저장하지 않았습니다');
+  const again = plain(await page.w.stayAddonPrice.readLine(inPage(page.w, Object.assign({ hotel: HOTEL }, LINE))));
+  assert.deepEqual([again.ok, again.late], [true, undefined], '한 번만 말한다');
+  assert.deepEqual(takeAll(page.w, again).body.window.form, form, '저장되지 않았다');
+  page.w.close();
+});

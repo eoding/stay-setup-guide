@@ -290,7 +290,7 @@
     return out;
   }
   // 거르기를 지나 800자 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
-  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'moved', 'rest', 'body', 'ms', 'doneAt', 'error'];
+  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'moved', 'rest', 'body', 'ms', 'doneAt', 'error', 'late'];
   function fit(result) {
     var out = scrub(result);
     if (shownLength(out) <= RESULT_CHARS) return out;
@@ -662,11 +662,36 @@
     var hx = window.stayRun && window.stayRun.hx;
     return !drawerOpen() && !(body && body.firstElementChild) && !cellWindow() && !(hx && hx.pending > 0);
   }
-  // 드로어는 ERP 가 듣는 `stay-drawer-close` 로 닫는다(러너 `stayRun.close()` 와 같은 길) — 클릭이 아니다
+  // 드로어는 ERP 가 듣는 `stay-drawer-close` 로 닫는다(러너 `stayRun.close()` 와 같은 길) — 클릭이 아니다. 닫힌 드로어에 내용이 남아
+  // 있어도 같은 사건을 보낸다: 도우미가 결과를 못 보고(saved "unknown") 닫은 드로어에 늦게 온 응답 — ERP 가 저장을 거절하며 다시 그린
+  // 창 — 이 들어오면 드로어는 닫힌 채 내용만 남고(`_drawer.html` hide() 는 닫을 때 한 번만 비운다) 쉬는 화면(atRest)이 오지 않아 모든
+  // 작업이 「앞 화면이 아직 정리되지 않았습니다」로 멈춘다. ERP 의 close() 는 열려 있는지 보지 않고 hide() 를 불러 0.35초 뒤 비운다.
+  // 비우기 전에 그 창의 오류를 그 저장의 결과로 적어 둔다(lateOf → late)
   async function closeDrawer(untilMs) {
-    if (!drawerOpen()) return;
+    var left = !drawerOpen() && !!drawerContent();
+    if (!drawerOpen() && !left) return;
+    if (left) lateOf();
     window.dispatchEvent(new CustomEvent('stay-drawer-close'));
-    await window.stayRun.waitFor(function () { return !drawerOpen(); }, Math.max(1, Math.min(3000, (untilMs || Infinity) - Date.now())));
+    await window.stayRun.waitFor(function () { return !drawerOpen() && (!left || !drawerContent()); },
+      Math.max(1, Math.min(3000, (untilMs || Infinity) - Date.now())));
+  }
+  // 결과를 못 본 저장(GUARD.unknown — saveOnce 가 적는다: 창 종류 · 그 저장의 번호)의 창이 닫힌 드로어에 오류와 함께 다시 그려져 있으면
+  // 그것이 그 저장에 대한 ERP 의 늦은 답이다 — GUARD.late 에 적는다. 그 창 종류의 모듈이 다음 작업의 답에 한 번 싣는다(late)
+  function lateOf() {
+    var pending = GUARD.unknown, body = document.getElementById('stay_drawer_body');
+    var win = body && pending ? body.querySelector('[data-stay-screen="' + pending.screen + '"]') : null;
+    var errors = win ? windowErrors(win) : [];
+    if (!errors.length) return;
+    GUARD.unknown = null;
+    GUARD.late = { screen: pending.screen, no: pending.no, errors: errors };
+  }
+  // 늦게 온 거절 한 번 — 그 창 종류(screen)의 것이 있으면 담당자에게 그대로 할 한 문장을 돌려주고 지운다. 없으면 undefined
+  function late(screen) {
+    var hit = GUARD.late;
+    if (!hit || hit.screen !== screen) return undefined;
+    GUARD.late = null;
+    var which = typeof hit.no === 'number' ? hit.no + '번째 저장' : '저장';
+    return clip('앞서 저장됐는지 알 수 없던 ' + which + '은 ERP 가 거절했습니다 — ' + hit.errors.join(' / '), 200);
   }
   // 작업이 끝난 뒤의 정리 — 셀 창 [닫기] 도 press 로 누른다. 못 눌러도 드로어는 닫는다(남은 것은 run 이 답에 적는다)
   async function closeAll(op, untilMs) {
@@ -1404,10 +1429,11 @@
     return off.length ? '친 뒤에 창이 바뀌었습니다(' + off.join(', ') + ')' : true;
   }
   // 편집 창의 저장 한 번 — 저장 단추를 press 로 한 번 누르고 결과를 본다. opts 는 {root: 창 뿌리, panel: 저장 응답이 다시 그리는 목록의
-  // id, window: 창 이름, what: 답의 what, waitMs: 결과를 기다리는 천장(기본 10초 — 서버가 오래 걸리는 저장은 남은 시간을 준다),
-  // banner: 참이면 저장됐을 때 목록의 저장 배너 글을 `banner` 로 싣는다}. 저장됨: 창이 사라지고 저장 표지(`#stay_save_result` 의 저장
-  // 시각이 바뀌었거나 새로 온 · 바뀐 목록의 저장 배너)가 왔다. 거절: 창이 오류와 함께 다시 그려졌다. 둘 다 아니면 "unknown" — 다시
-  // 누르지 않는다. 벽이 저장 클릭을 막았으면(holds) 요청이 나가지 않았으니 기다리지 않고 그 까닭으로 멈춘다(refused)
+  // id, window: 창 이름, what: 답의 what, no: 그 저장의 번호(작업 값의 no), waitMs: 결과를 기다리는 천장(기본 10초 — 서버가 오래 걸리는
+  // 저장은 남은 시간을 준다), banner: 참이면 저장됐을 때 목록의 저장 배너 글을 `banner` 로 싣는다}. 저장됨: 창이 사라지고 저장 표지
+  // (`#stay_save_result` 의 저장 시각이 바뀌었거나 새로 온 · 바뀐 목록의 저장 배너)가 왔다. 거절: 창이 오류와 함께 다시 그려졌다. 둘 다
+  // 아니면 "unknown" — 다시 누르지 않고, 그 창 종류와 no 를 적어 둔다(늦게 온 거절은 closeDrawer 가 그 저장의 결과로 붙인다). 벽이 저장
+  // 클릭을 막았으면(holds) 요청이 나가지 않았으니 기다리지 않고 그 까닭으로 멈춘다(refused)
   async function saveOnce(ctx, opts) {
     var root = opts.root, rootId = root.id, screen = root.getAttribute('data-stay-screen');
     var windowRoot = function () { return document.querySelector('#stay_drawer_body [data-stay-screen="' + screen + '"]'); };
@@ -1416,6 +1442,7 @@
       return { stamp: saveStamp(), panel: list, banner: list ? list.querySelector('[data-stay-result="saved"]') : null };
     };
     var was = signs();
+    GUARD.unknown = null;
     await press(ctx, opts.window + ' [저장]', function () { return windowRoot() === root ? saveButton(root) : null; });
     var pressed = !!ctx.saves && ctx.wall.pressed(ctx.saves);
     // 벽이 저장 클릭을 막았다(누르는 순간 창이 친 값과 다름 — holds) — 요청은 나가지 않았다. 결과를 기다리지 않는다
@@ -1438,8 +1465,10 @@
     } else if (pressed && done.refused) {
       out.error = opts.window + '이 저장을 거절했습니다 — ' + done.errors.join(' / ');
       out.errors = done.errors.slice(0, 3).map(function (e) { return clip(e, 60); });
-    } else if (pressed) out.error = '[저장] 은 눌렸고 저장됐는지 알 수 없습니다 — 다시 읽어 확인합니다(다시 누르지 않았습니다)';
-    else out.error = '저장 단추를 누르지 못했습니다';
+    } else if (pressed) {
+      out.error = '[저장] 은 눌렸고 저장됐는지 알 수 없습니다 — 다시 읽어 확인합니다(다시 누르지 않았습니다)';
+      GUARD.unknown = { screen: screen, no: opts.no };   // 늦게 온 거절을 이 저장의 결과로 붙이려고(lateOf)
+    } else out.error = '저장 단추를 누르지 못했습니다';
     return out;
   }
 
@@ -1472,7 +1501,7 @@
     run: run, press: press, settle: settle, fail: fail, Stop: Stop,
     scrub: function (value) { return scrub(value); }, fit: fit, take: take, last: last, idle: idleState,
     C: C, all: all, clip: clip, quiet: quiet, scopeText: scopeText,
-    drawerOpen: drawerOpen, closeDrawer: closeDrawer, atRest: atRest, pageHotel: pageHotel, guard: guard,
+    drawerOpen: drawerOpen, closeDrawer: closeDrawer, late: late, atRest: atRest, pageHotel: pageHotel, guard: guard,
     sent: sent, differs: differs, pairs: pairs, errors: windowErrors, fill: fill, holds: holds, saveOnce: saveOnce
   });
 

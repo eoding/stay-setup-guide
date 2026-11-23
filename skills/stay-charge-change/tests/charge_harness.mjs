@@ -165,7 +165,8 @@ function judge(db, offer, charge, pairs) {
  *   charges    'loaded'(기본: 목록이 이미 왔다) | 'stub'(스텁만 있고, 스텁의 hx-trigger load 처럼 stubMs(기본 60ms) 뒤에 목록이 온다)
  *   db         charges.json 대신 쓸 데이터(복사해 쓴다)
  *   onSave     'ok'(기본: 폼처럼 검사해 저장 · 틀리면 오류와 함께 다시 그린다) | 'refuse'(늘 적용 범위 오류로 다시 그린다) |
- *              'silent'(요청은 끝나지만 아무것도 바뀌지 않는다)
+ *              'silent'(요청은 끝나지만 아무것도 바뀌지 않는다) | 'late'(요청이 lateMs(기본 1500ms) 동안 돌다가 'refuse' 처럼 거절된
+ *              창을 드로어 몸통에 넣는다 — 드로어가 닫혀 있어도. ERP 는 거절에 드로어를 다시 열지 않는다)
  *   onType     'flipMode' 면 금액 칸에 글자를 치면 화면 스크립트가 「지정」인 금액의 뜻(amount_mode · pct_mode)을 「미정」으로 바꾼다
  *   windowFor  {부과금 번호: 다른 부과금 번호} — 서버가 그 부과금의 [편집] 에 다른 부과금의 창을 내준다(서버 결함 흉내)
  *   withAddon  true 면 부가옵션 가격 도우미(stay_addon_price.js)도 올린다(모듈을 통틀어 작업은 하나인지 볼 때)
@@ -242,7 +243,16 @@ ${o.charges === 'stub' ? stub(hotelId) : panel(db, hotelId)}
       return;
     }
     const { errors, values, saved } = judge(db, offer, charge, pairs);
-    const scopeError = o.onSave === 'refuse' ? '이 부과금의 객실 범위는 오퍼가 파는 객실 안이어야 합니다 — 저장하지 않았습니다' : '';
+    const scopeError = ['refuse', 'late'].includes(o.onSave) ? '이 부과금의 객실 범위는 오퍼가 파는 객실 안이어야 합니다 — 저장하지 않았습니다' : '';
+    if (o.onSave === 'late') {
+      fire('htmx:before:request', {});
+      w.setTimeout(() => {
+        body.innerHTML = chargeWindow(db, hotelId, chargeId, { morph: morph(), values, errors, scopeError });
+        fire('htmx:after:swap', {}); fire('htmx:after:settle', {}); wire(body);
+        fire('htmx:finally:request', {});
+      }, o.lateMs ?? 1500);
+      return;
+    }
     if (scopeError || Object.keys(errors).length) {   // 실패도 200 — 보낸 값으로 창을 다시 그린다(뿌리 id 가 새로 난다)
       swap(() => { body.innerHTML = chargeWindow(db, hotelId, chargeId, { morph: morph(), values, errors, scopeError }); return body; });
       return;

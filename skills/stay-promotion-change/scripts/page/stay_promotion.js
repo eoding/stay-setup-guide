@@ -241,18 +241,20 @@
 
   // 프로모션 하나의 편집 창 — 연 창이 그 프로모션의 것인지 본 뒤 저장 단추가 보낼 칸(form) · 고르기의 보이는 글자 · 표식(뿌리 ·
   // 단 줄마다) · 오류를 읽고 드로어를 `stay-drawer-close` 로 닫는다. 저장은 누르지 않는다. 목록에 그 줄이 없으면 {missing: true}
+  // 결과를 못 본 이 창의 저장(saved "unknown")에 ERP 가 늦게 거절로 답했으면 그 한 문장(kit late)을 읽기 답의 `late` 로 한 번 싣는다
+  function withLate(result) { var said = K.late('promotion'); if (said) result.late = said; return result; }
   function readPromotion(input) {
     return K.run('readPromotion', input, async function (p, ctx) {
       var want = ids(p);
       var win = await openPromotion(ctx, want, {});
-      if (!win) return { ok: true, missing: true, note: '목록에 그 카드의 그 프로모션이 없습니다 — 아무것도 열지 않았습니다' };
+      if (!win) return withLate({ ok: true, missing: true, note: '목록에 그 카드의 그 프로모션이 없습니다 — 아무것도 열지 않았습니다' });
       var form = K.sent(win.root);
       if (!form) fail('프로모션 편집 창의 저장 단추가 무엇을 보내는지 알 수 없어(hx-include) 읽지 않았습니다');
       var facts = windowFacts(win.root, form);
       await K.closeDrawer(Date.now() + 3000);
       if (K.drawerOpen()) fail('읽은 뒤 드로어를 닫지 못했습니다');
-      return { ok: true, what: clip(win.offer.name + ' · ' + win.promotion.title, 120), keeps: facts.keeps,
-        keep: { hotel: ctx.hotel, offer: win.offer, promotion: win.promotion, window: facts } };
+      return withLate({ ok: true, what: clip(win.offer.name + ' · ' + win.promotion.title, 120), keeps: facts.keeps,
+        keep: { hotel: ctx.hotel, offer: win.offer, promotion: win.promotion, window: facts } });
     }, SPEC);
   }
 
@@ -311,7 +313,8 @@
         fail('창의 단 표식(화면에 없는 설정)이 읽은 것과 다릅니다 — 아무것도 치지 않았고 누르지 않았습니다', { refused: true, differ: ['marks'] });
       }
       K.fill(ctx, win.root, form, edits, { window: '프로모션 편집 창', settable: settable });
-      return K.saveOnce(ctx, { root: win.root, panel: 'stay_promotions', window: '프로모션 편집 창', what: clip(win.offer.name + ' · ' + win.promotion.title, 120) });
+      return K.saveOnce(ctx, { root: win.root, panel: 'stay_promotions', window: '프로모션 편집 창', what: clip(win.offer.name + ' · ' + win.promotion.title, 120),
+        no: p.no });
     }, SPEC);
   }
 

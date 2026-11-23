@@ -43,7 +43,7 @@
 
 ## 답의 모양
 
-모든 답은 JSON 으로 800자 안이다. `op` · `ok` · `ask`(물은 값의 지문) · `clicks`(지난 클릭) · `blocked` · `ms` · `doneAt`(끝난 시각). `what`(읽거나 저장한 프로모션) · `note`(저장했으면 「저장했습니다」 같은 한 마디) · `rest`(답할 때 화면 — 드로어 · 요청 — 이 정리됐는지. 아니면 다음 작업이 `started: false` 로 기다린다)도 온다. 읽기는 조각 `body`(id · 글자 수 · 바이트 수 · CRC-32 · FNV-1a)를 싣고 `take` 로 받는다. `readPromotion` 은 `keeps` 도 싣는다. 저장 작업의 답에는 언제나 `saved`(true · false · "unknown") 와 `pressed` 가 있다 — 누르기 전에 멈추면 `refused: true`, 표식이 없어 멈추면 `gate: true` 도. 시작하지 않은 작업은 `started: false` 와 `wait`(초)다.
+모든 답은 JSON 으로 800자 안이다. `op` · `ok` · `ask`(물은 값의 지문) · `clicks`(지난 클릭) · `blocked` · `ms` · `doneAt`(끝난 시각). `what`(읽거나 저장한 프로모션) · `note`(저장했으면 「저장했습니다」 같은 한 마디) · `rest`(답할 때 화면 — 드로어 · 요청 — 이 정리됐는지. 아니면 다음 작업이 `started: false` 로 기다린다)도 온다. 읽기는 조각 `body`(id · 글자 수 · 바이트 수 · CRC-32 · FNV-1a)를 싣고 `take` 로 받는다. `readPromotion` 은 `keeps` 도 싣고, 결과를 못 본 저장(`saved: "unknown"`)에 ERP 가 늦게 거절로 답했으면 한 번 `late`(그 저장의 결과 한 문장 — "앞서 저장됐는지 알 수 없던 k번째 저장은 ERP 가 거절했습니다 — <ERP 의 글>". 그대로 말한다, stopped.md 1)도 싣는다. 저장 작업의 답에는 언제나 `saved`(true · false · "unknown") 와 `pressed` 가 있다 — 누르기 전에 멈추면 `refused: true`, 표식이 없어 멈추면 `gate: true` 도. 시작하지 않은 작업은 `started: false` 와 `wait`(초)다.
 
 ## 오류와 할 일
 

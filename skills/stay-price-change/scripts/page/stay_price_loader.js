@@ -51,10 +51,10 @@
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 115525, crc32: '2e2985e0', fnv: '5dc3a845' },
-    'stay_addon_price.js': { bytes: 16997, crc32: 'dc5975fa', fnv: 'fe2273aa' },
-    'stay_charge.js': { bytes: 20198, crc32: '72022333', fnv: '72f6e0e0' },
-    'stay_promotion.js': { bytes: 24904, crc32: '664503d2', fnv: '2d32ec80' },
+    'stay_price.js': { bytes: 117926, crc32: 'ac12f3cd', fnv: '494aad9c' },
+    'stay_addon_price.js': { bytes: 17308, crc32: '028d30fa', fnv: '776372f9' },
+    'stay_charge.js': { bytes: 20512, crc32: 'dddf5930', fnv: 'b205e611' },
+    'stay_promotion.js': { bytes: 25221, crc32: '5f9de391', fnv: '71f0febe' },
     'stay_price_season.js': { bytes: 23948, crc32: '4a65a157', fnv: 'f3cdf780' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다

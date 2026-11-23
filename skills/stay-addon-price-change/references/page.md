@@ -61,6 +61,7 @@
 | `saved` | applyLine 만. `true` 저장됨 · `false` 저장 안 됨 · `"unknown"` 단추는 눌렸고 저장됐는지 모름 |
 | `pressed` · `refused` · `differ` | 저장 단추를 눌렀는지 · 누르기 전에 스스로 거절했는지 · 읽은 값과 다른 칸 이름 |
 | `missing` | 목록에 그 부가옵션의 그 줄이 없다 |
+| `late` | 읽기(`readLine`)만. 결과를 못 본 저장(`saved: "unknown"`)에 ERP 가 늦게 거절로 답했을 때 한 번 — 그 저장의 결과 한 문장("앞서 저장됐는지 알 수 없던 k번째 저장은 ERP 가 거절했습니다 — <ERP 의 글>"). 그대로 말한다(stopped.md 1) |
 | `body` | look · readLine 의 읽은 것 `{id, chars, bytes, crc32, fnv}`. 명령이 `refetch` 로 댄 조각만 `take` 로 받는다 |
 | `what` · `note` · `error` · `errors` | 무엇을 했는지(`what` 은 「오퍼 · 부가옵션 · 줄」 — 오퍼마다 이름이 같은 부가옵션이 있다) · 메모 · 까닭 · 화면이 보인 오류 줄 |
 | `clicks` · `blocked` | 누른 것 수 · 막은 클릭 |
