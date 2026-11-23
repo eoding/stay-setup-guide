@@ -295,14 +295,16 @@
   function applyPromotion(input) {
     return K.run('applyPromotion', input, async function (p, ctx) {
       var want = ids(p);
-      if (typeof p.title !== 'string' || !C(p.title)) fail('`title` 은 readPromotion 이 읽은 프로모션 이름(window.form 의 title)입니다');
+      if (typeof p.title !== 'string' || !C(p.title)) fail('`title` 은 그 프로모션의 이름입니다(명령의 calls 가 준 그대로)');
       var form = K.pairs(p.form, 'readPromotion');
       var marks = marksIn(p.marks, form);
       var edits = editsOf(p.set, form);
       var win = await openPromotion(ctx, want, { refused: true });
       if (!win) fail('목록에 그 카드의 그 프로모션이 없습니다 — 저장하지 않았습니다', { refused: true, missing: true });
+      // 이름은 목록이 읽는 대로 맞춰 견준다(C — NFC · 빈칸 묶음 하나로 · 앞뒤 빈칸 없이): 명령이 주는 title 은 목록의 이름이고 창의 이름
+      // 칸은 날 글자다. 그 창이 그 프로모션의 것인지는 열 때 저장 주소(프로모션 번호)로 이미 봤다
       var titles = all('input,select,textarea', win.root).filter(function (el) { return el.name === 'title' && !el.matches(':disabled'); });
-      if (titles.length !== 1 || titles[0].value !== p.title) {
+      if (titles.length !== 1 || C(titles[0].value) !== C(p.title)) {
         fail('창의 프로모션 이름이 고른 프로모션(「' + clip(p.title, 40) + '」)이 아닙니다 — 아무것도 치지 않았습니다', { refused: true });
       }
       if (win.root.getAttribute(KEEPS) !== '1') fail(GATE + ' — 아무것도 치지 않았고 누르지 않았습니다', { refused: true, gate: true });

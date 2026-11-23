@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -48,6 +49,15 @@ OFFERLESS = ""           # 프로모션 변경은 호텔 안의 프로모션 번
 COMMON, COMMON_NAME = "0", "전 오퍼 공통"   # 오퍼 표식이 없는 카드 — 오퍼 번호 대신 0(ERP 의 새로 만들기 주소 `offers/0/` 과 같다)
 VALUE = "tiers_value"    # 도우미가 치는 단 하나의 칸 — 이 밖의 칸은 저장 단계가 만들어질 때 거절한다
 TYPED = re.compile(r"^\d+(\.\d+)?$")
+# 페이지의 글자 맞추기(stay_price.js 의 C)가 빈칸으로 보는 글자 — 자바스크립트 정규식의 \s 와 같은 묶음
+_SPACES = re.compile("[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+")
+
+
+def shown_name(text: str) -> str:
+    """이름을 페이지가 목록의 글자를 읽는 대로(stay_price.js 의 C) — NFC, 빈칸 묶음은 하나로, 앞뒤 빈칸 없이. 목록의 이름은 페이지가 이미
+    이렇게 읽어 오고 편집 창의 이름 칸은 날 글자라, 둘을 견줄 때는 둘 다 이것으로 맞춘다(빈칸 둘 · 끝 빈칸 · 풀어 쓴 한글(NFD)이 든
+    이름도 같은 이름이다). 페이지의 applyPromotion 도 창의 이름 칸을 같은 셈으로 맞춰 견준다."""
+    return _SPACES.sub(" ", unicodedata.normalize("NFC", str(text))).strip(" ")
 GATE = ("이 ERP 는 아직 프로모션을 화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어, 도우미가 저장하지 않습니다 — ERP 가 "
         "고쳐진 뒤에 됩니다")
 UNSURE_ORIGIN = "?"      # 숨은 칸 tiers_origin 의 이 값 — ERP 가 그 줄이 어느 저장된 단에서 왔는지 모른다(거절된 요청 뒤 다시 그린 창)
@@ -349,7 +359,7 @@ def promotion_of(answer: Mapping) -> Promotion | None:
                           {str(k): str(v) for k, v in (window.get("labels") or {}).items()}, window.get("keeps") is True,
                           tuple(tuple(str(name) for name in names) for names in window.get("marks") or ()),
                           str(window.get("title") or ""))
-    if promotion.one("title") != promotion.name:
+    if shown_name(promotion.one("title")) != shown_name(promotion.name):
         raise BrowserError(f"프로모션 {row['id']}번의 편집 창 이름({promotion.one('title')})이 목록의 이름({promotion.name})과 다릅니다")
     promotion.items()               # 칸이 생각한 모양인지 지금 본다(아니면 BrowserError)
     return promotion

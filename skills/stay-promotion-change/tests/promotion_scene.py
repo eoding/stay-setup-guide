@@ -14,6 +14,7 @@ import copy
 import importlib.util
 import json
 import sys
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -108,6 +109,11 @@ def benefit_lines(promotion: dict) -> list[str]:
     return lines + (["※ 만족하는 단 중 가장 높은 하나만 적용"] if len(trigger["tiers"]) > 1 else [])
 
 
+def listed_text(text: str) -> str:
+    """목록의 글자를 페이지처럼(stay_price.js 의 C) — NFC, 빈칸 묶음은 하나로, 앞뒤 빈칸 없이. 편집 창의 이름 칸은 날 글자 그대로다."""
+    return " ".join(unicodedata.normalize("NFC", text).split())
+
+
 def row_of(card: dict, promotion: dict) -> dict:
     season = next((s for s in card["seasons"] if s["id"] == promotion["season"]), None)
     plan = next((p for p in DATA["rate_plans"] if p["id"] == promotion["rate_plan"]), None)
@@ -119,7 +125,7 @@ def row_of(card: dict, promotion: dict) -> dict:
         limits.append(f"예약일 {promotion['apply_start'] or '…'} ~ {promotion['apply_end'] or '…'}")
     warnings = (["진행기간이 비어 있습니다. 후보에서 빠져 고객이 고르면 예약이 거부됩니다."]
                 if promotion["apply_flag"] and not (promotion["apply_start"] and promotion["apply_end"]) else [])
-    return {"id": promotion["id"], "title": promotion["title"], "code": promotion["code"],
+    return {"id": promotion["id"], "title": listed_text(promotion["title"]), "code": promotion["code"],
             "trigger": LIST_TRIGGERS[promotion["trigger"]["type"]], "benefit": benefit_lines(promotion),
             "combo": ["중복 가능" if promotion["combinability"] else "택일"] + ([f"배타 그룹 {promotion['group']}"] if promotion["group"] else []),
             "limits": limits, "warnings": warnings}

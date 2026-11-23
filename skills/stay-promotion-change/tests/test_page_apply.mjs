@@ -4,7 +4,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { promotionPage, inPage, plain, takeAll, HOTEL, GATE, ORIGIN_UNKNOWN } from './promotion_harness.mjs';
+import { promotionPage, inPage, plain, takeAll, HOTEL, GATE, ORIGIN_UNKNOWN, DB } from './promotion_harness.mjs';
 
 async function readWindow(page, offer, promotion) {
   const r = plain(await page.w.stayPromotion.readPromotion(inPage(page.w, { hotel: HOTEL, offer, promotion })));
@@ -216,5 +216,26 @@ test('P2 · 결과를 못 본 저장을 ERP 가 늦게 거절해도(거절된 �
   const again = plain(await page.w.stayPromotion.readPromotion(inPage(page.w, { hotel: HOTEL, offer: '601', promotion: '9003' })));
   assert.deepEqual([again.ok, again.late], [true, undefined], '한 번만 말한다');
   assert.equal(page.promotion('9003').trigger.tiers[0].amount, '20', '저장되지 않았다');
+  page.w.close();
+});
+
+test('P3 · 이름에 빈칸 둘 · 끝 빈칸 · 풀어 쓴 한글(NFD)이 든 프로모션도 저장한다(명령은 목록의 이름을 준다) — 다른 이름이면 여전히 거절한다', async () => {
+  const name = '롱스테이 2박 7% / 3박 10%';
+  for (const raw of ['롱스테이  2박 7% / 3박 10%', `${name} `, name.normalize('NFD')]) {
+    const db = JSON.parse(JSON.stringify(DB));
+    db.cards.flatMap((card) => card.promotions).find((p) => p.id === '9002').title = raw;
+    const page = promotionPage({ db });
+    const win = await readWindow(page, '601', '9002');
+    const r = await apply(page, '601', '9002', win, [['tiers_value', 0, '8']], { title: name });
+    assert.equal(r.saved, true, `${JSON.stringify(raw)}: ${r.error}`);
+    assert.equal(page.log.posts[0].pairs.find(([n]) => n === 'title')[1], raw, '창의 이름 칸은 날 글자 그대로 나간다');
+    page.w.close();
+  }
+  const page = promotionPage();
+  const win = await readWindow(page, '601', '9002');
+  const r = await apply(page, '601', '9002', win, [['tiers_value', 0, '8']], { title: '롱스테이 2박 8% / 3박 10%' });
+  assert.deepEqual([r.saved, r.pressed, r.refused], [false, false, true]);
+  assert.match(r.error, /^창의 프로모션 이름이 고른 프로모션/);
+  assert.deepEqual([page.log.typed, page.log.posts], [[], []]);
   page.w.close();
 });

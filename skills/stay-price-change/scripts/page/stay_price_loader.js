@@ -54,7 +54,7 @@
     'stay_price.js': { bytes: 117926, crc32: 'ac12f3cd', fnv: '494aad9c' },
     'stay_addon_price.js': { bytes: 17308, crc32: '028d30fa', fnv: '776372f9' },
     'stay_charge.js': { bytes: 20512, crc32: 'dddf5930', fnv: 'b205e611' },
-    'stay_promotion.js': { bytes: 25221, crc32: '5f9de391', fnv: '71f0febe' },
+    'stay_promotion.js': { bytes: 25543, crc32: 'f75bb34b', fnv: 'b528c195' },
     'stay_price_season.js': { bytes: 23948, crc32: '4a65a157', fnv: 'f3cdf780' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다

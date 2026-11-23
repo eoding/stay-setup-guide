@@ -4,13 +4,14 @@
     python3 -m unittest discover -s tests
 """
 
+import unicodedata
 import unittest
 from decimal import Decimal
 
 import promotion_scene as scene
 from promotion_model import GATE, ORIGIN_UNKNOWN, ModelError, Snapshot, decode_request, promotion_of, snapshot_items, tier_key
 from promotion_plan import PlanError, PromotionStep, Edit, plan_change, plan_steps, resolve, step_call
-from change_core.answers import attach_bodies
+from change_core.answers import BrowserError, attach_bodies
 from change_core.rules import Resolution
 
 READ_AT = "2026-11-23T10:00:00+09:00"
@@ -160,3 +161,28 @@ class KeysAndRequestTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NameTest(unittest.TestCase):
+    """P3 (리뷰 2 · 페이지 6) — 이름에 빈칸 둘 · 앞뒤 빈칸 · 풀어 쓴 한글(NFD)이 든 프로모션도 읽고 바꾼다: 목록의 이름(페이지가 맞춰 읽은
+    글자)과 편집 창의 이름 칸(날 글자)을 같은 셈으로 맞춰 견준다. 다른 이름의 창은 여전히 거절한다."""
+
+    NAME = "롱스테이 2박 7% / 3박 10%"
+
+    def test_a_name_with_doubled_or_end_spaces_or_decomposed_hangul_is_read_and_planned(self):
+        for raw in ("롱스테이  2박 7% / 3박 10%", " 롱스테이 2박 7% / 3박 10% ", unicodedata.normalize("NFD", self.NAME)):
+            snap = snapshot("9002", change=lambda erp, raw=raw: erp.promotion("9002").update(title=raw))
+            promotion = snap.promotions["9002"]
+            self.assertEqual((promotion.name, promotion.one("title")), (self.NAME, raw), repr(raw))
+            step, = plan_steps(plan_change(snap, request(("601", "9002", "3"), value="12")))
+            self.assertEqual(step_call(1, scene.HOTEL["name"], scene.HOTEL["id"], step)["payload"]["title"], self.NAME,
+                             "페이지에 주는 이름은 목록의 이름")
+            self.assertIn(("title", raw), step.form, "창의 이름 칸은 읽은 날 글자 그대로 보낸다")
+
+    def test_a_window_whose_name_is_another_promotions_is_still_refused(self):
+        erp = scene.Erp()
+        answer, = attach_bodies(erp.read_promotion(dict(hotel=scene.HOTEL, offer="601", promotion="9002")))
+        answer["window"]["form"] = [[name, "롱스테이 2박 8% / 3박 10%" if name == "title" else value] for name, value in answer["window"]["form"]]
+        with self.assertRaises(BrowserError) as caught:
+            promotion_of(answer)
+        self.assertIn("목록의 이름(롱스테이 2박 7% / 3박 10%)과 다릅니다", str(caught.exception))
