@@ -41,7 +41,7 @@ from promotion_model import (
     promotion_of, promotion_of_key, snapshot_items,
 )
 from promotion_pages import (
-    UNIT, blocked_tiers, chosen_tiers, guest_effect, off_notes, red_lines, render_preview, render_prices, render_result,
+    UNIT, blocked_tiers, chosen_tiers, guest_effect, kept_off, off_notes, red_lines, render_preview, render_prices, render_result,
     render_rollback, render_window, result_name,
 )
 from promotion_plan import (
@@ -197,6 +197,12 @@ def written_names(ledger: Ledger, record) -> list:
         (row.item_key, row.before) for row in record.rows if row.written and row.action))]
 
 
+def kept_off_of(ledger: Ledger, record, now: Snapshot, moved: list[dict]) -> list[str]:
+    """이 번호가 저장한 프로모션에서 화면 밖 설정이 저장 뒤에도 그대로인 단의 문장(promotion_pages.kept_off)."""
+    saved = [promotion_of_key(row.item_key) for row in record.rows if row.written and row.action]
+    return kept_off(recorded_snapshot(ledger, record.id), now, saved, moved)
+
+
 def moved_since(ledger: Ledger, change_id: int, now: Snapshot) -> list[dict]:
     """저장한 프로모션 가운데 그대로여야 할 것이 달라진 것 — 넣지 않은 단의 값, 창이 보내는 딸린 칸, 표식(화면 밖 설정의 이름),
     새로 생긴 단(change_core.window.moved_since, 저장 단위는 프로모션 하나)."""
@@ -225,8 +231,10 @@ def cmd_render(args):
     else:
         ledger = open_ledger()
         record = ledger.change(args.change)
-        moved = moved_since(ledger, args.change, decode_snapshot(load(args.snapshot))) if args.snapshot else ()
-        html, hotel = render_result(record, moved, str(ledger.path), written_names(ledger, record)), record.hotel
+        now = decode_snapshot(load(args.snapshot)) if args.snapshot else None
+        moved = moved_since(ledger, args.change, now) if now else []
+        kept = kept_off_of(ledger, record, now, moved) if now else []
+        html, hotel = render_result(record, moved, str(ledger.path), written_names(ledger, record), kept), record.hotel
         name = f"프로모션 할인 {result_name(record)}"
     if args.text:
         return dict(text=page_text(html))
@@ -320,8 +328,9 @@ def cmd_verify(args):
     same_hotel_or_refuse(args.change, recorded_snapshot(ledger, args.change), now)
     mismatches = ledger.verify(args.change, snapshot_items(now))
     moved = moved_since(ledger, args.change, now)
+    record = ledger.change(args.change)
     return dict(change_id=args.change, same=not mismatches and not moved, moved=moved,
-                names=written_names(ledger, ledger.change(args.change)), mismatches=[
+                kept=kept_off_of(ledger, record, now, moved), names=written_names(ledger, record), mismatches=[
         dict(promotion=promotion_of_key(item.item_key), label=item.label, field=item.field, what="할인 값",
              after=money_text(item.after), seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])
 
@@ -428,10 +437,12 @@ def short_read(result: dict) -> dict:
 
 
 def short_plan(result: dict) -> dict:
-    return dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
-                saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
-                blocked=result["blocked"], gate=result["gate"], off=result["off"], guest=result["guest"], names=result["names"],
-                scope_card=result["scope_card"])
+    """`scope_card` 는 저장할 것이 있을 때(또는 빨간 줄을 고른 뒤 있을 수 있을 때)만 true — 저장하지 않는 미리보기(표식 없는 ERP ·
+    바뀌는 단이 없음)에서 저장이 만드는 것을 먼저 말하지 않는다(시운전 10)."""
+    saves = None if result["steps"] is None else len(result["steps"])
+    return dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"], saves=saves,
+                red=result["red"], chosen=result["chosen"], blocked=result["blocked"], gate=result["gate"], off=result["off"],
+                guest=result["guest"], names=result["names"], scope_card=result["scope_card"] and saves != 0)
 
 
 def short_rollback(result: dict) -> dict:

@@ -307,9 +307,13 @@ def unresolved(plan: Plan) -> tuple[TierChange, ...]:
 
 
 def counts(plan: Plan) -> dict:
-    """단 수 — 짚은 단 · 바뀌는 단 · 그대로인 단 · 바꿀 수 없는 단 · 고를 단, 그리고 판정마다."""
+    """단 수 — 짚은 단 · 바뀌는 단 · 그대로인 단 · 바꿀 수 없는 단 · 고를 단, 그리고 판정마다. `sent` 는 짚지 않아 창이 보인 그대로
+    보내는 단(짚은 프로모션의 다른 단 — 시운전 10 에서 도우미가 페이지를 읽어야만 「그대로인 단」을 말할 수 있었다)."""
+    targeted = {(change.promotion, change.tier) for change in plan.changes}
     found = dict(tiers=len(plan.changes), promotions=len(plan.promotions), will_change=sum(c.writes for c in plan.changes),
-                 unchanged=len(plan.unchanged), blocked=sum(c.blocked for c in plan.changes),
+                 unchanged=len(plan.unchanged),
+                 sent=sum((promotion.id, tier.at) not in targeted for promotion in plan.promotions for tier in promotion.tiers()),
+                 blocked=sum(c.blocked for c in plan.changes),
                  red=sum(c.waiting for c in plan.changes), chosen=sum(c.choice is not None for c in plan.changes),
                  missing=len(plan.missing))
     for rule in RULES.rules:

@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from promotion_model import (
-    BASES, COMMON, GATE, ITEM_KIND, TRIGGERS, UNITS, Listing, Promotion, Snapshot, off_words, part_of_key,
+    BASES, COMMON, GATE, ITEM_KIND, TRIGGERS, UNITS, Listing, Promotion, Snapshot, off_words, part_of_key, promotion_of_key,
 )
 from promotion_plan import CHOICE_LABELS, RULES, Plan, TierChange, counts, form_refusal, typed
 from change_core.chrome import (
@@ -97,6 +97,22 @@ def off_notes(promotion: Promotion) -> list[str]:
             for tier in promotion.tiers() if tier.off]
 
 
+def kept_off(then: Snapshot, now: Snapshot, saved: Sequence[str], moved: Sequence[dict]) -> list[str]:
+    """저장한 프로모션 가운데 그대로여야 할 것이 달라지지 않은 것(verify 의 `moved` 에 없음)의, 화면 밖 설정이 붙은 단마다 한 문장 —
+    「…단: 화면에 안 보이는 취소 조건은 저장 뒤에도 그대로입니다」. verify 가 견준 것(표식 — 화면 밖 설정의 이름 — 은 `moved` 가 본다)
+    에서 말한다. 그 번호의 읽은 값(`then`)과 방금 읽은 값(`now`) 둘 다에 그 단의 설정이 있을 때만."""
+    touched = {promotion_of_key(item["key"]) for item in moved}
+    out = []
+    for promotion_id in sorted(set(saved)):
+        before, after = then.promotions.get(promotion_id), now.promotions.get(promotion_id)
+        if before is None or after is None or promotion_id in touched:
+            continue
+        was = {tier.at: tier.off for tier in before.tiers() if tier.off}
+        out += [f"{after.threshold_words(tier)} 단: 화면에 안 보이는 {josa(off_words(tier.off), '은는')} 저장 뒤에도 그대로입니다."
+                for tier in after.tiers() if tier.off and was.get(tier.at) == tier.off]
+    return out
+
+
 def guest_effect(plan: Plan) -> str:
     """손님에게 닿는 것 한 문장 — 할인이 커지면 손님이 내는 객실 요금이 줄고, 작아지면 는다. 새 견적부터, 기존 예약은 그대로."""
     moves = {change.larger for change in plan.changes if change.larger is not None}
@@ -161,17 +177,16 @@ def _verdict_cell(change: TierChange | None, why: str) -> str:
             f'{f"<small class=more>{esc(why)}</small>" if why else ""}</td>')
 
 
-def _tier_table(plan: Plan, promotion: Promotion) -> tuple[str, int]:
-    """프로모션 하나의 단 표와 짚지 않아 그대로 보내는 단 수."""
+def _tier_table(plan: Plan, promotion: Promotion) -> str:
+    """프로모션 하나의 단 표 — 짚지 않은 단은 「그대로 보냄」(그 수는 counts 의 `sent`)."""
     currency = promotion.currency or plan.currency
     mine = {change.tier: change for change in plan.changes if change.promotion == promotion.id}
-    rows, sent = [], 0
+    rows = []
     for tier in promotion.tiers():
         change, before = mine.get(tier.at), promotion.value(tier)
         off = f'<small class="more">화면 밖 설정: {esc(off_words(tier.off))} — 그대로 둠</small>' if tier.off else ""
         name = f'<td class="text">{esc(promotion.threshold_words(tier))} 단 · {esc(promotion.field_label)}{off}</td>'
         if change is None:
-            sent += 1
             rows.append(f'<tr>{name}<td class="same"><span class="was">{shown(before, promotion.basis, currency)}</span></td>'
                         '<td class="text"><small>그대로 보냄</small></td></tr>')
             continue
@@ -181,7 +196,7 @@ def _tier_table(plan: Plan, promotion: Promotion) -> tuple[str, int]:
                else "same" if after is None or after == before else "")
         rows.append(f'<tr>{name}<td class="{cls}">{_move(before, after, promotion.basis, currency)}</td>'
                     f"{_verdict_cell(change, _why(plan, change))}</tr>")
-    return ('<div class="scroll"><table><tr><th>단</th><th>전 → 후</th><th>판정</th></tr>' + "".join(rows) + "</table></div>"), sent
+    return '<div class="scroll"><table><tr><th>단</th><th>전 → 후</th><th>판정</th></tr>' + "".join(rows) + "</table></div>"
 
 
 def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, names: Sequence[str] = ()) -> str:
@@ -203,10 +218,9 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     if zero:
         body.append(f'<div class="banner amber"><b>할인이 없어집니다 — {len(zero)}단.</b> {esc(" · ".join(zero))}</div>')
     body.append(names_banner(names))
-    tables, sent = [], 0
+    tables = []
     for promotion in plan.promotions:
-        table, left = _tier_table(plan, promotion)
-        sent += left
+        table = _tier_table(plan, promotion)
         offs = off_notes(promotion)
         tables += [f"<h2>{esc(promotion.label)} <small class=\"sub\">프로모션 {esc(promotion.id)}번</small></h2>",
                    f'<p class="sub">{esc(_shape(promotion))}</p>', table,
@@ -214,14 +228,15 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
                    _settings_table(promotion)]
     body.append(stats([(found["will_change"], "바뀌는 단"), (found["unchanged"], "그대로인 단"), (found["blocked"], "바꿀 수 없는 단"),
                        (found["red"], "고를 빨간 줄")] + ([(found["missing"], "목록에 없는 프로모션")] if found["missing"] else [])
-                      + [(sent, "짚지 않아 그대로 보내는 단")]))
+                      + [(found["sent"], "짚지 않아 그대로 보내는 단")]))
     body += tables
     for offer, promotion_id in plan.missing:
         body.append(f'<p class="sub">프로모션 {esc(promotion_id)}번(오퍼 {esc(offer)}) — 목록에 없습니다. 지워졌거나 번호가 바뀌었습니다. 바꾸지 않습니다.</p>')
     said = [KEPT_NOTE, SIDE_NOTE] + ([guest_effect(plan)] if guest_effect(plan) else [])
     if any(name.startswith("scope_") for promotion in plan.promotions for name, _text in promotion.form):
         said.insert(2, SCOPE_NOTE)
-    body.append(notes(said))
+    if steps is None or steps:   # 저장할 것이 없으면(표식 없는 ERP · 고른 대로면 바뀌는 단이 없음) 저장이 하는 일을 말하지 않는다
+        body.append(notes(said))
     if steps is None:
         body.append('<div class="banner red">아직 적용할 수 없습니다. 먼저 빨간 줄을 골라 주세요.</div>')
     elif not steps and plan.unmarked:
@@ -242,8 +257,10 @@ def _row_value(value, record: ChangeRecord) -> str:
     return "비어 있음" if value is None else typed(value)
 
 
-def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None, names: Sequence[str] = ()) -> str:
-    """장부의 변경 하나의 결과 — 단마다 넣은 값과 다시 읽어 맞았는지. `moved` 는 그대로여야 할 것이 달라진 것(verify 의 답)."""
+def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str | None = None, names: Sequence[str] = (),
+                  kept: Sequence[str] = ()) -> str:
+    """장부의 변경 하나의 결과 — 단마다 넣은 값과 다시 읽어 맞았는지. `moved` 는 그대로여야 할 것이 달라진 것, `kept` 는 화면 밖 설정이
+    저장 뒤에도 그대로인 단의 문장(verify 의 답 — kept_off)."""
     title = f"{result_name(record)} · {record.hotel} · 프로모션 할인"
     written = [row for row in record.rows if row.written and row.action and not row.rolled_back_by]
     mismatched = [row for row in written if record.verified_at and not row.verified]
@@ -294,14 +311,14 @@ def render_result(record: ChangeRecord, moved: Sequence = (), ledger_path: str |
     if nothing_left(record):
         body.append(notes([f"기록: {ledger_path}"]) if ledger_path else "")
     elif record.status in ("applied", "stopped"):
-        tail = ("저장 뒤 새 견적부터 새 할인으로 바뀝니다(손님이 이 프로모션을 고를 때만, 객실 요금에만). 이미 받은 예약의 금액은 바뀌지 "
-                "않습니다.")
+        tail = (("되돌린 할인 값은 저장 뒤 새 견적부터 붙습니다" if record.kind == "rollback" else "저장 뒤 새 견적부터 새 할인으로 바뀝니다")
+                + "(손님이 이 프로모션을 고를 때만, 객실 요금에만). 이미 받은 예약의 금액은 바뀌지 않습니다.")
         if stop is None:
-            said = [tail, undo_hint(record)]
+            said = [*kept, tail, undo_hint(record)]
         else:   # 멈췄다 — 되돌리는 법은 위의 「어떻게 할까요?」가 말한다
             said = [f"저장한 {len(written):,}단만 새 할인입니다. {tail}"]
-        if ledger_path:
-            said.insert(1, f"기록: {ledger_path}")
+        if ledger_path:   # 되돌리는 법 앞에
+            said.insert(len(said) - 1 if stop is None else len(said), f"기록: {ledger_path}")
         body.append(notes(said))
     return page(title, "\n".join(body), MAKER)
 

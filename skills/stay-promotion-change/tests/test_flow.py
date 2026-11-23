@@ -215,6 +215,32 @@ class FiveShapesTest(Flow):
         tiers = self.erp.promotion("9005")["trigger"]["tiers"]
         self.assertEqual(tiers[1], {"threshold": 31, "pct": "10.0", "cancellation": "CUTOFF_AT_THRESHOLD"}, "건드리지 않은 단은 표기까지 그대로")
 
+    def test_w4_the_tier_sent_as_read_is_counted_and_the_off_settings_read_the_same_after_the_save(self):
+        """W4 (시운전 10) — 짚지 않아 그대로 보내는 단을 짧은 답이 센다(`counts.sent`). 저장 뒤 verify 가 견준 것에서 화면 밖 설정이
+        그대로라고 말한다(`kept`) — 결과 페이지도. 되돌리기 미리보기에는 「통화 .」가 없고, 되돌리기 결과는 되돌린 할인이라고 한다."""
+        change, plan, short = self.preview(self.request(EARLY_NRF, value="16", sentence="얼리버드 46일 16% 로"))
+        self.assertEqual((short["counts"]["will_change"], short["counts"]["unchanged"], short["counts"]["sent"]), (1, 0, 1))
+        self.assertIn("1 짚지 않아 그대로 보내는 단", self.cli("render", "preview", "--plan", plan, "--text")["text"])
+        self.apply(change, plan)
+        after = self.read(record=change)
+        verified = self.cli("verify", "--change", change, "--snapshot", after)
+        kept = ["체크인 46일 전 단: 화면에 안 보이는 취소 조건은 저장 뒤에도 그대로입니다.",
+                "체크인 31일 전 단: 화면에 안 보이는 취소 조건은 저장 뒤에도 그대로입니다."]
+        self.assertEqual((verified["same"], verified["kept"]), (True, kept))
+        result = self.cli("render", "result", "--change", change, "--snapshot", after, "--text")["text"]
+        for sentence in kept:
+            self.assertIn(sentence, result)
+        out = self.work / "rollback-1.json"
+        rollback = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--record", "--out", out)
+        page = self.cli("render", "rollback", "--plan", out, "--text")["text"]
+        self.assertNotIn("통화 .", page)
+        self.assertIn("에 ERP 에서 읽은 것입니다.", page)
+        self.apply(rollback["change_id"], out)
+        undone = self.cli("render", "result", "--change", rollback["change_id"], "--snapshot", self.read(record=rollback["change_id"]),
+                          "--text")["text"]
+        self.assertIn("되돌린 할인 값은 저장 뒤 새 견적부터 붙습니다", undone)
+        self.assertNotIn("새 할인으로 바뀝니다", undone)
+
 
 class GateTest(Flow):
     def test_an_erp_without_the_mark_reads_and_previews_but_never_saves(self):
@@ -227,6 +253,9 @@ class GateTest(Flow):
         text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
         self.assertIn(GATE, text)
         self.assertIn("저장하지 않습니다", text)
+        self.assertFalse(short["scope_card"], "W4 — 저장하지 않는 미리보기에서 저장이 만드는 것을 먼저 말하지 않는다")
+        for said in ("저장하면 ERP 가", "저장할 때 ERP 가", "저장은 프로모션마다 한 번"):
+            self.assertNotIn(said, text, "W4 — 저장하지 않는 미리보기는 저장이 하는 일을 늘어놓지 않는다")
         refused = self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change), code=2)
         self.assertIn("저장할 것이 없는 미리보기", refused["error"])
         self.assertEqual(self.erp.posts, [])
