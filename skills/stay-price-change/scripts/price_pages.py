@@ -403,6 +403,9 @@ def record_what(kind: str, request: Mapping | None, reverses: int | None, curren
         return "가격 바꾸기"
     if request.get("kind") == "restore_snapshot":
         return f"{request.get('snapshot')}번 저장 상태로 되돌리기{picked}"
+    if request.get("kind") == "season_fill":
+        from price_season import season_what
+        return season_what(request)
     parsed = decode_request(request)
     if isinstance(parsed, TargetTable):
         return f"{'새 요금표' if parsed.from_sheet else '목표 값'} {len(parsed.targets) if cells is None else cells:,}칸"
@@ -854,7 +857,8 @@ def _undone_banner(undone: Sequence[Mapping]) -> str:
 
 
 def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = (), scope: str = "", by_date: bool = False,
-                    undone: Sequence[Mapping] = ()) -> str:
+                    undone: Sequence[Mapping] = (), extra: str = "") -> str:
+    """`extra` 는 되돌리는 변경의 종류가 더 말할 것(시즌 다시 채우기 — 되돌려도 돌아오지 않는 것 · 창의 이전 입력값, 그려 둔 HTML)."""
     currency = plan.currency
     what = "저장해 둔 상태로 되돌리기" if plan.mode == "restore" else "되돌리기"
     title = f"{what} 미리보기 · {plan.hotel} · {plan.offer}"
@@ -878,7 +882,7 @@ def render_rollback(plan: RollbackPlan, reserved: Iterable[tuple[str, str]] = ()
     body = [f"<h1>{esc(title)}</h1>", rollback_head(plan, scope), _undone_banner(undone),
             stats([(len(restored), "되돌리는 칸"), (len(kept), "그대로 두는 칸"), (len(gone), "지울 수 없는 칸")]
                   + ([(booked, "되돌리는 칸 중 예약 있는 날")] if booked else [])),
-            kept_table(plan, FIELD_LABELS), unremovable_table(plan, FIELD_LABELS),
+            extra, kept_table(plan, FIELD_LABELS), unremovable_table(plan, FIELD_LABELS),
             '<h2>되돌리는 칸' + (' <span class="sub">— 예약 있는 날도 포함합니다</span>' if booked else "") + "</h2>",
             grid([*restored, *held], cell, reserved, closed, by_date) if restored or held else
             '<p class="sub">되돌릴 칸이 없습니다.</p>',
