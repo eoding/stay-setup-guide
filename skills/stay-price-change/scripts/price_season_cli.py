@@ -17,7 +17,7 @@ from typing import Mapping
 
 from change_core.answers import attach_bodies
 from change_core.chrome import MOVED_ERRORS
-from change_core.items import key_fields
+from change_core.items import encode_state, key_fields, stale_items
 from change_core.ledger import Ledger, clock
 from change_core.money import money_text
 from change_core.rollback import holds
@@ -26,7 +26,8 @@ from price_model import (
     same_hotel,
 )
 from price_season import (
-    KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, decode_choices, decode_counts, decode_fill,
+    KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, day_items, decode_choices,
+    decode_counts, decode_fill,
     decode_plan, decode_window, encode_plan, encode_window, expected_cells, fresh_problem, followup_targets, has_writes, missing_seasons,
     plan_season, preview_rows, range_differences, recorded_request, rule_choices, rule_label, rule_said, season_range, season_steps, step_call, step_range,
     window_of, window_remembers,
@@ -228,12 +229,15 @@ def next_call(ledger: Ledger, record, now: Snapshot | None, then: Snapshot) -> d
         raise SeasonError(problem)
     expected = expected_cells(then, saved_values(record), pairs, days)
     differences = range_differences(expected, now, pairs, days)
-    if differences:
+    moved_days = stale_items(day_items(then, pairs, days), day_items(now, pairs, days))   # 판매일이 열림 · 예약이 듦(검토 2 의 7)
+    if differences or moved_days:
+        count = len(differences) + len(moved_days)
         status = ledger.record_step(record.id, step.index, False,
-                                    f"{MOVED_ERRORS[0]}({len(differences)}칸) — 시즌 창 저장 직전에 그 범위를 다시 읽으니 미리보기 때와 다릅니다")
+                                    f"{MOVED_ERRORS[0]}({count}칸) — 시즌 창 저장 직전에 그 범위를 다시 읽으니 미리보기 때와 다릅니다")
         return dict(change_id=record.id, status=status, calls=[], stopped=True,
                     differences=[dict(key=encode_key(key), then=encode_value(was), now=encode_value(seen))
-                                 for key, was, seen in differences])
+                                 for key, was, seen in differences]
+                    + [dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in moved_days])
     age = int((clock()() - datetime.fromisoformat(now.read_at.replace("Z", "+00:00"))).total_seconds())
     return dict(change_id=record.id, status=record.status, calls=[step_call(step.index, step.body)],
                 fresh=dict(read_at=now.read_at, seconds=age))

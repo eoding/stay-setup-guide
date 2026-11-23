@@ -121,5 +121,36 @@ class NoChangeSaveTest(SeasonCase):
         self.assertIn("저장 1번", listed["line"], "장부의 한 일도 누르는 저장만 센다")
 
 
+class DayFactsTest(SeasonCase):
+    """검토 2 의 7 — 미리보기 뒤에 판매일이 열리거나 예약이 든 날은 적용 직전(begin)과 저장 직전(calls)의 다시 읽기가 알아챈다."""
+
+    DAYS = season_scene.CASES["hotel"]["season"]
+
+    def setup_change(self):
+        window = season_scene.window(rooms=["디럭스"])
+        cells = {key("A2", day=day): CellValue(D("180"), None, None, "open") for day in self.DAYS if day != "2026-12-03"}
+        snapshot = replace(season_scene.snapshot((), pairs=[BB]), cells=cells)
+        self.assertIn(("디럭스", "2026-12-03"), snapshot.no_sale)
+        short, plan, plan_file = self.plan(window, snapshot, [{"pairs": [{"room": BB[0], "rate_plan": BB[1]}], "price": "190",
+                                                               "occupancy_keys": "A2", "overwrite": True}])
+        self.assertEqual((plan.saves[0].counts.created, plan.saves[0].counts.skipped), (0, 1), "12/3 은 판매일이 없어 건너뛴다")
+        return short["change_id"], snapshot, plan_file
+
+    def test_s7_a_sale_day_opened_since_the_preview_stops_begin(self):
+        change, snapshot, plan_file = self.setup_change()
+        opened = replace(snapshot, no_sale=frozenset())                    # 누가 12/3 판매일을 열었다(칸은 아직 없다)
+        stale = self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(opened, at(20)), now=30, code=1)
+        self.assertEqual([(item["key"], item["then"]["state"], item["now"]) for item in stale["differences"]],
+                         [({"room": "디럭스", "date": "2026-12-03", "what": "no_sale"}, "no_sale", None)])
+
+    def test_s7_a_booking_since_the_preview_stops_the_save_before_its_press(self):
+        change, snapshot, plan_file = self.setup_change()
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        booked = replace(snapshot, reserved=frozenset({("디럭스", "2026-12-02")}))
+        stopped = self.cli("calls", "--change", change, "--snapshot", self.snap(booked, at(40)), now=50)
+        self.assertEqual((stopped["calls"], stopped["status"], [item["key"] for item in stopped["differences"]]),
+                         ([], "stopped", [{"room": "디럭스", "date": "2026-12-02", "what": "reserved"}]))
+
+
 if __name__ == "__main__":
     unittest.main()

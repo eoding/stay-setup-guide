@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Iterable, Mapping, Sequence
 
-from change_core.items import Refused
+from change_core.items import ItemState, Refused, item_key
 from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import money, money_text, round_money, scale_of
 from change_core.rules import BLOCKED, RED, moved_far
@@ -1041,6 +1041,22 @@ def range_differences(expected: Mapping[CellKey, CellValue], now: Snapshot, pair
         then, here = expected.get(key, MISSING), seen.get(key, MISSING)
         if then != here:
             out.append((key, then, here))
+    return out
+
+
+DAY_KIND = "season_day"   # 날의 사정(판매일 없음 · 예약 있음)을 견주기의 항목으로 — 검토 2 의 7
+
+
+def day_items(snapshot: Snapshot, pairs, days) -> dict:
+    """그 범위의 객실 · 날 가운데 판매일 없는 날 · 예약 있는 날 — 하나에 항목 하나(있을 때만). 미리보기가 쓴 사정이다(판매일 없는 날은
+    건너뛴 칸, 예약 있는 날은 바구니). 적용 직전(begin)과 저장마다(calls)의 다시 읽은 값이 칸과 함께 견준다 — 그 사이 판매일이 열리면
+    미리보기에 없던 칸이 생기고, 예약이 들면 담당자가 고른 「예약 있는 날은 빼고」가 그 날을 모른다."""
+    rooms, days = {room for room, _plan in pairs}, set(days)
+    out = {}
+    for what, said, facts in (("no_sale", "판매일 없음", snapshot.no_sale), ("reserved", "예약 있음", snapshot.reserved)):
+        for room, day in sorted(facts):
+            if room in rooms and day in days:
+                out[(DAY_KIND, item_key({"room": room, "date": day, "what": what}))] = ItemState(f"{room} · {day} {said}", what, {})
     return out
 
 

@@ -93,7 +93,7 @@ from price_pages import (
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
 import price_season_cli as season_cli
 import season_pages
-from price_season import KIND as SEASON_KIND, decode_plan as decode_season_plan, step_note, step_range
+from price_season import KIND as SEASON_KIND, day_items, decode_plan as decode_season_plan, step_note, step_range
 from price_plan import (
     PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows,
     resolve, rollback_rows, rollback_writes, save_steps, snapshot_rows, stale_cells, step_plans, unresolved,
@@ -454,12 +454,15 @@ def cmd_begin(args):
         raise PlanError(f"{args.change}번 미리보기는 바꿀 칸이 없어 적용할 것이 없습니다 — 아무것도 시작하지 않았습니다")
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     then = reading_since(ledger, args.change, now) if ledger.change(args.change).status == "previewed" else now
+    then_items, now_items = snapshot_reading(then), snapshot_reading(now)
     if data.get("kind") == "season_plan":
         steps, request = season_cli.begin_steps(data)
+        # 시즌 미리보기는 판매일 없는 날 · 예약 있는 날도 썼다 — 칸과 함께 견준다(검토 2 의 7)
+        then_items = {**then_items, **day_items(then, then.pairs, then.dates)}
+        now_items = {**now_items, **day_items(now, then.pairs, then.dates)}
     else:
         steps, request = step_plans(decode_step(step) for step in data["steps"]), data["plan"]["request"] if "plan" in data else None
-    differences = ledger.begin_fresh(args.change, steps, snapshot_reading(then), snapshot_reading(now), read_at=now.read_at,
-                                     request=request)
+    differences = ledger.begin_fresh(args.change, steps, then_items, now_items, read_at=now.read_at, request=request)
     if differences:
         return dict(change_id=args.change, status="previewed", same=False, differences=encode_differences(differences))
     record = ledger.change(args.change)
