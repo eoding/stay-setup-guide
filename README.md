@@ -9,7 +9,7 @@ more change the prices of a hotel that already sells — price calendar cells, a
 promotion discounts — with a preview, a save only after the person says "적용", a fresh reading to verify, and a rollback. The guides and the skill
 documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.9.0 (`stay-setup-guide` 1.8.1, `stay-setup-run` 0.15.1, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.0). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+Release: plugin `stay-setup` 1.9.0 (`stay-setup-guide` 1.8.1, `stay-setup-run` 0.15.1, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.0). The matched ERP release went to production on 2026-11-23; the promotion helper saves only on an ERP that carries it. This release does not claim a production or browser installation rehearsal.
 
 ## 2026-11-23 promotion discount helper
 
