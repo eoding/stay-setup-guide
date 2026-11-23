@@ -381,7 +381,9 @@
       for (var j = 0; j < names.length; j++) {
         var entry = spec.controls[names[j]];
         if (!ctl.matches(entry.sel)) continue;
-        if (entry.when && !spec.when[entry.when](ctl, pins)) return { ctl: ctl, why: '이 작업이 고른 대상이 아닙니다(' + names[j] + ')' };
+        // when 은 참이면 지나고, 거짓이면 「고른 대상이 아님」, 글이면 그 글이 막은 까닭이다(누르는 순간 창이 바뀐 것 — holds)
+        var fits = entry.when ? spec.when[entry.when](ctl, pins) : true;
+        if (!fits || typeof fits === 'string') return { ctl: ctl, why: typeof fits === 'string' ? fits : '이 작업이 고른 대상이 아닙니다(' + names[j] + ')' };
         if (counting && entry.max && (counts[names[j]] || 0) >= entry.max) return { ctl: ctl, why: '같은 저장을 다시 누르지 않습니다' };
         return { allow: names[j] };
       }
@@ -1352,7 +1354,8 @@
   }
   // 「읽은 그대로 보내고 고른 칸만 바꾸기」 — edits 는 [이름, 몇 번째(그 이름의 보낼 칸 가운데 0 부터), 값] 목록이다. 치기 전에 창이
   // 보낼 칸이 form 과 꼭 같아야 하고, 친 뒤에는 form 에서 그 자리들만 바뀌어야 한다. opts 는 {window: 창 이름, settable(이름) → 칸의
-  // 이름(글자) 또는 null, guard(after): 더 볼 것}. 누르기 전에 멈추면 refused 다. 친 뒤에 보낼 칸을 돌려준다
+  // 이름(글자) 또는 null, guard(after): 더 볼 것}. 누르기 전에 멈추면 refused 다. 친 뒤에 보낼 칸을 돌려주고, 보내야 할 칸(form 에서
+  // 그 자리만 바꾼 것)을 `ctx.pins.sent` 에 둔다 — 저장 단추의 when 이 누르는 순간 holds 로 견준다
   function fill(ctx, root, form, edits, opts) {
     var refused = { refused: true };
     var before = sent(root);
@@ -1387,13 +1390,24 @@
     });
     var off2 = differs(after, expected);
     if (off2.length) fail('친 뒤의 창이 바꾼 칸 말고도 다릅니다(' + off2.join(', ') + ') — 저장하지 않았습니다', { refused: true, differ: off2 });
+    ctx.pins.sent = expected;   // 저장 단추를 누르는 순간에도 창이 꼭 이것을 보내야 지난다(holds)
     return after;
+  }
+  // 저장 단추를 누르는 그 순간의 창 — 단추의 창(root)이 보낼 칸이 fill 이 친 뒤의 칸(pins.sent)과 꼭 같으면 true, 아니면 벽이 적을
+  // 까닭 글. fill 과 누르기 사이에 도는 요청을 기다리는 동안(press 의 quiet) 무엇이 창을 고쳐 쓰면 그 저장은 나가지 않는다. fill 을
+  // 지나지 않은 창의 저장은 지나지 않는다. 저장 단추의 when 이 호텔 · 대상을 본 뒤 마지막으로 부른다
+  function holds(root, pins) {
+    if (!pins.sent) return '친 값을 확인하지 않은 창의 저장입니다';
+    var now = root ? sent(root) : null;
+    if (!now) return '창이 무엇을 보내는지 알 수 없습니다';
+    var off = differs(now, pins.sent);
+    return off.length ? '친 뒤에 창이 바뀌었습니다(' + off.join(', ') + ')' : true;
   }
   // 편집 창의 저장 한 번 — 저장 단추를 press 로 한 번 누르고 결과를 본다. opts 는 {root: 창 뿌리, panel: 저장 응답이 다시 그리는 목록의
   // id, window: 창 이름, what: 답의 what, waitMs: 결과를 기다리는 천장(기본 10초 — 서버가 오래 걸리는 저장은 남은 시간을 준다),
   // banner: 참이면 저장됐을 때 목록의 저장 배너 글을 `banner` 로 싣는다}. 저장됨: 창이 사라지고 저장 표지(`#stay_save_result` 의 저장
   // 시각이 바뀌었거나 새로 온 · 바뀐 목록의 저장 배너)가 왔다. 거절: 창이 오류와 함께 다시 그려졌다. 둘 다 아니면 "unknown" — 다시
-  // 누르지 않는다
+  // 누르지 않는다. 벽이 저장 클릭을 막았으면(holds) 요청이 나가지 않았으니 기다리지 않고 그 까닭으로 멈춘다(refused)
   async function saveOnce(ctx, opts) {
     var root = opts.root, rootId = root.id, screen = root.getAttribute('data-stay-screen');
     var windowRoot = function () { return document.querySelector('#stay_drawer_body [data-stay-screen="' + screen + '"]'); };
@@ -1404,6 +1418,9 @@
     var was = signs();
     await press(ctx, opts.window + ' [저장]', function () { return windowRoot() === root ? saveButton(root) : null; });
     var pressed = !!ctx.saves && ctx.wall.pressed(ctx.saves);
+    // 벽이 저장 클릭을 막았다(누르는 순간 창이 친 값과 다름 — holds) — 요청은 나가지 않았다. 결과를 기다리지 않는다
+    var stopped = ctx.wall.log.blocked[0];
+    if (!pressed && stopped) fail(stopped.why + ' — 저장을 누르지 않았습니다', { refused: true });
     var outcome = function () {
       var now = signs(), r = windowRoot();
       var stamped = !!now.stamp && now.stamp !== was.stamp;
@@ -1456,7 +1473,7 @@
     scrub: function (value) { return scrub(value); }, fit: fit, take: take, last: last, idle: idleState,
     C: C, all: all, clip: clip, quiet: quiet, scopeText: scopeText,
     drawerOpen: drawerOpen, closeDrawer: closeDrawer, atRest: atRest, pageHotel: pageHotel, guard: guard,
-    sent: sent, differs: differs, pairs: pairs, errors: windowErrors, fill: fill, saveOnce: saveOnce
+    sent: sent, differs: differs, pairs: pairs, errors: windowErrors, fill: fill, holds: holds, saveOnce: saveOnce
   });
 
   window.stayPrice = {

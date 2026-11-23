@@ -25,6 +25,23 @@ function replaced(form, set) {
     return [name, hit ? hit[2] : value];
   });
 }
+// 창에 `typed` 칸을 치는 순간 htmx 요청 하나를 열고, 150ms 뒤 그 창의 `field` 칸(nth 번째)을 `value` 로 고쳐 쓰고, 300ms 뒤 요청을
+// 닫는다 — 저장 단추가 도는 요청을 기다리는 사이(press 의 quiet) 무엇이 창을 바꾸는 것(앞 저장의 다시 읽기 · 화면 스크립트) 흉내
+function rewriteWhileWaiting(page, typed, field, nth, value) {
+  let done = false;
+  const fire = (name) => page.doc.dispatchEvent(new page.w.CustomEvent(name, { detail: {}, bubbles: true }));
+  page.doc.addEventListener('input', (e) => {
+    if (done || e.target.name !== typed) return;
+    done = true;
+    fire('htmx:before:request');
+    page.w.setTimeout(() => {
+      const el = page.doc.querySelectorAll(`#stay_drawer_body [name="${field}"]`)[nth];
+      el.value = value;
+      el.dispatchEvent(new page.w.Event('input', { bubbles: true }));
+    }, 150);
+    page.w.setTimeout(() => fire('htmx:finally:request'), 300);
+  });
+}
 const values = (pairs, name) => pairs.filter(([n]) => n === name).map(([, v]) => v);
 async function listed(page, id) {
   const r = plain(await page.w.stayCharge.look());
@@ -134,11 +151,25 @@ test('C4 · 시간대 행 · 금액의 뜻 · 연령별 단가 · 범위 · 설�
   page.w.close();
 });
 
+test('P1 · 친 뒤 저장 단추가 도는 요청을 기다리는 사이 창의 다른 칸이 바뀌면 벽이 그 클릭을 막는다 — 요청이 나가지 않고 창이 바뀌었다고 말한다', async () => {
+  const page = chargePage();
+  const form = await readForm(page, '701');
+  rewriteWhileWaiting(page, 'tiers_pct', 'tiers_pct', 0, '99.00');
+  const r = await apply(page, '701', form, [['tiers_pct', 1, '60.00']]);
+  assert.deepEqual([r.ok, r.saved, r.pressed, r.refused], [false, false, false, true], r.error);
+  assert.ok(r.error.startsWith('친 뒤에 창이 바뀌었습니다(tiers_pct) — 저장을 누르지 않았습니다'), r.error);
+  assert.match(r.blocked[0].why, /^친 뒤에 창이 바뀌었습니다\(tiers_pct\)$/);
+  assert.deepEqual(r.clicks, { chargeOpen: 1 });
+  assert.deepEqual(page.log.posts, [], '저장 요청이 나가지 않았다');
+  page.w.close();
+});
+
 test('C4 · 저장을 두 번 누르는 것은 지나가지 않는다 — 한 작업의 벽 안에서 두 번째 [저장] 은 막히고 요청은 하나다', async () => {
   const page = chargePage();
   const pins = { hotel: HOTEL.id, offer: '601', charge: '701' };
   const save = () => page.doc.querySelector('#stay_drawer_body [data-stay-action="save"]').click();
   page.showCharge('701');
+  pins.sent = page.w.stayPageKit.sent(page.doc.querySelector('#stay_drawer_body [data-stay-screen="charge"]'));   // fill 이 핀에 두는 보낼 칸
   // 첫 저장이 창을 닫는다 — 같은 창을 다시 그려 한 번 더 눌러 본다
   const seen = plain(await page.w.stayCharge.guard('applyCharge', async () => { save(); page.showCharge('701'); save(); }, pins));
   assert.deepEqual(seen.clicks, ['chargeSave']);

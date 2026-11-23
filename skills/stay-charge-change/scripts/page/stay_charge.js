@@ -17,7 +17,8 @@
  *  - 금액만 바꾼다. set 의 칸은 금액 칸(amount · pct · onsite_amount · tiers_amount · tiers_pct · age_rate_<번호> · onsite_age_rate_<번호>)
  *    뿐이고, 값은 금액 글자다 — 비우지 않고, 빈 칸을 채우지 않는다. 몇 번째(nth)는 그 이름의 보낼 칸 가운데 자리다(시간대 행 차례).
  *  - applyCharge 는 kit 의 fill 로 친다 — 치기 전에 창이 보낼 칸이 앞서 읽은 form 과 꼭 같아야 하고, 친 뒤에는 form 에서 set 의 자리만
- *    바뀌어야 한다. 금액의 뜻(amount_mode · pct_mode)도 다른 시간대 행도 읽은 그대로 나간다. 저장은 kit 의 saveOnce 로 한 번 누른다.
+ *    바뀌어야 한다. 금액의 뜻(amount_mode · pct_mode)도 다른 시간대 행도 읽은 그대로 나간다. 저장은 kit 의 saveOnce 로 한 번 누르고,
+ *    벽은 누르는 그 순간에도 창이 친 뒤의 칸 그대로인지 본다(kit holds — 아니면 요청이 나가지 않는다).
  *  - 저장 단추의 주소(hx-post)는 페이지 안에서 견주기만 하고 돌려주지 않는다.
  */
 (function () {
@@ -64,8 +65,11 @@
       var tr = el.closest('tr[data-stay-entity="charge"]'), card = el.closest('[data-stay-entity="offer"]');
       return !!(pins.charge && pins.offer && tr && card) && tr.getAttribute('data-stay-entity-id') === pins.charge && card.getAttribute('data-stay-entity-id') === pins.offer;
     },
-    // 그 호텔 · 그 부과금의 편집 주소로 저장하는 단추만
-    chargeTarget: function (el, pins) { return !!(pins.hotel && pins.charge) && endsWith(hxPost(el), editPath(pins.hotel, pins.charge)); }
+    // 그 호텔 · 그 부과금의 편집 주소로 저장하는 단추만, 그리고 누르는 순간 그 창이 친 뒤의 칸(fill 의 pins.sent)을 꼭 그대로 보낼 때만
+    // (아니면 그 까닭 글로 막는다)
+    chargeTarget: function (el, pins) {
+      return !!(pins.hotel && pins.charge) && endsWith(hxPost(el), editPath(pins.hotel, pins.charge)) && K.holds(el.closest(SCREEN), pins);
+    }
   };
   var SPEC = {
     name: 'stayCharge', allow: ALLOW, controls: CONTROLS, when: WHEN, never: NEVER, late: [],

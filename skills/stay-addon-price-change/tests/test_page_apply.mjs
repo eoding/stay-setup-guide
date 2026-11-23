@@ -19,7 +19,37 @@ async function listed(page, line) {
   const r = plain(await page.w.stayAddonPrice.look());
   return takeAll(page.w, r).body.addons.flatMap((a) => a.lines).find((l) => l.id === line);
 }
+// 창에 `typed` 칸을 치는 순간 htmx 요청 하나를 열고, 150ms 뒤 그 창의 `field` 칸(nth 번째)을 `value` 로 고쳐 쓰고, 300ms 뒤 요청을
+// 닫는다 — 저장 단추가 도는 요청을 기다리는 사이(press 의 quiet) 무엇이 창을 바꾸는 것(앞 저장의 다시 읽기 · 화면 스크립트) 흉내
+function rewriteWhileWaiting(page, typed, field, nth, value) {
+  let done = false;
+  const fire = (name) => page.doc.dispatchEvent(new page.w.CustomEvent(name, { detail: {}, bubbles: true }));
+  page.doc.addEventListener('input', (e) => {
+    if (done || e.target.name !== typed) return;
+    done = true;
+    fire('htmx:before:request');
+    page.w.setTimeout(() => {
+      const el = page.doc.querySelectorAll(`#stay_drawer_body [name="${field}"]`)[nth];
+      el.value = value;
+      el.dispatchEvent(new page.w.Event('input', { bubbles: true }));
+    }, 150);
+    page.w.setTimeout(() => fire('htmx:finally:request'), 300);
+  });
+}
 const LINE = { addon: '201', line: '301' };
+
+test('P1 · 친 뒤 저장 단추가 도는 요청을 기다리는 사이 창의 다른 칸이 바뀌면 벽이 그 클릭을 막는다 — 요청이 나가지 않고 창이 바뀌었다고 말한다', async () => {
+  const page = addonPage();
+  const form = await readForm(page, '201', '301');
+  rewriteWhileWaiting(page, 'price', 'net_amount', 0, '1.00');
+  const r = await apply(page, Object.assign({ form, set: { price: '22.00' } }, LINE));
+  assert.deepEqual([r.ok, r.saved, r.pressed, r.refused], [false, false, false, true], r.error);
+  assert.ok(r.error.startsWith('친 뒤에 창이 바뀌었습니다(net_amount) — 저장을 누르지 않았습니다'), r.error);
+  assert.match(r.blocked[0].why, /^친 뒤에 창이 바뀌었습니다\(net_amount\)$/);
+  assert.deepEqual(r.clicks, { lineOpen: 1 });
+  assert.deepEqual(page.log.posts, [], '저장 요청이 나가지 않았다');
+  page.w.close();
+});
 
 test('A3 · 창이 읽은 그대로면 저장 요청 하나에 form 에서 판매가만 바꿔 보낸다 — 공급 원가는 그대로 실린다', async () => {
   const page = addonPage();

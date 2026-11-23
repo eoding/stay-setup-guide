@@ -16,6 +16,23 @@ function replaced(form, edits) {
   const seen = {};
   return form.map(([name, value]) => { const nth = seen[name] = (seen[name] ?? -1) + 1; const hit = edits.find(([n, i]) => n === name && i === nth); return [name, hit ? hit[2] : value]; });
 }
+// 창에 `typed` 칸을 치는 순간 htmx 요청 하나를 열고, 150ms 뒤 그 창의 `field` 칸(nth 번째)을 `value` 로 고쳐 쓰고, 300ms 뒤 요청을
+// 닫는다 — 저장 단추가 도는 요청을 기다리는 사이(press 의 quiet) 무엇이 창을 바꾸는 것(앞 저장의 다시 읽기 · 화면 스크립트) 흉내
+function rewriteWhileWaiting(page, typed, field, nth, value) {
+  let done = false;
+  const fire = (name) => page.doc.dispatchEvent(new page.w.CustomEvent(name, { detail: {}, bubbles: true }));
+  page.doc.addEventListener('input', (e) => {
+    if (done || e.target.name !== typed) return;
+    done = true;
+    fire('htmx:before:request');
+    page.w.setTimeout(() => {
+      const el = page.doc.querySelectorAll(`#stay_drawer_body [name="${field}"]`)[nth];
+      el.value = value;
+      el.dispatchEvent(new page.w.Event('input', { bubbles: true }));
+    }, 150);
+    page.w.setTimeout(() => fire('htmx:finally:request'), 300);
+  });
+}
 async function apply(page, offer, promotion, win, set, extra = {}) {
   const input = Object.assign({ no: 1, hotel: HOTEL, offer, promotion, title: titleOf(win.form), form: win.form, marks: win.marks, set }, extra);
   return plain(await page.w.stayPromotion.applyPromotion(inPage(page.w, input)));
@@ -140,12 +157,27 @@ test('M4 · ERP 가 단을 짚어 저장을 거절하면(화면 밖 설정을 �
   page.w.close();
 });
 
+test('P1 · 친 뒤 저장 단추가 도는 요청을 기다리는 사이 창의 다른 단 값이 바뀌면 벽이 그 클릭을 막는다 — 요청이 나가지 않고 창이 바뀌었다고 말한다', async () => {
+  const page = promotionPage();
+  const win = await readWindow(page, '601', '9002');
+  rewriteWhileWaiting(page, 'tiers_value', 'tiers_value', 1, '50');
+  const r = await apply(page, '601', '9002', win, [['tiers_value', 0, '8']]);
+  assert.deepEqual([r.ok, r.saved, r.pressed, r.refused], [false, false, false, true], r.error);
+  assert.ok(r.error.startsWith('친 뒤에 창이 바뀌었습니다(tiers_value) — 저장을 누르지 않았습니다'), r.error);
+  assert.match(r.blocked[0].why, /^친 뒤에 창이 바뀌었습니다\(tiers_value\)$/);
+  assert.deepEqual(r.clicks, { promotionOpen: 1 });
+  assert.deepEqual(page.log.posts, [], '저장 요청이 나가지 않았다');
+  assert.deepEqual(page.promotion('9002').trigger.tiers, [{ threshold: 2, pct: '7' }, { threshold: 3, pct: '10' }], '저장된 단 그대로');
+  page.w.close();
+});
+
 test('M7 · 한 작업 안에서 저장 단추를 두 번 누르면 두 번째는 벽이 막는다(서버가 아직 답하지 않아 창이 그대로일 때)', async () => {
   const page = promotionPage({ onSave: 'silent' });
   const root = page.showPromotion('9002');
   const save = root.querySelector('[data-stay-action="save"]');
+  // sent — fill 이 친 뒤 핀에 두는 보낼 칸(여기서는 친 것 없이 창 그대로)
   const seen = plain(await page.w.stayPromotion.guard('applyPromotion', async () => { save.click(); save.click(); },
-    { hotel: HOTEL.id, offer: '601', promotion: '9002' }));
+    { hotel: HOTEL.id, offer: '601', promotion: '9002', sent: page.w.stayPageKit.sent(root) }));
   assert.deepEqual(seen.clicks, ['promotionSave']);
   assert.equal(seen.blocked.length, 1);
   assert.match(seen.blocked[0].why, /같은 저장을 다시 누르지 않습니다/);

@@ -22,7 +22,8 @@
  *  - 단의 값만 바꾼다. set 의 칸은 `tiers_value` 뿐이고, 값은 숫자 글자다 — 비우지 않고, 빈 칸을 채우지 않는다. 몇 번째(nth)는 단 줄의
  *    차례다. 치기 전에 단 줄마다 화면 밖 설정의 이름(`data-stay-off-form-keys`)이 읽은 marks 와 같아야 한다.
  *  - applyPromotion 은 kit 의 fill 로 친다 — 치기 전에 창이 보낼 칸이 앞서 읽은 form 과 꼭 같아야 하고(`tiers_origin` · 진행기간
- *    체크까지), 친 뒤에는 form 에서 set 의 자리만 바뀌어야 한다. 저장은 kit 의 saveOnce 로 한 번 누른다.
+ *    체크까지), 친 뒤에는 form 에서 set 의 자리만 바뀌어야 한다. 저장은 kit 의 saveOnce 로 한 번 누르고, 벽은 누르는 그 순간에도 창이
+ *    친 뒤의 칸 그대로인지 본다(kit holds — 아니면 요청이 나가지 않는다).
  *  - 단 줄의 숨은 칸 `tiers_origin`(그 줄이 저장된 어느 단에서 왔는지 — 저장된 단의 기준값, 새 줄은 빈 값)은 읽은 그대로 두고 치지
  *    않는다. 그 값이 `?`(ERP 가 모름 — 거절된 요청 뒤 다시 그린 창)인 줄이 하나라도 있으면 applyPromotion 은 아무것도 치지 않는다.
  *  - 저장 단추의 주소(hx-post)는 페이지 안에서 견주기만 하고 돌려주지 않는다.
@@ -79,10 +80,12 @@
       var tr = el.closest('tr[data-stay-entity="promotion"]'), card = el.closest('#stay_promotions .stay-card');
       return !!(pins.promotion && pins.offer && tr && card) && tr.getAttribute('data-stay-entity-id') === pins.promotion && cardOffer(card) === pins.offer;
     },
-    // 그 호텔 · 그 프로모션의 편집 주소로 저장하는 단추만, 그리고 그 창에 화면 밖 설정을 지키는 표식이 있을 때만
+    // 그 호텔 · 그 프로모션의 편집 주소로 저장하는 단추만, 그 창에 화면 밖 설정을 지키는 표식이 있을 때만, 그리고 누르는 순간 그 창이
+    // 친 뒤의 칸(fill 의 pins.sent)을 꼭 그대로 보낼 때만(아니면 그 까닭 글로 막는다)
     promotionTarget: function (el, pins) {
       var root = el.closest(SCREEN);
-      return !!(pins.hotel && pins.promotion && root) && root.getAttribute(KEEPS) === '1' && endsWith(hxPost(el), editPath(pins.hotel, pins.promotion));
+      return !!(pins.hotel && pins.promotion && root) && root.getAttribute(KEEPS) === '1' && endsWith(hxPost(el), editPath(pins.hotel, pins.promotion)) &&
+        K.holds(root, pins);
     }
   };
   var SPEC = {

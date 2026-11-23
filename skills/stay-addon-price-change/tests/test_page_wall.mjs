@@ -76,8 +76,9 @@ test('A4 · 줄 [편집] 은 고른 카드의 고른 줄만, 창의 [저장] 은
   assert.ok(opened.blocked.every((b) => /고른 대상이 아닙니다\(lineOpen\)/.test(b.why)));
   assert.deepEqual(page.log.gets, ['/stay/1/addon-prices/301/edit/']);
   const save = () => page.doc.querySelector('#stay_drawer_body [data-stay-action="save"]').click();
-  // 첫 저장이 창을 닫는다 — 같은 창을 다시 그려 한 번 더 눌러 본다
-  const saved = plain(await page.w.stayAddonPrice.guard('applyLine', async () => { save(); page.showPrice('301'); save(); }, PINS));
+  // 첫 저장이 창을 닫는다 — 같은 창을 다시 그려 한 번 더 눌러 본다. sent 는 fill 이 핀에 두는 보낼 칸(여기서는 친 것 없이 창 그대로)
+  const sent = page.w.stayPageKit.sent(page.doc.querySelector('#stay_drawer_body [data-stay-screen="addon-price"]'));
+  const saved = plain(await page.w.stayAddonPrice.guard('applyLine', async () => { save(); page.showPrice('301'); save(); }, Object.assign({ sent }, PINS)));
   assert.deepEqual(saved.clicks, ['lineSave']);
   assert.match(saved.blocked[0].why, /같은 저장을 다시 누르지 않습니다/);
   assert.equal(page.log.posts.length, 1, '저장 요청은 하나');

@@ -15,7 +15,8 @@
  *  - 저장 단추가 보내는 칸(SENT)은 kit 의 `sent` 가 그 단추의 `hx-include` 그대로 [이름, 값] 쌍으로 읽는다.
  *  - applyLine 은 kit 의 `fill` 로 친다 — 치기 전에 창의 SENT 가 앞서 읽은 form 과 꼭 같아야 하고, 친 뒤에는 form 에서 set 의 값만
  *    바뀌어야 한다. 공급 원가는 set 이 `net_amount: ""` 로 비우라고 할 때만 빈 채로 보낸다(비면 ERP 가 저장된 원가를 지운다).
- *    저장은 kit 의 `saveOnce` 로 한 번 누르고 다시 누르지 않는다.
+ *    저장은 kit 의 `saveOnce` 로 한 번 누르고 다시 누르지 않는다. 벽은 누르는 그 순간에도 창이 친 뒤의 칸 그대로인지 본다(kit `holds`
+ *    — 아니면 요청이 나가지 않는다).
  *  - 저장 단추의 주소(hx-post)는 페이지 안에서 견주기만 하고 돌려주지 않는다.
  */
 (function () {
@@ -29,6 +30,7 @@
   /* ───────────── 1. 벽의 표 ───────────── */
 
   var HEAD = ['가격행 이름', '판매가', '통화별 금액', '적용 대상', '적용 범위', '인원 밴드', '액션'];
+  var SCREEN = '[data-stay-screen="addon-price"]';
   // 어떤 작업에서도 누르지 않는 것 — 허용 목록보다 먼저 본다
   var NEVER = [
     { sel: '[data-stay-action="delete"],[hx-delete]', why: '삭제' },
@@ -44,7 +46,7 @@
   var CONTROLS = {
     tab: { sel: 'ul.tab-container a[data-stay-tab="addons"]' },
     lineOpen: { sel: '#stay_addons tr[data-stay-entity="addon_price"] [data-stay-action="open_edit"]', when: 'line' },
-    lineSave: { sel: '#stay_drawer_body [data-stay-screen="addon-price"] [data-stay-action="save"]', when: 'lineTarget', max: 1 }
+    lineSave: { sel: '#stay_drawer_body ' + SCREEN + ' [data-stay-action="save"]', when: 'lineTarget', max: 1 }
   };
   var ALLOW = {
     look: ['tab'],
@@ -60,8 +62,11 @@
       var tr = el.closest('tr[data-stay-entity="addon_price"]'), card = el.closest('[data-stay-entity="addon"]');
       return !!(pins.line && pins.addon && tr && card) && tr.getAttribute('data-stay-entity-id') === pins.line && card.getAttribute('data-stay-entity-id') === pins.addon;
     },
-    // 그 호텔 · 그 줄의 편집 주소로 저장하는 단추만
-    lineTarget: function (el, pins) { return !!(pins.hotel && pins.line) && endsWith(hxPost(el), editPath(pins.hotel, pins.line)); }
+    // 그 호텔 · 그 줄의 편집 주소로 저장하는 단추만, 그리고 누르는 순간 그 창이 친 뒤의 칸(fill 의 pins.sent)을 꼭 그대로 보낼 때만
+    // (아니면 그 까닭 글로 막는다)
+    lineTarget: function (el, pins) {
+      return !!(pins.hotel && pins.line) && endsWith(hxPost(el), editPath(pins.hotel, pins.line)) && K.holds(el.closest(SCREEN), pins);
+    }
   };
   var SPEC = {
     name: 'stayAddonPrice', allow: ALLOW, controls: CONTROLS, when: WHEN, never: NEVER, late: [],
@@ -120,7 +125,7 @@
 
   /* ───────────── 3. 편집 창 — 연 창이 그 호텔 · 그 줄의 것인지, 저장 단추가 보낼 칸 ───────────── */
 
-  function windowRoot() { return document.querySelector('#stay_drawer_body [data-stay-screen="addon-price"]'); }
+  function windowRoot() { return document.querySelector('#stay_drawer_body ' + SCREEN); }
   function saveOf(root) { return root ? root.querySelector('[data-stay-action="save"]') : null; }
   function windowFacts(root, form) {
     var labels = {};
