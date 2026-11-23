@@ -513,7 +513,7 @@
     // 다만 「모름」으로 끝난 저장을 ERP 가 늦게 거절해 그 창을 다시 그린 것이면(모듈의 adopt 가 알아본다 — 도우미가 친 값이 든 그 창)
     // 그 저장의 답(`lateSave` — ERP 의 오류 글)으로 알리고 닫는다. 사람에게 그 창을 저장하라고 하지 않는다
     if (drawerOpen() && drawerContent() && drawerContent() !== GUARD.leftDrawer) {
-      var adopted = GUARD.unknownSave && GUARD.unknownSave.spec === spec.name && spec.adopt ? spec.adopt(drawerContent(), GUARD.unknownSave) : null;
+      var adopted = GUARD.unknownSave ? GUARD.unknownSave.adopt(drawerContent(), GUARD.unknownSave) : null;   // 어느 모듈의 작업이 와도
       if (adopted) {
         var pending = GUARD.unknownSave;
         GUARD.unknownSave = null;
@@ -603,7 +603,7 @@
     GUARD.leftDrawer = drawerOpen() ? drawerContent() : null;   // 다음 작업이 닫아도 되는 드로어 — 이 작업이 닫지 못하고 남긴 것
     // 「모름」으로 끝난 저장 — 그 요청을 ERP 가 늦게 거절해 창을 다시 그리면 다음 작업이 그 저장의 답으로 알아보게 남긴다(adopt)
     if (saves && out.saved === 'unknown' && spec.adopt) {
-      GUARD.unknownSave = { spec: spec.name, op: op, no: no, ask: crc32(canon(askedOf(input))), pins: Object.assign({}, wall.pins) };
+      GUARD.unknownSave = { adopt: spec.adopt, op: op, no: no, ask: crc32(canon(askedOf(input))), pins: Object.assign({}, wall.pins) };
     }
     if (!late) { wall.stop(); window.__stayPriceBusy = null; }
     var blocked = wall.log.blocked;

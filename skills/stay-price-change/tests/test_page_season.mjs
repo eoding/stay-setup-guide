@@ -264,7 +264,8 @@ test('검토 2 의 page 4 · 「모름」으로 끝난 저장을 ERP 가 늦게 
   const refused = WINDOW.replace('<div class="table1">', '<div class="stay-banner stay-banner--blocking" data-stay-result="error"><span>조정 값은 부호를 붙여 주세요</span></div><div class="table1">');
   page.doc.getElementById('stay_drawer_body').innerHTML = refused;
   page.doc.dispatchEvent(new page.w.CustomEvent('htmx:finally:request', { bubbles: true, detail: {} }));
-  const r = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
+  // 다음 작업이 다른 모듈(가격 캘린더 읽기)이어도 그 창을 알아본다
+  const r = plain(await page.w.stayPrice.readPair(inPage(page.w, { hotel: HOTEL, offer: OFFER, room: '디럭스', ratePlan: '조식 포함', from: '2026-07-01', to: '2026-07-01' })));
   assert.deepEqual([r.ok, r.started], [false, false], r.error);
   assert.doesNotMatch(r.error, /사람이 닫은 뒤/, '사람에게 그 창을 닫거나 저장하라고 하지 않는다');
   assert.deepEqual([r.lateSave.op, r.lateSave.no, r.lateSave.ask, r.lateSave.saved, r.lateSave.pressed, r.lateSave.refused],
