@@ -133,5 +133,39 @@ class RollbackReadsTheHolderTest(BookCase):
         self.assertEqual(([item.key for item in plan.restored], plan.kept), (["c1"], ()), "다시 산 1번의 칸은 되돌린다")
 
 
+class CheckSettlesLostAnswersTest(BookCase):
+    """검토 2 의 2 — 저장 안 됨으로 적힌 단계 · 아직 적지 않은 단계(누른 답을 잃었다)도 칸이 모두 넣은 값이면 check 가 저장됨으로 적는다."""
+
+    def check(self, number: int):
+        book = self.book
+        then = {(KIND, key): ItemState(key, "open", {"sell": value}) for key, value in {"c1": D("100"), "c2": D("200")}.items()}
+        return book.ledger.check(number, book.reading(), then, book.tick())
+
+    def test_s3_a_step_recorded_as_not_saved_whose_cells_read_as_written_is_settled_as_saved(self):
+        book = self.book
+        number = book.preview({"c1": D("150")})
+        book.apply(number, {"c1": D("150")}, saved=False)
+        book.erp["c1"] = D("150")                                 # 장부에는 저장 안 됨, ERP 에는 들어갔다
+        report = self.check(number)
+        self.assertEqual((report.status, report.steps[0].ledger, report.steps[0].settled), ("applied", "failed", "saved"))
+        self.assertEqual(book.rollback_plan(number).restored[0].key, "c1", "저장된 것으로 적혀 되돌릴 수 있다")
+
+    def test_s3_a_step_never_recorded_whose_cells_read_as_written_is_settled_as_saved(self):
+        book = self.book
+        number = book.preview({"c1": D("150")})
+        step = StepPlan("save", "1번째", {"items": ["c1"]}, (FieldWrite(KIND, "c1", "sell", D("150")),))
+        book.ledger.begin(number, [step], read_at=book.tick())
+        book.erp["c1"] = D("150")                                 # 눌렀고 저장됐는데 답을 적지 못했다
+        report = self.check(number)
+        self.assertEqual((report.status, report.steps[0].ledger, report.steps[0].settled), ("applied", "pending", "saved"))
+
+    def test_a_not_saved_step_whose_cells_read_as_before_stays_not_saved(self):
+        book = self.book
+        number = book.preview({"c1": D("150")})
+        book.apply(number, {"c1": D("150")}, saved=False)
+        report = self.check(number)
+        self.assertEqual((report.steps[0].settled, report.can_continue), (None, True))
+
+
 if __name__ == "__main__":
     unittest.main()

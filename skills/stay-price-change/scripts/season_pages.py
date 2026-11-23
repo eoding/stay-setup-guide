@@ -19,7 +19,7 @@ from typing import Iterable, Mapping, Sequence
 from change_core.chrome import (
     esc, fmt_money, fmt_time, notes, page, result_word, stats, stop_view, stopped_choices, steps_list, times_word, undo_hint,
 )
-from change_core.ledger import ChangeRecord
+from change_core.ledger import ChangeRecord, left_out, seen_kind
 from change_core.money import scale_of
 from price_model import CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellValue, below_cost_label, cell_name, key_of_item
 from price_pages import MAKER, cell_views, grid, render_result as render_cells_result
@@ -27,7 +27,7 @@ from price_season import (
     CHOICE_WORDS, INPUT_LABELS, RULES, SeasonPlan, banner_counts, counts, counts_agree, date_runs,
     decode_counts, recorded_request, rule_label, rule_said, verdict, window_remembers,
 )
-from price_season_cli import OPENS_CLOSED
+from price_season_cli import OPENS_CLOSED, may_skip
 
 # 되돌려도 돌아오지 않는 것(설계 5) — 미리보기 · 되돌리기 미리보기가 그대로 말한다
 UNDO_CREATED = "새로 생기는 칸 {n}칸은 되돌려도 지울 수 없습니다(ERP 에 칸을 지우는 길이 없습니다)."
@@ -258,19 +258,23 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
 
 
 def season_check(record: ChangeRecord) -> dict:
-    """장부만으로 — 넣은 칸 가운데 다시 읽은 값이 넣은 값이 아닌 칸(허용 조합을 몰라 ERP 가 뺐을 수 있는 칸이 칸 없음 · 전 값이면 받아들임),
-    새 칸의 판매 상태가 짐작과 다른 칸, 저장마다 ERP 가 띠로 말한 수와 예상."""
+    """장부만으로 — 넣은 칸 가운데 다시 읽은 값이 넣은 값이 아닌 칸(ERP 가 넣지 않을 수 있는 칸이 전 값 그대로면 받아들임 — check ·
+    확인과 같은 뜻, change_core.ledger.left_out), 새 칸의 판매 상태가 짐작과 다른 칸, 저장마다 ERP 가 띠로 말한 수와 예상."""
     views = cell_views(record)
-    combo = {key_of_item(row.item_key) for row in record.rows if "combo_unknown" in row.marks}
     opens_closed = {key_of_item(row.item_key) for row in record.rows if OPENS_CLOSED in row.marks}
     seen_state = {key_of_item(row.item_key): row.seen_state for row in record.rows if row.field == "sell"}
-    wrong, left_out, state_only = [], [], []
+    missed: dict[CellKey, list[bool]] = {}
+    for row in record.rows:
+        if row.written and not row.verified and row.rolled_back_by is None:
+            missed.setdefault(key_of_item(row.item_key), []).append(
+                left_out(row.marks, seen_kind(row.state, row.before, row.after, row.seen_state, row.seen), may_skip))
+    wrong, skipped, state_only = [], [], []
     for key, view in views.items():
         if not view.written or view.rolled_back_by is not None or not record.verified_at:
             continue
         if not view.verified:
-            if key in combo and (seen_state.get(key) in (None, "missing") or view.seen.get("sell") == view.before.sell):
-                left_out.append(key)
+            if all(missed.get(key) or [False]):
+                skipped.append(key)
             else:
                 wrong.append(key)
         elif view.before.state == "missing" and seen_state.get(key) not in (None, "closed" if key in opens_closed else "open"):
@@ -281,7 +285,7 @@ def season_check(record: ChangeRecord) -> dict:
         told = banner_counts(step.note) if step.status == "saved" else None
         steps.append(dict(no=step.index, label=step.label, predicted=predicted, told=told,
                           agree=told is not None and counts_agree(predicted, told)))
-    return dict(views=views, wrong=wrong, left_out=left_out, state_only=state_only, steps=steps)
+    return dict(views=views, wrong=wrong, left_out=skipped, state_only=state_only, steps=steps)
 
 
 def _counts_text(counts) -> str:

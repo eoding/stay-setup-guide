@@ -20,7 +20,7 @@ from change_core.ledger import LEDGER_ENV, Ledger, LedgerError  # noqa: E402
 from price_model import CellKey, CellValue, encode_snapshot, snapshot_reading  # noqa: E402
 from price_season import SeasonChoice, plan_season, recorded_request, season_steps, season_what  # noqa: E402
 from price_season import SeasonError  # noqa: E402
-from price_season_cli import next_call, season_rows, verify_season  # noqa: E402
+from price_season_cli import may_skip, next_call, season_rows, verify_season  # noqa: E402
 import season_pages  # noqa: E402
 
 DELUXE = ("디럭스", "조식 포함")
@@ -76,11 +76,11 @@ class SeasonLedgerTest(unittest.TestCase):
         change = self.record(snapshot, plan)
         self.apply(snapshot, plan, change, "가격을 넣었습니다 — 새로 0칸 · 덮어쓴 1칸 (룸 1개 × 1일).")
         after = replace(snapshot, cells={**before, CellKey(*DELUXE, "2026-12-01", "A2", 1): CellValue(D("180"), None, None, "open")})
-        mismatches = self.ledger.verify(change, snapshot_reading(after))
+        mismatches = self.ledger.verify(change, snapshot_reading(after), skippable=may_skip)
         self.assertTrue(verify_season(self.ledger, change, after, mismatches)["same"])
         other = self.record(snapshot, plan)
         self.apply(snapshot, plan, other, "가격을 넣었습니다 — 새로 1칸 · 덮어쓴 0칸 (룸 1개 × 1일).")
-        told = verify_season(self.ledger, other, after, self.ledger.verify(other, snapshot_reading(after)))
+        told = verify_season(self.ledger, other, after, self.ledger.verify(other, snapshot_reading(after), skippable=may_skip))
         self.assertEqual((told["same"], told["mismatches"], told["counts"][0]["agree"]), (False, [], False),
                          "값이 모두 맞아도 ERP 가 말한 칸 수가 다르면 같다고 하지 않는다")
 
@@ -89,7 +89,7 @@ class SeasonLedgerTest(unittest.TestCase):
         change = self.record(snapshot, plan)
         self.apply(snapshot, plan, change, "가격을 넣었습니다 — 새로 0칸 · 덮어쓴 1칸 (룸 1개 × 1일).")
         wrong = replace(snapshot, cells={CellKey(*DELUXE, "2026-12-01", "A2", 1): CellValue(D("179"), None, None, "open")})
-        told = verify_season(self.ledger, change, wrong, self.ledger.verify(change, snapshot_reading(wrong)))
+        told = verify_season(self.ledger, change, wrong, self.ledger.verify(change, snapshot_reading(wrong), skippable=may_skip))
         self.assertEqual((told["same"], [item["seen"] for item in told["mismatches"]]), (False, ["179"]))
 
     def test_left_out_combo_cells_are_accepted_and_a_state_only_difference_is_reported(self):
@@ -99,7 +99,7 @@ class SeasonLedgerTest(unittest.TestCase):
         change = self.record(snapshot, plan)
         self.apply(snapshot, plan, change, "가격을 넣었습니다 — 새로 1칸 · 덮어쓴 0칸 (룸 1개 × 1일).")
         only_adult = replace(snapshot, cells={CellKey(*DELUXE, "2026-12-01", "A2", 1): CellValue(D("180"), None, None, "closed")})
-        told = verify_season(self.ledger, change, only_adult, self.ledger.verify(change, snapshot_reading(only_adult)))
+        told = verify_season(self.ledger, change, only_adult, self.ledger.verify(change, snapshot_reading(only_adult), skippable=may_skip))
         self.assertEqual([item["key"]["occupancy"] for item in told["left_out"]], ["A2C1_CHD"], "ERP 가 조합으로 뺀 칸은 받아들인다")
         self.assertEqual(told["mismatches"], [])
         self.assertEqual([(item["want"], item["seen"]) for item in told["state_only"]], [("open", "closed")], "판매 상태만 다름")

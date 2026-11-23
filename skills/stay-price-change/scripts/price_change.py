@@ -531,9 +531,9 @@ def same_record_hotel(ledger: Ledger, change_id: int, now) -> None:
 def cmd_check(args):
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     same_record_hotel(ledger, args.change, now)
-    unit = season_cli.pair_unit if season_cli.is_season(ledger.change(args.change)) else None
+    season = season_cli.is_season(ledger.change(args.change))
     report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at,
-                          unit=unit)
+                          unit=season_cli.pair_unit if season else None, skippable=season_cli.may_skip if season else None)
     step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
     return dict(change_id=report.change_id, scope=listed(ledger, args.change)[0]["scope"], status=report.status, cause=report.cause,
                 note=report.note,
@@ -546,9 +546,10 @@ def cmd_check(args):
 def cmd_verify(args):
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     same_record_hotel(ledger, args.change, now)
-    mismatches = ledger.verify(args.change, snapshot_reading(now))
     if season_cli.is_season(ledger.change(args.change)):
+        mismatches = ledger.verify(args.change, snapshot_reading(now), skippable=season_cli.may_skip)
         return season_cli.verify_season(ledger, args.change, now, mismatches)
+    mismatches = ledger.verify(args.change, snapshot_reading(now))
     return dict(change_id=args.change, same=not mismatches, mismatches=[
         dict(key=key_fields(item.item_key), label=item.label, field=item.field, after=money_text(item.after),
              seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])

@@ -430,14 +430,31 @@ def _absent(item) -> bool:
     return item is None or item.state == "missing"
 
 
-def _field_seen(row, item) -> str:
-    """장부의 한 줄(넣은 필드 하나)을 방금 읽은 항목으로 — after 넣은 값 · before 전 값 · other 그 밖."""
-    seen = None if _absent(item) else item.fields.get(row["field"])
-    if not _absent(item) and seen == money(row["after"]):
+def seen_kind(state: str, before: Decimal | None, after: Decimal | None, seen_state: str | None, seen: Decimal | None) -> str:
+    """장부의 한 줄(넣은 필드 하나 — 그때 상태 · 전 값 · 넣은 값)을 다시 읽은 것(상태 · 값, 항목이 없으면 None)으로 — after 넣은 값 ·
+    before 전 값(없던 항목이면 지금도 없음) · other 그 밖. check · 확인 · 결과 페이지가 모두 이것으로 가린다."""
+    absent = seen_state in (None, "missing")
+    if not absent and seen == after:
         return "after"
-    if (row["state"] == "missing" and _absent(item)) or (row["state"] != "missing" and not _absent(item) and seen == money(row["before"])):
+    if (state == "missing" and absent) or (state != "missing" and not absent and seen == before):
         return "before"
     return "other"
+
+
+def _field_seen(row, item) -> str:
+    return seen_kind(row["state"], money(row["before"]), money(row["after"]), None if item is None else item.state,
+                     None if _absent(item) else item.fields.get(row["field"]))
+
+
+def left_out(marks: Iterable[str], kind: str, skippable: Callable[[tuple[str, ...]], bool] | None) -> bool:
+    """ERP 가 넣지 않을 수 있는 줄(`skippable(표시)` — 시즌 창이 객실의 허용 인원 조합 밖이면 그 칸을 만들지 않는다)이 전 값
+    그대로인지 — 그 줄은 저장이 됐는지에 대해 아무것도 말하지 않는다. 「이 저장이 됐다」의 뜻은 하나다: check 는 그 줄을 빼고
+    가리고(줄이 모두 그렇다면 저장 안 됨 — 다시 눌러도 그 칸은 그대로다), 확인은 그 줄을 다른 값으로 치지 않는다."""
+    return kind == "before" and skippable is not None and skippable(tuple(marks))
+
+
+def _marks(row) -> tuple[str, ...]:
+    return tuple(mark for mark in (row["marks"] or "").split(",") if mark)
 
 
 def _same_item(then, now) -> bool:
@@ -446,6 +463,7 @@ def _same_item(then, now) -> bool:
 
 @dataclass(frozen=True)
 class Mismatch:
+    """확인에서 넣은 값이 아닌 줄. `left_out` 은 ERP 가 넣지 않을 수 있는 줄이 전 값 그대로인 것이다(left_out — 다른 값이 아니다)."""
     item_kind: str
     item_key: str
     label: str
@@ -453,6 +471,7 @@ class Mismatch:
     after: Decimal | None
     seen: Decimal | None
     seen_state: str | None
+    left_out: bool = False
 
 
 def _body(data) -> str:
@@ -774,8 +793,9 @@ class Ledger:
                                    (row["hotel_id"], row["offer"], row["item_kind"], row["item_key"], row["field"]),
                                    money(row["before"]), row["state"] == "missing") for row in snapshots])
 
-    def verify(self, change_id: int, reading: Reading) -> list[Mismatch]:
-        """저장된 값을 방금 읽은 값과 견준다. 맞는 값은 확인됨으로 적고, 다른 값을 돌려준다. 되돌린 값은 보지 않는다."""
+    def verify(self, change_id: int, reading: Reading, skippable: Callable[[tuple[str, ...]], bool] | None = None) -> list[Mismatch]:
+        """저장된 값을 방금 읽은 값과 견준다. 맞는 값은 확인됨으로 적고, 다른 값을 돌려준다. 되돌린 값은 보지 않는다. ERP 가 넣지 않을
+        수 있는 줄(`skippable` — check 와 같은 뜻, left_out)이 전 값 그대로면 `left_out` 을 달아 돌려준다(다른 값이 아니다)."""
         mismatches = []
         with self._db() as db:
             for row in self._ours(db, self._header(db, change_id)):
@@ -785,7 +805,8 @@ class Ledger:
                 held = item is not None and item.state != "missing" and seen == after
                 if not held:
                     mismatches.append(Mismatch(row["item_kind"], row["item_key"], row["label"], row["field"], after, seen,
-                                               None if item is None else item.state))
+                                               None if item is None else item.state,
+                                               left_out(_marks(row), _field_seen(row, item), skippable)))
                 db.execute(f"UPDATE item_values SET verified = ?, seen = ?, seen_state = ? WHERE change_id = ? AND {ROW}",
                            (int(held), money_text(seen), None if item is None else item.state, change_id,
                             row["item_kind"], row["item_key"], row["field"]))
@@ -815,7 +836,7 @@ class Ledger:
         return moved
 
     def check(self, change_id: int, now: Reading, then: Reading, read_at: str,
-              unit: Callable[[str], str] | None = None) -> CheckReport:
+              unit: Callable[[str], str] | None = None, skippable: Callable[[tuple[str, ...]], bool] | None = None) -> CheckReport:
         """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
         해도 되는지, 어디까지 됐고 왜 멈췄는지.
 
@@ -823,7 +844,8 @@ class Ledger:
         가리거나 적지 않고 거절한다(적용 직전의 읽은 값은 그 뒤의 저장을 모른다).
 
         「모름」(눌렸고 저장됐는지 모르는 단계)은 읽은 값이 넣은 값 그대로면 저장됨으로, 전 값 그대로면 저장 안 됨으로 가려 적는다.
-        남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
+        저장 안 됨으로 적힌 단계 · 아직 적지 않은 단계도 칸이 모두 넣은 값이면 저장됨으로 적는다(누른 답을 잃었다). ERP 가 넣지 않을
+        수 있는 줄(`skippable` — left_out)은 확인과 같은 뜻으로 가린다. 남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
         바탕으로 삼은 읽은 값(`then`)과 모두 같고, 읽은 값이 IDLE 안의 것일 때뿐이다. 그러면 변경을 적용 중으로 두고 그 읽은
         값의 시각을 활동으로 적는다(IDLE 안이면 calls 가 남은 단계를 낸다). 아니면 멈춘 변경으로 둔다. `unit` 은 untouched 와 같다 —
         남은 저장의 칸은 그 저장이 다시 쓰는 단위 전부를 본다.
@@ -850,13 +872,16 @@ class Ledger:
             note = halt["note"]
         seen_steps, settle, moved_items = [], [], {}
         for step in steps:
-            kinds = {_field_seen(row, now.get((row["item_kind"], row["item_key"]))) for row in rows[step["idx"]]}
+            found = [(row, _field_seen(row, now.get((row["item_kind"], row["item_key"])))) for row in rows[step["idx"]]]
+            kinds = {kind for row, kind in found if not left_out(_marks(row), kind, skippable)} or {kind for _row, kind in found}
             seen = {frozenset({"after"}): "saved", frozenset({"before"}): "not_saved",
                     frozenset({"after", "before"}): "mixed"}.get(frozenset(kinds), "changed")
             state = "unknown" if step["status"] == "failed" and step["unknown"] else step["status"]
             if state == "saved" and seen != "saved":
                 seen = "changed"
-            settled = seen if state == "unknown" and seen in ("saved", "not_saved") else None
+            # 「모름」은 읽은 값대로 가린다. 저장 안 됨 · 아직 적지 않은 저장도 칸이 모두 넣은 값이면 저장된 것이다(답을 잃은 누름)
+            settled = (seen if state == "unknown" and seen in ("saved", "not_saved")
+                       else "saved" if state in ("failed", "pending") and seen == "saved" else None)
             if settled:
                 settle.append((step["idx"], settled))
             done = state == "saved" or settled == "saved"
@@ -876,8 +901,6 @@ class Ledger:
             remaining.append(step.index)
             if step.ledger == "unknown" and not step.settled:
                 why.append(f"{name}은 저장됐는지 가리지 못했습니다 — 칸이 {'일부만 넣은 값' if step.seen == 'mixed' else '넣은 값도 전 값도 아닌 값'}입니다")
-            elif step.seen == "saved":
-                why.append(f"{name}은 장부에 저장 안 됨인데 칸은 이미 넣으려던 값입니다")
             elif step.seen == "mixed":
                 why.append(f"{name}의 칸이 일부만 넣으려던 값입니다")
             elif step.seen == "changed" and not step.moved:

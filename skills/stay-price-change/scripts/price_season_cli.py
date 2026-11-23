@@ -258,20 +258,19 @@ def is_season(record) -> bool:
 # ─── verify ───
 
 
+def may_skip(marks) -> bool:
+    """ERP 가 넣지 않을 수 있는 칸 — 허용 인원 조합을 몰라 객실 조합으로 빠질 수 있다고 표시한 칸. check 와 확인이 이 한 뜻으로
+    「이 저장이 됐다」를 가린다(change_core.ledger.left_out)."""
+    return "combo_unknown" in marks
+
+
 def verify_season(ledger: Ledger, change_id: int, now: Snapshot, mismatches) -> dict:
-    """장부의 확인(그 변경이 넣은 칸마다 읽은 값이 넣은 값인지) 위에 — 허용 인원 조합을 몰라 ERP 가 뺐을 수 있는 칸은 칸이 없거나 전
-    값이면 받아들이고, 새 칸의 판매 상태가 짐작과 다르면 「판매 상태만 다름」, ERP 가 띠로 말한 칸 수를 예상과 견준다. 「확인했습니다」는
-    셋 다 맞을 때만이다."""
+    """장부의 확인(그 변경이 넣은 칸마다 읽은 값이 넣은 값인지 — `may_skip` 으로 부른 것) 위에 — ERP 가 넣지 않을 수 있는 칸이 전 값
+    그대로면(left_out) 받아들이고, 새 칸의 판매 상태가 짐작과 다르면 「판매 상태만 다름」, ERP 가 띠로 말한 칸 수를 예상과 견준다.
+    「확인했습니다」는 셋 다 맞을 때만이다."""
     record = ledger.change(change_id)
-    combo = {row.item_key for row in record.rows if "combo_unknown" in row.marks}
-    befores = {(row.item_key, row.field): row.before for row in record.rows}
-    accepted, remaining = [], []
-    for item in mismatches:
-        before = befores.get((item.item_key, item.field))
-        if item.item_key in combo and (item.seen_state in (None, "missing") or item.seen == before):
-            accepted.append(item)
-        else:
-            remaining.append(item)
+    accepted = [item for item in mismatches if item.left_out]
+    remaining = [item for item in mismatches if not item.left_out]
     state_only = []
     for row in record.rows:
         if not row.written or row.field != "sell" or row.state != "missing" or row.rolled_back_by:
