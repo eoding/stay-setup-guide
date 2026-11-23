@@ -19,7 +19,7 @@
 | `record-result` | `--change` · `--result` | `applyPromotion` 답 하나 → 장부에 됨 · 멈춤. `started: false` 답은 적지 않고 `wait` 를 돌려준다 |
 | `check` | `--change` · `--snapshot` | 멈춘 변경을 방금 읽은 값으로 본다(stopped.md). 남은 저장의 프로모션은 그 안의 모든 단 · 칸 · 표식을 본다 |
 | `verify` | `--change` · `--snapshot` | 적용 뒤 견주기. `mismatches` 넣은 값과 다른 단, `moved` 저장한 프로모션에서 그대로여야 할 것(다른 단의 값 · 딸린 칸 · 단의 화면 밖 설정 이름 · 표식)이 달라졌거나 없던 단이 생긴 것. 하나라도 있으면 종료 1. `names` 는 `plan` 의 것과 같은 셈 |
-| `rollback` | `--change` · `--snapshot` · `--include-kept` · `--promotion` (여러 번) · `--record` · `--replaces` · `--sentence` · `--out` | 되돌리기 계산. 그 변경이 넣은 값이 지금도 그대로인 단만 적어 둔 값(읽어 둔 표기 그대로)으로 돌리고, 그 사이 달라진 단은 그대로 두고 세 값과 까닭을 댄다. 지금 창에 표식이 없으면 저장 단계를 만들지 않고 거절한다 |
+| `rollback` | `--change` · `--snapshot` · `--include-kept` · `--promotion` (여러 번) · `--record` · `--replaces` · `--sentence` · `--out` | 되돌리기 계산. 그 변경이 넣은 값이 지금도 그대로인 단만 적어 둔 값(읽어 둔 표기 그대로)으로 돌리고, 그 사이 달라진 단은 그대로 두고 세 값과 까닭을 댄다. 되돌리기도 같은 규칙으로 되돌린다. 지금 창에 표식이 없으면 저장 단계를 만들지 않고 거절한다 |
 | `list` | `--look` · `--all` | 장부의 기록 목록, 새것부터 — 네 도우미(객실 가격 · 부가옵션 가격 · 부과금 · 프로모션 할인)의 기록이 한 장부에 있어 모두 나온다. 줄마다 `item_kind`(`promotion` …) · `helper`(그 기록을 맡는 도우미) · `scope`(범위 한 줄) · `line`(확인받을 때 읽어 주는 말) |
 
 ## 요청 파일
@@ -78,7 +78,7 @@
 
 - `plan`: `change_id` · `replaces` · `counts`(단 수와 판정마다) · `saves`(빨간 줄이 남았으면 null) · `red`(규칙마다 `examples` 의 `tier` · `name` · `moves`) · `chosen` · `blocked`(단마다 `rule` · `label` · `why`) · `gate`(표식 없는 프로모션마다 `name` · `said`) · `off`(화면 밖 설정이 붙은 단마다 한 문장) · `guest`(손님에게 닿는 것 한 문장) · `names` · `scope_card`.
 - `read`: `asked` · `found` · `missing` · `unmarked`.
-- `rollback`: `change_id` · `scope` · `restore_to` · `restored` · `kept` · `kept_why`(까닭마다 장부 번호 · 시각 · 문장 · `outside`) · `saves`.
+- `rollback`: `change_id` · `scope` · `restore_to` · `restored` · `kept` · `kept_why`(까닭마다 장부 번호 · 시각 · 문장 · `outside`) · `saves` · `undoing`(되돌리기를 되돌릴 때 먼저 할 말).
 
 ## 장부
 

@@ -125,7 +125,10 @@ class Flow(unittest.TestCase):
         again = self.roll_back(back, f"rollback-{back}.json")
         self.assertEqual(self.erp.data, after, "되돌리기를 되돌리면 도우미가 넣었던 값으로 돌아간다")
         lines = self.listed()
-        self.assertEqual(lines[again]["status"], "applied")
+        self.assertEqual((lines[again]["status"], lines[change]["status"]), ("applied", "applied"),
+                         "되돌리기를 되돌리면 처음 변경이 다시 적용된 것으로 읽힌다")
+        self.assertIn(f"되돌렸다가 다시 살림", lines[change]["scope"])
+        self.assertIn(f"장부 {back}번 · {again}번", lines[change]["scope"])
         return change, plan, posts, short
 
 
