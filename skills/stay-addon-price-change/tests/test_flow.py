@@ -444,6 +444,8 @@ class NothingToSaveTest(Flow):
                          "--resolutions", self.file("고름.json", [{"rule": "BELOW_COST", "choice": "keep", "said": "그 칸은 그냥 둬"}]), "--out", plan)
         self.assertEqual((short["saves"], short["counts"]["will_change"], short["counts"]["red"], short["counts"]["unchanged"]),
                          (0, 0, 0, 1))
+        self.assertEqual(short["nothing"], "고르신 대로면 바꿀 줄이 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다.",
+                         "W1 — 도우미가 그대로 하는 말. 고른 것이 있을 때만 「고르신 대로면」")
 
         text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
         self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", text)

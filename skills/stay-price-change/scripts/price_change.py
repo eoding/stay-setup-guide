@@ -67,7 +67,7 @@ from pathlib import Path
 
 from change_core import cli, files
 from change_core.answers import BrowserError, answers_for, attach_bodies, step_outcome, unanswered
-from change_core.chrome import page_text
+from change_core.chrome import nothing_to_save, page_text
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
@@ -78,16 +78,15 @@ from erp_read import PairRead, build_snapshot, parse_adjust_page, parse_price_pa
 from price_browser import (
     page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_calls, too_big,
 )
-from change_core.rules import BLOCKED
 from price_model import (
-    CELL_RULES, FIELDS, ITEM_KIND, CellKey, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request,
+    FIELDS, ITEM_KIND, CellKey, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request,
     decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_key, encode_plan, encode_request,
     encode_snapshot, encode_step, encode_unused, hotel_label, iso_day, key_of_item, line_label, request_range, same_hotel,
     snapshot_reading,
 )
 from price_compare import compare_counts, compare_saved, decode_comparison, encode_comparison
 from price_pages import (
-    EXAMPLES, cells_scope, chosen_lines, record_scope, record_what, red_lines, unused_lines, render_compare, render_prices, render_preview,
+    blocked_lines, cells_scope, chosen_lines, record_scope, record_what, red_lines, unused_lines, render_compare, render_prices, render_preview,
     render_result, render_rollback, render_sheet, result_name, scope_text,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
@@ -681,12 +680,12 @@ def short_plan(result: dict) -> dict:
     if result.get("kind") == "season_plan":
         return season_cli.short_plan(result)
     plan = decode_plan(result["plan"])
-    blocked = [dict(rule=rule.code, label=rule.label, cells=result["counts"][rule.code],
-                    examples=[encode_key(change.key) for change in plan.changes if change.verdict == rule.code][:EXAMPLES])
-               for rule in CELL_RULES.rules if rule.severity == BLOCKED and result["counts"][rule.code]]
-    short = dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
-                 saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
-                 unused=result["unused"], blocked=blocked, above_one_night_before=result["above_one_night_before"])
+    saves = None if result["steps"] is None else len(result["steps"])
+    short = dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"], saves=saves,
+                 red=result["red"], chosen=result["chosen"], unused=result["unused"], blocked=blocked_lines(plan),
+                 above_one_night_before=result["above_one_night_before"])
+    if saves == 0:   # 저장할 것이 없다 — 도우미가 그대로 하는 말(고른 빨간 줄이 있을 때만 「고르신 대로면」)
+        short["nothing"] = nothing_to_save(bool(result["counts"]["chosen"]))
     if isinstance(plan.request, TargetTable):   # 표에 인원 · 박수가 없던 목표는 명령이 고른 줄 — 담당자에게 어느 줄인지 말한다
         short["lines"] = list(dict.fromkeys(line_label(target.key.occupancy, target.key.nights) for target in plan.request.targets))
     if "coverage" in result:

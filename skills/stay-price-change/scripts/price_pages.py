@@ -24,7 +24,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
     MOVED_TAG, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
-    notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view,
+    nothing_to_save, notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view,
     stopped_choices, undo_hint, undoes, unremovable_table,
 )
 from change_core.files import record_progress
@@ -35,9 +35,9 @@ from change_core.rules import BLOCKED, RED
 from change_core.words import josa
 
 from price_model import (
-    CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
+    BLOCKED_WORDS, CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
     CellValue, ChangeRequest, Gap, ITEM_KIND, Plan, Snapshot, cell_item_key, cell_name, day_label, decode_request, decode_unused, key_of_item,
-    line_label, nights_label, occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
+    blocked_said, line_label, nights_label, occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
 from price_compare import MOVED, Comparison, compare_counts
 from price_plan import counts, day_runs, days_summary
@@ -254,7 +254,10 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
 
     targets = isinstance(request, TargetTable)
     sheet = targets and request.from_sheet
-    what = (f"{'새 요금표' if sheet else '목표 값'} {len(request.targets):,}칸" if targets else operation_label(request, currency))
+    # 목표 값 · 새 요금표의 「N칸」은 저장이 넣는 칸 — 장부 한 줄(record_what, 장부의 planned)과 같은 수다(시운전 11 — 머리는 1칸,
+    # 장부는 0칸이었다). 요청한 칸 수는 아래 요청 상자의 「목표 값」이 말한다.
+    what = (f"{'새 요금표' if sheet else '목표 값'} {sum(1 for change in plan.changes if change.writes):,}칸" if targets
+            else operation_label(request, currency))
     title = f"미리보기 · {request.hotel} · {request.offer} · {what}"
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 것입니다'
@@ -306,12 +309,12 @@ APPLY_INVITE = '말씀이 없으면 아무것도 바뀌지 않습니다. 대화�
 
 def _ending(tally: Mapping) -> str:
     """미리보기의 끝 — 지금 담당자가 할 일. 고를 빨간 줄이 남았으면 그것이 먼저이고 "적용"을 청하지 않는다(Y3). 저장할 칸이 없으면
-    적용할 것이 없다고 한다."""
+    적용할 것이 없다고 한다 — 고른 빨간 줄이 있을 때만 「고르신 대로면」(nothing_to_save, plan 의 답 `nothing` 과 같은 말)."""
     if tally["red"]:
         return (f'<div class="banner red"><b>아직 적용할 수 없습니다.</b> 먼저 빨간 줄 {tally["red"]:,}칸을 어떻게 할지 대화창에서 '
                 "말씀해 주세요(고를 것은 위의 빨간 띠에 있습니다). 고르시면 미리보기를 다시 보여 드립니다.</div>")
     if not tally["will_change"]:
-        return '<div class="banner blue">바꿀 칸이 없어 적용할 것이 없습니다. 아무것도 바뀌지 않았습니다.</div>'
+        return f'<div class="banner blue">{esc(nothing_to_save(bool(tally["chosen"])))}</div>'
     return f'<div class="banner blue">{APPLY_INVITE}</div>'
 
 
@@ -485,6 +488,20 @@ HELD_NOTE = ("아동이 든 칸은 같은 날 · 같은 박수 층의 성인만 
              "가격 가감]과 같습니다). 그 성인 칸을 바꾸면 이 칸도 바뀝니다.")
 
 
+def blocked_lines(plan: Plan) -> list[dict]:
+    """적용할 수 없는 칸 — 규칙마다 이름 · 칸 수 · 칸의 예 몇 · 담당자에게 하는 말(`said` — 까닭과 대신 할 수 있는 것, price_model
+    .BLOCKED_WORDS). 미리보기의 띠와 plan 의 답이 같은 말을 쓴다(도우미는 이 말을 그대로 전한다)."""
+    out = []
+    for rule in CELL_RULES.rules:
+        cells = [change for change in plan.changes if change.verdict == rule.code]
+        if rule.severity != BLOCKED or not cells:
+            continue
+        out.append(dict(rule=rule.code, label=rule.label, cells=len(cells),
+                        examples=[encode_key(change.key) for change in cells[:EXAMPLES]],
+                        said=blocked_said(rule.code, len(cells), cell_name(cells[0].key))))
+    return out
+
+
 def red_lines(plan: Plan) -> list[dict]:
     """아직 고르지 않은 빨간 줄 — 규칙마다 칸 수, 고를 것(담당자에게 말하는 이름, 「정가도 같이 올림」은 첫 칸의 예와 함께), 칸의 예
     몇. 미리보기의 띠와 plan 의 답이 같은 말을 쓴다(도우미는 이 말을 그대로 전한다)."""
@@ -538,11 +555,10 @@ EXAMPLES = 3   # 빨간 줄마다 plan 의 답에 싣는 칸의 예
 def _preview_banners(plan: Plan, tally: Mapping) -> str:
     """머리 띠 — 적용할 수 없는 칸, 아직 고르지 않은 빨간 줄(규칙마다), 고른 빨간 줄(규칙마다, 고른 것과 그 칸의 예 하나)."""
     out = []
-    blocked = [rule for rule in CELL_RULES.rules if rule.severity == BLOCKED and tally[rule.code]]
+    blocked = "".join(f"<li>{esc(line['said'])}</li>" for line in blocked_lines(plan))
     if blocked:
-        reasons = " · ".join(f"{rule.label} {tally[rule.code]}칸" for rule in blocked)
-        out.append(f'<div class="banner amber"><b>적용할 수 없음 · {tally["blocked"]}칸</b> ERP 가 받지 않는 값이라 이 칸은 '
-                   f'바꾸지 않습니다. ({esc(reasons)})</div>')
+        out.append(f'<div class="banner amber"><b>적용할 수 없음 · {tally["blocked"]}칸</b> 이 칸은 저장하지 않습니다(고를 것이 '
+                   f'아닙니다).<ul class="notes">{blocked}</ul></div>')
     if tally["held"]:
         out.append(f'<div class="banner amber"><b>같이 그대로 · {tally["held"]}칸</b> {esc(CELL_RULES.by_code["ADULT_HELD"].label)} '
                    f'— {esc(HELD_NOTE)}</div>')
@@ -618,13 +634,16 @@ def _flagged_section(plan: Plan, currency: str) -> str:
 
 
 def _new_section(plan: Plan, currency: str) -> str:
-    fresh = [change for change in plan.changes if NEW in change.marks]
+    """새로 생기는 칸 — 저장이 만들 칸만(적용할 수 없는 칸 · 같이 그대로 두는 칸 · 안 바꾸기로 고른 칸은 생기지 않는다 — counts 의
+    `new` 와 같은 칸)."""
+    fresh = [change for change in plan.changes if NEW in change.marks
+             and CELL_RULES.severity(change.verdict) not in (BLOCKED, HELD) and change.choice != "keep"]
     if not fresh:
         return ""
     rows = []
     for change in fresh:
         rule = CELL_RULES.by_code.get(change.verdict)
-        status = "만듭니다" if rule is None else f"{'적용할 수 없음' if rule.severity == BLOCKED else '빨간 줄'} · {rule.label}"
+        status = "만듭니다" if rule is None else f"빨간 줄 · {rule.label}"
         after = change.after or change.before
         rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(after.sell, currency)}</td>'
                     f'<td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'

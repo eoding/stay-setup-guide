@@ -476,6 +476,13 @@ def chosen_table(entries: Iterable[tuple[str, str, int, str | None]], unit: str 
             f'<th>고르실 때 하신 말</th></tr>{rows}</table></div>')
 
 
+def nothing_to_save(chosen: bool, unit: str = "칸") -> str:
+    """저장할 것이 없는 미리보기에서 담당자에게 하는 말(네 도우미) — 빨간 줄을 고른 것이 있으면 「고르신 대로면」, 고른 것이 없으면
+    (바꿀 수 없는 것뿐이거나 바뀌는 것이 없음) 그 말 없이(시운전 11 — 아무것도 고르지 않았는데 「고르신 대로면」이라고 했다)."""
+    lead = f"고르신 대로면 바꿀 {unit}이" if chosen else f"바꿀 수 있는 {unit}이"
+    return f"{lead} 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다."
+
+
 ROLLBACK_NOTE = "이 되돌리기도 장부에 한 번의 변경으로 적혀서, 다시 되돌릴 수 있습니다 — 되돌리면 지금 값으로 돌아갑니다."
 
 

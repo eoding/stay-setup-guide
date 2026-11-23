@@ -179,5 +179,45 @@ class TargetPageAndCommandTest(unittest.TestCase):
             self.assertEqual(result["plan"]["changes"][0]["key"], encode_key(key("2027-01-02", room="스위트", plan="룸온리")))
 
 
+class RowNotThereTest(unittest.TestCase):
+    """W1 (시운전 11) — 이 객실 · 요금제에 없는 줄(「성인 2 · 5박 이상」)의 값을 넣으라면 막는다(`NEW_NOT_SHOWN`). 그 칸은 생기지 않으니
+    「새로 생기는 칸」으로 세지도 · 늘어놓지도 · 되돌려도 지울 수 없다고 하지도 않는다(예약 있는 날이어도 「바꿉니다」로 세지 않는다).
+    까닭은 줄이 없다는 것이고 금액을 바꾸라고 하지 않으며, 대신 할 수 있는 것(ERP 에서 사람이 만듦 · 시즌 다시 채우기)을 댄다.
+    아무것도 고르지 않았으니 「고르신 대로면」이라고 하지 않는다. 미리보기 머리의 칸 수와 장부 한 줄의 칸 수가 같다."""
+
+    def test_a_row_the_room_does_not_have_is_refused_in_true_words_and_never_counted_as_created(self):
+        missing = key("2026-12-25", nights=5)   # 디럭스 · 조식 포함 · 12/25 는 예약 있는 날이다
+        plan = plan_targets(scene.snapshot(), table((missing, {"sell": "45.00"})))
+        tally = counts(plan.changes)
+        self.assertEqual({name: tally[name] for name in ("blocked", "NEW_NOT_SHOWN", "new", "reserved", "will_change")},
+                         {"blocked": 1, "NEW_NOT_SHOWN": 1, "new": 0, "reserved": 0, "will_change": 0})
+        text = visible(render_preview(plan))
+        for wrong in ("새로 생기는 칸", "지울 수 없", "ERP 가 받지 않는 값", "금액을 바꿔 다시", "고르신 대로면", "예약 있는 날의 칸"):
+            self.assertNotIn(wrong, text)
+        for said in ("미리보기 · 데모 호텔 · 기본 오퍼 · 목표 값 0칸", "금액을 바꿔도 같습니다", "「추가할 인원 조합」",
+                     "바꿀 수 있는 칸이 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다."):
+            self.assertIn(said, text)
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            (folder / "s.json").write_text(json.dumps(encode_snapshot(scene.snapshot()), ensure_ascii=False), encoding="utf-8")
+            (folder / "t.json").write_text(json.dumps(encode_request(table((missing, {"sell": "45.00"}))), ensure_ascii=False),
+                                           encoding="utf-8")
+            cli = [sys.executable, str(HERE.parent / "scripts" / "price_change.py")]
+            done = subprocess.run([*cli, "plan", "--record", "--snapshot", str(folder / "s.json"), "--request", str(folder / "t.json"),
+                                   "--out", str(folder / "plan-1.json")], capture_output=True, text=True, env=scene.env(str(folder)))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            short = json.loads(done.stdout)
+            self.assertEqual((short["saves"], short["counts"]["new"], [line["rule"] for line in short["blocked"]]), (0, 0, ["NEW_NOT_SHOWN"]))
+            self.assertEqual(short["blocked"][0]["said"],
+                             "적용할 수 없는 1칸(12/25 금 · 디럭스 · 조식 포함 · 성인 2 · 5박 이상)은 이 객실 · 요금제에는 그 인원 조합 · 박수 "
+                             "줄이 없어 넣을 수 없습니다 — 금액을 바꿔도 같습니다. 그 줄은 ERP 에서 사람이 만듭니다 — 그날 가격 수정 창의 "
+                             "「추가할 인원 조합」이나 시즌의 [가격 입력] 창에서요. 박수 층이면 그 시즌을 다시 채우라고 하실 때 도우미가 만들 수 "
+                             "있습니다.")
+            self.assertEqual(short["nothing"], "바꿀 수 있는 칸이 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다.")
+            listed = subprocess.run([*cli, "list", "--all"], capture_output=True, text=True, env=scene.env(str(folder)))
+            line, = [entry["line"] for entry in json.loads(listed.stdout)["changes"]]
+            self.assertTrue(line.endswith("· 목표 값 0칸 · 저장할 것 없음"), line)
+
+
 if __name__ == "__main__":
     unittest.main()

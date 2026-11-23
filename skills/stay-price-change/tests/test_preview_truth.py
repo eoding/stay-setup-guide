@@ -291,7 +291,7 @@ class NothingToSaveTest(CommandCase):
 
         page = Path(self.run_cli("render", "preview", "--plan", self.dir / "plan.json", "--out", self.dir / "preview.html")["page"])
         text = " ".join(re.sub(r"<[^>]+>", " ", re.sub(r"<style>.*?</style>", " ", page.read_text(encoding="utf-8"), flags=re.S)).split())
-        self.assertIn("바꿀 칸이 없어 적용할 것이 없습니다", text)
+        self.assertIn("고르신 대로면 바꿀 칸이 없어 저장할 것이 없습니다. 아무것도 바뀌지 않았습니다.", text)
         self.assertIn("고르신 대로면 바꿀 칸이 없어 아무것도 저장하지 않습니다", text)
         for said in ("고르신 대로 저장합니다", "저장합니다(", "\"적용\"이라고 하시면", "나눠 저장합니다"):
             self.assertNotIn(said, text, "저장할 것이 없는 미리보기는 저장한다고도, 적용하라고도 말하지 않는다")

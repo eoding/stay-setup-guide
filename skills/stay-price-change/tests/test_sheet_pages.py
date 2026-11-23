@@ -68,7 +68,8 @@ class SheetPreviewTest(unittest.TestCase):
     def test_the_preview_lists_what_the_sheet_leaves_out_and_the_season_refill_sentence(self):
         plan = plan_sheet(S.reading(), SheetCheck(decode_sheet(S.sheet_data()), PAIRS))
         text = visible(render_preview(plan))
-        self.assertIn("미리보기 · 데모 호텔 · 기본 오퍼 · 새 요금표 108칸", text)
+        self.assertIn("미리보기 · 데모 호텔 · 기본 오퍼 · 새 요금표 80칸", text, "W1 — 머리의 칸 수는 저장이 넣는 칸(장부 한 줄과 같은 수)")
+        self.assertIn("목표 값 108칸", text, "요청 상자는 요금표가 준 칸 수")
         self.assertIn(SEASON_REFILL_NOTE, text)
         self.assertIn("요금표가 넣지 않는 것", text)
         self.assertIn("요금표에 없는 칸 — 그대로 둡니다 · 13칸 객실 · 요금제 인원 · 박수 날짜 요금표 줄 "

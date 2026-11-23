@@ -334,7 +334,9 @@ def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
     """미리보기 머리 숫자. `cells` 는 계산한 칸, `will_change` 는 그중 저장할 칸(적용할 수 없는 칸 · 같이 그대로 두는 칸 · 안 바꾸기로
     고른 칸을 뺀 수, 아직 고르지 않은 빨간 줄은 든다), `held` 는 성인만 있는 칸을 따라 같이 그대로 두는 아동 칸, `red` 는 아직 고르지
     않은 빨간 줄, `chosen` 은 고른 빨간 줄, 고름마다(`raise_list` 등) 그 수, `new` 는 새로 생기는 칸. 규칙 코드마다의 수는 고르기
-    전이든 뒤든 그 규칙에 걸린 칸이다."""
+    전이든 뒤든 그 규칙에 걸린 칸이다. 칸의 표시(`new` 새로 생김 · `reserved` 예약 있는 날 · `closed` 판매 마감)는 저장이 바꿀 칸
+    (`will_change` 에 드는 칸)만 센다 — 적용할 수 없는 칸을 「새로 생기는 칸」으로 세면 생기지도 않을 칸을 되돌려도 지울 수 없다고
+    말하게 된다(시운전 11)."""
     tally = dict(cells=len(changes), will_change=0, blocked=0, held=0, red=0, chosen=0, reserved=0, closed=0, new=0, skipped=skipped)
     tally.update({rule.code: 0 for rule in CELL_RULES.rules})
     tally.update({choice: 0 for choice in CHOICES})
@@ -342,14 +344,15 @@ def counts(changes: Sequence[CellChange], skipped: int = 0) -> dict:
         severity = CELL_RULES.severity(change.verdict)
         tally["blocked"] += severity == BLOCKED
         tally["held"] += severity == HELD
-        tally["will_change"] += severity not in (BLOCKED, HELD) and change.choice != "keep"
+        writes = severity not in (BLOCKED, HELD) and change.choice != "keep"
+        tally["will_change"] += writes
         tally["red"] += change.waiting
         if change.verdict:
             tally[change.verdict] += 1
         if change.choice:
             tally["chosen"] += 1
             tally[change.choice] += 1
-        for mark in change.marks:
+        for mark in change.marks if writes else ():
             tally[mark] += 1
     return tally
 

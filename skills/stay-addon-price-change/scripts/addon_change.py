@@ -58,7 +58,7 @@ from addon_plan import (
 )
 from change_core import cli, files
 from change_core.answers import BrowserError, answers_for, attach_bodies, reading_time, step_outcome, unanswered
-from change_core.chrome import page_text
+from change_core.chrome import nothing_to_save, page_text
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError
@@ -451,9 +451,14 @@ def short_read(result: dict) -> dict:
 
 
 def short_plan(result: dict) -> dict:
-    return dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
-                saves=None if result["steps"] is None else len(result["steps"]), red=result["red"], chosen=result["chosen"],
-                blocked=result["blocked"], names=result["names"], scope_card=result["scope_card"])
+    """`nothing` 은 저장할 것이 없을 때(`saves` 0)만 — 도우미가 그대로 하는 말(빨간 줄을 고른 것이 있을 때만 「고르신 대로면」)."""
+    saves = None if result["steps"] is None else len(result["steps"])
+    short = dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"], saves=saves,
+                 red=result["red"], chosen=result["chosen"], blocked=result["blocked"], names=result["names"],
+                 scope_card=result["scope_card"])
+    if saves == 0:
+        short["nothing"] = nothing_to_save(bool(result["counts"]["chosen"]), UNIT)
+    return short
 
 
 def short_rollback(result: dict) -> dict:

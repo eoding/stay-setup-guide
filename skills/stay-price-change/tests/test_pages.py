@@ -119,7 +119,7 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
         nothing = resolve(plan_change(scene.snapshot(), scene.request(rooms=("스위트",), rate_plans=("조식 포함",),
                                                                       dates=("2027-01-01",), occupancies=("A2",), nights=(1,))),
                           [Resolution("ABOVE_LIST", "keep")])
-        self.assertIn("바꿀 칸이 없어 적용할 것이 없습니다.", ending(nothing))
+        self.assertIn("고르신 대로면 바꿀 칸이 없어 저장할 것이 없습니다.", ending(nothing))
         self.assertNotIn("이라고 하시면 바꿉니다", ending(nothing))
 
     def test_v5_notes_about_reserved_and_closed_days_only_when_the_plan_has_such_cells(self):
@@ -147,7 +147,8 @@ class PreviewPageTest(SelfContainedMixin, unittest.TestCase):
                             frozenset(), frozenset({("R", "P")}))
         plan = plan_change(snapshot, ChangeRequest("H", "O", ("R",), ("P",), ("2026-12-25",), "amount", D("-60000")))
         text = visible(render_preview(plan))
-        self.assertIn("적용할 수 없음 · 1칸 ERP 가 받지 않는 값이라 이 칸은 바꾸지 않습니다. (0 이하가 됩니다 1칸)", text)
+        self.assertIn("적용할 수 없음 · 1칸 이 칸은 저장하지 않습니다(고를 것이 아닙니다). 적용할 수 없는 1칸(12/25 금 · R · P · 성인 2 · "
+                      "1박 이상)은 계산하면 판매가가 0 이하가 되어 바꿀 수 없습니다. 금액을 바꿔 다시 말씀해 주세요.", text)
         self.assertIn("50,000 적용할 수 없음", text)
         self.assertIn("90,000 → 30,000 30% 넘음", text)
         self.assertIn("판매가 -60,000 KRW", text)
