@@ -30,7 +30,7 @@ SKILL.md 가 이 파일을 여는 때: 「읽기」나 「적용하기」의 명
 - **`record-result` 가 저장이 안 됐다고 하거나 `status: stopped`** — 다음 저장을 하지 않는다. [stopped.md](stopped.md) 로 간다. 15분 동안 아무 일이 없던 변경은 그 뒤 저장이 돼도 멈춘 채로 적힌다.
 - **`calls` 가 `…번 변경은 멈춰 있습니다`** — [stopped.md](stopped.md). 다시 읽어 `check` 가 이어서 해도 된다고 하면 `calls` 를 다시 부른다.
 - **`verify` 가 종료 1(`same: false`)** — "적용했지만 다시 읽었더니 <`mismatches` 의 수>칸이 넣은 값과 다릅니다. 페이지의 빨간 칸을 ERP 에서 확인해 주세요." 다시 저장하지 않는다.
-- **시즌 다시 채우기의 `calls` 가 `…초 전 것입니다` · `…앞에 읽은 것입니다`** — 아무것도 내지 않았다. 그 저장의 범위를 `read-calls --record N --step k` 로 새 읽기 폴더에 다시 읽고 `calls --change N --snapshot` 을 다시 한다([season-fill.md](season-fill.md) 5 의 2).
+- **시즌 다시 채우기의 `calls` 가 `…초 전 것입니다` · `…앞에 읽은 것입니다`** — 아무것도 내지 않았다. 그 저장의 범위를 `read-calls --record N --step k` 로 새 읽기 폴더에 다시 읽고 `calls --change N --snapshot` 을 다시 한다([season-fill.md](season-fill.md) 5 의 2 — 다시 할 때의 폴더 · 파일 이름도 거기에 있다). `applySeason` 의 답이 `expired: true` 일 때도 같다: 아무것도 누르지 않았고 장부에도 적히지 않았다.
 - **시즌 다시 채우기의 `calls` 가 `stopped: true`** — 그 저장의 칸이 미리보기 뒤에 ERP 에서 바뀌어 아무것도 누르지 않았고 변경이 멈췄다. `differences` 의 수를 말하고 [stopped.md](stopped.md).
 - **`applySeason` 이 `saved: "unknown"`** — [가격 적용]은 눌렸고 ERP 가 아직 답하지 않았다. 다시 부르지 않는다. "시즌 창의 [가격 적용]은 눌렸고 ERP 가 아직 답하지 않았습니다. 다시 누르지 않습니다. ERP 가 끝나면 다시 읽어 저장됐는지 확인하겠습니다." 그리고 [stopped.md](stopped.md) — 다음 읽기는 그 요청이 끝날 때까지 `started: false` 로 기다린다.
 
