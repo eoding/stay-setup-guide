@@ -47,7 +47,7 @@ metadata:
 담당자가 시킨 일 하나(보기 · 저장 · 바꾸기 · 되돌리기 · 견주기 — 같은 대화의 두 번째 요청도)마다 3 부터 새 작업 폴더에서 한다. 그 일의 폴더를 그대로 쓰는 때는 둘뿐이다 — 방금 멈춘 변경을 이어서 할 때, 견주기 바로 다음에 되돌릴 때(compare.md 5). 이 일의 `look.json` 을 `--look` 으로 받는 명령은 `list` · `sheet` · `rooms` 다.
 
 1. **브라우저 도구.** JS 실행 · 파일 올리기 · 스크린샷 · 탭 보기가 되는지 본다(Claude in Chrome 이면 `javascript_tool` · `file_upload` · `computer` · `tabs_context_mcp`).
-2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`)마다.
+2. **도우미 올리기.** 탭마다 처음에, 그리고 이동 뒤(새로 고침 · 로그인 · 다른 화면에 갔다 옴, 또는 작업 답이 `stayPrice is not defined`)마다. 시즌 창 묶음도 같은 때다(season-fill.md 1) — 이동 없이 같은 탭이면 다시 하지 않는다.
    1. JS 실행 도구로 `scripts/page/stay_price_loader.js` 의 내용 전체 뒤에 한 줄 `stayPriceLoader.again()` 을 붙여 한 번에 실행한다. 이 탭에 적어 둔 원본이 설치된 도우미와 같을 때만 실행하므로 안전하다. `ok: true` 와 `helper`·`price` 판 번호(`0·15·0` 꼴)가 오면 됐다.
    2. 거절하면(`적어 둔 원본이 없습니다` · `…설치된 도우미와 다릅니다` — 아무것도 실행되지 않았다) 답의 `want` 파일(이 탭에 없거나 예전 판인 것만 — 셋은 러너의 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js`, 이 스킬의 `scripts/page/stay_price.js`)을 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load()`. 이름이 다른 파일 칸(ERP 사진 칸, 러너의 `stay file bridge`)에는 올리지 않는다. 도구가 경로를 거절하거나 `load()` 가 `ok: true` 가 아니면 page.md 「올리기」.
 3. **작업 폴더.** `python3 scripts/price_change.py work` 의 `work` 가 이 일의 `<작업>` 이다(장부가 있는 기록 폴더 안). 그 일의 읽기(미리보기 · 적용 직전 · 적용 뒤 · 멈췄을 때)는 모두 그 안의 `읽기-1`, `읽기-2` …(폴더는 명령이 만든다). 경로에 빈칸과 `·` 가 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다(`--out "<작업>/plan-1.json"`).

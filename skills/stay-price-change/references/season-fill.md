@@ -8,11 +8,11 @@ SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가
 
 ## 1. 준비 · 창 읽기
 
-1. SKILL.md 「준비」 1 ~ 5. 2 의 올리기는 시즌 창 묶음이다 — 올리개 뒤에 `stayPriceLoader.again('season')` 한 줄을 붙여 실행하고, 거절하면 답의 `want` 파일을 「stay price file bridge」 칸에 올려 `await stayPriceLoader.load('season')` — 자리는 이 스킬 폴더에서 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `scripts/page/stay_price.js` · `scripts/page/stay_price_season.js` 이고, 이 스킬 폴더의 절대 경로를 붙여 온전한 경로로 올린다(page.md 「올리기」).
+1. SKILL.md 「준비」 1 ~ 5. 2 의 올리기는 시즌 창 묶음이다 — 언제 하는지는 SKILL.md 「준비」 2 와 같다(탭마다 처음에, 그리고 이동 뒤 · `stayPriceSeason is not defined` 일 때). 같은 탭에서 이동 없이 두 번째 시즌 일을 하면 다시 하지 않는다 — 올라 있는지는 `stayPriceLoader.status('season')` 의 `ok: true` 와 `season` 판 번호로 본다. 할 때는 올리개 뒤에 `stayPriceLoader.again('season')` 한 줄을 붙여 실행하고, 거절하면 답의 `want` 파일을 「stay price file bridge」 칸에 올려 `await stayPriceLoader.load('season')` — 자리는 이 스킬 폴더에서 `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `scripts/page/stay_price.js` · `scripts/page/stay_price_season.js` 이고, 이 스킬 폴더의 절대 경로를 붙여 온전한 경로로 올린다(page.md 「올리기」).
 2. 시즌 이름을 묻는다(오퍼는 `look` 의 답에서). `await stayPriceSeason.readSeason({hotel: <look 의 hotel>, offer: "<오퍼>", season: {name: "<시즌 이름>"}})` 의 답을 `<작업>/look/season-1.json` 에 저장한다(look 답과 같은 폴더 — `work` 가 만들어 두었다). 도구가 답을 버렸으면 같은 값으로 다시 부른다 — 창을 열어 읽기만 하고 아무것도 저장하지 않는다. 이름이 같은 시즌이 둘이면 답이 시즌 번호를 대며 거절한다 — `season: {id: "<번호>"}` 로 다시 부른다.
 3. `python3 scripts/price_change.py season --answers "<작업>/look" --out "<작업>/season.json"`.
    - 종료 2 의 `ask` 는 같은 오퍼의 다른 시즌이다(그 날에도 드는 칸을 미리보기가 말한다) — 값마다 `stayPriceSeason.readSeason(<값 그대로>)` 의 답을 같은 폴더의 `season-2.json`, `season-3.json` … 에 저장하고 다시 한다. `refetch` 는 SKILL.md 「읽기」 5 처럼 받되 `stayPriceSeason.take` 로 받는다.
-   - 짧은 답의 `pairs` 가 창이 고를 수 있는 객실 · 요금제(캘린더 이름, `base` 는 기준 요금제), `child` 가 아동 칸(`amount` 고칠 수 있음 · `percent` 비율로 셈 · `none` 깔리지 않음), `last_fill_note` 가 창에 남은 마지막 입력값이다.
+   - 짧은 답의 `pairs` 가 창이 고를 수 있는 객실 · 요금제(캘린더 이름, `base` 는 기준 요금제), `child` 가 아동 칸(`amount` 고칠 수 있음 · `percent` 비율로 셈 · `none` 깔리지 않음), `last_fill_note` 가 창에 남은 마지막 입력값이다. `combos_unknown` 은 허용 인원 조합을 모르는 객실이다 — 창의 객실 타입이 모두 「조합 제한 없음」이면 객실 이름이 타입 이름과 달라도 비어 있다(빠질 칸이 없다). `banner` 는 시즌 목록에 남은 띠가 이 시즌의 저장의 것일 때만 「장부 N번 k번째 저장의 띠: …」로 온다(다른 시즌의 띠는 싣지 않는다) — 읽어 주지 않아도 된다.
 
 ## 2. 요청
 
@@ -23,7 +23,7 @@ SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가
 
 1. `read-calls --request "<작업>/request.json" --season "<작업>/season.json"` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`. 읽기 한 번에 들지 않으면 저장을 객실끼리 나눠 요청을 둘 이상 쓰고 하나씩 한다(저마다 변경 하나).
 2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --season "<작업>/season.json" --record --out "<작업>/plan-1.json"` → `change_id` 가 N, `saves` 는 창을 누를 횟수(고를 것이 남았으면 null), `per_save` 는 저장마다 걸린 규칙 · 바구니(`rules`)와 거절한 입력(`refused`).
-3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸 · 새로 생기는 칸 · 날짜별로 바꿔 둔 칸 · 예약 있는 날의 칸 · 다른 시즌 날의 칸 · 판매 마감인 칸 · 이번 채우기에 없는 예전 칸 · 판매일 없는 날의 칸 · 요금표와 다르게 채워지는 칸 수를 말한다(0 인 것은 뺀다).
+3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸 · 새로 생기는 칸 · 날짜별로 바꿔 둔 칸 · 예약 있는 날의 칸 · 다른 시즌 날의 칸 · 판매 마감인 칸 · 이번 채우기에 없는 예전 칸 · 판매일 없는 날의 칸 · 요금표와 다르게 채워지는 칸 · 객실 조합으로 빠질 수 있는 칸(`combo_unknown` — 도우미의 짐작, 어느 칸인지는 페이지에 있다) 수를 말한다(0 인 것은 뺀다).
 4. "적용"을 청하기 전에 해당되는 것을 꼭 말한다.
    - "새로 생기는 칸 ○칸은 되돌려도 지울 수 없습니다(ERP 에 칸을 지우는 길이 없습니다)."
    - "되돌리기는 가격 캘린더에서 날짜별로 전 값을 다시 넣는 것입니다. 시즌 창의 마지막 입력값은 이번에 친 값으로 남고, 덮인 칸이 원래 어느 시즌 것이었는지와 ERP 의 '손입력' 표시는 되돌아가지 않습니다."
@@ -39,6 +39,7 @@ SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가
 - 빨간 줄(`NEW_ROW` 없던 줄이 생김 · `ABOVE_LIST` · `ABOVE_ONE_NIGHT` · `BELOW_COST` · `OVER_30` · `SHEET_DIFFERS` 요금표와 다르게 채워짐)은 셋 다. 막힘(`NOT_POSITIVE` · `NEGATIVE_SUPPLY` · `WHOLE_UNIT_FRACTION` 원화처럼 소수 없는 통화의 소수)은 그 날은 빼고 채움 · 요청을 고침, `ERP_REFUSES`(창이 거절할 입력 — `refused` 의 ERP 문장을 그대로 말한다)는 요청을 고침뿐이다.
 - 바구니(`helper_edited` · `looks_edited` · `reserved` · `other_season` · `left_old`)는 빨간 줄이 아니다. 담당자가 그 칸을 지키자고 하면 그 날은 빼고 채움을 낸다.
 - `SHEET_DIFFERS` 를 이대로 채우면 채운 뒤 그 칸들을 날짜별 변경으로 맞추는 것을 바로 내놓는다(6).
+- **말하는 법.** 고를 것이 남은 규칙마다 짧은 답의 `per_save[].rules[].said` 를 그대로 말한다 — 몇 번째 저장의 몇 칸 · 며칠, 이름(`label`), 칸의 예, 고를 것이 들어 있다(미리보기의 빨간 띠와 같은 말). 공급 원가 규칙은 채우기 전부터 공급 원가보다 쌌던 칸이면 이름이 「이미 공급 원가보다 쌉니다 — 이번에도 그대로」다(일부면 그 수가 붙는다). 도우미가 물음을 지어 말하지 않는다. 고른 뒤 미리보기를 말할 때는 고른 규칙마다 "1번째 저장의 ○칸은 고르신 대로 이대로 채웁니다(그 날은 빼고 채웁니다)"라고 한다. 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는 것, "알아서 해"는 고름이 아닌 것은 [red-lines.md](red-lines.md) 와 같다.
 - 고름은 담당자의 말에서만 나온다. `<작업>/choices-<k>.json`([commands.md](commands.md) 「시즌 고름 파일」, 지금까지 고른 것을 모두)을 쓰고 3 의 2 를 `--resolutions "<작업>/choices-<k>.json" --replaces <N>` 을 붙여 `--out "<작업>/plan-<k>.json"` 으로 다시 하고 미리보기를 다시 연다. 고를 것이 남았는데 "적용"이라고만 하면 저장하지 않는다.
 
 ## 5. 적용하기

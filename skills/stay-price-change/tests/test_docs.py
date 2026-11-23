@@ -339,6 +339,20 @@ class TrialEightDocsTest(unittest.TestCase):
             self.assertIn("도구가 답을 버렸으면 다시 부른다 — 읽기만 한다", look, skill)
         self.assertIn("도구가 답을 버렸으면 같은 값으로 다시 부른다", self.read("stay-price-change", "references/season-fill.md"))
 
+    def test_w7_the_season_path_has_words_for_red_lines_room_names_text_sheets_and_one_loader_rule(self):
+        """W7 (시운전 12) — 시즌 빨간 줄은 `said` 를 그대로 말하고, 두 이름을 쓴 요금표 객실은 다른 객실을 읽지 않고 맞추며, 같은 이름에
+        한 답은 다시 쓰고, 글 파일 요금표는 변환기 없이 읽고, 같은 탭의 두 번째 시즌 일은 올리개를 다시 붙이지 않는다(SKILL.md 와 같은 말)."""
+        season = self.read("stay-price-change", "references/season-fill.md")
+        step = season[season.index("## 4. 고르기"):season.index("## 5.")]
+        for said in ("`per_save[].rules[].said` 를 그대로 말한다", "이미 공급 원가보다 쌉니다 — 이번에도 그대로", "red-lines.md"):
+            self.assertIn(said, step)
+        self.assertIn("`stayPriceLoader.status('season')`", season)
+        self.assertIn("시즌 창 묶음도 같은 때다(season-fill.md 1) — 이동 없이 같은 탭이면 다시 하지 않는다", self.read("stay-price-change", "SKILL.md"))
+        sheet = self.read("stay-price-change", "references/sheet.md")
+        for said in ("「디럭스 (Deluxe)」", "다른 객실을 읽지도(`rooms`) 묻지도 않는다", "그 답을 다시 쓰고 다시 묻지 않는다",
+                     "변환기는 글 파일을 받지 않는다"):
+            self.assertIn(said, sheet)
+
     def test_u1_the_value_a_check_read_is_told_with_its_time_never_as_now(self):
         stopped = self.read("stay-price-change", "references/stopped.md")
         step = stopped[stopped.index("## 2."):stopped.index("## 3.")]
