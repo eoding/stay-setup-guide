@@ -739,7 +739,8 @@ def _with_misses(plan: SavePlan, targets, snapshot: Snapshot) -> SavePlan:
         return plan
     pairs, days = set(plan.save.pairs), set(plan.dates)
     final = _final(plan, snapshot)
-    keys = [key for key in targets if (key.room, key.rate_plan) in pairs and key.date in days and not _reproduced(key, targets, final)]
+    keys = [key for key in targets if (key.room, key.rate_plan) in pairs and key.date in days and (key.room, key.date) not in snapshot.no_sale
+            and not _reproduced(key, targets, final)]
     if not keys:
         return plan
     return replace(plan, hits={**plan.hits, "SHEET_DIFFERS": tuple(keys)})
@@ -772,7 +773,7 @@ def _misses(saves: Sequence[SavePlan], targets, snapshot: Snapshot, window: Seas
         owner.update({(room, rate_plan, day): plan.index for room, rate_plan in plan.save.pairs for day in plan.dates})
     out = []
     for key, (values, line) in sorted(targets.items()):
-        if _reproduced(key, targets, final):
+        if (key.room, key.date) in snapshot.no_sale or _reproduced(key, targets, final):   # 판매일 없는 날은 어느 길로도 넣지 못한다
             continue
         value = final.get(key, MISSING)
         out.append(Miss(key, dict(values), None if value.state == "missing" else {name: getattr(value, name) for name in FIELDS},
@@ -1097,10 +1098,11 @@ def decode_plan(data: Mapping) -> SeasonPlan:
 
 
 def recorded_request(plan: SeasonPlan) -> dict:
-    """장부에 적는 요청 — 담당자의 요청 + 창(띠는 빼고). 되돌리기 페이지가 이전 입력값을 여기서 보인다."""
+    """장부에 적는 요청 — 누를 저장들(고른 대로 날을 뺀 것, 빠진 저장은 없음) + 창(띠는 빼고). 되돌리기 페이지가 창의 이전 입력값을
+    여기서 보인다."""
     window = encode_window(plan.window)
     window.pop("banner", None)
-    return dict(encode_fill(plan.fill), window=window)
+    return dict(encode_fill(replace(plan.fill, saves=tuple(save.save for save in plan.live))), window=window)
 
 
 def counts(plan: SeasonPlan) -> dict:
@@ -1124,3 +1126,13 @@ def counts(plan: SeasonPlan) -> dict:
                 tally["red"] += 1
     return tally
 
+
+
+def season_what(request: Mapping) -> str:
+    """장부 목록의 한 일 — 「시즌 「Peak」 다시 채우기(덮기) · 저장 2번」. 저장이 모두 덮기를 끄면 「(빈 칸만)」, 날짜를 고른 저장이 있으면
+    「 · 날짜 일부」. 저장 수는 창을 누를 횟수다(빠진 저장은 세지 않는다 — 장부에 적힌 요청은 담당자가 준 그대로라 그 수다)."""
+    saves = request.get("saves") or ()
+    overwrite = "(빈 칸만)" if saves and not any(save.get("overwrite", True) for save in saves) else "(덮기)"
+    part = " · 날짜 일부" if any(save.get("dates") is not None for save in saves) else ""
+    name = (request.get("season") or {}).get("name") or ""
+    return f"시즌 「{name}」 다시 채우기{overwrite}{part} · 저장 {len(saves)}번"

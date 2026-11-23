@@ -2,9 +2,12 @@
 """price_change.py — 가격 변경 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
 
     work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
+    season        stayPriceSeason.readSeason() 의 답들과 그 조각 → 시즌 [가격 입력] 창(season.json) — 시즌 다시 채우기의 바탕.
+                  같은 오퍼의 다른 시즌 날을 아직 읽지 않았으면 그 물음(ask)을 내고 종료 2
     look          stayPrice.look() 의 답과 그 조각(take 답들) → 호텔 · 오퍼 · 객실 × 요금제(답이 둘 이상이면 가장 늦게 끝난 것 —
                   다른 오퍼를 다시 본 것). 기록 폴더의 다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
-    read-calls    읽을 범위(요청 파일, 또는 장부 번호) → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음(calls.json)
+    read-calls    읽을 범위(요청 파일, 또는 장부 번호) → 브라우저에 부를 값: readPair 목록과 readReserved 첫 물음(calls.json).
+                  시즌 다시 채우기 요청은 --season 과 함께, 장부 번호는 --step 으로 그 저장 하나의 범위만
     reserved      calls.json + readReserved 답들 → 남은 물음(숨긴 줄이 있던 물음은 좁혀서). 다 끝나면 done
     read          calls.json + 브라우저 답들(readPair · readReserved 와 그 조각의 take 답, 폴더째) → 지금 값(snapshot.json).
                   읽은 시각(read_at)은 그 작업들이 끝난 시각 가운데 가장 이른 것이다. 시험용으로 ERP 화면 조각(HTML) 파일도 받는다
@@ -13,6 +16,7 @@
                   이름을 모으고, 어느 읽기도 읽지 않은 객실만 읽을 범위로 낸다(요금표의 객실 이름을 맞출 때)
     sheet         요금표 파일(kind sheet) + look 의 답 → 셈한 값 · 호텔에 없는 / 요금표에 없는 객실 · 요금제 · 읽을 범위와
                   페이지 작업 수(sheet-check.json). read-calls · plan · render sheet 가 이 파일을 받는다
+    season-request  sheet 가 낸 파일 + season.json → 시즌 다시 채우기 요청(창에 칠 입력을 명령이 셈한다 — 요금표를 품는다)
     plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다.
                   다시 계산하면 새 파일(plan-2.json)에 쓰고 --replaces 로 앞 번호를 댄다(있는 파일은 덮어쓰지 않는다).
                   요청이 sheet-check.json 이면 요금표를 칸마다 펼쳐 계산하고 넣지 않는 것(coverage)을 단다
@@ -20,7 +24,8 @@
     begin         적용 시작 — 적용 직전에 읽은 값을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견주어, 한 칸이라도 다르면
                   아무것도 시작하지 않고 다른 칸을 댄다(종료 1). 같으면 저장 단계를 장부에 적는다
     calls         장부의 변경에서 아직 저장되지 않은 단계 → 브라우저에 부를 값(applyBulk · applyCell). 멈춘 변경(저장이 실패했거나
-                  15분 동안 아무 일이 없던)은 다시 읽어 check 가 이어서 해도 된다고 한 뒤에만 낸다
+                  15분 동안 아무 일이 없던)은 다시 읽어 check 가 이어서 해도 된다고 한 뒤에만 낸다. 시즌 다시 채우기는 다음 저장
+                  하나(applySeason)만, 그 저장의 범위를 120초 안에 다시 읽은 값(--snapshot)이 미리보기 때와 같을 때만 낸다
     check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 계획대로 해도 되는지와 까닭,
                   어디까지 됐고 왜 멈췄는지. 「모름」인 저장은 읽은 값으로 가려 장부에 적는다
     record-result 브라우저 답(applyBulk · applyCell JSON) 하나 → 그 단계를 장부에 됨·멈춤으로 적는다
@@ -85,6 +90,9 @@ from price_pages import (
     render_result, render_rollback, render_sheet, result_name, scope_text,
 )
 from price_sheet import Part, SheetCheck, coverage_counts, decode_check, decode_sheet, encode_check, plan_sheet
+import price_season_cli as season_cli
+import season_pages
+from price_season import KIND as SEASON_KIND, decode_plan as decode_season_plan, step_note, step_range
 from price_plan import (
     PlanError, cell_filter, counts, plan_cell_restore, plan_cell_rollback, plan_change, plan_steps, plan_targets, preview_rows,
     resolve, rollback_rows, rollback_writes, save_steps, snapshot_rows, stale_cells, step_plans, unresolved,
@@ -134,6 +142,11 @@ def newest_look(looks: list) -> dict:
                            "도우미를 다시 올리고 look 을 새 작업 폴더에서 다시 봅니다")
     return max(looks, key=lambda look: datetime.fromisoformat(str(look.get("doneAt") or "1970-01-01T00:00:00+00:00")
                                                               .replace("Z", "+00:00")))
+
+
+def cmd_season(args):
+    """readSeason 답들 → season.json. 받지 못했거나 잘린 조각은 refetch(stayPriceSeason.take), 다른 시즌 날은 ask 로 낸다."""
+    return season_cli.window_command(files.load_results(args.answers, season_cli.SEASON_PREFIXES), [])
 
 
 def cmd_look(args):
@@ -188,14 +201,33 @@ def recorded_reading(ledger: Ledger, change_id: int):
     return decode_snapshot(ledger.reading(change_id))
 
 
-def request_scope(data: dict) -> ReadRange:
-    """요청 파일의 읽을 범위 — sheet 가 낸 파일이면 요금표의 범위(읽기 한 번에 들지 않으면 거절), 아니면 request_range."""
+def request_scope(data: dict, season: str | None = None) -> ReadRange:
+    """요청 파일의 읽을 범위 — sheet 가 낸 파일이면 요금표의 범위(읽기 한 번에 들지 않으면 거절), 시즌 다시 채우기면 저장들의 쌍 ×
+    날(`--season` 의 시즌 날), 아니면 request_range."""
+    if data.get("kind") == SEASON_KIND:
+        fill, pairs, days = season_cli.request_range(data, season_cli.load_window(season, load))
+        return ReadRange(fill.hotel, fill.hotel_id, fill.offer, pairs, days)
     return decode_check(data).fitting_range() if data.get("kind") == "sheet_check" else request_range(data)
+
+
+def step_scope(ledger: Ledger, change_id: int, step_no: int) -> ReadRange:
+    """시즌 다시 채우기 변경의 저장 하나의 범위 — 그 저장의 쌍 × 날(calls 가 그 저장을 내기 전에 다시 읽는 범위)."""
+    record = ledger.change(change_id)
+    step = next((step for step in record.steps if step.index == step_no), None)
+    if step is None or step.kind != SEASON_KIND:
+        raise PlanError(f"{change_id}번 변경에 시즌 창 저장 {step_no}번째가 없습니다(--step 은 시즌 다시 채우기의 적용을 시작한 뒤에 씁니다)")
+    pairs, days = step_range(season_cli.decode_window(record.request["window"]), step.body)
+    return ReadRange(record.hotel, record.hotel_id, record.offer, pairs, days)
 
 
 def cmd_read_calls(args):
     """페이지가 조각을 다 두지 못하는 읽기는 아무것도 부르기 전에 거절한다 — 받으려 할 때는 앞 조각이 이미 밀려나 있다."""
-    scope: ReadRange = recorded_reading(open_ledger(), args.record).range if args.record else request_scope(load(args.request))
+    if args.step and not args.record:
+        raise ValueError("--step 은 --record(장부 번호)와 함께 줍니다")
+    if args.step:
+        scope = step_scope(open_ledger(), args.record, args.step)
+    else:
+        scope = recorded_reading(open_ledger(), args.record).range if args.record else request_scope(load(args.request), args.season)
     hotel = encode_hotel(scope.hotel, scope.hotel_id)
     calls = dict(pairs=read_calls(hotel, scope.offer, scope.pairs, scope.dates),
                  reserved=reserved_probes(hotel, scope.offer, scope.pairs, scope.dates))
@@ -274,6 +306,14 @@ def cmd_sheet(args):
     return encode_check(SheetCheck(sheet, tuple((str(item["room"]), str(item["rate_plan"])) for item in look["pairs"]), part))
 
 
+def cmd_season_request(args):
+    """요금표로 시즌을 다시 채울 때 — 확인한 요금표와 시즌 창에서 창에 칠 입력을 셈한 요청(kind season_fill). 기록이라 덮어쓰지 않는다."""
+    files.fresh_record(args.out, None, False, "season-request")
+    from price_season import encode_fill
+    from season_sheet import propose
+    return encode_fill(propose(decode_check(load(args.sheet)), season_cli.load_window(args.season, load), args.sentence or ""))
+
+
 def fresh_record(args, name: str) -> None:
     files.fresh_record(args.out, args.replaces, args.record, name)
 
@@ -281,6 +321,9 @@ def fresh_record(args, name: str) -> None:
 def cmd_plan(args):
     fresh_record(args, "plan")
     snapshot, data = decode_snapshot(load(args.snapshot)), load(args.request)
+    if data.get("kind") == SEASON_KIND:
+        return season_cli.plan_command(snapshot, data, season_cli.load_window(args.season, load),
+                                       load(args.resolutions) if args.resolutions else [], open_ledger(), args.replaces, args.record)
     said = str(data.get("currency") or "").strip().upper()   # 담당자가 금액에 말한 통화 — 바꿔 셈하지 않는다(요금표는 아래 plan_sheet 가)
     if data.get("kind") in ("change", "targets") and said and said != snapshot.currency:
         raise PlanError(f"말씀하신 통화는 {said} 인데 ERP 의 이 오퍼는 {snapshot.currency} 입니다 — 바꿔 셈하지 않습니다. 어느 통화의 "
@@ -315,7 +358,11 @@ def cmd_render(args):
     if args.text and args.out:
         raise ValueError("--text 는 페이지의 글만 답하고 파일을 쓰지 않습니다 — --out 과 같이 주지 않습니다")
     name = PAGE_NAMES[args.kind]
-    if args.kind == "preview":
+    if args.kind == "preview" and load(args.plan).get("kind") == "season_plan":
+        data = load(args.plan)
+        plan = decode_season_plan(data["plan"])
+        html, hotel = season_pages.render_preview(plan, data.get("change_id"), data.get("steps"), args.by_date), plan.window.hotel
+    elif args.kind == "preview":
         data = load(args.plan)
         plan = decode_plan(data["plan"])
         html = render_preview(plan, data.get("change_id"), [decode_step(step) for step in data.get("steps") or ()], args.by_date)
@@ -324,7 +371,8 @@ def cmd_render(args):
         data = load(args.plan)
         plan = decode_rollback(data["rollback"])
         html = render_rollback(plan, [(item["room"], item["date"]) for item in data.get("reserved") or ()],
-                               data.get("scope") or "", args.by_date, data.get("undone") or ())
+                               data.get("scope") or "", args.by_date, data.get("undone") or (),
+                               season_pages.rollback_notes(data["season"]) if data.get("season") else "")
         hotel = plan.hotel
     elif args.kind == "prices":
         snapshot = decode_snapshot(load(args.snapshot))
@@ -339,7 +387,10 @@ def cmd_render(args):
     else:
         ledger = open_ledger()
         record = ledger.change(args.change)
-        html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
+        if season_cli.is_season(record):
+            html, hotel, name = season_pages.render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
+        else:
+            html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
     if args.text:   # 페이지의 글을 읽기만 한다 — 파일을 쓰지 않는다(같은 페이지가 「… (2).html」로 또 생기지 않게)
         return dict(text=page_text(html))
     path = files.write_out(args.out or page_path(hotel, name), html)
@@ -373,9 +424,12 @@ def cmd_begin(args):
         raise PlanError(f"{args.change}번 미리보기는 바꿀 칸이 없어 적용할 것이 없습니다 — 아무것도 시작하지 않았습니다")
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     then = reading_since(ledger, args.change, now) if ledger.change(args.change).status == "previewed" else now
-    differences = ledger.begin_fresh(args.change, step_plans(decode_step(step) for step in data["steps"]), snapshot_reading(then),
-                                     snapshot_reading(now), read_at=now.read_at,
-                                     request=data["plan"]["request"] if "plan" in data else None)
+    if data.get("kind") == "season_plan":
+        steps, request = season_cli.begin_steps(data)
+    else:
+        steps, request = step_plans(decode_step(step) for step in data["steps"]), data["plan"]["request"] if "plan" in data else None
+    differences = ledger.begin_fresh(args.change, steps, snapshot_reading(then), snapshot_reading(now), read_at=now.read_at,
+                                     request=request)
     if differences:
         return dict(change_id=args.change, status="previewed", same=False, differences=encode_differences(differences))
     record = ledger.change(args.change)
@@ -390,6 +444,8 @@ def record_hotel(record) -> dict:
 def change_calls(ledger: Ledger, record) -> list[dict]:
     """그 변경의 저장 단계 전부의 부를 값(차례대로) — 칸마다 누르기 전에 화면에 있어야 할 값(`was` — 장부에 적힌 그 계산의 읽은
     값 위에 앞 단계들이 넣은 값을 얹은 것)이 든다. 페이지는 화면이 그 값이 아니면 치지도 누르지도 않는다."""
+    if season_cli.is_season(record):
+        return season_cli.step_calls(record)
     return step_calls(record_hotel(record), record.offer, [(step.index, step.kind, step.body) for step in record.steps],
                       recorded_reading(ledger, record.id))
 
@@ -402,6 +458,11 @@ def cmd_calls(args):
     if record.status == "stopped":
         raise LedgerError(f"{args.change}번 변경은 멈춰 있습니다(저장이 실패했거나 15분 동안 아무 일이 없었습니다) — 같은 범위를 "
                           f"다시 읽고(read-calls --record {args.change}) check 가 이어서 해도 된다고 하면 calls 를 다시 부릅니다")
+    if season_cli.is_season(record):
+        return season_cli.next_call(ledger, record, decode_snapshot(load(args.snapshot)) if args.snapshot else None,
+                                    recorded_reading(ledger, record.id))
+    if args.snapshot:
+        raise ValueError("--snapshot 은 시즌 다시 채우기의 calls 에만 줍니다(저장 하나의 범위를 다시 읽은 값)")
     left = {step.index for step in record.steps if step.status != "saved"}
     return dict(change_id=record.id, status=record.status, calls=[call for call in change_calls(ledger, record) if call["no"] in left])
 
@@ -420,8 +481,10 @@ def cmd_record_result(args):
         return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note,
                     status=record.status)
     moved = dict(moved=outcome.moved) if outcome.moved else {}
-    return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note, **moved,
-                status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note,
+    note = step_note(result) if season_cli.is_season(record) and outcome.saved is True else outcome.note
+    extra = {name: result[name] for name in ("counts", "warn") if season_cli.is_season(record) and result.get(name)}
+    return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=note, **moved, **extra,
+                status=ledger.record_step(record.id, step.index, outcome.saved is True, note,
                                           unknown=outcome.saved == "unknown"))
 
 
@@ -450,6 +513,8 @@ def cmd_verify(args):
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     same_record_hotel(ledger, args.change, now)
     mismatches = ledger.verify(args.change, snapshot_reading(now))
+    if season_cli.is_season(ledger.change(args.change)):
+        return season_cli.verify_season(ledger, args.change, now, mismatches)
     return dict(change_id=args.change, same=not mismatches, mismatches=[
         dict(key=key_fields(item.item_key), label=item.label, field=item.field, after=money_text(item.after),
              seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])
@@ -495,7 +560,9 @@ def cmd_rollback(args):
                                       reverses=args.change, reading=encode_snapshot(snapshot), request=request,
                                       replaces=args.replaces, empty=not rollback_writes(plan)) if args.record else None
     scope = rollback_scope(ledger, change_id, "rollback", request, args.change, plan)
-    return rollback_answer(change_id, args, scope, plan, snapshot, undone)
+    answer = rollback_answer(change_id, args, scope, plan, snapshot, undone)
+    season = season_cli.rollback_inputs(ledger, args.change)
+    return dict(answer, season=season) if season else answer
 
 
 def cmd_restore(args):
@@ -598,6 +665,8 @@ def short_sheet(result: dict) -> dict:
 def short_plan(result: dict) -> dict:
     """미리보기를 말하고 고를 것을 묻는 데 필요한 것 — 수, 저장 횟수(`saves`, 빨간 줄이 남았으면 null), 고를 빨간 줄과 고른 것의 말,
     적용할 수 없는 칸의 까닭. 칸마다의 값은 계산 파일과 미리보기 페이지에 있다."""
+    if result.get("kind") == "season_plan":
+        return season_cli.short_plan(result)
     plan = decode_plan(result["plan"])
     blocked = [dict(rule=rule.code, label=rule.label, cells=result["counts"][rule.code],
                     examples=[encode_key(change.key) for change in plan.changes if change.verdict == rule.code][:EXAMPLES])
@@ -650,7 +719,8 @@ def short_rooms(result: dict) -> dict:
     return dict(rooms=result["rooms"], unread=result["unread"], read=bool(result["unread"]))
 
 
-SHORT = {"rooms": short_rooms, "read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,
+SHORT = {"season": season_cli.short_window, "season-request": season_cli.short_request,
+         "rooms": short_rooms, "read-calls": short_read_calls, "read": short_read, "sheet": short_sheet, "plan": short_plan,
          "rollback": short_rollback, "restore": short_rollback, "compare": short_compare}
 
 
@@ -666,6 +736,9 @@ def parser() -> argparse.ArgumentParser:
         return sub
 
     command("work", cmd_work, "새 작업 폴더")
+    sub = command("season", cmd_season, "stayPriceSeason.readSeason() 의 답들(과 그 조각) → 시즌 [가격 입력] 창(season.json)")
+    sub.add_argument("--answers", action="append", required=True, help="readSeason 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+
     sub = command("look", cmd_look, "stayPrice.look() 의 답(과 그 조각) → 호텔 · 오퍼 · 객실 × 요금제")
     sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
 
@@ -673,6 +746,8 @@ def parser() -> argparse.ArgumentParser:
     scope = sub.add_mutually_exclusive_group(required=True)
     scope.add_argument("--request", help="요청 파일 — 읽을 범위(kind range) · 바꾸기 요청 · 목표 값 표 · sheet 가 낸 파일")
     scope.add_argument("--record", type=int, help="장부 번호 — 그 번호의 계산이 바탕으로 삼은 범위를 다시 읽는다")
+    sub.add_argument("--season", help="시즌 다시 채우기 요청이면 season 명령이 낸 season.json(시즌 날)")
+    sub.add_argument("--step", type=int, help="시즌 다시 채우기 변경(--record)의 저장 하나 — 그 저장의 범위만 읽는다(calls 앞의 다시 읽기)")
 
     sub = command("reserved", cmd_reserved, "readReserved 물음과 답 → 남은 물음")
     sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
@@ -699,10 +774,17 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--from", dest="date_from", help="이 날짜부터(ISO) — 요금표를 시즌(날짜 창)마다 나눠 할 때")
     sub.add_argument("--to", dest="date_to", help="이 날짜까지(ISO)")
 
+    sub = command("season-request", cmd_season_request, "요금표 + 시즌 창 → 시즌 다시 채우기 요청(창에 칠 입력을 셈한다)")
+    sub.add_argument("--sheet", required=True, help="sheet 명령이 낸 파일(sheet-check-<k>.json)")
+    sub.add_argument("--season", required=True, help="season 명령이 낸 season.json")
+    sub.add_argument("--sentence", help="담당자가 한 말")
+
     sub = command("plan", cmd_plan, "미리보기 계산")
     sub.add_argument("--snapshot", required=True)
     sub.add_argument("--request", required=True,
-                     help="요청 JSON — 바꾸는 방법(kind change) · 목표 값 표(kind targets) · sheet 가 낸 파일(kind sheet_check)")
+                     help="요청 JSON — 바꾸는 방법(kind change) · 목표 값 표(kind targets) · sheet 가 낸 파일(kind sheet_check) · "
+                          "시즌 다시 채우기(kind season_fill, --season 과 함께)")
+    sub.add_argument("--season", help="시즌 다시 채우기 요청이면 season 명령이 낸 season.json")
     sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "ABOVE_LIST", "choice": "raise_list", '
                      '"said": "<담당자 말>"}]')
     sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
@@ -726,8 +808,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--plan", required=True, help="steps 가 든 plan-<k>.json 또는 rollback-<k>.json")
     sub.add_argument("--snapshot", required=True, help="적용 직전에 같은 범위로 읽은 값(read-calls --record N 으로 읽는다, 15분 안)")
 
-    sub = command("calls", cmd_calls, "아직 저장되지 않은 단계 → applyBulk · applyCell 부를 값")
+    sub = command("calls", cmd_calls, "아직 저장되지 않은 단계 → applyBulk · applyCell 부를 값(시즌 다시 채우기는 다음 applySeason 하나)")
     sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--snapshot", help="시즌 다시 채우기만 — 다음 저장의 범위를 방금(120초 안에) 다시 읽은 값(read-calls --record N --step k)")
 
     sub = command("record-result", cmd_record_result, "브라우저 답 하나를 장부에 적기")
     sub.add_argument("--change", type=int, required=True)

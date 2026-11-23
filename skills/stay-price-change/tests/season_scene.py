@@ -104,3 +104,30 @@ def fill_of(*saves: SeasonSave, sentence="Peak 시즌 다시 채워줘", currenc
 
 def case(case_id: str) -> dict:
     return next(item for item in CASES["fills"] if item["id"] == case_id)
+
+
+def answer_body(window: SeasonWindow, room_types=None, banner=None) -> dict:
+    """readSeason 의 조각(keep) 모양 — 페이지(`stay_price_season.js`)가 그 창을 읽었을 때 싣는 것."""
+    child = []
+    for item in window.child:
+        if item.kind == "amount":
+            child.append({"field": item.field, "editable": True, "value": dict(window.form).get(item.field, item.blank), "text": ""})
+        else:
+            child.append({"field": item.field, "editable": False, "value": item.text, "text": item.text})
+    blank = None
+    if window.blank is not None:
+        blank = {"form": [list(pair) for pair in window.blank],
+                 "child": [{"field": item.field, "editable": True, "value": item.blank, "text": ""} for item in window.child
+                           if item.kind == "amount"]}
+    return {"offer": window.offer, "season": {"id": window.season_id, "name": window.season_name, "days": str(len(window.dates))},
+            "title": window.title, "dates": list(window.dates), "form": [list(pair) for pair in window.form], "order": list(window.order),
+            "rooms": [{"id": room.id, "label": room.label} for room in window.rooms],
+            "plans": [{"id": plan.id, "roomId": plan.room_id, "label": plan.label} for plan in window.plans],
+            "child": child, "note": window.last_fill_note, "blank": blank,
+            "ratePlans": [{"id": plan.id, "roomId": plan.room_id, "room": plan.room, "plan": plan.rate_plan, "base": plan.base,
+                           "sort": "" if plan.sort is None else str(plan.sort)} for plan in window.plans],
+            "roomTypes": room_types if room_types is not None else [{"name": room.room, "combos": window.combos.get(room.room)}
+                                                                    for room in window.rooms],
+            "seasons": [{"id": window.season_id, "name": window.season_name, "days": str(len(window.dates))}]
+                       + [{"id": item.id, "name": item.name, "days": str(len(item.dates))} for item in window.seasons],
+            "banner": banner}

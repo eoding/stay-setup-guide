@@ -21,6 +21,8 @@ SCRIPT = SCRIPTS / "price_change.py"
 sys.path.insert(0, str(SCRIPTS))
 
 import scene  # noqa: E402
+import season_scene  # noqa: E402
+from browser_replies import reply  # noqa: E402
 from price_model import decode_step, encode_request, encode_snapshot  # noqa: E402
 
 ERP = HERE / "fixtures" / "erp"
@@ -88,6 +90,15 @@ class MissingFolderTest(Commands):
         self.out("rooms", "--look", look, "--date", "2026-12-25")
         sheet, _ = self.out("sheet", "--sheet", self.file("sheet.json", sheet_example()), "--look", look)
         self.out("render", "sheet", "--plan", sheet, name="sheet.html")
+        window = season_scene.window(dates=["2027-07-02", "2027-07-03"], bands=[{"code": "CHD", "basis": "flat", "value": "20"}])
+        answers = self.work / "시즌"
+        answers.mkdir()
+        asked = {"hotel": scene.HOTEL_REF, "offer": scene.OFFER, "season": {"id": window.season_id}}
+        for index, item in enumerate(reply("readSeason", asked, keep=season_scene.answer_body(window))):
+            (answers / ("season-1.json" if index == 0 else f"take-{index}.json")).write_text(json.dumps(item, ensure_ascii=False),
+                                                                                             encoding="utf-8")
+        season, _ = self.out("season", "--answers", answers, name="season.json")
+        self.out("season-request", "--sheet", sheet, "--season", season, name="season-request.json")
 
         request = self.file("request.json", encode_request(scene.request()))
         calls, _ = self.out("read-calls", "--request", request, name="calls.json")
