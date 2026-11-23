@@ -481,6 +481,14 @@
     }));
   }
 
+  // 작업 하나의 시간 천장 — 표(`spec.limits[op]`)가 그 작업에 더 긴 천장을 줄 수 있다(시즌 창 저장은 서버가 오래 걸린다 — hardMs +
+  // restMs 는 그래도 45초 안이어야 한다). config() 로 낮춘 천장(시험 · 시운전)은 그대로 이긴다
+  function limitsOf(spec, op) {
+    var own = (spec.limits && spec.limits[op]) || {}, out = {};
+    Object.keys(LIMITS).forEach(function (k) { out[k] = LIMITS[k] < DEFAULTS[k] || typeof own[k] !== 'number' ? LIMITS[k] : own[k]; });
+    return out;
+  }
+
   // 작업 하나의 틀 — 어느 모듈의 작업이든 이 길을 지난다. 바쁨 표지(`__stayPriceBusy`)는 하나라 두 모듈을 통틀어 한 번에 하나다
   async function run(op, input, body, spec) {
     var loose = spec.loose.indexOf(op) >= 0, here = null;
@@ -509,7 +517,7 @@
       if (here.refusal) return remember(here.refusal);
     }
     var token = window.__stayPriceBusy = { op: op };
-    var started = Date.now(), limits = Object.assign({}, LIMITS);
+    var started = Date.now(), limits = limitsOf(spec, op);
     var hardAt = started + limits.hardMs, endAt = hardAt + limits.restMs;
     var no = input && typeof input.no === 'number' ? input.no : undefined;
     remember({ running: { op: op, no: no, at: new Date(started).toISOString() } });
