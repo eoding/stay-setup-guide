@@ -661,6 +661,12 @@ def value_of(state: ItemState) -> CellValue:
     return CellValue(*(state.fields.get(name) for name in FIELDS), state.state)
 
 
+def new_cell_state(snapshot: Snapshot, key: CellKey) -> str:
+    """ERP 가 새로 만드는 칸의 판매 상태 — 판매 가능, 그날 지속 마감(요금제 마감 · 객실 전체 마감)이 덮으면 마감(ERP `protect_price_cells`).
+    셀 창에서 칸마다 마감한 날은 덮지 않는다. 날짜별 변경([선택 날짜 가격 수정])과 시즌 창이 같은 규칙이다."""
+    return "closed" if (key.room, key.rate_plan, key.date) in snapshot.closures else "open"
+
+
 def as_read(cells: Mapping[CellKey, CellValue]) -> dict[CellKey, CellValue]:
     """칸들 → ERP 의 [선택 날짜 가격 수정] 화면이 보일 모양. 화면은 판매 상태를 칸마다가 아니라 (객실, 요금제, 날)마다 하나로 보인다 —
     가격 있는 칸의 상태가 하나가 아니면(또는 이미 섞였으면) 그날 그 요금제의 칸은 모두 「인원·박수별 상태 다름」(mixed)으로 읽힌다.

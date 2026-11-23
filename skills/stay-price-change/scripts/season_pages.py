@@ -22,7 +22,7 @@ from change_core.chrome import (
 from change_core.ledger import ChangeRecord, left_out, seen_kind
 from change_core.money import scale_of
 from price_model import CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellValue, below_cost_label, cell_name, key_of_item
-from price_pages import MAKER, cell_views, grid, render_result as render_cells_result
+from price_pages import CLOSED_NEW, CLOSED_NEW_HEAD, MAKER, cell_views, grid, render_result as render_cells_result
 from price_season import (
     CHOICE_WORDS, INPUT_LABELS, RULES, SeasonPlan, banner_counts, counts, counts_agree, date_runs,
     decode_counts, recorded_request, rule_label, rule_said, verdict, window_remembers,
@@ -37,8 +37,6 @@ UNDO_EMPTY = "정가·공급 원가가 비어 있던 칸 {n}칸에 값을 넣습
 UNDO_REFILL = "되돌린 뒤 누가 이 시즌을 '덮기'로 다시 채우면 이번 값이 다시 들어갑니다."
 NO_DELETE = "도우미는 시즌 창의 '이번에 고르지 않은 인원·요금제 가격 지우기'를 켜지 않습니다 — 이번 채우기에 없는 예전 칸은 예전 값으로 남습니다."
 GUESS = "「날짜별로 따로 넣은 것으로 보이는 칸」 · 객실 조합으로 빠질 수 있는 칸은 도우미의 짐작입니다(ERP 가 그 표시를 보이지 않습니다)."
-CLOSED_NEW = ("요금제 마감 · 객실 전체 마감인 날의 새 칸은 ERP 가 마감으로 만듭니다(팔리지 않습니다 — 마감을 풀면 이 값으로 팔립니다). "
-              "셀 창에서 칸마다 마감한 날의 새 칸은 판매 가능으로 생깁니다.")
 BUCKETS = (   # 미리보기 바구니 — (코드, 머리, 덧말). 차례가 보이는 차례다
     ("helper_edited", "장부가 날짜별로 바꿔 둔 칸", "이 장부의 날짜별 변경이 넣은 값을 시즌 값으로 덮습니다."),
     ("looks_edited", "날짜별로 따로 넣은 것으로 보이는 칸", "같은 줄의 다른 날과 값이 달라 따로 넣은 것으로 보입니다(짐작) — 시즌 값으로 덮습니다."),
@@ -147,7 +145,7 @@ def _bucket_sections(plan: SeasonPlan, save) -> str:
                    "합니다): " + esc(" / ".join(f"{room} {_days(sorted(set(items)))}" for room, items in days.items())) + "</p>")
     closed_new = [change.key for change in save.changes if change.before.state == "missing" and change.after.state == "closed"]
     if closed_new:
-        out.append(f"<h3>판매 마감 날에 새로 생기는 칸 · {len(closed_new):,}칸</h3><p class=\"sub\">{esc(CLOSED_NEW)}</p>"
+        out.append(f"<h3>{CLOSED_NEW_HEAD} · {len(closed_new):,}칸</h3><p class=\"sub\">{esc(CLOSED_NEW)}</p>"
                    + _cell_table(closed_new, lambda key: f"<td>{_move(by_key[key].before, by_key[key].after, currency)}</td>"))
     if save.same:
         out.append(f'<p class="sub">값은 같고 이 시즌 칸이 되는 칸 {save.same:,}칸 — 표에 없습니다.</p>')
@@ -212,7 +210,7 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
                       + ([(tally["no_sale"], "판매일 없는 날의 칸")] if tally["no_sale"] else [])
                       + ([(tally["same"], "값은 같고 시즌 칸이 되는 칸")] if tally["same"] else [])
                       + ([(tally["combo_unknown"], "조합으로 빠질 수 있는 칸")] if tally["combo_unknown"] else [])
-                      + ([(tally["closed_new"], "판매 마감 날에 새로 생기는 칸")] if tally["closed_new"] else [])
+                      + ([(tally["closed_new"], CLOSED_NEW_HEAD)] if tally["closed_new"] else [])
                       + ([(tally["misses"], "요금표와 다르게 채워지는 칸")] if tally["misses"] else [])))
     body.append(_misses_section(plan))
     for save in plan.saves:

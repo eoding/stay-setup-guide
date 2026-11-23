@@ -30,7 +30,7 @@ from price_model import (
     CELL_RULES, CLOSED, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, CellChange, CellKey, CellValue, Snapshot, below_cost_label,
     cell_item_key,
     cell_name, day_label, decode_change, decode_hotel, decode_key, encode_change, encode_hotel, encode_key, iso_day,
-    same_hotel,
+    new_cell_state, same_hotel,
 )
 from season_expand import (
     NO_COMBOS, ChildRate, SeasonRefused, key_allowed, los_matrix, parse_combos, parse_inputs, parse_key, parse_money, stored,
@@ -615,8 +615,7 @@ def expand_save(snapshot: Snapshot, window: SeasonWindow, save: SeasonSave, inde
                         if before.state == "missing":
                             # ERP 는 새 칸을 판매 가능으로 만들고, 지속 마감(요금제 마감 · 객실 전체 마감)이 덮는 날에만 마감으로 둔다 —
                             # 셀 창에서 칸마다 마감한 날은 덮지 않는다(검토 2 의 0, ERP season.fill_season_price · sales_closure)
-                            closed = (key.room, key.rate_plan, key.date) in snapshot.closures
-                            after = CellValue(sell, listed, _supply(net, currency), "closed" if closed else "open")
+                            after = CellValue(sell, listed, _supply(net, currency), new_cell_state(snapshot, key))
                             created += 1
                             maybe_created += bool(maybe)
                         elif save.overwrite:

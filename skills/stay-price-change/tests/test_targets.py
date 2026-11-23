@@ -64,6 +64,24 @@ class TargetPlanTest(unittest.TestCase):
         self.assertEqual([(s.dates, [(r.occupancy, r.sell, r.supply) for r in s.rows]) for s in steps],
                          [(("2027-01-02",), [("A2", D("450.00"), D("300.00"))])])
 
+    def test_a_new_cell_on_a_sales_closure_day_is_predicted_closed_as_the_erp_writes_it(self):
+        """날짜별 변경도 ERP 가 새 칸을 판매 가능으로 만들고 지속 마감(요금제 마감 · 객실 전체 마감)인 날에만 마감으로 둔다 — 미리보기가
+        그 상태를 말하고, 시즌 다시 채우기의 미리보기와 같은 말을 쓴다. 셀 창 마감은 지속 마감이 아니다(그날 새 칸은 판매 가능)."""
+        new = key("2027-01-02", room="스위트", plan="룸온리")
+        closure = replace(self.snapshot, closures=frozenset({("스위트", "룸온리", "2027-01-02")}))
+        plan = plan_targets(closure, table((new, {"sell": "450.00"})))
+        self.assertEqual((plan.changes[0].marks, plan.changes[0].after.state), (("new",), "closed"))
+        self.assertEqual([(s.dates, [(r.occupancy, r.sell) for r in s.rows]) for s in plan_steps(plan)],
+                         [(("2027-01-02",), [("A2", D("450.00"))])], "저장은 그대로다 — 판매 상태는 ERP 가 정한다")
+        page = visible(render_preview(plan))
+        self.assertIn("만듭니다 · 판매 마감으로(판매 마감 날에 새로 생기는 칸)", page)
+        self.assertIn("판매 마감 날에 새로 생기는 칸 · 1칸. 요금제 마감 · 객실 전체 마감인 날의 새 칸은 ERP 가 마감으로 만듭니다(팔리지 않습니다 — "
+                      "마감을 풀면 이 값으로 팔립니다).", page)
+        self.assertIn("마감", page.split("새로 생기는 칸 — 지금은 가격이 없는 칸입니다")[0].split("칸마다 바뀌는 값")[1], "칸 표도 마감을 단다")
+        opened = plan_targets(self.snapshot, table((new, {"sell": "450.00"})))
+        self.assertEqual(opened.changes[0].after.state, "open", "지속 마감이 아닌 날의 새 칸은 판매 가능이다")
+        self.assertNotIn("판매 마감 날에 새로 생기는 칸", visible(render_preview(opened)))
+
     def test_a_new_cell_needs_a_sell_price_and_an_occupancy_the_room_already_shows(self):
         plan = plan_targets(self.snapshot, table(
             (key("2027-01-02", room="스위트", plan="룸온리"), {"list": "500.00"}),

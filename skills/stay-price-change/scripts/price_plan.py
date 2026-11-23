@@ -33,7 +33,7 @@ from price_model import (
     CellEditStep, CellKey,
     CellValue, CellWrite, ChangeRequest, Plan, RowWrite, Skipped, Snapshot, TargetTable, UnusedChoice, UNUSED_WHY, cell_item_key, cell_name,
     day_label, day_windows, encode_step, hotel_label, key_of_item, line_label, matching_rows, occupancy_label, occupancy_order,
-    same_hotel, snapshot_reading, split_occupancy, value_of,
+    new_cell_state, same_hotel, snapshot_reading, split_occupancy, value_of,
 )
 
 
@@ -302,8 +302,9 @@ def plan_targets(snapshot: Snapshot, table: TargetTable) -> Plan:
             lacking = "row"
         elif before.state == "missing" and merged["sell"] is None:
             lacking = "sell"
+        # 새 칸은 ERP 가 만드는 상태로 — 판매 가능, 지속 마감인 날은 마감(new_cell_state). 있던 칸은 상태를 쓰지 않는다
         after = None if lacking else CellValue(merged["sell"], merged["list"], merged["supply"],
-                                               "open" if before.state == "missing" else before.state)
+                                               new_cell_state(snapshot, key) if before.state == "missing" else before.state)
         if after == before:
             continue
         changes.append(_change(snapshot, table, key, before, after, lacking))

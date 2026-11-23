@@ -52,6 +52,10 @@ ONE_COLUMN_PER_DATE_UP_TO = 7        # 날짜가 이만큼까지는 날짜마다
 # 미리보기 안내 — 그런 칸이 있을 때만 단다
 RESERVED_NOTE = "예약 있는 날도 똑같이 바꿉니다. 이미 받은 예약의 금액은 바뀌지 않습니다."
 CLOSED_NOTE = "판매 마감인 날은 값만 바뀌고 마감은 그대로입니다."
+# 지속 마감인 날의 새 칸 — 날짜별 변경 · 시즌 다시 채우기의 미리보기가 같은 말을 쓴다(price_model.new_cell_state)
+CLOSED_NEW_HEAD = "판매 마감 날에 새로 생기는 칸"
+CLOSED_NEW = ("요금제 마감 · 객실 전체 마감인 날의 새 칸은 ERP 가 마감으로 만듭니다(팔리지 않습니다 — 마감을 풀면 이 값으로 팔립니다). "
+              "셀 창에서 칸마다 마감한 날의 새 칸은 판매 가능으로 생깁니다.")
 # 되돌려도 그대로인 것 — 되돌리기 미리보기의 끝에 단다(chrome.rollback_ask)
 ROLLBACK_KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.", "판매 마감·판매 가능 상태는 되돌리지 않고 값만 되돌립니다.",
                   "ERP 의 '손입력' 표시는 되돌리지 않습니다 — 도우미가 읽지도 되돌리지도 못합니다.")
@@ -223,7 +227,7 @@ def render_preview(plan: Plan, change_id: int | None = None, steps: Sequence | N
     request, currency = plan.request, plan.currency
     tally = counts(plan.changes, len(plan.skipped))
     by_key = {change.key: change for change in plan.changes}
-    closed = {change.key for change in plan.changes if CLOSED in change.marks}
+    closed = {change.key for change in plan.changes if CLOSED in change.marks or (change.after and change.after.state == "closed")}
     reserved = {(change.key.room, change.key.date) for change in plan.changes if RESERVED in change.marks}
 
     skipped = {item.key: item.reason for item in plan.skipped}
@@ -644,17 +648,21 @@ def _new_section(plan: Plan, currency: str) -> str:
              and CELL_RULES.severity(change.verdict) not in (BLOCKED, HELD) and change.choice != "keep"]
     if not fresh:
         return ""
-    rows = []
+    rows, closed = [], 0
     for change in fresh:
         rule = CELL_RULES.by_code.get(change.verdict)
-        status = "만듭니다" if rule is None else f"빨간 줄 · {rule.label}"
         after = change.after or change.before
+        status = "만듭니다" if rule is None else f"빨간 줄 · {rule.label}"
+        if after.state == "closed":   # 지속 마감인 날 — ERP 가 마감으로 만든다
+            closed += 1
+            status = f"{status} · 판매 마감으로({CLOSED_NEW_HEAD})"
         rows.append(f'<tr><td class="text">{esc(cell_name(change.key))}</td><td>{fmt_money(after.sell, currency)}</td>'
                     f'<td>{fmt_money(after.list, currency)}</td><td>{fmt_money(after.supply, currency)}</td>'
                     f'<td class="text">{esc(status)}</td></tr>')
+    note = f'<p class="sub"><b>{CLOSED_NEW_HEAD} · {closed:,}칸.</b> {esc(CLOSED_NEW)}</p>' if closed else ""
     return ('<h2>새로 생기는 칸 <span class="sub">— 지금은 가격이 없는 칸입니다</span></h2>'
             '<div class="banner amber">ERP 에는 칸을 지우는 길이 없어, 이 칸들은 나중에 되돌려도 지울 수 없습니다'
-            '(되돌리기에서 「지울 수 없는 칸」으로 남습니다).</div><div class="scroll"><table>'
+            f'(되돌리기에서 「지울 수 없는 칸」으로 남습니다).</div>{note}<div class="scroll"><table>'
             '<tr><th>칸</th><th>판매가</th><th>정가</th><th>공급 원가</th><th>상태</th></tr>' + "".join(rows) + "</table></div>")
 
 
