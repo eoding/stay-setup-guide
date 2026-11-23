@@ -1,0 +1,46 @@
+<!-- 손으로 만든 조각: ERP _calendar_adjust_form.html 의 confirm 단계(「건너뛰는 칸」 표 포함)를 따른다. 실제 캡처
+     calendar-adjust--step2.html 은 건너뛰는 칸이 0줄이라 이 조각을 따로 둔다. 오퍼·객실·금액은 지어낸 값이다. -->
+<div id="stay_calendar_adjust_00000000" class="stay-root stay-readable" data-stay-screen="calendar-adjust" data-calendar-adjust="confirm">
+  <input type="hidden" name="offer" value="{offer:1}">
+  <input type="hidden" name="adjust" value="+1">
+  <input type="hidden" name="date_selection_0" value="2026-12-24 ~ 2026-12-31">
+  <input type="hidden" name="digest" value="{digest}">
+  <section class="stay-card" data-stay-summary>
+    <h4 class="stay-section-title">확인</h4>
+    <dl class="stay-facts">
+      <dt>오퍼</dt><dd>샘플 오퍼</dd>
+      <dt>객실</dt><dd>디럭스 · 스위트</dd>
+      <dt>요금제</dt><dd>조식 포함 · 룸온리</dd>
+      <dt>기간</dt><dd>2026-12-24 ~ 2026-12-31 (8일)</dd>
+      <dt>인원 조합</dt><dd>인원 무관 단일가 · A2 · 성인 2 · A3 · 성인 3 · A2C1_CHD · 소아 1</dd>
+      <dt>박수 층</dt><dd>전 층</dd>
+      <dt>가감</dt><dd>+1 (USD)</dd>
+    </dl>
+    <p class="stay-description"><strong>대상 40칸 · 적용 33칸 · 건너뜀 7칸</strong></p>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <thead><tr><th>객실</th><th>요금제</th><th>인원 조합</th><th>박수</th><th class="stay-numeric">칸</th><th class="stay-numeric">현재가 (USD)</th><th class="stay-numeric">변경 후 (USD)</th></tr></thead>
+        <tbody>
+          <tr><td>디럭스</td><td>조식 포함</td><td>A2 · 성인 2</td><td>1박 이상</td>
+            <td class="stay-numeric">6 / 8</td>
+            <td class="stay-numeric">140.00 ~ 160.00</td>
+            <td class="stay-numeric">141.00 ~ 161.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="stay-card">
+    <h4 class="stay-section-title">건너뛰는 칸 · 7칸</h4>
+    <div class="table1 stay-table-scroll">
+      <table class="bs-table stay-table stay-aligned-table">
+        <thead><tr><th>숙박일</th><th>객실</th><th>요금제</th><th>인원 조합</th><th>박수</th><th>사유</th></tr></thead>
+        <tbody><tr><td>2026-12-24 ~ 2026-12-25 (2일)</td><td>디럭스</td><td>조식 포함</td><td>A2 · 성인 2</td><td>1박 이상</td><td>예약이 있는 날</td></tr><tr><td>2026-12-24 ~ 2026-12-25 (2일)</td><td>디럭스</td><td>조식 포함</td><td>A2C1_CHD · 소아 1</td><td>3박 이상</td><td>예약이 있는 날</td></tr><tr><td>2026-12-28</td><td>스위트</td><td>룸온리</td><td>A3 · 성인 3</td><td>1박 이상</td><td>예약이 있는 날</td></tr><tr><td>2026-12-31</td><td>스위트</td><td>룸온리</td><td>인원 무관 단일가</td><td>1박 이상</td><td>정가보다 비싸짐</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <div class="stay-banner stay-banner--warning"><span>가감한 뒤 시즌 가격 적용을 '이미 값이 있는 날도 덮기'로 다시 돌리면 조정한 값이 시즌 단가로 돌아갑니다.</span></div>
+  <div class="stay-drawer__footer">
+    <button type="button" class="stay-btn stay-btn--primary" data-stay-action="save">가감 적용</button>
+  </div>
+</div>

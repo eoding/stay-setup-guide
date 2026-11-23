@@ -1,0 +1,247 @@
+{
+  "_note": "손 조각(tests/fixtures/erp/charges.json · charges_erp.mjs)을 받침에 세우고 진짜 stay_charge.js 를 돌려 얻은 답의 입력이다. 답 파일마다 [답, take 쪽…] 목록이고, 시각에 따라 바뀌는 칸은 normalized 의 값으로 적었다. posted 는 저장 요청이 실어 보낸 [이름, 값] 쌍이다.",
+  "normalized": {
+    "ms": 0,
+    "doneAt": "2026-11-21T00:00:00.000Z",
+    "body.id 와 쪽의 id": {
+      "look": "bgoldenlook",
+      "readCharge": "bgoldenread"
+    }
+  },
+  "hotel": {
+    "id": "1",
+    "name": "데모 호텔"
+  },
+  "look": {},
+  "readCharge": {
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "offer": "601",
+    "charge": "701"
+  },
+  "applyCharge": {
+    "no": 1,
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "offer": "601",
+    "charge": "701",
+    "name": "레이트 체크아웃 (14시 이후 · 1박 요금의 50%)",
+    "form": [
+      [
+        "kind",
+        "1"
+      ],
+      [
+        "name",
+        "레이트 체크아웃 (14시 이후 · 1박 요금의 50%)"
+      ],
+      [
+        "basis",
+        "1"
+      ],
+      [
+        "per",
+        "0"
+      ],
+      [
+        "amount_mode",
+        "blank"
+      ],
+      [
+        "amount",
+        ""
+      ],
+      [
+        "pct_mode",
+        "set"
+      ],
+      [
+        "pct",
+        "50.00"
+      ],
+      [
+        "date_mode",
+        "optional"
+      ],
+      [
+        "date_scope",
+        ""
+      ],
+      [
+        "onsite_currency",
+        ""
+      ],
+      [
+        "onsite_amount",
+        ""
+      ],
+      [
+        "tiers_submitted",
+        "1"
+      ],
+      [
+        "tiers_time_from",
+        "12:01"
+      ],
+      [
+        "tiers_time_to",
+        "14:00"
+      ],
+      [
+        "tiers_basis",
+        "0"
+      ],
+      [
+        "tiers_amount",
+        "0.00"
+      ],
+      [
+        "tiers_pct",
+        ""
+      ],
+      [
+        "tiers_time_from",
+        "14:01"
+      ],
+      [
+        "tiers_time_to",
+        "18:00"
+      ],
+      [
+        "tiers_basis",
+        "1"
+      ],
+      [
+        "tiers_amount",
+        ""
+      ],
+      [
+        "tiers_pct",
+        "50.00"
+      ],
+      [
+        "description",
+        ""
+      ],
+      [
+        "scope_room_mode",
+        "0"
+      ]
+    ],
+    "set": [
+      [
+        "tiers_pct",
+        1,
+        "60.00"
+      ]
+    ]
+  },
+  "posted": [
+    [
+      [
+        "kind",
+        "1"
+      ],
+      [
+        "name",
+        "레이트 체크아웃 (14시 이후 · 1박 요금의 50%)"
+      ],
+      [
+        "basis",
+        "1"
+      ],
+      [
+        "per",
+        "0"
+      ],
+      [
+        "amount_mode",
+        "blank"
+      ],
+      [
+        "amount",
+        ""
+      ],
+      [
+        "pct_mode",
+        "set"
+      ],
+      [
+        "pct",
+        "50.00"
+      ],
+      [
+        "date_mode",
+        "optional"
+      ],
+      [
+        "date_scope",
+        ""
+      ],
+      [
+        "onsite_currency",
+        ""
+      ],
+      [
+        "onsite_amount",
+        ""
+      ],
+      [
+        "tiers_submitted",
+        "1"
+      ],
+      [
+        "tiers_time_from",
+        "12:01"
+      ],
+      [
+        "tiers_time_to",
+        "14:00"
+      ],
+      [
+        "tiers_basis",
+        "0"
+      ],
+      [
+        "tiers_amount",
+        "0.00"
+      ],
+      [
+        "tiers_pct",
+        ""
+      ],
+      [
+        "tiers_time_from",
+        "14:01"
+      ],
+      [
+        "tiers_time_to",
+        "18:00"
+      ],
+      [
+        "tiers_basis",
+        "1"
+      ],
+      [
+        "tiers_amount",
+        ""
+      ],
+      [
+        "tiers_pct",
+        "60.00"
+      ],
+      [
+        "description",
+        ""
+      ],
+      [
+        "scope_room_mode",
+        "0"
+      ]
+    ]
+  ]
+}

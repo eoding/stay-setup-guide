@@ -1,0 +1,114 @@
+{
+  "_note": "손 조각(tests/fixtures/erp/addons.json · addons_erp.mjs)을 받침에 세우고 진짜 stay_addon_price.js 를 돌려 얻은 답의 입력이다. 답 파일마다 [답, take 쪽…] 목록이고, 시각에 따라 바뀌는 칸은 normalized 의 값으로 적었다. posted 는 저장 요청이 실어 보낸 [이름, 값] 쌍이다.",
+  "normalized": {
+    "ms": 0,
+    "doneAt": "2026-11-21T00:00:00.000Z",
+    "body.id 와 쪽의 id": {
+      "look": "bgoldenlook",
+      "readLine": "bgoldenread"
+    }
+  },
+  "hotel": {
+    "id": "1",
+    "name": "데모 호텔"
+  },
+  "look": {},
+  "readLine": {
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "addon": "201",
+    "line": "301"
+  },
+  "applyLine": {
+    "no": 1,
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "addon": "201",
+    "line": "301",
+    "form": [
+      [
+        "name",
+        "비수기 조식"
+      ],
+      [
+        "price",
+        "20.00"
+      ],
+      [
+        "net_amount",
+        "15.00"
+      ],
+      [
+        "season",
+        "41"
+      ],
+      [
+        "date",
+        ""
+      ],
+      [
+        "rate_plan",
+        ""
+      ],
+      [
+        "description",
+        ""
+      ],
+      [
+        "scope_rate_plan_mode",
+        "0"
+      ],
+      [
+        "scope_room_mode",
+        "0"
+      ]
+    ],
+    "set": {
+      "price": "22.00"
+    }
+  },
+  "posted": [
+    [
+      [
+        "name",
+        "비수기 조식"
+      ],
+      [
+        "price",
+        "22.00"
+      ],
+      [
+        "net_amount",
+        "15.00"
+      ],
+      [
+        "season",
+        "41"
+      ],
+      [
+        "date",
+        ""
+      ],
+      [
+        "rate_plan",
+        ""
+      ],
+      [
+        "description",
+        ""
+      ],
+      [
+        "scope_rate_plan_mode",
+        "0"
+      ],
+      [
+        "scope_room_mode",
+        "0"
+      ]
+    ]
+  ]
+}

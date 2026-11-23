@@ -1,0 +1,61 @@
+[
+  {
+    "op": "look",
+    "ok": true,
+    "login": false,
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "count": {
+      "offers": 3,
+      "promotions": 6
+    },
+    "body": {
+      "id": "bgoldenlook",
+      "chars": 1539,
+      "bytes": 2262,
+      "crc32": "7dcd5696",
+      "fnv": "324f59ed"
+    },
+    "rest": true,
+    "ask": "a3a6bf43",
+    "clicks": {},
+    "blocked": [],
+    "ms": 0,
+    "doneAt": "2026-11-23T00:00:00.000Z"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenlook",
+    "at": 0,
+    "size": 800,
+    "next": 676,
+    "end": 1539,
+    "sum": "55452448",
+    "text": "{'op':'look','asked':{},'hotel':{'id':'1','name':'데모 호텔'},'offers':[{'id':'602','name':'데모 연말 오퍼','promotions':[{'id':'9007','title':'연말 얼리버드 31일 전 10%','code':'','trigger':'얼리버드','benefit':['체크인 D-N일 전 31 → 10%'],'combo':['택일'],'limits':['시즌 연말 성수기','요금제: 기존 범위 그대로','객실: 기존 범위 그대로','요금제 디럭스 · 조식 포함','숙박일 2026-12-20 ~ 2027-01-05'],'warnings':[]}]},{'id':'601','name':'데모 오퍼 2027','promotions':[{'id':'9002','title':'롱스테이 2박 7% / 3박 10%','code':'','trigger':'연박','benefit':['최소 숙박(박) 2 → 7%','최소 숙박(박) 3 → 10%','※ 만족하는 단 중 가장 높은 하나만 적용'],'combo':['택일','배타 그룹 DEMO-PROMO'],'limits':['요금제: 기존 범위 그대로','객실: 기존 범위 그대로','숙박일 제한 없음'],'warnings':[]},{'id':'9003','title':'상시 정액 할인',"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenlook",
+    "at": 676,
+    "size": 800,
+    "next": 1357,
+    "end": 1539,
+    "sum": "3f7ec619",
+    "text": "'code':'FLAT-20','trigger':'상시 · 조건 없이 항상','benefit':['20 USD'],'combo':['택일'],'limits':['요금제: 기존 범위 그대로','객실: 기존 범위 그대로','숙박일 제한 없음'],'warnings':[]},{'id':'9004','title':'4박 이상이면 1박 무료','code':'','trigger':'연박','benefit':['최소 숙박(박) 4 → 1박 무료'],'combo':['택일'],'limits':['요금제: 기존 범위 그대로','객실: 기존 범위 그대로','숙박일 제한 없음'],'warnings':[]},{'id':'9005','title':'얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프','code':'','trigger':'얼리버드','benefit':['체크인 D-N일 전 46 → 15.0%','체크인 D-N일 전 31 → 10.0%','※ 만족하는 단 중 가장 높은 하나만 적용'],'combo':['택일'],'limits':['요금제: 기존 범위 그대로','객실: 기존 범위 그대로','숙박일 제한 없음'],'warnings':[]}]},{'id':'0','name':'전 오퍼 공통','promotions':[{'id':'9006','title':'전 오퍼 공통 상시 5%','code':'ALL-5',"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenlook",
+    "at": 1357,
+    "size": 800,
+    "next": 1539,
+    "end": 1539,
+    "sum": "3be05421",
+    "text": "'trigger':'상시 · 조건 없이 항상','benefit':['5%'],'combo':['중복 가능','배타 그룹 DEMO-ALL'],'limits':['요금제: 기존 범위 그대로','객실: 기존 범위 그대로','숙박일 제한 없음','예약일 2026-11-01 ~ 2027-02-28'],'warnings':[]}]}]}"
+  }
+]

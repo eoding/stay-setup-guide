@@ -1,0 +1,550 @@
+#!/usr/bin/env python3
+"""promotion_change.py — 프로모션 할인 도우미의 명령. JSON 파일을 받고 JSON 을 돌려준다(브라우저 쪽이 이 명령을 부른다).
+
+장부 · 낡음 확인 · 15분 멈춤 · 다시 읽어 견주기 · 되돌리기 계산 · 저장 한 걸음 · 페이지 틀은 다른 세 도우미와 같은 것을 쓴다
+(`../stay-price-change/scripts/change_core`). 장부는 같은 파일이고, 이 명령은 그 장부를 프로모션(`promotion`)의 장부로 연다 — 다른
+도우미의 번호는 거절한다. `list` 만은 네 도우미의 기록을 모두 싣는다(줄은 저마다 그 도우미가 만든다).
+
+편집 창에 화면 밖 설정을 지키는 표식이 없는 ERP 에서는 읽고 미리보기만 하고 저장하지 않는다 — 미리보기는 그 단을 바꿀 수 없는
+단(NO_MARK)으로 두고, begin 은 적용 직전에 읽은 창에 표식이 없으면 시작하지 않으며, 되돌리기는 저장 단계를 만들지 않는다.
+
+    work          새 작업 폴더 — 담당자가 시킨 일 하나에 하나(기록 폴더/작업/<YYYY-MM-DD HHMMSS>/)
+    look          stayPromotion.look() 의 답과 그 조각(take 답들) → 호텔의 카드마다 프로모션 전부(목록이 보인 그대로). 기록 폴더의
+                  다른 작업 폴더의 look/(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다
+    read-calls    요청 파일(목록 확인은 --look), 장부 번호, 또는 프로모션 번호(--promotion, 바꾸지 않고 설정만 볼 때 · --look 과 같이)
+                  → readPromotion 부를 값(calls.json)
+    read          calls.json + readPromotion 답과 조각(폴더째) → 지금 값(snapshot.json)
+    plan          지금 값 + 요청(+ 빨간 줄 고름) → 미리보기 계산과 저장 단계(plan-1.json). --record 면 장부에 적는다
+    render        preview | result | rollback | prices | window 페이지(HTML). --text 면 파일을 만들지 않고 페이지의 글만 낸다
+    begin         적용 시작 — 적용 직전에 읽은 값에 표식이 있는지, 그 번호의 계산이 바탕으로 삼은 읽은 값과 한 칸이라도(딸린 칸 ·
+                  표식까지) 다른지 본다. 다르면 아무것도 시작하지 않고 다른 것을 댄다(종료 1). 같으면 저장 단계를 장부에 적는다
+    calls         아직 저장되지 않은 단계 → applyPromotion 부를 값. 멈춘 변경은 다시 읽어 check 가 이어서 해도 된다고 한 뒤에만 낸다
+    record-result applyPromotion 답 하나 → 그 단계를 장부에 됨 · 멈춤으로 적는다
+    check         장부 번호 + 방금 읽은 값 → 저장마다 됨 · 안 됨 · 섞임 · 그 사이 바뀜, 남은 저장을 해도 되는지
+    verify        적용 뒤 다시 읽은 값과 견주기 — 넣은 값, 그리고 그 프로모션의 다른 단 · 칸 · 표식이 그대로인지. 다르면 종료 1
+    rollback      장부의 변경 하나(또는 --promotion 으로 고른 프로모션)를 되돌리는 계산. --record 면 장부에 적는다
+    list          장부에 적힌 기록 목록 — 네 도우미의 것 모두, 탭의 호텔(--look) 것만, --all 이면 다른 호텔 것도 그 뒤에
+
+결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다. 파일에 쓰는 명령(look · read-calls · read · plan · rollback)은
+`--out` 을 주면 표준 출력에는 짧은 답만 낸다. 종료 코드: 0 됨 · 1 다른 값이 있음(begin · verify) · 2 입력이나 순서가 맞지 않음(표준
+오류에 {"error": "…"} 한 줄, 조각을 받아야 하면 "refetch").
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+from promotion_model import (
+    GATE, ITEM_KIND, OFFERLESS, ORIGIN_UNKNOWN, ModelError, Snapshot, decode_hotel, decode_listing, decode_request, decode_snapshot, encode_hotel,
+    encode_listing, encode_request, encode_snapshot, hotel_label, known_promotions, listing_of, name_notes_of, part_of_key,
+    promotion_of, promotion_of_key, snapshot_items,
+)
+from promotion_pages import (
+    UNIT, blocked_tiers, chosen_tiers, guest_effect, kept_off, off_notes, red_lines, render_preview, render_prices, render_result,
+    render_rollback, render_window, result_name,
+)
+from promotion_plan import (
+    PlanError, counts, decode_plan, decode_step, encode_plan, encode_step, plan_change, plan_promotion_rollback, plan_steps,
+    preview_rows, promotion_filter, resolve, rollback_rows, rollback_steps, step_call, step_plans,
+)
+from change_core import cli, files
+from change_core.answers import BrowserError, answers_for, attach_bodies, reading_time, step_outcome, unanswered
+from change_core.chrome import page_text
+from change_core.files import load, page_path
+from change_core.items import encode_state, key_fields
+from change_core.ledger import Ledger, LedgerError
+from change_core.money import money_text
+from change_core.rollback import decode_rollback, encode_rollback
+from change_core.rules import Resolution, said_in
+from change_core.window import moved_since as window_moved
+
+PREFIXES = ("look-", "promotion-", "take-")
+PAGE_OBJECT = "stayPromotion"       # 조각을 다시 받으라고 할 때 부르라고 말하는 페이지 모듈
+READS = ("readPromotion",)
+PAGE_KEEPS = 200            # 페이지가 두는 조각 수(stay_price.js 의 KEEP_BODIES) — readPromotion 하나가 조각 하나다
+LOOK_SHOWN = 40             # look 의 짧은 답이 싣는 고를 프로모션 수 — 넘으면 `more` 에 남은 수, --find 로 좁힌다
+PAGE_NAMES = {"preview": "프로모션 할인 미리보기", "result": "프로모션 할인 적용 결과", "rollback": "프로모션 할인 되돌리기 미리보기",
+              "prices": "지금 프로모션", "window": "프로모션 설정"}
+
+
+def open_ledger() -> Ledger:
+    """프로모션의 장부 — 다른 세 도우미와 같은 파일, 이 종류의 번호만(`list` 는 종류 없이 연다)."""
+    return Ledger(kind=ITEM_KIND)
+
+
+def load_results(paths) -> list:
+    return files.load_results(paths, PREFIXES)
+
+
+def label_of(key: str, field: str) -> str:
+    return "할인 값" if part_of_key(key)[1] is not None else field
+
+
+# ───────────── 읽기 ─────────────
+
+def cmd_work(args):
+    return dict(work=str(files.new_work()))
+
+
+def cmd_look(args):
+    results = load_results(args.answers)
+    looks = [result for result in attach_bodies(answers_for(results, "look"), files.lent_looks(results, args.answers, PREFIXES),
+                                                PAGE_OBJECT) if result.get("op") == "look"]
+    if len(looks) != 1:
+        raise BrowserError(f"stayPromotion.look() 의 답이 하나여야 합니다(받은 것 {len(looks)}개)")
+    look = looks[0]
+    if look.get("login"):
+        raise BrowserError("탭이 로그인 화면입니다 — 담당자가 직접 로그인한 뒤 다시 봅니다")
+    if not look.get("ok"):
+        raise BrowserError(f"stayPromotion.look() 이 실패했습니다: {look.get('error')}")
+    return encode_listing(listing_of(look, reading_time(results, ("look",))))
+
+
+def load_calls(path: str) -> dict:
+    calls = load(path)
+    if not isinstance(calls, dict) or not isinstance(calls.get("promotions"), list):
+        raise ValueError(f"read-calls 가 낸 파일(promotions)이 아닙니다: {path}")
+    return calls
+
+
+def recorded_snapshot(ledger: Ledger, change_id: int) -> Snapshot:
+    return decode_snapshot(ledger.reading(change_id))
+
+
+def read_calls(hotel: str, hotel_id: str, refs) -> dict:
+    refs = list(dict.fromkeys(refs))
+    if len(refs) > PAGE_KEEPS:
+        raise PlanError(f"프로모션 {len(refs)}개는 읽기 한 번에 들지 않습니다({PAGE_KEEPS}개까지) — 요청 파일을 둘 이상으로 나눕니다")
+    return dict(promotions=[dict(hotel=encode_hotel(hotel, hotel_id), offer=offer, promotion=promotion) for offer, promotion in refs])
+
+
+def listed_refs(listing, promotions) -> list:
+    """프로모션 번호들 → (카드의 오퍼, 프로모션) — 목록(look)에서 찾는다. 바꾸지 않고 설정만 볼 때(render window) 쓴다."""
+    found = {item.id: (item.offer, item.id) for item in listing.promotions}
+    unknown = [str(promotion) for promotion in promotions if str(promotion) not in found]
+    if unknown:
+        raise ModelError(f"목록에 없는 프로모션 번호입니다: {', '.join(unknown)} — look 의 번호를 씁니다")
+    return [found[str(promotion)] for promotion in promotions]
+
+
+def cmd_read_calls(args):
+    if args.promotion or args.all:
+        if not args.look:
+            raise ValueError("--promotion · --all 로 고를 때는 --look(이 일의 look.json)을 같이 줍니다 — 프로모션의 카드를 목록에서 찾습니다")
+        listing = decode_listing(load(args.look))
+        chosen = [item.id for item in listing.promotions] if args.all else args.promotion
+        return read_calls(listing.hotel, listing.hotel_id, listed_refs(listing, chosen))
+    if args.record:
+        then = recorded_snapshot(open_ledger(), args.record)
+        return read_calls(then.hotel, then.hotel_id, then.asked)
+    request = decode_request(load(args.request))
+    listing = decode_listing(load(args.look)) if args.look else None
+    return read_calls(request.hotel, request.hotel_id, known_promotions(request, listing))
+
+
+def cmd_read(args):
+    calls, results = load_calls(args.calls), load_results(args.answers)
+    missing = unanswered(calls["promotions"], results, "readPromotion")
+    if missing:
+        raise BrowserError(f"readPromotion 답이 없는 부를 값이 {len(missing)}개 있습니다 — 처음 것: 오퍼 {missing[0]['offer']} · "
+                           f"프로모션 {missing[0]['promotion']}. 그 값으로 readPromotion 을 부릅니다(불렀는데 답이 끊겼거나 잘렸으면 "
+                           "stayPromotion.last() 의 답을 새 파일로 저장해도 됩니다)")
+    read_at = reading_time(results, READS)
+    joined = attach_bodies(answers_for(results, "readPromotion"), files.lent_answers(args.calls, args.answers, calls, PREFIXES),
+                           PAGE_OBJECT)
+    asked = [(str(call["offer"]), str(call["promotion"])) for call in calls["promotions"]]
+    hotel, hotel_id = decode_hotel(calls["promotions"][0]["hotel"]) if calls["promotions"] else ("", "")
+    promotions = {}
+    for answer in joined:
+        if answer.get("op") != "readPromotion":
+            continue
+        promotion = promotion_of(answer)
+        if promotion is not None:
+            promotions[promotion.id] = promotion
+        if answer.get("ok") and answer.get("hotel"):
+            hotel = str(answer["hotel"].get("name") or hotel)
+    return encode_snapshot(Snapshot(hotel, hotel_id, read_at, tuple(asked),
+                                    {pid: promotions[pid] for _offer, pid in asked if pid in promotions}))
+
+
+# ───────────── 미리보기 ─────────────
+
+def cmd_plan(args):
+    files.fresh_record(args.out, args.replaces, args.record, "plan")
+    snapshot, request = decode_snapshot(load(args.snapshot)), decode_request(load(args.request))
+    plan = plan_change(snapshot, request)
+    resolutions = [Resolution(str(item["rule"]), str(item["choice"]), None if item.get("tiers") is None else
+                              tuple(str(name) for name in item["tiers"]), said_in(item))
+                   for item in load(args.resolutions)] if args.resolutions else []
+    plan = resolve(plan, resolutions)
+    steps = plan_steps(plan)
+    change_id = open_ledger().record_preview(
+        hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=OFFERLESS, currency=plan.currency, sentence=request.sentence,
+        read_at=plan.read_at, rows=preview_rows(plan), request=encode_request(request), reading=encode_snapshot(snapshot),
+        replaces=args.replaces, empty=steps is not None and not steps) if args.record else None
+    names = name_notes_of(snapshot, ((change.key, change.before) for change in plan.changes if change.writes))
+    return dict(change_id=change_id, replaces=args.replaces, counts=counts(plan), plan=encode_plan(plan, encode_request),
+                red=red_lines(plan), chosen=chosen_tiers(plan), blocked=blocked_tiers(plan),
+                gate=[dict(promotion=promotion.id, name=promotion.label, said=GATE) for promotion in plan.unmarked]
+                + [dict(promotion=promotion.id, name=promotion.label, said=ORIGIN_UNKNOWN) for promotion in plan.unsure],
+                off=[line for promotion in plan.promotions for line in off_notes(promotion)], guest=guest_effect(plan),
+                names=[note.sentence for note in names],
+                scope_card=any(name.startswith("scope_") for promotion in plan.promotions for name, _text in promotion.form),
+                steps=None if steps is None else [encode_step(step) for step in steps])
+
+
+def written_names(ledger: Ledger, record) -> list:
+    return [note.sentence for note in name_notes_of(recorded_snapshot(ledger, record.id), (
+        (row.item_key, row.before) for row in record.rows if row.written and row.action))]
+
+
+def kept_off_of(ledger: Ledger, record, now: Snapshot, moved: list[dict]) -> list[str]:
+    """이 번호가 저장한 프로모션에서 화면 밖 설정이 저장 뒤에도 그대로인 단의 문장(promotion_pages.kept_off)."""
+    saved = [promotion_of_key(row.item_key) for row in record.rows if row.written and row.action]
+    return kept_off(recorded_snapshot(ledger, record.id), now, saved, moved)
+
+
+def moved_since(ledger: Ledger, change_id: int, now: Snapshot) -> list[dict]:
+    """저장한 프로모션 가운데 그대로여야 할 것이 달라진 것 — 넣지 않은 단의 값, 창이 보내는 딸린 칸, 표식(화면 밖 설정의 이름),
+    새로 생긴 단(change_core.window.moved_since, 저장 단위는 프로모션 하나)."""
+    return window_moved(ledger, change_id, snapshot_items(recorded_snapshot(ledger, change_id)), snapshot_items(now),
+                        unit=promotion_of_key, label_of=label_of)
+
+
+def cmd_render(args):
+    if args.text and args.out:
+        raise ValueError("--text 는 글만 내고 파일을 만들지 않습니다 — --out 과 같이 주지 않습니다")
+    name = PAGE_NAMES[args.kind]
+    if args.kind == "preview":
+        data = load(args.plan)
+        plan = decode_plan(data["plan"], decode_request)
+        html, hotel = render_preview(plan, data.get("change_id"), data.get("steps"), data.get("names") or ()), plan.request.hotel
+    elif args.kind == "rollback":
+        data = load(args.plan)
+        plan = decode_rollback(data["rollback"])
+        html, hotel = render_rollback(plan, decode_snapshot(data["reading"]), data.get("scope") or ""), plan.hotel
+    elif args.kind == "prices":
+        listing = decode_listing(load(args.look))
+        html, hotel = render_prices(listing, decode_snapshot(load(args.snapshot)) if args.snapshot else None), listing.hotel
+    elif args.kind == "window":
+        snapshot = decode_snapshot(load(args.snapshot))
+        html, hotel = render_window(snapshot), snapshot.hotel
+    else:
+        ledger = open_ledger()
+        record = ledger.change(args.change)
+        now = decode_snapshot(load(args.snapshot)) if args.snapshot else None
+        moved = moved_since(ledger, args.change, now) if now else []
+        kept = kept_off_of(ledger, record, now, moved) if now else []
+        html, hotel = render_result(record, moved, str(ledger.path), written_names(ledger, record), kept), record.hotel
+        name = f"프로모션 할인 {result_name(record)}"
+    if args.text:
+        return dict(text=page_text(html))
+    path = files.write_out(args.out or page_path(hotel, name), html)
+    return dict(page=str(path.resolve()))
+
+
+# ───────────── 적용 ─────────────
+
+def same_hotel_or_refuse(change_id: int, then: Snapshot, now: Snapshot) -> None:
+    if then.hotel_id != now.hotel_id:
+        raise PlanError(f"방금 읽은 값은 {hotel_label(now.hotel, now.hotel_id)} 것이고, {change_id}번은 "
+                        f"{hotel_label(then.hotel, then.hotel_id)} 입니다")
+
+
+def marked_or_refuse(steps, now: Snapshot) -> None:
+    """적용 직전에 읽은 창마다 화면 밖 설정을 지키는 표식이 있는지, 단 줄마다 ERP 가 어느 저장된 단에서 왔는지 아는지(숨은 칸
+    tiers_origin 에 `?` 가 없는지) — 아니면 아무것도 시작하지 않는다(장부에도 적지 않는다)."""
+    read = [now.promotions[step.promotion] for step in steps if step.promotion in now.promotions]
+    bare = [promotion.label for promotion in read if not promotion.keeps]
+    if bare:
+        raise PlanError(f"{GATE}: {', '.join(bare)}")
+    unsure = [promotion.label for promotion in read if not promotion.origin_known]
+    if unsure:
+        raise PlanError(f"{ORIGIN_UNKNOWN}: {', '.join(unsure)}")
+
+
+def cmd_begin(args):
+    """적용 직전에 읽은 값(`--snapshot`)에 표식이 없거나 미리보기 때 값과 한 칸이라도 다르면 아무것도 시작하지 않는다."""
+    data = load(args.plan)
+    if data.get("steps") is None:
+        raise PlanError("빨간 줄을 먼저 골라 주세요 — 아직 저장 단계가 없습니다")
+    if not data["steps"]:
+        raise PlanError("저장할 것이 없는 미리보기입니다(바뀌는 단이 없거나 이 ERP 에서는 저장하지 않습니다) — 적용할 것이 없습니다")
+    ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
+    then = recorded_snapshot(ledger, args.change)
+    same_hotel_or_refuse(args.change, then, now)
+    steps = [decode_step(step) for step in data["steps"]]
+    marked_or_refuse(steps, now)
+    differences = ledger.begin_fresh(args.change, step_plans(steps), snapshot_items(then), snapshot_items(now), read_at=now.read_at,
+                                     request=data["plan"]["request"] if "plan" in data else None)
+    if differences:
+        return dict(change_id=args.change, status="previewed", same=False, differences=[
+            dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in differences])
+    record = ledger.change(args.change)
+    return dict(change_id=record.id, status=record.status, steps=len(record.steps))
+
+
+def step_payload(record, step) -> dict:
+    return step_call(step.index, record.hotel, record.hotel_id, decode_step(dict(step.body, kind=step.kind)))
+
+
+def cmd_calls(args):
+    record = open_ledger().change(args.change)
+    if not record.steps:
+        raise LedgerError(f"{args.change}번 변경은 아직 적용을 시작하지 않았습니다(begin)")
+    if record.status == "stopped":
+        raise LedgerError(f"{args.change}번 변경은 멈춰 있습니다(저장이 실패했거나 15분 동안 아무 일이 없었습니다) — 같은 프로모션을 다시 "
+                          f"읽고(read-calls --record {args.change}) check 가 이어서 해도 된다고 하면 calls 를 다시 부릅니다")
+    return dict(change_id=record.id, status=record.status,
+                calls=[step_payload(record, step) for step in record.steps if step.status != "saved"])
+
+
+def cmd_record_result(args):
+    result = load(args.result)
+    ledger = open_ledger()
+    record = ledger.change(args.change)
+    step = next((step for step in record.steps if step.index == result.get("no")), None)
+    if step is None:
+        raise LedgerError(f"{args.change}번 변경에 {result.get('no')}번째 저장이 없습니다")
+    outcome = step_outcome(step_payload(record, step), result)
+    if not outcome.started:
+        return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note, status=record.status)
+    return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=outcome.note,
+                status=ledger.record_step(record.id, step.index, outcome.saved is True, outcome.note,
+                                          unknown=outcome.saved == "unknown"))
+
+
+def cmd_check(args):
+    ledger = open_ledger()
+    now = decode_snapshot(load(args.snapshot))
+    then = recorded_snapshot(ledger, args.change)
+    same_hotel_or_refuse(args.change, then, now)
+    report = ledger.check(args.change, snapshot_items(now), snapshot_items(then), now.read_at, unit=promotion_of_key)
+    step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
+    return dict(change_id=report.change_id, scope=listed(ledger, args.change)[0]["scope"], status=report.status,
+                cause=report.cause, note=report.note, last_saved=step_ref(report.last_saved), next=step_ref(report.next),
+                remaining=list(report.remaining), can_continue=report.can_continue, why=list(report.why),
+                steps=[dict(no=step.index, label=step.label, ledger=step.ledger, seen=step.seen, settled=step.settled,
+                            moved=step.moved) for step in report.steps])
+
+
+def cmd_verify(args):
+    ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
+    same_hotel_or_refuse(args.change, recorded_snapshot(ledger, args.change), now)
+    mismatches = ledger.verify(args.change, snapshot_items(now))
+    moved = moved_since(ledger, args.change, now)
+    record = ledger.change(args.change)
+    return dict(change_id=args.change, same=not mismatches and not moved, moved=moved,
+                kept=kept_off_of(ledger, record, now, moved), names=written_names(ledger, record), mismatches=[
+        dict(promotion=promotion_of_key(item.item_key), label=item.label, field=item.field, what="할인 값",
+             after=money_text(item.after), seen=money_text(item.seen), seen_state=item.seen_state) for item in mismatches])
+
+
+# ───────────── 되돌리기 · 목록 ─────────────
+
+def cmd_rollback(args):
+    files.fresh_record(args.out, args.replaces, args.record, "rollback")
+    ledger = open_ledger()
+    now = decode_snapshot(load(args.snapshot))
+    select, _picked = promotion_filter(args.promotion or ())
+    plan = plan_promotion_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept,
+                                   select)
+    steps, rows = rollback_steps(plan, now), rollback_rows(plan, now)
+    change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
+                                      sentence=args.sentence, read_at=plan.read_at, rows=rows,
+                                      reverses=args.change, reading=encode_snapshot(now),
+                                      replaces=args.replaces, empty=not steps) if args.record else None
+    # 되돌리기 확인 · 미리보기의 「되돌리는 범위」 — 이 되돌리기의 줄(「N번 되돌리기」)이다. 되돌리는 변경의 줄(「할인 값 16으로」)을
+    # 옮기지 않는다(부과금 도우미에서 되돌리기가 그 값을 넣는 것처럼 읽혔다 — 시운전 9 · 11). 장부에 적었으면 `list` 의 그 번호 줄.
+    if change_id is not None:
+        scope = listed(ledger, change_id)[0]["scope"]
+    else:
+        scope = scope_line(scope_labels(rows), f"{args.change}번 되돌리기")
+    return dict(change_id=change_id, replaces=args.replaces, scope=scope,
+                rollback=encode_rollback(plan), reading=encode_snapshot(now), steps=[encode_step(step) for step in steps])
+
+
+def scope_line(labels: list[str], did: str, progress: str = "") -> str:
+    """범위 한 줄의 차례 — 프로모션 몇 개와 처음 프로모션 이름, 한 일, 어디까지 갔는지."""
+    names = list(dict.fromkeys(labels))
+    head = f"프로모션 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
+    return " · ".join(part for part in (head, did, progress) if part)
+
+
+def record_scope(entry: dict, labels: list[str]) -> str:
+    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 프로모션 몇 개와 처음 프로모션 이름(넣을 것이 없으면 짚은 프로모션), 한 일, 어디까지
+    갔는지(네 도우미가 같은 말, files.record_progress)."""
+    request = entry.get("request") or {}
+    did = ""
+    if request.get("kind") == "promotion_change":
+        try:
+            did = decode_request(request).describe()
+        except (ModelError, KeyError, TypeError, ValueError):
+            did = ""
+    elif entry.get("reverses"):
+        did = f"{entry['reverses']}번 되돌리기"
+    return scope_line(labels, did, files.record_progress(entry, UNIT))
+
+
+def scope_labels(rows) -> list[str]:
+    """장부의 줄(또는 되돌리기 계산의 줄)에서 범위 한 줄이 이름을 대는 프로모션 — 값을 넣는 프로모션(넣는 것이 없으면 짚은
+    프로모션)마다 그 이름."""
+    touched = {promotion_of_key(row.item_key) for row in rows if row.action} or {promotion_of_key(row.item_key) for row in rows}
+    return [row.label.rsplit(" · ", 1)[0] for row in rows if promotion_of_key(row.item_key) in touched]
+
+
+def described(ledger: Ledger, entry: dict) -> dict:
+    """프로모션 기록 한 줄에 범위 한 줄(`scope`)을 단다. 다른 도우미의 `list` 도 이것으로 이 종류의 줄을 만든다."""
+    return dict(entry, scope=record_scope(entry, scope_labels(ledger.change(entry["id"]).rows)))
+
+
+def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:
+    return files.listed(ledger, ITEM_KIND, described, change_id)
+
+
+def cmd_list(args):
+    """탭의 호텔의 기록 전부 — 네 도우미의 것을 모두, 저마다 그 도우미가 만든 줄로."""
+    ledger = Ledger()
+    return files.hotel_list(ledger.path, listed(ledger), args.look, args.all)
+
+
+# ───────────── 짧은 답 · 파서 ─────────────
+
+def look_item(item: dict) -> dict:
+    """고를 프로모션 하나 — 요청 파일에 옮길 번호(`offer` · `promotion`)와 이름, 혜택 줄(단마다 기준값과 값이 여기 있다)."""
+    return dict(offer=item["offer"], offer_name=item["offer_name"], promotion=item["id"], title=item["title"],
+                trigger=item["trigger"], benefit=item["benefit"])
+
+
+def short_look(result: dict, find: str | None = None) -> dict:
+    """호텔과 수, 그리고 고를 프로모션(`items`, LOOK_SHOWN 개까지 — 넘으면 `more` 에 남은 수). `find` 를 주면 카드 이름 · 프로모션 이름 ·
+    코드 · 발동 조건 · 혜택 줄에 그 낱말이 든 것만(`found` 는 그 수)."""
+    words = (lambda item: " ".join((item["offer_name"], item["title"], item["code"], item["trigger"], *item["benefit"])).casefold())
+    items = [look_item(item) for item in result["promotions"] if not find or find.casefold() in words(item)]
+    short = dict(hotel=result["hotel"], read_at=result["read_at"], offers=len(result["offers"]), promotions=len(result["promotions"]))
+    if find:
+        short.update(find=find, found=len(items))
+    short["items"] = items[:LOOK_SHOWN]
+    if len(items) > LOOK_SHOWN:
+        short["more"] = len(items) - LOOK_SHOWN
+    return short
+
+
+def short_read_calls(result: dict) -> dict:
+    return dict(promotions=result["promotions"])
+
+
+def short_read(result: dict) -> dict:
+    snapshot = decode_snapshot(result)
+    return dict(hotel=result["hotel"], read_at=result["read_at"], asked=len(snapshot.asked), found=len(snapshot.promotions),
+                missing=[promotion for _offer, promotion in snapshot.missing()],
+                unmarked=[promotion.id for promotion in snapshot.promotions.values() if not promotion.keeps])
+
+
+def short_plan(result: dict) -> dict:
+    """`scope_card` 는 저장할 것이 있을 때(또는 빨간 줄을 고른 뒤 있을 수 있을 때)만 true — 저장하지 않는 미리보기(표식 없는 ERP ·
+    바뀌는 단이 없음)에서 저장이 만드는 것을 먼저 말하지 않는다(시운전 10)."""
+    saves = None if result["steps"] is None else len(result["steps"])
+    return dict(change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"], saves=saves,
+                red=result["red"], chosen=result["chosen"], blocked=result["blocked"], gate=result["gate"], off=result["off"],
+                guest=result["guest"], names=result["names"], scope_card=result["scope_card"] and saves != 0)
+
+
+def short_rollback(result: dict) -> dict:
+    plan = decode_rollback(result["rollback"])
+    causes: dict[tuple, int] = {}
+    for item in plan.kept:
+        cause = (item.cause.change_id, item.cause.at, item.cause.sentence)
+        causes[cause] = causes.get(cause, 0) + 1
+    return dict(change_id=result["change_id"], replaces=result["replaces"], scope=result["scope"], restore_to=plan.restore_to,
+                restored=len(plan.restored), kept=len(plan.kept),
+                kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, items=count)
+                          for (change_id, at, sentence), count in causes.items()],
+                saves=len(result["steps"]), undoing=plan.undoing or None)
+
+
+SHORT = {"look": short_look, "read-calls": short_read_calls, "read": short_read, "plan": short_plan, "rollback": short_rollback}
+
+
+def parser() -> argparse.ArgumentParser:
+    top = argparse.ArgumentParser(prog="promotion_change.py", description="프로모션 할인 도우미의 명령")
+    commands = top.add_subparsers(dest="command", required=True)
+
+    def command(name: str, handler, help_text: str):
+        sub = commands.add_parser(name, help=help_text)
+        sub.set_defaults(handler=handler)
+        sub.add_argument("--out", help="결과(JSON, render 는 HTML)를 쓸 파일")
+        return sub
+
+    command("work", cmd_work, "새 작업 폴더")
+    sub = command("look", cmd_look, "look 답 → 카드마다 프로모션 전부")
+    sub.add_argument("--answers", action="append", required=True, help="look 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub.add_argument("--find", help="짧은 답의 고를 프로모션을 이 낱말(카드 · 프로모션 이름 · 코드 · 발동 조건 · 혜택 줄)로 좁힌다 — 파일은 전부")
+    sub = command("read-calls", cmd_read_calls, "읽을 프로모션 → readPromotion 부를 값")
+    scope = sub.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--request", help="바꾸기 요청 파일(kind promotion_change)")
+    scope.add_argument("--record", type=int, help="장부 번호 — 그 번호의 계산이 바탕으로 삼은 프로모션을 다시 읽는다")
+    scope.add_argument("--promotion", action="append", help="프로모션 번호(여러 번) — 바꾸지 않고 설정만 볼 때. --look 과 같이 준다")
+    scope.add_argument("--all", action="store_true", help="목록의 프로모션 전부 — 「지금 프로모션 보여줘」(화면 밖 설정 · 표식을 보려고). "
+                       "--look 과 같이 준다")
+    sub.add_argument("--look", help="look 명령이 낸 파일 — 요청의 오퍼 · 프로모션 번호가 목록에 있는지 본다")
+    sub = command("read", cmd_read, "readPromotion 답 → 지금 값")
+    sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
+    sub.add_argument("--answers", action="append", required=True, help="readPromotion 답과 take 답 파일, 또는 그것이 든 폴더 (여러 번)")
+    sub = command("plan", cmd_plan, "미리보기 계산")
+    sub.add_argument("--snapshot", required=True)
+    sub.add_argument("--request", required=True, help="바꾸기 요청 파일(kind promotion_change)")
+    sub.add_argument("--resolutions", help='빨간 줄 고름 JSON 목록 — [{"rule": "OVER_30", "choice": "include", "tiers": ["9001 21"], '
+                     '"said": "<담당자 말>"}]')
+    sub.add_argument("--record", action="store_true", help="장부에 미리보기로 적는다")
+    sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 미리보기의 장부 번호(빨간 줄을 고른 뒤 · 적용 직전에 값이 달라 다시 계산함)")
+    sub = command("render", cmd_render, "페이지 만들기")
+    sub.add_argument("kind", choices=sorted(PAGE_NAMES))
+    sub.add_argument("--plan", help="preview 는 plan-<k>.json, rollback 은 rollback-<k>.json")
+    sub.add_argument("--look", help="prices 의 look 파일")
+    sub.add_argument("--change", type=int, help="result 의 장부 번호")
+    sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값, window — 읽은 값, prices — read-calls --all 로 읽은 값(프로모션마다 "
+                     "화면 밖 설정 · 표식 한 줄)")
+    sub.add_argument("--text", action="store_true", help="페이지를 만들지 않고 페이지에 보이는 글만 답의 text 로 낸다(--out 과 같이 주지 않는다)")
+    sub = command("begin", cmd_begin, "적용 시작")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--plan", required=True, help="steps 가 든 plan-<k>.json 또는 rollback-<k>.json")
+    sub.add_argument("--snapshot", required=True, help="적용 직전에 같은 프로모션을 읽은 값(read-calls --record N 으로 읽는다, 15분 안)")
+    sub = command("calls", cmd_calls, "남은 저장 → applyPromotion 부를 값")
+    sub.add_argument("--change", type=int, required=True)
+    sub = command("record-result", cmd_record_result, "applyPromotion 답 하나를 장부에")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--result", required=True, help="stayPromotion.applyPromotion 답 JSON")
+    sub = command("check", cmd_check, "멈춘 변경을 방금 읽은 값으로 보기")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--snapshot", required=True, help="방금 같은 프로모션을 읽은 값(read-calls --record N 으로 읽는다)")
+    sub = command("verify", cmd_verify, "적용 뒤 견주기")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--snapshot", required=True)
+    sub = command("rollback", cmd_rollback, "되돌리기 계산")
+    sub.add_argument("--change", type=int, required=True)
+    sub.add_argument("--snapshot", required=True, help="지금 읽은 값(read-calls --record <그 번호> 로 읽는다)")
+    sub.add_argument("--include-kept", action="store_true", help="그 사이 달라진 단도 되돌린다")
+    sub.add_argument("--promotion", action="append", help="이 프로모션 번호만 (여러 번)")
+    sub.add_argument("--record", action="store_true", help="장부에 되돌리기 미리보기로 적는다")
+    sub.add_argument("--replaces", type=int, help="이 계산이 바꾸는 앞 되돌리기 미리보기(같은 변경을 되돌리는 것)의 장부 번호")
+    sub.add_argument("--sentence", default="되돌리기", help="담당자가 한 말")
+    sub = command("list", cmd_list, "장부 목록")
+    sub.add_argument("--look", help="look 명령이 낸 파일 — 탭에 열린 호텔의 기록만 싣는다")
+    sub.add_argument("--all", action="store_true", help="다른 호텔의 기록도 싣는다(탭의 호텔이 먼저)")
+    return top
+
+
+def main(argv=None) -> int:
+    cli.utf8_streams()
+    args = parser().parse_args(argv)
+    if args.command == "render":
+        needed = {"preview": "plan", "rollback": "plan", "prices": "look", "result": "change", "window": "snapshot"}[args.kind]
+        if getattr(args, needed) is None:
+            parser().error(f"render {args.kind} 에는 --{needed} 가 필요합니다")
+    return cli.run(args, dict(SHORT, look=lambda result: short_look(result, getattr(args, "find", None))))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

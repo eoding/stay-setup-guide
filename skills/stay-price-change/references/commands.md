@@ -1,0 +1,293 @@
+# price_change.py — 명령과 파일
+
+차례: 공통 · 하위 명령 · 요청 파일 · 요금표 · 넣지 않는 것 · 빨간 줄 고름 파일 · 오류와 할 일
+
+## 공통
+
+```bash
+python3 scripts/price_change.py <하위 명령> [플래그] [--out "<파일>"]
+```
+
+- 경로는 큰따옴표로 감싼다. 기록 폴더(`~/Documents/어딩 Stay 가격 변경 기록`)와 작업 폴더(`작업/2026-11-21 101500`), 페이지 이름(`<날짜 시각> · <호텔> · <페이지 이름>.html`)에 빈칸과 `·` 가 들어 있어 감싸지 않으면 셸이 경로를 쪼갠다. 이 글의 예에서 `<…>` 로 적은 경로도 모두 그렇게 넣는다.
+- 어느 폴더에서든 부를 수 있다. 위 꼴은 스킬 폴더에서 부를 때다. 다른 폴더에서는 `python3 "<스킬 폴더>/scripts/price_change.py" <하위 명령> …` 처럼 스크립트를 절대 경로로 부른다. 플래그의 파일 경로는 지금 폴더 기준이니 작업 폴더의 파일은 절대 경로로 주는 것이 안전하다. 장부 자리는 어디서 불러도 같다.
+
+- 결과는 표준 출력에 JSON 으로 쓴다. `--out` 을 주면 그 파일에도 쓴다(`render` 는 HTML 을 그 파일에 쓰고 표준 출력에는 `{page}` 만).
+- **짧은 답.** 파일에 쓰는 명령 여덟(`rooms` · `read-calls` · `read` · `sheet` · `plan` · `rollback` · `restore` · `compare`)은 `--out` 을 주면 온 결과를 그 파일에만 쓰고, 표준 출력에는 다음 일을 정하는 데 필요한 것만 담은 짧은 답을 낸다(칸 목록은 싣지 않는다). 모든 짧은 답에 `out`(온 결과가 든 파일의 절대 경로)이 있다. 명령마다의 짧은 답은 아래 표의 「`--out` 의 짧은 답」. `--out` 이 없으면 온 결과를 표준 출력에 낸다. 도우미는 짧은 답으로 말하고 정하고, 결과 파일을 통째로 읽지 않는다.
+- 종료 코드: 0 됨 · 1 다른 값이 있음(`stale`·`verify` 의 `same: false`) · 2 입력이나 순서가 맞지 않음. `--out` 의 폴더가 없으면 명령이 만든다 — 기록 폴더 안(작업 폴더의 `읽기-2/` 같은 것)만이고, 밖의 없는 폴더는 아무것도 하지 않고 거절한다(밖이라도 있는 폴더에는 쓴다). 2 는 무슨 일이든 표준 오류의 JSON 한 줄이다(파이썬 Traceback 은 없다) — 「오류와 할 일」의 끝 세 줄이 예상하지 못한 오류다. 2 일 때 표준 오류에 `{"error": "…"}`, 담당자에게 그대로 할 말이 있으면 `"say"`(그 문장만 말하고 멈춘다), 고를 줄이 있으면 `"choose": [{room, rate_plan, occupancy, choices: [{occupancy, label}]}]`(「오류와 할 일」), 받아야 할 조각이 있으면 `"refetch": [{"id", "at", "size", "until", "save", "bad"}]` 도 온다 — `at` 부터 `size` 로 받아 `<save><at>.json` 에, 답의 `next` 가 `until` 보다 작으면 `next` 로 이어 받아 `<save><next>.json` 에 둔다. `save` 는 명령이 고른 아직 없는 이름의 앞이다(처음이면 `take-<id>-`, 그 조각의 파일이 이미 있으면 `take-<id>-2-` …). `bad` 는 그 사이의 맞지 않는 쪽마다 `{file, at, why}` — 다시 받는 까닭이다.
+- 장부: `~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3`. 환경 변수 `STAY_PRICE_LEDGER_DIR` 로 폴더를 바꿀 수 있다. 문서 폴더(Documents)를 iCloud 「데스크탑 및 문서」 · OneDrive 백업 같은 클라우드가 동기화하면, 동기화하지 않는 폴더를 `STAY_PRICE_LEDGER_DIR` 로 정하고 기록 폴더를 그리로 옮긴다 — 동기화되는 장부 파일은 클라우드로만 옮겨지거나 사본으로 갈릴 수 있다. 기록 폴더에 작업 폴더나 페이지가 있는데 장부 파일이 없으면 명령은 빈 장부를 만들지 않고 `장부가 있던 자리라 빈 장부를 새로 만들지 않았습니다` 로 멈춘다 — 그 글을 담당자에게 그대로 전하고 멈춘다. 처음 쓰는 기록 폴더는 `work` 가 장부를 같이 만든다. 장부는 지우지 않는다. 번호마다(미리보기 · 지금 상태 저장 · 되돌리기) 호텔(페이지가 알아본 번호와 이름)과 그 계산이 바탕으로 삼은 읽은 값을 적는다. 그래서 같은 범위를 다시 읽거나 견줄 때는 번호만 준다.
+- 답 폴더(`--answers "<폴더>"`)에서는 이름이 `look-`·`pair-`·`resv-`·`take-` 로 시작하는 `.json`·`.txt` 파일을 답으로 읽는다.
+- 앞선 읽기: `reserved`·`read` 는 기록 폴더의 읽기 폴더(`작업/<작업>/<읽기>/`) 가운데 그 폴더의 `calls.json` 이 같은 호텔을 부르는 것을 스스로 찾는다(어느 작업의 읽기이든, 이번 읽기의 폴더는 빼고). 그 안의 답은 이번 읽기의 답으로 치지 않고, 다 받아 맞춰 본 조각만 빌린다. 조각은 알아볼 값 넷(글자 수 · 바이트 수 · CRC-32 · FNV-1a)이 모두 같을 때만 같은 조각이다. 앞선 폴더의 어긋난 것(잘못 옮겨 적은 쪽 · 빠진 쪽 · 검사값이 다른 것 · JSON 이 아닌 파일)은 오류가 아니다 — 명령이 말없이 건너뛰고, 그 폴더가 없는 것처럼 받을 것을 댄다. 이번 답들과 앞선 읽기 폴더 어디에도 없는 조각만 `refetch` 에 나온다. 기록 폴더 밖의 폴더는 보지 않는다.
+- 각 명령의 플래그는 `--help` 가 정본이다.
+
+## 하위 명령
+
+| 명령 | 플래그 | 하는 일 · 답 |
+|---|---|---|
+| `work` | 없음 | 새 작업 폴더를 그 안의 `look/`(look 답을 둘 곳)과 함께 만들어 `{work}` 로 그 자리를 준다 — `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`. 담당자가 시킨 일 하나(보기 · 바꾸기 · 되돌리기 · 이어서)에 하나다. 같은 이름이 있으면 ` (2)` …를 붙여 앞선 일의 폴더를 다시 주지 않는다 |
+| `look` | `--answers` (여러 번) · `--out` | `stayPrice.look()` 의 답과 그 조각 → `{login, hotel, offer, offers, pairs}`. 짧은 답이 따로 없다 — 이 답이 고를 이름(오퍼 · 객실 · 요금제)의 전부이고 이름은 여기서 옮긴다. `look/` 에 look 답이 둘 이상이면(탭이 연 오퍼를 본 뒤 담당자가 말한 오퍼를 `look({offer})` 로 다시 보고 그 답을 다음 번호 `look-2.json` 에 저장함) 페이지가 가장 늦게 끝낸 답을 쓴다 — 답의 `offer` 가 그 오퍼다. 기록 폴더의 다른 작업 폴더의 `look/`(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
+| `season` | `--answers` (여러 번) · `--out` | `stayPriceSeason.readSeason()` 의 답들과 그 조각 → `season.json`(「시즌 다시 채우기」의 창). 같은 오퍼의 다른 시즌 날을 아직 읽지 않았으면 종료 2 에 `ask`(그 시즌마다 readSeason 에 그대로 넘길 값 — `datesOnly: true`)를 낸다. 받지 못한 조각은 `refetch`(`stayPriceSeason.take`). 짧은 답 `{season, dates, last_fill_note, pairs, child, other_seasons, combos_unknown, banner, supply_warn}` — `supply_warn` 은 시즌 목록의 「공급 통화 없음」 띠(있으면 그 호텔의 시즌 채우기 칸이 팔리지 않는다 — 담당자에게 그대로 전한다) |
+| `read-calls` | `--request` 또는 `--record` · `--season` · `--step` | 읽을 범위 → `{pairs: [readPair 부를 값], reserved: [readReserved 첫 물음]}`. `--request` 는 범위 파일(`kind: range`)·바꾸기 요청·목표 값 표·`sheet` 가 낸 파일, `--record` 는 장부 번호(그 번호의 계산이 바탕으로 삼은 범위). 부를 값마다 `hotel` 이 든다. 기간은 고른 날만 덮게 끊는다(readPair 186일씩). 읽기 한 번은 가격 읽기와 예약 있는 날 읽기를 합쳐 200번까지다 — 넘는 범위는 아무것도 내지 않고 거절한다(까닭은 「`sheet` 가 낸 파일」). `--out` 의 짧은 답: `{out, pairs, reads}` — `pairs` 는 readPair 에 그대로 넣을 값(파일의 것과 같다), `reads` 는 `{readPair, readReserved, limit, fits}`. 예약 있는 날 물음은 `reserved` 가 파일에서 읽는다. 시즌 다시 채우기 요청은 `--season`(그 창의 시즌 날)과 함께 주고, `--record N --step k` 는 그 변경의 저장 하나의 범위(그 저장의 객실 · 요금제 × 날)만 읽는다(`calls` 앞의 다시 읽기) |
+| `reserved` | `--calls` · `--answers` (여러 번) | `read-calls` 가 낸 파일과 readReserved 답들 → `{done, ask, answered, failed}`. 숨긴 줄이 있던 물음은 객실 → 요금제 → 날짜 반쪽 순으로 쪼개 `ask` 에 다시 낸다. 답 폴더를 통째로 주면 된다. 예약 조각이 어디에도 없으면 종료 2 와 `refetch`. readPair 답이 다 와 있고 어느 답에도 판매일 있는 날이 없으면(`days.withCell` 0) 묻지 않고 거절한다 — 거절의 `say` 를 그대로 말하고 멈춘다(「오류와 할 일」). |
+| `read` | `--calls` · `--answers` (여러 번) · `--read-at` (시험용) | 브라우저 답 → 지금 값 `{hotel, offer, currency, read_at, cells, reserved, pairs, room_names, no_sale, dates, closures}`. 칸의 `state` 는 `open` · `closed` · `missing`, 그리고 `mixed` — 화면은 판매 상태를 그 객실 · 요금제의 날마다 하나로 보여, 칸마다 상태가 다른 날(「인원·박수별 상태 다름」 — 셀 창에서 칸마다 마감했다)은 그날 칸이 모두 `mixed` 다(어느 칸이 마감인지 모른다). `closures` 는 그날 상태가 「요금제 마감」 · 「객실 전체 마감」(지속 마감)인 (객실, 요금제, 날) — ERP 가 그날 새로 만드는 칸도 마감이다. 호텔은 페이지가 알아본 것이다. `read_at` 은 ERP 에서 읽은 시각 — 이번 읽기의 readPair · readReserved 답이 싣는 끝난 시각(`doneAt`) 가운데 가장 이른 것이다(명령을 부른 때가 아니다). 끝난 시각이 없는 답이 있으면 거절하고, `--read-at` 은 화면 조각 파일로 읽을 때만 받는다. 읽는 작업의 잘린 답과 `{running}`(돌던 중의 `last()`)은 답으로 치지 않고, 한 물음에 온전한 답이 둘이면 늦게 끝난 것을 쓴다. readPair 답이 없는 부를 값이나 남은 예약 물음이 있으면 거절하고, 어디에도 없는 조각이 있으면 종료 2 와 `refetch`. `--hotel`·`--hotel-id`·`--price-page`·`--adjust-page` 는 화면 조각 파일로 읽는 시험용이다. `--out` 의 짧은 답: `{out, hotel, offer, currency, read_at, rooms, cells, priced, closed, missing, reserved, no_sale, pairs, dates: {first, last, count}}` — 칸 · 예약 있는 (객실, 날짜) · 판매일 없는 (객실, 날짜) · 객실 · 요금제의 수. `rooms` 는 읽은 객실마다 ERP 가 부르는 이름 둘 `{room, drawer}` — `room` 은 캘린더 칩(요청 · 요금표 파일에 적는 이름), `drawer` 는 가격 수정 창의 이름(판매일이 없어 창을 열지 않았으면 null). 요금표의 객실 이름을 맞출 때는 `rooms` 가 기록 폴더의 읽기에서 이것을 모은다(sheet.md 3). |
+| `rooms` | `--look` · `--date` · `--out` | 객실마다 ERP 가 부르는 두 이름 → `{kind, hotel, offer, rooms: [{room, drawer}], unread}`. `room` 은 캘린더 칩(`look` 의 이름), `drawer` 는 가격 수정 창의 이름 — 기록 폴더의 앞선 읽기(같은 호텔 · 오퍼, 새것이 앞선다)가 아는 것을 모은다(그 읽기에 판매일이 없어 창을 열지 않았으면 null). `unread` 는 어느 읽기도 읽지 않은 객실이다. 그런 객실이 있으면 `--date`(요금표의 첫 날)가 있어야 하고, 낸 파일이 그 객실만 그날 하루를 읽는 범위(`kind: range` — 객실마다 `look` 의 첫 요금제)다: 그 파일로 읽고 `rooms` 를 다음 이름으로 다시 한다. 없으면 `kind: room_names` 이고 읽을 것이 없다. `--out` 에 이미 있는 파일을 주면 거절한다(그 작업에서 k 번째는 `rooms-<k>.json`). `--out` 의 짧은 답: `{out, rooms, unread, read}` — `read` 는 낸 파일로 읽어야 하는지. |
+| `sheet` | `--sheet` · `--look` · `--room` (여러 번) · `--from` · `--to` | 요금표 파일(「요금표」)을 읽기 전에 확인한다 → `sheet-check-<k>.json`: `{kind: "sheet_check", sheet, hotel_pairs, part, lines, cells, currency, gaps, range, reads}`. `--look` 은 `look()` 의 답(`hotel`·`offer`·`pairs`, 길면 `look` 명령이 묶은 파일). 요금표 전체의 셈과 펼침을 해 보고 없는 줄을 가리킴 · 고리 · 두 줄이 한 칸에 다른 값 · 틀린 기간이면 거절한다. `gaps` 는 읽기 전에 아는 넣지 않는 것(`unknown`·`unnamed`), `range` 는 읽을 범위(객실 · 요금제와 첫 날 · 끝 날 · 날 수), `reads` 는 읽기 한 번의 페이지 작업 `{readPair, readReserved, limit, fits}`. `--room`·`--from`·`--to` 는 요금표의 한 부분만(객실 하나 · 시즌 하나) 할 때. 이 파일을 `read-calls`·`plan` 의 `--request`, `render sheet` 의 `--plan` 으로 준다. `--out` 에 이미 있는 파일을 주면 아무것도 쓰지 않고 거절한다 — 그 작업에서 k 번째 `sheet` 는 `sheet-check-<k>.json` 이다(고친 요금표 · 나눈 부분마다 다음 번호). `--out` 의 짧은 답: `{out, hotel, offer, currency, lines, cells, part, gaps, range: {pairs, first, last, days}, reads}` — `range.pairs` 는 수다. |
+| `season-request` | `--sheet` · `--season` · `--sentence` · `--out` | `sheet` 가 낸 파일 + `season.json` → 시즌 다시 채우기 요청(`kind: season_fill`). 창에 칠 입력은 명령이 요금표에서 셈한다 — 객실 묶기 · 판매 단가 · 인원별 금액 차이 · 요금제 조정 · 박수 층 · 고칠 수 있는 아동 금액. 요금표 파일을 품고(`sheet`), 칸마다 어느 줄에서 셈했는지 `sources` 에 적는다. 기록이라 덮어쓰지 않는다. 짧은 답 `{season, saves: [{pairs, inputs, child_extra, dates}]}` |
+| `plan` | `--snapshot` · `--request` · `--season` · `--resolutions` · `--record` · `--replaces` | 미리보기 계산 → `{change_id, replaces, counts, red, chosen, unused, plan, unresolved, steps}`. `--record` 면 장부에 미리보기와 그 읽은 값을 적고 `change_id` 를 준다. `--replaces N`(`--record` 와 함께)은 이 계산이 장부 N번 미리보기를 바꾼다는 뜻이다 — 빨간 줄을 고른 뒤, 적용 직전에 값이 달라 다시 계산할 때. N번은 같은 호텔 · 오퍼의, 아직 적용을 시작하지 않은 미리보기여야 하고 `replaced` 가 된다(`begin` 이 받지 않는다). `--out` 에 이미 있는 파일을 주면 아무것도 적지 않고 거절한다 — 계산 파일은 기록이라 `plan-1.json`, `plan-2.json` … 처럼 새 이름으로 쓴다. 빨간 줄을 다 고르지 않았으면 `steps` 가 null. 칸(`plan.changes[]`)은 고름을 단 뒤의 것이다: `after` 는 저장하면 그 칸이 될 값(정가도 올림이면 올린 정가, 정가 지움이면 빈 정가, 안 바꿈이면 지금 값 그대로 — 적용할 수 없는 칸 · 같이 그대로 두는 칸(`ADULT_HELD`)은 계산한 값이고 저장하지 않으니 그 칸은 지금 값 그대로다. 그 값은 성인 칸의 고름이 바뀌어 다시 계산할 때 쓴다), `verdict` 는 계산한 값이 걸린 규칙, `choice` 는 고른 것(아직 고르지 않았으면 null — 그때 `after` 는 계산한 값), `list_follow` 는 정가보다 비싸지는 칸에서 「정가도 같이 올림」을 고르면 정가가 될 값(ERP 「정가도 같이 조정」의 규칙 — 「빨간 줄 고름 파일」). `steps` · 장부의 줄 · 미리보기 페이지가 모두 이 칸에서 나온다. `unresolved` 는 아직 고르지 않은 칸. `red` 는 아직 고르지 않은 빨간 줄의 규칙마다 `{rule, label, cells, choices: [{choice, words, example}], examples}` — `words` 는 담당자에게 말하는 고름의 이름이고(「정가도 같이 올림」은 이 요청에서 정가가 어떻게 되는지: "정가도 12% 올림"), `example` 은 첫 칸에서 그 숫자("… — 정가 110.00 → 123.20"), `examples` 는 칸 키 몇. `chosen` 은 고른 빨간 줄의 규칙 · 고름마다 `{rule, choice, cells, words, does, example}`(`does` 는 저장이 그 칸에 하는 일, `example` 은 첫 칸의 바뀌는 값). `unused` 는 고름 파일의 고름 가운데 이번 계산에서 어느 칸도 쓰지 않는 것 — 고름 · 까닭마다 `{rule, choice, words, said, cells, why, label, example}`(`cells` 는 그 고름을 말한 칸 수 — 규칙 전체 고름이면 그것이 덮던 칸, `why` 는 까닭 코드: `held_kept` · `held_blocked` · `held_waiting` · `held` 성인 칸을 따라 같이 그대로 · `tier` 박수 층 빨간 줄로 넘어감 · `pinned` 그 규칙의 칸을 모두 칸마다 따로 고름 · `replaced` 같은 칸 · 규칙에 뒤 고름이 앞섬 · `none` 그 규칙에 걸린 칸이 없음, `label` 은 담당자에게 하는 그 까닭의 말 — red-lines.md 「쓰지 않는 고름」). 같이 그대로 두는 칸에 말한 고름의 `said` 는 그 칸의 장부 줄에 남는다. `above_one_night_before` 는 읽은 값에서 바꾸기 전부터 같은 날 1박 이상보다 비싼 박수 층 칸 수(`plan.above_one_night_before`), `plan.tiers` 는 박수 층 규칙을 다시 볼 때 쓰는 같은 날 다른 층의 지금 판매가다. `--request` 가 `sheet` 가 낸 파일이면 요금표를 칸마다 펼쳐 목표 값 표로 계산하고(`plan.request.from_sheet: true`), 넣지 않는 것을 `plan.coverage`(「넣지 않는 것」)에, 종류마다의 수를 `coverage` 에 싣는다. `--out` 의 짧은 답: `{out, change_id, replaces, counts, saves, red, chosen, unused, blocked, above_one_night_before, nothing}`(목표 값 표면 `lines` — 칸을 넣는 인원 · 박수 줄의 이름, 요금표면 `coverage`). `saves` 는 저장 횟수(빨간 줄이 남았으면 null), `blocked` 는 적용할 수 없는 칸의 규칙마다 `{rule, label, cells, examples, said}` — `said` 는 담당자에게 그대로 하는 말(칸 수 · 예 · 까닭 · 대신 할 수 있는 것, red-lines.md 「적용할 수 없는 칸」), `nothing` 은 `saves` 가 0 일 때만 — 저장할 것이 없다는 말(빨간 줄을 고른 것이 있으면 「고르신 대로면 …」, 없으면 「바꿀 수 있는 칸이 없어 …」). 칸 목록(`plan` · `unresolved` · `steps`)은 파일에만 있다. 요청이 시즌 다시 채우기면 `--season` 과 함께 → 시즌의 계산 파일(「시즌 다시 채우기」), 시즌의 계산 파일을 요청으로 주면 그 `followup`(요금표와 다르게 채워진 칸의 목표 값 표)으로 계산한다 |
+| `render` | `preview`·`result`·`rollback`·`prices`·`sheet`·`compare` 중 하나 + `--plan` (preview·rollback·sheet·compare) · `--change` (result) · `--snapshot` (prices) · `--by-date` · `--text` | 페이지 HTML. `sheet` 는 「요금표를 이렇게 읽었습니다」(`sheet` 가 낸 파일로, ERP 를 읽기 전에), 요금표에서 온 `preview`·`result` 는 시즌 [가격] 덮기 한 문장을 단다. `compare` 는 「저장해 둔 상태와 견주기」(`compare` 가 낸 파일로) — 칸마다 저장해 둔 값 → 지금 값과 종류마다의 수이고, 아무것도 바꾸지 않았다고 말한다. 저장해 둔 상태로 되돌리는 `rollback` 페이지는 시즌 화면을 건드리지 않는다는 한 문장(시즌을 다시 채웠다면 시즌 창은 다시 채운 입력값 그대로)을 단다. `--out` 이 없으면 기록 폴더에 `<날짜 시각> · <호텔> · <페이지 이름>.html` 로 쓴다. 답 `{page}` 는 그 경로. 날짜 열은 7일까지 날짜마다 하나, 그보다 길면 모든 줄의 칸이 같은 날끼리(떨어져 있어도) 하나다 — 열 머리에 날 수와 그 날짜 구간을 모두 적고, 예약 있는 날을 따로 적는다. `--by-date` 면 길이와 상관없이 날짜마다 하나. `--text` 면 파일을 쓰지 않고 답이 `{text}` 다 — `text` 는 페이지에 보이는 글이다(머리 · 문단 · 띠 · 표의 줄마다 한 줄, 표의 칸은 ` | ` 로 잇는다). 도우미는 자기 페이지를 브라우저 도구로 열지 못하므로 이미 연 페이지의 글을 그대로 옮겨야 할 때 같은 `render` 에 `--text` 를 붙여 이것을 읽는다(`--out` 과 같이 주지 않는다). 멈춘 변경의 `result` 는 장부에 적힌 마지막 `check` 대로 말한다(stopped.md 2) — check 가 없으면 이어서 할 수 있는지는 다시 읽어 봐야 안다고, 안 된다고 했으면 이어서를 빼고 까닭과 바뀐 칸을 그 check 가 읽은 값으로(「○시 ○분에 다시 읽으니 …」, 다른 날이면 날짜도). 멈춘 변경의 페이지 이름은 「적용하다 멈춤」(되돌리기면 「되돌리다 멈춤」)이다. 결과 페이지가 말하는 ERP 의 '손입력' 표시(도우미가 넣은 칸에 ERP 가 다는 값의 출처)는 도우미가 읽지도 되돌리지도 못한다 — 되돌려도 그 표시는 넣기 전으로 돌아가지 않는다. |
+| `begin` | `--change` · `--plan` (`steps` 가 든 계산 파일 `plan-<k>.json` 또는 `rollback-<k>.json`) · `--snapshot` (적용 직전에 같은 범위로 읽은 값) | 적용 시작. 저장 단계가 넣는 값이 그 번호의 미리보기 칸(장부의 줄)과 하나라도 다르거나, 미리보기가 넣는다고 보인 값을 어느 단계도 넣지 않으면 거절한다(종료 2). 먼저 `--snapshot` 을 그 번호의 계산이 바탕으로 삼은 읽은 값과 견준다(시즌 다시 채우기는 판매일 없는 날 · 예약 있는 날도 — `calls` 와 같다) — 한 칸이라도 다르면 아무것도 시작하지 않고 `stale` 과 같은 `{change_id, status, same: false, differences}` (종료 1). 견주기 전에, 그 번호를 계산한 뒤에 읽은 값이 아니면(미리보기의 읽은 값 그대로 · 앞선 읽기 폴더의 답을 다시 묶은 읽기 — 읽은 시각은 답이 끝난 시각이라 다시 묶어도 그대로다) 거절하고, 읽은 지 15분이 넘은 값이면 거절한다. 같으면 저장 단계를 장부에 적는다 → `{change_id, status, steps}`(`steps` 는 저장 횟수, 숫자 — 그 단계들은 `calls` 가 낸다). 이미 시작한 번호에 같은 단계로 다시 부르면 아무것도 바꾸지 않는다. 다시 계산해 바뀐(`replaced`) 번호는 거절한다. |
+| `calls` | `--change` · `--snapshot` · `--out` | 아직 저장되지 않은 단계 → `{change_id, status, calls: [{no, op, payload}]}`. `--out "<작업>/적용-N/calls.json"` 은 저장 답을 둘 `적용-N` 폴더를 만든다(답은 그대로 표준 출력에도 낸다). `op` 는 `applyBulk` 또는 `applyCell`, `payload` 는 그 작업에 그대로 넘긴다(장부의 호텔이 든다). `payload` 에는 그 저장이 쓰는 칸마다 누르는 순간 화면에 있어야 할 값 `was` 가 든다 — 그 번호의 계산이 바탕으로 삼은 읽은 값 위에 앞 단계들이 넣은 값을 얹은 것이다(묶음 저장은 줄마다 `[첫 날, 끝 날, 판매가, 정가, 공급 원가]` 목록, 셀 창은 `[판매가, 정가, 공급 원가]`, 판매가가 null 이면 칸이 없다). 페이지는 화면이 그 값이 아니면 치지도 누르지도 않는다. 멈춘 변경(아래 `list` 의 `stopped`)은 다시 읽어 `check` 가 이어서 해도 된다고 한 뒤에만 낸다. 시즌 다시 채우기는 다음 저장 하나(`applySeason`)만 낸다 — `--snapshot` 은 그 저장의 범위를 `read-calls --record N --step k` 로 방금 읽은 값이고, 앞 저장이 끝난 뒤(첫 저장은 계산한 뒤) 120초 안에 읽은 것이어야 한다(아니면 종료 2 — 다시 읽는다). 낸 `payload` 에는 그 읽은 값의 기한 `freshUntil`(읽은 때부터 120초 — 이 컴퓨터 시계의 1970년부터 ms)이 든다(답의 `fresh.until` 은 그 시각) — 페이지는 기한이 없거나 지난 페이로드로는 창을 열지도 누르지도 않는다(`expired: true`). 계산 파일 · 장부의 페이로드에는 기한이 없어 누를 수 없다. 같은 읽은 값으로는 부를 값을 한 번만 낸다(두 번째는 종료 2 — 다시 읽는다). 그 범위가 미리보기 때 값에 이 저장이 넣는 값까지 얹은 것과 같으면 그 저장은 이미 된 것으로 보인다(누른 답을 잃었다) — 아무것도 내지도 적지도 않고 `{saved_already: <단계>, said}` 로 답한다(`said` 를 따른다: 답 파일이 있으면 `record-result`, 없으면 다시 읽어 `check`). 그 밖에 그 범위의 칸이 미리보기 때(앞 저장이 넣은 값을 얹은 것)와 하나라도 다르거나, 그 범위의 판매일 없는 날 · 예약 있는 날이 미리보기 때와 다르면(판매일이 열림 · 예약이 듦 — 미리보기가 그 날을 건너뛴 칸 · 바구니로 셈했다) 아무것도 내지 않고 그 저장을 「그 사이 바뀜」으로 적어 변경을 멈춘다 → `{stopped: true, differences: [{key, then, now}]}`(날의 차이는 `key` 가 `{room, date, what}` — `what` 은 `no_sale` · `reserved`) |
+| `record-result` | `--change` · `--result` (답 파일 하나) | 브라우저 답 하나 → 그 단계를 됨·멈춤으로 적는다 → `{change_id, step, started, saved, note, status}`. 페이지가 누르기 전에 화면의 값이 `was` 와 달라 거절한 답이면 `moved`(다른 칸 수)도 온다 — 저장 안 됨으로 적혀 변경이 멈춘다(stopped.md 2 「미리보기 뒤에 칸이 바뀌어 멈췄을 때」 — 이 변경에서 아직 아무것도 저장하지 않았으면 새 미리보기, 앞 저장이 됐으면 묻기만 한다). 답이 `started: false` 면 적지 않고 `{started: false, wait}` 만 돌려준다(그 초만큼 기다려 같은 값으로 다시 부른다). `saved: "unknown"` 은 「모름」 표시를 달아 멈춤으로 적는다. 이미 멈춘 변경에 적힌 저장은 적기만 하고 `status` 는 `stopped` 그대로다. 다른 단계·다른 값을 물은 답이면 거절한다. 시즌 다시 채우기는 그 단계에 `calls` 가 낸 부를 값(기한이 든 것)의 답만 받고, 받은 답은 언제 적어도 적는다(기한은 누르기를 막을 뿐이다). 페이지가 기한이 지나 누르지 않은 답(`expired: true`)은 적지 않고 `{started: false, expired: true}` — 그 저장의 범위를 다시 읽고 `calls` 부터 한다. |
+| `check` | `--change` · `--snapshot` · `--season` | 방금 같은 범위로 읽은 값으로 → `{change_id, scope, status, cause, note, last_saved, next, steps: [{no, label, ledger, seen, settled, moved}], remaining, can_continue, why}`. 시즌 다시 채우기에 「모름」인 저장이 있으면 `--season`(그 뒤에 readSeason 으로 읽어 `season` 이 낸 `season.json`)이 있어야 한다 — 그 창의 「공급 통화 없음」 띠(`supply_warn`)가 있으면 저장된 마지막 단계 뒤에 멈춘 것으로 적는다(`cause: halted`, `note` 가 그 글). 그 창이 「모름」인 저장 앞에 읽은 것이면 거절한다. `scope` 는 `list` 의 그 번호 줄과 같은 범위 한 줄(check 뒤의 상태로). `seen`: `saved` 넣은 값 그대로 · `not_saved` 전 값 그대로 · `mixed` 섞임 · `changed` 그 사이 다른 값. 「모름」인 단계는 읽은 값이 말하는 대로 가려 장부에 적는다(`settled`). 저장 안 됨 · 아직 적지 않은 단계도 칸이 모두 넣은 값이면 저장됨으로 적는다(`settled: saved`). 시즌 다시 채우기는 ERP 가 객실 조합으로 뺄 수 있는 칸이 전 값 그대로인 것을 `verify` 와 같은 뜻으로 가린다(그 칸은 저장이 됐는지에 대해 아무것도 말하지 않는다). `cause`: `failed` 저장이 실패함 · `unknown` 저장됐는지 몰랐음 · `cut_off` 실패 없이 끊김 · `halted` 저장은 됐는데 ERP 가 다음 저장을 하지 말라고 함(시즌 창의 「공급 통화 없음」 띠 — record-result 가 바로 멈추고, check 는 이어서 하게 하지 않는다) · 멈추지 않았으면 null. `note` 는 멈춘 저장의 메모, `last_saved`·`next` 는 마지막으로 저장된 단계와 다음 단계 `{no, label}`(없으면 null). 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 값이 아니면 아무것도 가리거나 적지 않고 거절한다(종료 2). 읽은 지 15분이 넘은 값으로는 이어 가게 하지 않는다. `can_continue` 면 변경을 적용 중으로 두고, 그 읽은 값에서 15분 안이면 `calls` 가 남은 단계를 낸다. 아니면 멈춘 변경으로 둔다. 답(`can_continue` · `why` · `cause`)과 남은 저장의 칸 가운데 미리보기 때와 달라진 칸의 그때 값(읽은 시각과 함께)을 장부에 적는다 — `render result` 가 멈춘 변경을 그대로 말한다(그 값은 「○시 ○분에 다시 읽으니 …」 — 그 뒤에 또 바뀌었을 수 있어 지금 값이라고 하지 않는다. 그 뒤 저장 결과가 적히거나, 이어서 해도 된다고 한 뒤 15분이 지나면 그 check 는 쓰지 않는다). |
+| `verify` | `--change` · `--snapshot` | 적용 뒤 다시 읽은 값과 견준다 → `{change_id, same, mismatches: [{key, label, field, after, seen, seen_state}]}`. 저장된 단계의 값만 본다. 읽은 값이 그 번호의 호텔 · 오퍼가 아니면 아무것도 적지 않고 거절한다(`check` 와 같다). |
+| `stale` | `--change` · `--snapshot` | 그 번호의 계산이 바탕으로 삼은 읽은 값과 방금 읽은 값 → `{same, differences: [{key, then, now}]}`. 알리기만 하고 장부는 바꾸지 않는다(적용 직전의 확인은 `begin` 이 한다). 한쪽에만 있는 칸도 다른 칸이다. 예약 표시는 견주지 않는다. 다른 호텔의 값이면 거절한다. |
+| `rollback` | `--change` · `--snapshot` · `--include-kept` · `--room`·`--rate-plan`·`--occupancy` (여러 번) · `--from`·`--to` · `--record` · `--replaces` · `--sentence` | 변경 하나(또는 고른 일부)를 되돌리는 계산 → `{change_id, replaces, scope, rollback, steps, reserved}`. 저장된 단계의 칸 가운데 아직 되돌려져 있지 않은 칸만 되돌린다. 되돌리기 · 저장 상태로 되돌리기도 같은 규칙으로 되돌린다 — 그것이 덮은 값으로(rollback.md 「되돌리기를 되돌려 달라면」). `rollback` 안에 `restore_to`(적어 둔 값의 시각)·`restored`·`kept`(세 값과 `cause`)·`unremovable`. 다른 호텔의 값이면 거절한다. 다시 계산하는 규칙은 `plan` 과 같다: `--out` 에 이미 있는 파일을 주면 아무것도 적지 않고 거절하고(`rollback-1.json`, `rollback-2.json` …), `--replaces M`(`--record` 와 함께)은 이 계산이 장부 M번 되돌리기 미리보기를 바꾼다는 뜻이다 — 그대로 둔 칸도 되돌릴 때(`--include-kept`), 적용 직전에 값이 달라 다시 계산할 때. M번은 같은 변경을 되돌리는, 아직 적용을 시작하지 않은 미리보기여야 하고 `replaced` 가 된다. `undone` 은 이 변경에서 이미 되돌린 부분 — 되돌린 번호마다 `{change_id, sentence, applied_at, cells, scope}`(「나머지 되돌리기」의 미리보기가 그대로 말한다). `--out` 의 짧은 답: `{out, change_id, replaces, scope, mode, restore_to, restored, kept, kept_why, unremovable, saves, reserved, undone, undoing}` — `undoing` 은 되돌리는 번호가 되돌리기 · 저장 상태로 되돌리기일 때 먼저 그대로 하는 말(「장부 2번(1번 되돌리기)을 되돌립니다 — 1번이 넣었던 값으로 돌아갑니다.」), 아니면 null. `scope` 는 이 되돌리기가 덮는 범위 한 줄(장부 목록의 그 번호 줄과 같은 셈 — 되돌리는 칸의 객실 · 요금제와 날짜, 「N번 되돌리기」, 고르기 플래그로 고른 칸), 칸 수, 그대로 두는 까닭마다 `{change_id, at, sentence, outside, cells}`, 되돌리는 칸 가운데 예약 있는 날의 칸 수. |
+| `restore` | `--saved` · `--snapshot` · 고르기 플래그 · `--record` · `--replaces` · `--sentence` | 지금 상태 저장으로 적은 상태로 되돌리는 계산. 답은 `rollback` 과 같은 모양이고 `--out`·`--replaces` 규칙도 같다(`--replaces` 의 번호는 같은 저장 상태로 되돌리는 미리보기). 장부에는 변경으로 적혀 이것도 되돌릴 수 있다 — 되돌리면 그것이 덮은 값으로 돌아간다(rollback.md 「되돌리기를 되돌려 달라면」). `--out` 의 짧은 답은 `rollback` 과 같다(`mode: restore`). |
+| `compare` | `--saved` · `--snapshot` (그 범위를 방금 읽은 값) | 지금 상태 저장으로 적은 상태와 방금 같은 범위를 읽은 값(`read-calls` 에 그 번호를 주어 읽는다)을 칸마다 견준다 → `compare-<k>.json`: `{kind: "compare", saved, sentence, saved_at, read_at, scope, counts, reserved, written_by, cells: [{key, then, now, kind, edited_by, written_by}]}`. 아무것도 바꾸지 않고 장부에도 적지 않는다. 칸의 `kind`: `changed` 값(판매가 · 정가 · 공급 원가)이 달라짐 · `new` 저장해 둔 때 없던(가격이 없었거나 그 칸이 아예 없던) 칸에 값이 생김 — 되돌려도 지울 수 없다 · `gone` 값이 있던 칸이 없어짐 · `closed` 값은 같고 판매 마감 · 판매 가능만 달라짐 · `same` 그대로. 칸의 `written_by` 는 바뀐 · 새로 생긴 · 없어진 칸을 저장한 뒤 이 장부의 기록(변경 · 되돌리기 · 저장 상태로 되돌리기)이 넣었고 지금도 그 값이면 그 마지막 기록의 번호다 — 그 밖은 장부에 없는 변화(도우미 밖에서 바뀜)다. 답의 `written_by` 는 그런 기록마다 `{change_id, what, sentence, at, cells}`(`what`: 변경 · 되돌리기 · 저장 상태로 되돌리기, `cells` 는 지금도 그 기록의 값인 칸 수). `edited_by` 는 바뀌거나 없어진 칸이 저장해 둔 때 이 장부의 앞선 변경이 날짜별로 넣은 값을 갖고 있었으면 그 번호다(ERP 화면에서 사람이 직접 고친 칸은 가려내지 못한다). `counts`: 종류마다의 수와 `helper`(저장한 뒤 이 장부의 기록이 바꾼 칸) · `outside`(장부에 없는 변화) · `edited`(날짜별로 바꿔 두었다가 바뀐 칸) · `reserved`(바뀐 칸 가운데 지금 예약 있는 날의 칸) · `cells`. 저장해 둔 상태가 아닌 번호, 다른 호텔 · 오퍼의 값, 저장한 범위를 다 읽지 않은 값이면 거절한다(더 넓게 읽은 값은 그 범위 안만 본다). `--out` 에 이미 있는 파일을 주면 거절한다. `--out` 의 짧은 답: `{saved, saved_at, read_at, scope, counts, edited_by, written_by, example}` — `written_by` 는 위의 기록마다의 것, `edited_by` 는 날짜별로 바꿔 두었다가 바뀐 칸을 넣은 장부 번호들, `example` 은 바뀐 칸 하나(`key` · 달라진 첫 필드 `field` · `then` → `now`). |
+| `save-snapshot` | `--snapshot` · `--sentence` | 지금 값을 장부에만 적는다 → `{change_id}`. 장부 목록의 상태는 `saved` 다. 담당자에게 「S번(○시 ○분)」이라고 말할 때의 시각은 그 지금 값의 `read_at`(ERP 에서 읽은 시각)이다 — 장부에 적은 시각이 아니다. `--sentence` 는 담당자의 말 그대로, 무엇을 적었는지 알 수 없는 말이면 "<오퍼> · <객실 · 요금제> · <날짜> 지금 상태". |
+| `list` | `--look` · `--all` | `{ledger, hotel, changes: [{id, kind, item_kind, helper, status, scope, line, hotel, hotel_id, offer, currency, sentence, read_at, created_at, begun_at, applied_at, verified_at, reverses, replaces, replaced_by, items, planned, written, rolled_back, undone_by, redone, redone_by, live, steps, saved_steps}], others}`. 새것부터. 세 도우미(객실 가격 · 부가옵션 가격 · 부과금)의 기록이 한 장부에 있어 모두 나온다 — `item_kind` 는 그 기록의 종류(`price_cell` · `addon_price` · `charge`, 항목이 하나도 적히지 않아 모르면 null), `helper` 는 그 기록을 맡는 도우미(되돌리기 · 이어서는 그 도우미가 한다), `scope` 는 그 도우미가 만든다 — 부가옵션 줄은 「부가옵션 가격 줄 1개 (…)」, 부과금 줄은 「부과금 1개 (…)」로 시작한다(종류를 모르는 줄은 「항목 없음 · 「<담당자의 말>」」). 가격 칸 기록의 `scope` 는 장부가 가진 칸에서 만든 범위 한 줄 — 「객실 가격」, 오퍼(늘 — 같은 객실 · 요금제가 두 오퍼에 있을 수 있다), 객실 · 요금제(넷 넘으면 셋과 「외 N객실」), 날짜 구간과 날 수, 한 일(「판매가 +12%」 · 「목표 값 6칸」(칸 수는 `planned`) · 「3번 되돌리기」 · 「5번 저장 상태로 되돌리기」 · 「지금 상태 저장」, 칸을 좁혔으면 그 칸까지 — 「판매가 -10% (1박 이상만)」 · 「판매가 -10% (성인 2 / 1박 이상만)」 · 「3번 되돌리기 (성인 2만)」), 멈췄거나 적용 중이면 「저장 2번 중 1번 하고 멈춤」, 되돌렸으면 「모두 되돌림 90/90칸 (장부 9번)」 · 「일부 되돌림 48/90칸 (장부 9번) · …」, 되돌린 것을 다시 살렸으면 「되돌렸다가 다시 살림 (장부 9번 · 10번)」(일부면 「되돌렸다가 다시 살림 42/90칸 (…)」 — 세 도우미가 같은 말). 담당자의 문장에 날짜가 없어도 이 줄로 말한다. `items` 는 그 번호에 적힌 칸 수(미리보기 · 지금 상태 저장의 칸), `planned` 는 그중 저장이 값을 넣는(넣을) 칸 수(안 바꾸기로 고른 빨간 줄 · 아직 고르지 않은 빨간 줄 · 적용할 수 없는 칸은 들지 않는다 — 목표 값 · 새 요금표의 「N칸」이 이 수다), `written` 은 그중 저장이 끝난 단계가 쓴 칸 수(ERP 에 실제로 넣은 칸), `rolled_back` 은 그중 지금 되돌려져 있는 칸 수, `undone_by` 는 그것을 되돌린 번호들, `redone` 은 되돌렸다가 다시 살린 칸 수(되돌리기를 되돌렸거나 저장 상태로 되돌리기가 그 값을 다시 넣음), `redone_by` 는 그때 되돌린 번호와 다시 살린 번호, `live` 는 넣은 값이 지금도 ERP 에 그대로인 칸 수(장부의 셈 — 나머지는 뒤 기록이 덮었다. 되돌리기를 되돌리면 그 되돌리기를 되돌린 번호와 처음 변경이 같은 값을 넣은 것이라 두 번호가 같은 칸을 함께 센다 — 칸 하나를 한 번호만 갖는 것이 아니다), `steps`·`saved_steps` 는 저장 단계 수와 그중 저장된 수다. `kind`: change · snapshot · rollback. `status`: previewed → applying → stopped / applied, 저장할 것이 없는 미리보기는 `empty`, 지금 상태 저장은 `saved`, `replaced`(다시 계산해 새 번호로 바뀐 미리보기 — 새 번호의 `replaces` 가 이 번호이고, 그 새 번호가 `replaced_by` 다), 그리고 저장한 칸이 지금 모두 되돌려져 있으면 `rolled_back`(되돌릴 것이 없다), 일부면 `partly_rolled_back`(나머지를 되돌릴 수 있다). 되돌렸다가 다시 살린 칸은 되돌려져 있지 않다 — 되돌리기를 되돌리면 그 변경은 다시 `applied` 다. 저장해 둔 상태로 되돌리기도 그 값을 덮어 돌려놓았으면 그 변경을 되돌린 것으로 센다(`undone_by` 에 그 번호) — 그 사이 다른 값으로 덮인 칸은 치지 않는다. 이 수들은 장부에 적어 두지 않고 저장한 차례에서 그때마다 셈한다. 적용 중인데 15분 동안 아무 일(받아들인 읽은 값 · 적힌 저장 결과 · 이어서 해도 된다고 한 check)이 없으면 `stopped` 다(세션이 끊겼다). 탭에 열린 호텔의 기록만 싣는다(`--look` 은 이 일의 `look.json`). `--all` 이면 다른 호텔의 기록을 그 뒤에 싣는다. 둘 다 없으면 거절한다. `others` 는 싣지 않은 다른 호텔의 번호 수. 상태 `empty` 는 저장할 것이 없는 미리보기다(바뀌는 칸이 없거나 빨간 줄을 모두 안 바꾸기로 고름 — 적용할 것이 없고, `scope` 끝에 「저장할 것 없음」) 줄마다 `line` 은 확인받을 때 그대로 읽어 주는 한 줄이다 — 「장부 3번 · 11/21 10:05 적용 · <`scope`>」(저장해 둔 상태는 값을 ERP 에서 읽은 때와 「저장」, 적용하지 않은 미리보기는 만든 때와 「미리보기」(다시 계산해 바뀐 것은 「미리보기 (장부 N번으로 바뀜)」), 적용 중이거나 멈춘 변경은 적용을 시작한 때(`begun_at`)와 「적용 중」 · 「적용하다 멈춤」 — 멈춘 변경은 뒤에 되돌렸어도 그 말과 시각 그대로). |
+
+`counts` 의 칸: `cells`(계산한 칸) · `will_change`(그중 저장할 칸 — 적용할 수 없는 칸 · 같이 그대로 두는 칸 · 안 바꾸기로 고른 칸을 뺀 수, 아직 고르지 않은 빨간 줄은 든다) · `blocked` · `held`(성인만 있는 칸이 새 값을 받지 않아 같이 그대로 두는 아동 칸 — 판정 `ADULT_HELD`, red-lines.md 「같이 그대로 두는 아동 칸」) · `red`(아직 고르지 않은 빨간 줄) · `chosen`(고른 빨간 줄) · `reserved` · `closed` · `new`(이 셋은 저장이 바꿀 칸만 — 적용할 수 없는 칸 · 같이 그대로 두는 칸 · 안 바꾸기로 고른 칸은 새로 생기지도 예약 있는 날에 바뀌지도 않아 세지 않는다) · `skipped`, 규칙 코드마다의 수(`ABOVE_LIST` 등, 고르기 전이든 뒤든 그 규칙에 걸린 칸), 고름마다의 수(`raise_list` · `clear_list` · `keep` · `include`).
+
+## 요청 파일
+
+세 모양 모두 `hotel` 은 `stayPrice.look()` 의 `hotel`(`{id, name}`)을 그대로 적는다. 번호 없이 이름만이면 거절한다. `offer` 와 객실 · 요금제 이름은 `look()` 의 `offer`·`pairs` 에서 고른 그대로다.
+
+### 읽을 범위 (`kind: range`)
+
+```json
+{"kind": "range", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼",
+ "pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}, {"room": "스위트", "rate_plan": "룸온리"}],
+ "dates": ["2026-12-25", "2026-12-26", "2027-01-01", "2027-01-02"]}
+```
+
+- `dates`: 겹치지 않는 오름차순 ISO 날짜 목록. 요일 조건은 날짜로 풀어 적는다.
+- 바꾸기 요청과 목표 값 표도 범위 파일로 쓸 수 있다. 그 요청의 객실 · 요금제 · 날짜를 읽는다.
+
+### 바꾸기 요청 (`kind: change`)
+
+```json
+{"kind": "change", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼",
+ "rooms": [], "rate_plans": [],
+ "pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}, {"room": "디럭스", "rate_plan": "룸온리"},
+           {"room": "스위트", "rate_plan": "조식 포함"}, {"room": "스위트", "rate_plan": "룸온리"}],
+ "dates": ["2026-12-25", "2026-12-26", "2027-01-01", "2027-01-02"],
+ "field": "sell",
+ "operation": {"kind": "percent", "value": "10"},
+ "occupancies": [], "nights": [],
+ "scale_child_surcharge": false,
+ "sentence": "데모 호텔 연말 금·토, 디럭스랑 스위트 10% 올려줘"}
+```
+
+- `pairs` 를 적고 `rooms`·`rate_plans` 는 빈 목록으로 둔다(쌍에서 채워진다).
+- `field`: `sell`(판매가) · `list`(정가) · `supply`(공급 원가).
+- `operation`:
+
+| `kind` | `value` | 뜻 |
+|---|---|---|
+| `amount` | `"10000"`, `"-5000"` | 칸마다 그만큼 더한다 |
+| `percent` | `"10"`, `"-5"` | 칸마다 그 비율. 아동이 있는 칸은 성인 몫에만 곱한다(`scale_child_surcharge: true` 면 칸 전체) |
+| `set` | `"350"` + `"base_occupancy": "A2"` | 그날 기준 인원 · 1박 이상 칸을 그 값으로, 다른 칸은 같은 만큼 옮겨 차이를 둔다 |
+| `clear` | `null` | 정가·공급 원가를 비운다(판매가는 비울 수 없다) |
+
+- `currency`(빼도 된다): 담당자가 금액에 통화를 말했을 때만 그 통화 코드를 적는다(「1,000엔」 → `"JPY"`). 오퍼의 통화와 다르면 `plan` 이 아무것도 적지 않고 거절한다 — 바꿔 셈하지 않는다. 목표 값 표에도 같은 칸을 둔다.
+- `occupancies`·`nights`: 칸을 좁힐 때만 적는다. 비우면 모든 인원 조합 · 모든 박수 층이다. `occupancies` 는 인원 조합 키(`""` 인원 무관 · `A2` 성인 2 · `A3` 성인 3 · `A2C1` 성인 2 + 아동 1), `nights` 는 박수 층의 시작 박수(1박 이상 `1`, 3박 이상 `3` …)다. 적은 칸만 움직이고 규칙 · 표시 · 저장은 그대로다. `set` 이면 `base_occupancy` 와 1박 이상 층이 그 안에 있어야 한다. 읽은 값에 없는 키 · 층이면 `plan` 이 읽은 것을 대며 거절한다.
+- **아동이 든 인원 조합**은 성인 · 아동 수만 적는다(`A2C1`, 아동 둘이면 `A2C2`). ERP 의 키는 뒤에 그 호텔의 아동 밴드 코드가 붙고(`A2C1_CHD`) 그 코드는 읽은 값에서만 안다. `plan` 이 객실 · 요금제마다 읽은 줄 가운데 그 수의 줄을 찾아, 하나면 그 줄로 계산하고 미리보기의 요청에 그 키를 적는다. 여럿(아동 밴드가 여럿)이면 아무것도 셈하거나 적지 않고 거절하며 고를 줄을 ERP 가 부르는 이름으로 댄다(「오류와 할 일」의 `choose`). 이 규칙은 목표 값 표의 `occupancy` 와 요금표의 `rows[].occupancy` 도 같다. 밴드 코드를 적은 키(`A2C1_CHD`)는 그 키만 가리킨다.
+
+**도우미가 할 일**(SKILL.md 「3. 가격 바꾸기」의 확인 상자):
+
+- 새 값("350 으로")이면 어느 인원 조합의 1박 이상 칸을 그 값으로 하는지(보통 성인 2) 밝히고, 다른 칸은 지금 차이를 그대로 둔다고 말한다.
+- 금액에 통화를 말했으면("1,000엔") 요청에 `currency` 를 적고, 확인 상자에 「통화」 줄을 둔다 — 오퍼의 통화와 말씀하신 통화. 오퍼의 통화는 `list` 에서 같은 호텔 번호 · 오퍼의 줄의 `currency` 다. 둘이 다르면 읽기 전에 묻는다: "이 오퍼의 가격은 USD 입니다. 엔으로 말씀하신 금액을 USD 로 바꿔 넣지는 않습니다 — USD 로 얼마로 할까요?" 장부에 그 오퍼의 줄이 없으면 읽기 전에는 오퍼의 통화를 모른다 — 「통화」 줄에 "지금 가격을 읽어 보고 다르면 여쭙겠습니다"라고 쓰고, 다르면 `plan` 이 거절하니 그때 묻는다.
+- "성인 2만", "1박만"처럼 칸을 좁히면 요청의 `occupancies`(성인 2 는 `A2`)·`nights`(1박 이상 층은 `1`)에 적고 「칸」에 그렇게 쓴다. 박수 층은 ERP 가 부르는 대로 말한다: "1박 이상", "3박 이상"(층은 그 박수 이상의 숙박을 덮는다 — 담당자의 "1박만"은 1박 이상 층이다). 새 값이면 기준 칸(그 인원 조합의 1박 이상)이 그 안에 있어야 한다.
+
+### 목표 값 표 (`kind: targets`)
+
+짧은 표를 붙여 넣었을 때 칸마다 넣을 값을 그대로 옮긴다. 지금 값과 다른 칸만 바뀐다. 적지 않은 필드는 그대로, `null` 로 적은 필드(정가·공급 원가)는 비운다.
+
+```json
+{"kind": "targets", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼", "sentence": "1/2 디럭스 조식 성인 2 는 330, 3박은 297",
+ "targets": [
+   {"key": {"room": "디럭스", "rate_plan": "조식 포함", "date": "2027-01-02", "occupancy": "A2", "nights": 1},
+    "values": {"sell": "330", "list": "380"}},
+   {"key": {"room": "디럭스", "rate_plan": "조식 포함", "date": "2027-01-02", "occupancy": "A2", "nights": 3},
+    "values": {"sell": "297", "list": null}}]}
+```
+
+- `occupancy`·`nights` 는 위 바꾸기 요청과 같은 키다(아동이 든 조합은 `A2C1`). 담당자의 표에 없으면 빼고 적는다(둘 다, 또는 하나). 읽은 값에서 그 객실 · 요금제의 줄 가운데 적은 것과 맞는 줄이 하나뿐이면 그 줄이고, 여럿이거나 없으면 `plan` 이 고를 줄을 대며 거절한다. `"occupancy": ""` 는 인원 무관 줄이다(빼는 것과 다르다). `plan` 답의 `plan.request` 와 장부에는 채운 줄이 적힌다.
+- 가격 없던 칸의 목표는 새로 생기는 칸이다. 판매가가 있어야 하고, 그 객실 · 요금제에 읽힌 적 있는 인원 조합 · 박수여야 한다. ERP 는 새 칸을 판매 가능으로 만들고, 그날 상태가 「요금제 마감」 · 「객실 전체 마감」(읽은 값의 `closures`)이면 마감으로 만든다 — 미리보기가 그 칸을 「판매 마감 날에 새로 생기는 칸」으로 말한다(시즌 다시 채우기와 같은 말). 셀 창에서 칸마다 마감한 날의 새 칸은 판매 가능이다.
+- `from_sheet` 는 명령이 요금표를 펼친 표에만 `true` 로 적는다(도우미가 쓰는 표에는 적지 않는다).
+
+**도우미가 할 일**(SKILL.md 「3. 가격 바꾸기」에서 담당자가 짧은 표를 붙여 넣었을 때):
+
+- 짧은 표(확인 상자에서 다시 읽어 볼 만한 몇 칸)를 붙여 넣으면 칸마다의 숫자를 그대로 목표 값 표에 옮긴다. 줄마다 다른 "+금액"이면 줄마다 따로 변경한다.
+- 표에 인원 조합 · 박수가 없으면 목표의 `occupancy`·`nights` 를 빼고 적는다. 확인 상자의 「칸」에는 "표에 인원 · 박수가 없어, 그 객실 · 요금제에 줄이 하나뿐이면 그 줄에 넣습니다(어느 줄인지 미리보기 머리에 나옵니다)"라고 쓴다. 줄이 여럿이면 `plan` 이 고를 줄을 대며 거절한다. 그 줄들을 담당자에게 보여 주고 고른 줄을 적어 다시 한다.
+
+## 요금표
+
+### 요금표 (`kind: sheet`)
+
+새 요금표를 날짜별 가격으로 맞출 때 도우미가 요금표에서 **숫자만** 옮겨 적는다. 종이와 한 줄씩 견줄 수 있게 줄 하나가 요금표의 줄 하나다: 객실 · 요금제 · 기간(여럿, 요일은 골라서) 하나와 그 안의 인원 조합 · 박수마다 값.
+
+```json
+{"kind": "sheet", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼", "currency": "USD",
+ "sentence": "새 요금표대로 디럭스 날짜별 가격 맞춰줘",
+ "lines": [
+   {"room": "디럭스", "rate_plan": "조식 포함", "season": "성수기",
+    "periods": [{"from": "2027-07-01", "to": "2027-08-31", "weekdays": ["금", "토"]}],
+    "rows": [
+      {"occupancy": "A2", "nights": 1, "sell": "240", "list": "300"},
+      {"occupancy": "A3", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "60"}},
+      {"occupancy": "A2C1", "nights": 1, "sell": {"from": {"occupancy": "A2"}, "add": "30"}},
+      {"occupancy": "A2", "nights": 3, "sell": {"from": {"nights": 1}, "percent": "-10"}}]}]}
+```
+
+- `currency`: 요금표에 적힌 통화. 읽은 값의 통화와 다르면 `plan` 이 거절한다(바꿔 셈하지 않는다). 셈한 값의 반올림이 이 통화를 따른다.
+- `lines[].room`·`rate_plan`: `look()` 의 `pairs` 이름. 호텔에 맞는 것이 없으면 요금표의 이름 그대로 — 「호텔에 없는 객실 · 요금제」로 나오고 넣지 않는다. `season` 은 요금표의 시즌 이름(보이기만 한다, 없어도 된다).
+- `periods`: `from`·`to` 는 ISO 날짜(둘 다 포함), `weekdays` 는 「월 화 수 목 금 토 일」 가운데 고른 글자(없으면 모든 요일). 시즌이 구간 여럿이면 기간을 여럿 적는다.
+- `rows[]`: 인원 조합 키(`occupancy`, 「바꾸기 요청」의 `occupancies` 와 같은 키 — 아동이 든 조합은 `A2C1` 처럼 성인 · 아동 수만, 인원 무관은 `""`)와 박수 층의 시작 박수(`nights`, 1박 이상 `1`)는 둘 다 적는다. 값은 `sell`(반드시) · `list` · `supply`.
+- 값은 글자 숫자(`"240"`)이거나 같은 줄의 다른 인원 · 박수 값(같은 필드)에서 셈한 값이다: `{"from": {"occupancy", "nights"}, "add": "60"}`(금액을 더함, 빼면 `"-20"`) 또는 `"percent": "-10"`. `from` 에 적지 않은 것은 그 줄의 것과 같다 — 성인 추가는 `{"occupancy": "A2"}`, 3박 이상 할인은 `{"nights": 1}`. 가리킨 값이 그 줄에 없거나 서로를 가리키면(고리) `sheet` 가 그 줄과 값을 대며 거절한다.
+- **아동이 든 값의 퍼센트.** 아동이 든 인원 조합의 값에서 퍼센트로 셈하는 값(성인 2 + 아동 1 의 "3박 이상 -10%")은 뜻이 둘이라 `scale_child_surcharge` 를 꼭 적는다 — `true` 는 칸 전체에 곱함, `false` 는 성인 몫(같은 줄 · 같은 박수의 성인만 있는 값)에만 곱하고 아동 추가분은 그대로다(ERP 의 퍼센트 가감과 같다: `반올림(성인 몫 × 비율) + (값 − 성인 몫)`). 적지 않으면 `sheet` 가 아무것도 쓰지 않고 거절하며 값마다 두 결과를 `ask` 에 댄다 — `{line, room, rate_plan, occupancy, nights, field, percent, base, whole, adult, extra, adults}`(`base` 는 퍼센트를 곱하는 값, `whole` 은 칸 전체에 곱한 결과, `adult` · `extra` 는 성인 몫과 아동 추가분, `adults` 는 성인 몫에만 곱한 결과 — 성인만 있는 값이 그 줄에 없으면 셋은 null). 아동이 없는 값에는 적지 않는다. 예: `{"occupancy": "A2C1", "nights": 3, "sell": {"from": {"nights": 1}, "percent": "-10", "scale_child_surcharge": false}}`.
+- 두 줄이 같은 칸(객실 · 요금제 · 날짜 · 인원 · 박수)에 다른 값을 주면 `sheet` 가 두 줄을 대며 거절한다. 같은 값이면 된다.
+- 셈은 명령이 하고 「요금표를 이렇게 읽었습니다」가 값 아래에 셈을 보인다(「계산」). 아동이 든 값의 퍼센트는 어느 뜻으로 셈했는지 「아동 칸 %」 꼬리표와 띠로 보인다.
+
+### `sheet` 가 낸 파일 (`kind: sheet_check`)
+
+`read-calls`·`plan` 의 `--request`, `render sheet` 의 `--plan` 으로 준다. 고치지 않는다 — 요금표를 고쳤으면 `sheet` 를 다시 한다. 명령은 그 안의 `sheet`·`hotel_pairs`·`part` 만 읽고 나머지는 다시 셈한다.
+
+- 읽을 범위는 넣을 줄(고른 부분 가운데 호텔에 있는 객실 · 요금제)의 객실 · 요금제 × 첫 날부터 끝 날까지 모든 날이다. 요금표가 비운 날도 읽어야 그대로 둘 칸을 빠짐없이 댄다.
+- 읽기 한 번은 가격 읽기(`readPair`, 객실 · 요금제마다 186일에 한 번)와 예약 있는 날 읽기(`readReserved`, 550일에 한 번 — 숨은 줄이 있으면 쪼개져 늘어난다)를 합쳐 200번까지다(1년이면 객실 · 요금제 99개). 페이지가 읽은 화면 조각을 200개까지만 두고(`stay_price.js` 의 `KEEP_BODIES`), 조각은 다 읽은 뒤에 받으므로 넘으면 앞 조각이 밀려난다. `reads.fits` 가 false 면 `read-calls` 가 거절한다 — `--room` 이나 `--from`·`--to` 로 나눈다. 요금표가 아닌 범위도 `read-calls` 가 같은 수로 거절한다.
+
+## 넣지 않는 것
+
+요금표에서 온 `plan` 의 `plan.coverage` 는 아래 다섯 종류의 목록이고, `coverage` 는 종류마다의 수다. 미리보기 페이지의 「요금표가 넣지 않는 것」이 같은 것을 보인다. 항목은 `{kind, room, rate_plan, occupancy, nights, dates, lines}` 이고 종류마다 쓰는 칸만 찬다.
+
+| `kind` | 뜻 | 수 | 찬 칸 |
+|---|---|---|---|
+| `untouched` | 호텔에 가격이 있는데 요금표가 말하지 않은 칸(읽은 범위 안). 그대로 둔다 | 칸 | 객실 · 요금제 · 인원 · 박수 · 날짜들 |
+| `unseen` | 요금표 값인데 읽은 값에 그 객실 · 요금제의 줄로 나온 적 없는 인원 조합 · 박수. 새 종류의 칸이라 만들지 않는다 | 칸 | 객실 · 요금제 · 인원 · 박수 · 날짜들 · 줄 번호들 |
+| `no_sale` | 요금표 날짜 가운데 판매일이 없는 날. 이 길로는 넣을 수 없다 | 일 | 객실 · 요금제 · 날짜들 |
+| `unknown` | 요금표에 있는데 호텔(이 오퍼)에 없는 객실 · 요금제. 넣지 않는다 | 개 | 객실 · 요금제 · 줄 번호들 |
+| `unnamed` | 호텔에 있는데 요금표가 말하지 않은 객실 · 요금제. 그대로 둔다 | 개 | 객실 · 요금제 |
+
+`sheet` 의 `gaps` 는 읽기 전에 아는 `unknown`·`unnamed` 다.
+
+## 시즌 다시 채우기
+
+[season-fill.md](season-fill.md) 의 파일들. 변경 하나 = 시즌 하나, 저장 하나 = 시즌 창 한 번 누름이다.
+
+### `season` 이 낸 파일 (`kind: season_window`)
+
+창이 열린 그대로다 — `form`(저장 단추가 보낼 [이름, 값], 켠 체크만 · 막힌 칸 빼고) · `order`(창의 칸 차례) · `blank`(마지막 입력값이 채워져 열렸을 때 [비우기] 한 창의 form) · `last_fill_note` · `rooms`(창의 객실 번호 · 이름 · 캘린더 이름) · `rate_plans`(요금제 번호 → 캘린더의 객실 · 요금제 이름, `base` 기준 ✓, `sort`) · `child`(아동 칸마다 `kind` amount · percent · none, 비율, [비우기] 한 창의 기본 금액 `blank`) · `combos`(객실 → 허용 인원 조합 글자, null 이면 객실 타입을 이름으로 하나로 정하지 못해 모름) · `dates`(시즌 날) · `seasons`(같은 오퍼의 다른 시즌과 그 날) · `banner`(시즌 목록의 저장 띠) · `supply_warn`(시즌 목록의 「공급 통화 없음」 띠) · `read_at`(그 창을 읽은 때). 도우미는 이 파일을 고치지 않는다.
+
+### 시즌 다시 채우기 요청 (`kind: season_fill`)
+
+```json
+{"kind": "season_fill", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼",
+ "season": {"id": "8801", "name": "Peak"}, "currency": "USD",
+ "sentence": "Peak 시즌 디럭스 180 으로 다시 채워줘, 룸온리는 8 싸게",
+ "saves": [
+  {"pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}, {"room": "디럭스", "rate_plan": "룸온리"}],
+   "price": "180", "original_price": "", "net_price": "150",
+   "plan_adjust": "-8", "occupancy_keys": "A2,A3", "occupancy_adjust": "A3:+30",
+   "los_prices": "3:160", "child_extra": {"CHD": ""},
+   "overwrite": true, "dates": null,
+   "sources": {"price": "말씀", "plan_adjust": "말씀"}}]}
+```
+
+- `hotel` · `offer` · `season` 은 `season.json` 의 것 그대로다. `saves` 하나가 창 한 번 누름이고, 칸은 창에 칠 글자 그대로다(금액은 쉼표 없이 소수 둘째 자리까지, 조정은 부호 필수 · `%` 가능, 박수 층은 `박수:1박 판매가`). 한 (객실, 요금제)는 한 저장에만 든다. 요금제는 늘 고른다(비우지 않는다).
+- `child_extra` 는 고칠 수 있는 아동 칸(`season.json` 의 `child` 에서 `kind: amount`)마다 — `""` 는 그 구간의 기본 금액이다.
+- `overwrite` false 면 값이 없는 칸에만 넣는다. 「이번에 고르지 않은 인원·요금제 가격 지우기」 칸은 요청에 없다 — 도우미는 켜지 않는다.
+- `dates` null 은 시즌 전체(창이 연 그대로), 목록이면 시즌 날 가운데 그 날들만.
+- `sources` 는 칸마다 어디서 온 값인지(말씀 · 요금표 N번째 줄). `season-request` 가 쓴 요청에는 요금표 파일이 `sheet` 로 들어 있어 `plan` 이 요금표의 칸과 견준다.
+
+### 계산 파일 (`kind: season_plan`)
+
+`plan` 이 쓴다 — `{kind, change_id, replaces, plan, counts, steps, waiting, followup}`. `plan.saves[]` 는 저장마다 고름을 단 뒤의 저장(`save`) · 쓰는 날(`dates`) · 뺀 날(`excluded`) · 거절한 입력(`refused`) · 바뀌는 칸(`changes`) · 같은 값으로 덮는 칸 수(`same`) · 덮기를 꺼서 그대로 두는 칸 수(`untouched`) · 이번 채우기에 없는 예전 칸(`left_old`) · 판매일 없는 날(`no_sale`) · 객실 조합으로 빠지는 줄(`combo_skipped`) · ERP 가 띠로 말할 예상 수(`counts`) · 규칙 · 바구니마다 걸린 칸(`hits`) · 고른 것(`choices`). `plan.misses` 는 요금표와 다르게 채워지는 칸(요금표 값 · 채운 뒤 값 · 줄). `steps` 는 고를 것이 남았으면 null. `followup` 은 그 칸을 날짜별로 맞출 목표 값 표(`kind: targets`, 없으면 null). 짧은 답은 `{change_id, replaces, counts, saves, per_save: [{save, dropped, pressed, excluded, refused, waiting, rules: [{rule, label, cells, dates, choices, chosen}], predicted}], misses, followup, unused, remembers}`. `saves` 는 창을 누를 횟수 — 바뀌는 칸이 없는 저장은 누르지 않는다(`pressed: false`, 장부의 단계가 아니다). `remembers` 는 날짜 일부만 채우는 저장이 있을 때만 — 시즌 창이 친 금액은 기억하고 날짜는 시즌 전체로 연다는 문장(도우미가 그대로 말한다, season-fill.md 3). 그 시즌 채우기를 되돌리는 `rollback` 의 짧은 답에도 같은 `remembers` 가 있다.
+
+### 시즌 고름 파일
+
+```json
+[{"save": 1, "rule": "OVER_30", "choice": "include", "said": "그대로 올려"},
+ {"save": 1, "rule": "reserved", "choice": "exclude_dates", "said": "예약 있는 날은 빼고 채워"}]
+```
+
+저장 번호 · 규칙(또는 바구니) · 고른 것(`include` 이대로 채움 · `exclude_dates` 그 날은 빼고 채움) · 담당자가 한 말. 칸을 짚는 고름은 없다(창은 칸 하나를 뺄 수 없다). 막힘에는 `exclude_dates` 만, `ERP_REFUSES` 에는 고를 것이 없다(요청을 고친다). 지금까지 고른 것을 모두 적는다.
+
+## 빨간 줄 고름 파일
+
+```json
+[{"rule": "ABOVE_LIST", "choice": "clear_list", "said": "정가 넘는 칸은 정가 지워 주세요"},
+ {"rule": "OVER_30", "choice": "include", "said": "크리스마스 디럭스는 그대로 올려",
+  "cells": [{"room": "디럭스", "rate_plan": "조식 포함", "date": "2026-12-25", "occupancy": "A2", "nights": 1}]}]
+```
+
+파일 이름은 그 고름으로 만들 계산 파일과 같은 번호(`choices-2.json` → `plan-2.json`)이고, 지금까지 고른 것을 모두 적는다 — `plan` 은 매번 요청에서 처음부터 계산하고 이 파일의 고름만 단다. `said` 는 그렇게 고르며 담당자가 한 말 그대로다(앞에서 고른 것도 그때의 말 그대로). 없는 고름이 있으면 `plan` 은 아무것도 적지 않고 거절한다. 장부가 고른 칸마다 그 말을 적고, 결과 페이지의 「고르신 빨간 줄」이 고른 것 옆에 보인다. `cells` 가 없으면 그 규칙의 모든 칸, 있으면 그 칸만이다(칸을 짚은 고름이 앞선다). 「정가도 같이 올림」(`raise_list`)의 정가는 ERP [선택 날짜 가격 가감]의 「정가도 같이 조정」과 같다: 판매가를 금액(`amount`)으로 옮기면 정가도 같은 금액, 퍼센트(`percent`)면 같은 비율이고 아동이 있는 칸은 `반올림((정가 − 아동 추가분) × 비율) + 아동 추가분`(`scale_child_surcharge: true` 면 칸 전체), 반올림은 판매가와 같다. 새 값 지정(`set`) · 목표 값 표는 ERP 에 짝이 없어 판매가가 옮긴 만큼 정가도 옮긴다. 칸 키는 `plan` 의 짧은 답 `red[].examples`, 없으면 계산 파일의 `unresolved[].key` 에서 그 칸의 것을 그대로 옮긴다. 고를 수 있는 값: `ABOVE_LIST` → `raise_list`·`clear_list`·`keep`, `ABOVE_ONE_NIGHT` → `include`·`keep`, `BELOW_COST` → `include`·`keep`, `OVER_30` → `include`·`keep`. 칸마다 판정은 하나이고 차례는 ERP 와 같다: 정가보다 비싸짐 → 박수 층이 1박 이상 가격보다 비싸짐(ERP `_check_los_tiers` — 2박 이상 층이 그날 같은 인원 조합의 1박 이상보다 비싸지면 그 칸, 1박 이상을 내려 위 층보다 싸지면 그 1박 이상 칸, 바꾼 뒤의 값끼리 견준다) → 공급 원가 → 30%. 박수 층 규칙은 다른 칸의 고름(안 바꾸면 지금 값)을 단 뒤에 보므로, 고른 뒤 다시 계산하면 새로 걸리는 칸이 있을 수 있다. 바꾸기 전부터 어긴 칸도 이번에 판매가를 바꾸면 보고, 바꾸지 않는 칸은 보지 않는다. 적용할 수 없는 칸(`NOT_POSITIVE`·`NEGATIVE_SUPPLY`·`NO_ADULT_CELL`·`NO_BASE_CELL`·`NEW_WITHOUT_SELL`·`NEW_NOT_SHOWN`)은 고를 수 없다.
+
+## 오류와 할 일
+
+문장은 담당자에게 쉬운 말로 옮겨 전할 수 있다. 아래에 없는 오류는 멈추고 문장 그대로 보고한다.
+
+| 오류 (앞부분) | 뜻 · 할 일 |
+|---|---|
+| `이 읽은 값은 N초 전 것입니다 — 시즌 창 저장은` | 시즌 다시 채우기의 다음 저장을 내기 전에 읽은 값이 2분보다 오래됐다. `read-calls --record N --step k` 로 그 저장의 범위를 다시 읽고 `calls --change N --snapshot` 을 다시 한다 |
+| `이 읽은 값(…)은 장부가 마지막으로 적은 때(…) 앞에 읽은 것입니다` | 앞 저장의 결과보다 먼저 읽은 값이다. 그 저장의 범위를 새 읽기 폴더에 다시 읽는다 |
+| `같은 오퍼의 다른 시즌 N개의 날을 아직 읽지 않았습니다` | `season` 의 `ask` 값마다 `stayPriceSeason.readSeason` 의 답을 저장하고 `season` 을 다시 한다 |
+| `시즌 창에 … 요금제가 없습니다` · `…이 1번째와 2번째 저장에 둘 다 있습니다` · `…시즌 「…」의 날이 아닌 것` | 요청이 그 창과 맞지 않는다. `season.json` 의 `pairs` · `dates` 에서 다시 옮겨 요청을 고친다 |
+| `… 에 인원 조합 키가 소문자인 예전 칸(`a2`)이 있습니다` | 시즌 다시 채우기를 계산하지 않았다 — ERP 시즌 창은 그 칸을 대문자 키로 덮는데 도우미는 다른 칸으로 읽는다. 그 글을 담당자에게 전하고 멈춘다(그 칸의 키는 ERP 셀 창에서 사람이 고친다) |
+| `고를 수 있는 것: …` (시즌 고름) | 그 규칙에 없는 고름이다. `include` 는 빨간 줄에만, 막힘에는 `exclude_dates` 만, 창이 거절할 입력은 요청을 고친다 |
+| `요금표의 A2C1 에 아동 구간 코드가 없고` | 창에서 쓸 수 있는 아동 구간이 하나가 아니다. 요금표 파일의 그 인원 조합에 코드를 적어(`A2C1_CHD`) sheet.md 「요금표를 고칠 때」대로 한다 |
+| `hotel 은 stayPrice.look() 이 준 {id, name} 을 그대로 적습니다` | 요청 파일의 `hotel` 에 번호가 없다. `look()` 의 `hotel` 을 그대로 옮긴다 |
+| `readPair 답이 없는 부를 값이 N개 있습니다` | 「읽기」 2 를 마저 한다. 그 값으로 readPair 를 부른다. 불렀는데 답이 끊겼거나 잘렸으면 `stayPrice.last()` 의 답을 새 파일로 저장해도 된다(failures.md 「읽기」) |
+| `예약 있는 날 물음이 N개 남았습니다` | `reserved` 가 `done` 이 될 때까지 「읽기」 3 을 마저 한다 |
+| `… 를 읽지 못했습니다: …` | readPair 답이 실패였다. 뒤의 페이지 오류를 page.md 에서 찾는다. 범위를 고쳤으면 새 폴더로 다시 읽는다 |
+| `refetch` 가 있는 오류 · `받지 못했거나 잘렸거나 잘못 옮겨 적은 쪽이 있습니다` | 「읽기」 5 의 조각 받기. `bad` 가 있으면 failures.md 「읽기」 — 그 쪽만 새 이름으로 다시 받는다 |
+| `… 의 답에 끝난 시각(doneAt)이 없어 언제 읽었는지 모릅니다` | 예전 판 페이지의 답이다. 「준비」 2 로 도우미를 다시 올리고 새 폴더로 처음부터 읽는다 |
+| `브라우저 답으로 읽을 때 … --read-at …` | 브라우저 답의 읽은 시각은 답에서 정한다. `--read-at` 을 빼고 다시 한다 |
+| `… 의 조각 머리(body)가 페이지가 준 쪽들과 맞지 않습니다` · `… 의 조각 머리(body)를 읽지 못했습니다` | 읽기 답을 옮겨 적다 틀렸다. 같은 값으로 그 작업을 다시 불러 답을 새 파일로 저장하고 명령을 다시 한다(받아 둔 쪽은 그대로 쓴다). 앞선 읽기의 조각은 명령이 기록 폴더에서 찾는다(파일을 베껴 오지 않는다) |
+| `조각 … 이 페이지에 없습니다` | 페이지가 바뀌었거나 조각이 밀려났다. 새 폴더로 처음부터 다시 읽는다(failures.md 「읽기」) |
+| `… 의 답이 물은 호텔(…)이 아닌 … 호텔에서 읽은 것입니다` · `읽기 답에서 호텔을 하나로 정하지 못했습니다` | 다른 호텔의 탭에서 읽은 답이 섞였다. 새 폴더로 읽기를 다시 한다 |
+| `읽은 날과 판매일 없는 날을 합쳐도 물은 날과 맞지 않습니다` · `… 를 물었는데 화면은 …` | 화면이 물은 것과 다르다. 멈추고 보고한다 |
+| `고른 날이 모두 판매일 없음입니다 … 더 읽지 않습니다`(거절에 `say`) | readPair 의 답이 모두 판매일 있는 날 0(`days.withCell`)이다. `reserved` · `read` 가 더 읽지 않고 거절한다. 거절의 `say` 를 그대로 담당자에게 말하고 멈춘다(미리보기 · 장부 없음 — failures.md 「읽기」) |
+| `판매일 있는 날을 하나도 읽지 못해 통화를 모릅니다` | 고른 날이 모두 판매일 없음이다(readPair 의 답에 `days` 가 없던 예전 판 페이지). 담당자에게 그 날들은 판매일이 열려 있지 않다고 알린다 — 위 줄의 `say` 와 같은 말 |
+| `가감 확인 단계가 N줄을 숨겼습니다` | 예약 물음이 덜 쪼개졌다. `reserved` 의 `ask` 를 마저 묻는다 |
+| `읽은 값은 호텔 … 것이고, 요청은 …` · `방금 읽은 값은 호텔 … 것이고` · `지금 읽은 값은 호텔 … 것이고` | 다른 호텔(또는 오퍼)의 값이다. 이름이 같아도 번호가 다르면 다른 호텔이다. 「준비」 4 로 탭을 확인한다 |
+| `읽지 않은 객실·요금제가 있습니다` · `읽은 값에 없는 날짜` · `지금 값을 읽지 않은 날짜` | 읽은 범위가 좁다. 범위를 넓혀 다시 읽는다 |
+| `읽은 값에 없는 인원 조합: …` · `읽은 값에 없는 박수 층: …` | 좁힌 칸이 그 객실 · 요금제에 없다. 괄호 안의 읽은 것을 담당자에게 보여 주고 다시 받는다 |
+| `아동이 든 값에서 퍼센트로 셈한 값 N개가 …` | 뜻을 적지 않은 아동 칸의 퍼센트다. 아무것도 쓰지 않았다. sheet.md 3 의 물음을 `ask` 의 숫자로 담당자에게 하고, 답대로 그 값마다 `scale_child_surcharge` 를 적어 sheet.md 「요금표를 고칠 때」대로 다시 한다 |
+| `… 성인 몫에만 곱하려면 같은 줄에 … 가 있어야 합니다` | 성인 몫에만(`false`)으로 적었는데 그 줄에 성인만 있는 값이 없다. 요금표에 그 값이 있으면 옮겨 적고, 없으면 담당자에게 다시 묻는다 |
+| `밴드 코드 없이 적은 인원 조합에 맞는 줄이 여럿입니다` | 아동 밴드가 둘 이상인 객실 · 요금제다. 아무것도 적지 않았다. `choose` 마다 담당자에게 묻는다: "요금표(말씀)의 <`occupancy` 의 우리말> 은 ERP 의 <`choices[].label` 을 ` / ` 로> 가운데 어느 줄인가요?" 고른 줄의 `occupancy` 키를 그 자리(요청의 `occupancies` · 목표의 `occupancy` · 요금표의 그 줄)에 적어 다시 한다. 요금표는 sheet.md 「요금표를 고칠 때」 |
+| `… 에 맞는 줄이 여럿입니다 — 고를 줄: …` · `… 에 맞는 줄이 없습니다 — 고를 줄: …` | 목표 값 표에 인원 조합 · 박수가 없는데 그 객실 · 요금제의 줄이 하나가 아니다. 고를 줄(이름과 괄호 안의 `occupancy · nights`)을 담당자에게 보여 주고, 고른 줄을 그 목표에 적어 `plan` 을 다시 한다 |
+| `새 값 지정의 기준 칸(…)이 고른 칸에 없습니다` | 새 값 지정은 기준 칸을 움직여 나머지를 옮긴다. 기준 칸을 넣을지, 금액(+/−)이나 퍼센트로 말할지 담당자에게 묻는다 |
+| `날짜는 겹치지 않게 오름차순 ISO 형식…` · `새 값 지정(set)에만, 그리고 반드시 기준 인원 조합을 적습니다` · `비우기(clear)에만 금액이 없습니다` · `판매가는 비울 수 없습니다` · `같은 객실·요금제 쌍이 두 번 있습니다` · `읽을 범위에는 객실 · 요금제와 날짜가 하나 이상 있어야 합니다` · `입력 JSON 에 필요한 칸이 없습니다` | 요청 파일 모양을 고친다 |
+| `고를 수 있는 것은 빨간 줄 규칙뿐입니다` · `… — 고를 수 있는 것: …` · `「…」 항목이 아닙니다` | 고름 파일을 고친다 — 짚은 칸이 그 규칙에 어느 계산에서도 걸리지 않았다(박수 층 규칙은 다른 칸을 고른 뒤에 새로 걸린 칸도 받는다) |
+| `정가를 같이 올릴 수 없는 칸입니다(전 정가가 없음)` · `정가를 같이 올려도 판매가보다 낮은 칸입니다` | 그 칸은 정가가 없거나 지금도 정가가 판매가보다 낮다(ERP 도 정가를 옮겨 저장하지 못하는 칸). 담당자에게 그 칸은 정가 지움이나 안 바꿈 가운데 고르게 한다 |
+| `저장 단계가 없습니다. 빨간 줄 칸을 먼저 골라 주세요` | 빨간 줄을 다 고르지 않았다 |
+| `…번 미리보기는 바꿀 칸이 없어 적용할 것이 없습니다` | 저장할 칸이 없다(`saves` 0). 아무것도 시작하지 않았다. 담당자에게 저장할 것이 없다고 말한다(red-lines.md) |
+| `…번 변경의 요청과 다른 계산입니다. 미리보기를 다시 만들어 주세요` | `begin` 에 다른 번호의 계산 파일을 줬다. 그 번호를 낸 `plan` 의 파일을 쓴다 |
+| `미리보기와 다른 값입니다` · `미리보기가 넣는다고 보이지 않은 값입니다` · `미리보기가 넣는다고 보인 값 …개를 어느 저장 단계도 넣지 않습니다` | 계산 파일의 저장 단계가 그 번호의 미리보기와 다르다(빨간 줄을 고르기 전의 번호에 고른 뒤의 파일을 줬거나, 파일을 고쳤다). 아무것도 시작하지 않았다. 그 계산 파일을 낸 `plan` 의 번호로 `begin` 을 부른다 |
+| `이미 다른 저장 단계로 적용을 시작했습니다` | 그 번호는 이미 적용을 시작했다. `calls` 로 남은 단계만 한다 |
+| `…번을 계산한 때(…) 뒤에 읽은 것이 아닙니다`(begin) · `장부가 N번에 마지막으로 적은 …(…) 뒤에 읽은 것이 아닙니다`(check) | 넘긴 읽은 값이 그 뒤에 다시 읽은 값이 아니다(미리보기의 읽은 값 · 적용 직전의 읽은 값 · 앞선 읽기 폴더의 답). 아무것도 시작하거나 가리지 않았다. 새 읽기 폴더에서 페이지를 다시 불러 읽고 같은 명령을 다시 한다(failures.md 「적용」) |
+| `…번 미리보기는 다시 계산해 …번으로 바뀌었습니다` · `…번 미리보기는 이미 …번으로 바뀌었습니다` | 그 번호는 다시 계산해 바뀌었다. 뒤 번호(와 그 계산 파일)를 쓴다 |
+| `이미 있는 파일입니다` | 계산 파일을 덮어쓰려 했다. 아무것도 적지 않았다. 다음 이름(`plan-<k>.json` · `rollback-<k>.json` · `sheet-check-<k>.json`)으로 다시 한다 |
+| `…번은 바꿀 수 있는 미리보기가 아닙니다` · `같은 것을 다시 계산한 미리보기만 바꿉니다` · `같은 호텔 · 오퍼의 미리보기만 바꿉니다` · `--replaces 는 장부에 적을 때(--record)만 줍니다` | `--replaces` 에 다른 번호를 줬다(적용을 시작했거나, 다른 일 — 가격 바꾸기 · 다른 변경 되돌리기 · 다른 저장 상태로 되돌리기 — 이거나, 다른 호텔). 바로 앞 미리보기의 번호를 준다. 적용을 시작한 번호면 `--replaces` 없이 새로 계산한다 |
+| `적용 직전에 읽은 값이 …분 전 것입니다` | 읽은 지 15분이 지났다. 「적용하기」 1 의 읽기를 다시 한다 |
+| `아직 적용을 시작하지 않았습니다(begin)` | `begin` 을 먼저 |
+| `…번 변경은 멈춰 있습니다` | stopped.md. 다시 읽고 `check` 가 이어서 해도 된다고 하면 `calls` 를 다시 부른다 |
+| `…번 저장(…)의 답이 아닙니다` · `…의 답이 장부의 그 단계와 다른 값을 물었습니다` · `…번째 저장이 없습니다` | 다른 단계의 답이거나 payload 를 바꿔 넣었다. 장부에 적히지 않았다. 그 단계를 다시 부르지 말고 `stayPrice.last()` 로 맞는 답을 찾는다 |
+| `이 변경으로 저장된 것 가운데 아직 되돌리지 않은 것이 없습니다` | 적용된 적이 없거나 지금 모두 되돌려져 있다(`list` 의 상태 `rolled_back` — 되돌리기 · 저장 상태로 되돌리기도 같다). 담당자에게 그렇게 알린다 |
+| `…번은 저장해 둔 상태입니다` / `…번은 저장해 둔 상태가 아닙니다` | `rollback` 과 `restore` 를 바꿔 쓴다 |
+| `고른 범위에 되돌릴 것이 없습니다` · `고른 범위에 저장해 둔 값이 없습니다` | 고르기 플래그가 맞는 칸이 없다. 객실·요금제·날짜·인원 조합 키를 다시 본다 |
+| `이 장부는 더 새 판 도우미가 만든 것입니다` | 담당자에게 도우미를 새로 받아 달라고 한다 |
+| `… 의 … 가 가리키는 … 가 그 줄에 없습니다` · `… 가 서로를 가리킵니다(고리)` | 요금표 파일의 그 줄을 요금표와 다시 견준다. 옮겨 적다 빠뜨렸으면 채우고, 요금표가 그렇게 적혀 있으면 담당자에게 묻는다 |
+| `… 과 … 이 … 칸에 다른 값을 줍니다` | 요금표의 두 줄이 같은 날 · 같은 인원에 다른 값을 준다(시즌이 겹친다). 두 줄을 담당자에게 보여 주고 어느 값인지 묻는다 |
+| `기간의 시작일 … 보다 뒤입니다` · `날짜는 ISO 형식` · `고른 요일 … 이 하루도 없습니다` · `요일은 「월 화 수 목 금 토 일」` · `금액을 읽지 못했습니다` · `판매가(sell)가 없습니다` · `같은 인원 · 박수가 두 번 있습니다` · `요금표의 통화(currency)` | 요금표 파일 모양을 고친다. 요금표에서 읽지 못한 숫자면 짐작하지 않고 담당자에게 묻는다 |
+| `요금표 파일(kind sheet)은 sheet 명령으로 확인하고` · `sheet 명령이 낸 파일` | `--request` 에는 `sheet` 가 낸 `sheet-check-<k>.json` 을 준다 |
+| `요금표 파일은 … 인데 look 의 답은 …` · `--look 은 hotel · offer · pairs 가 든 look 의 답입니다` | 요금표의 호텔 · 오퍼와 탭이 다르다, 또는 look 의 답이 아니다. 「준비」 4 로 그 오퍼를 다시 본다 |
+| `이 범위는 읽기 한 번에 들지 않습니다` | 아무것도 부르지 않았다. 담당자에게 "한 번에 읽기에는 범위가 커서 객실(또는 기간)별로 나눠 하겠습니다"라고 말하고, 범위를 객실 · 요금제나 날짜로 나눠 범위 파일을 둘 이상 쓰고 하나씩 한다. 나눈 것마다 읽기 · 장부 번호가 따로다 |
+| `이 요금표(부분)는 읽기 한 번에 들지 않습니다` | 객실(`--room`)이나 시즌의 날짜 창(`--from`·`--to`)으로 나눠 `sheet` 를 다시 하고 한 부분씩 한다 |
+| `고른 객실이 요금표에 없습니다` · `고른 부분에 요금표 줄이 하나도 없습니다` · `넣을 요금표 줄이 없습니다` | 나눈 부분을 다시 고른다 |
+| `요금표의 통화는 … 인데 ERP 의 이 오퍼는 …` | 멈추고 담당자에게 묻는다. 바꿔 셈하지 않는다 |
+| `말씀하신 통화는 … 인데 ERP 의 이 오퍼는 …` | 아무것도 적지 않았다. 담당자에게 오퍼의 통화로 얼마인지 묻는다(「바꾸기 요청」의 「도우미가 할 일」). 바꿔 셈하지 않는다 |
+| `요금표에서 넣을 수 있는 칸이 없습니다` | 요금표의 인원 조합 키가 호텔의 줄과 다르거나 날이 모두 판매일 없음이다. 읽은 값의 줄을 담당자에게 보여 주고 키를 맞춰 `sheet`·`plan` 을 다시 한다 |
+| `쓸 파일의 폴더가 없습니다` | `--out` 이 기록 폴더 밖의 없는 폴더다(기록 폴더 안이면 명령이 폴더를 만든다). 아무것도 셈하거나 적지 않았다 — 작업 폴더 안의 경로로 같은 명령을 다시 한다 |
+| `파일을 읽거나 쓰지 못했습니다` | 뒤의 경로와 까닭(없음 · 폴더임 · 권한)대로 경로를 고쳐 같은 명령을 다시 한다 |
+| `명령에 잘못이 있습니다(예상하지 못한 오류` | 도우미 명령의 잘못이다. 여기서 멈추고 그 글을 고치지 말고 그대로 담당자에게 전한다. 다른 길로 돌아가 같은 일을 하지 않는다 |

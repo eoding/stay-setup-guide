@@ -1,0 +1,62 @@
+[
+  {
+    "no": 1,
+    "op": "applyBulk",
+    "payload": {
+      "no": 1,
+      "hotel": {
+        "id": "1",
+        "name": "데모 호텔"
+      },
+      "offer": "〈오퍼 관리용 이름〉",
+      "room": "디럭스",
+      "ratePlan": "조식 포함",
+      "dates": [
+        "2026-07-01"
+      ],
+      "rows": [
+        {
+          "occupancy": "",
+          "nights": 1,
+          "sell": "125000.00",
+          "list": null,
+          "supply": null,
+          "was": [
+            [
+              "2026-07-01",
+              "2026-07-01",
+              "120000.00",
+              null,
+              null
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "no": 2,
+    "op": "applyCell",
+    "payload": {
+      "no": 2,
+      "hotel": {
+        "id": "1",
+        "name": "데모 호텔"
+      },
+      "offer": "〈오퍼 관리용 이름〉",
+      "room": "디럭스",
+      "ratePlan": "조식 포함",
+      "date": "2026-07-01",
+      "occupancy": "A2",
+      "nights": 1,
+      "clear": [
+        "supply"
+      ],
+      "was": [
+        "150000.00",
+        null,
+        "110000.00"
+      ]
+    }
+  }
+]

@@ -1,13 +1,37 @@
 # stay-setup-guide
 
-Two agent skills for travel-agency staff. From a hotel contract (rate sheet) file alone, `stay-setup-guide`
+Six agent skills for travel-agency staff. Two set up a new hotel. From a hotel contract (rate sheet) file alone, `stay-setup-guide`
 produces a step-by-step **입력지시서** — an input guide as one HTML file, the deliverable a person follows on the
 ERP Stay screens — plus a photo folder and a list of the values that need a human decision. `stay-setup-run` then
 takes that same guide and fills the ERP Stay screens automatically, in the Chrome tab the user is already logged
-into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. The
-guides and the skill documents are Korean because the ERP screens are Korean.
+into, one step at a time. **[판매 시작] (start selling) is always pressed by a person**, never by the skills. Four
+more change the prices of a hotel that already sells — price calendar cells, add-on price lines, charge amounts and
+promotion discounts — with a preview, a save only after the person says "적용", a fresh reading to verify, and a rollback. The guides and the skill
+documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.8.1 (`stay-setup-guide` 1.8.1, `stay-setup-run` 0.15.1). Publishing follows the matched ERP release. This release does not claim a production or browser installation rehearsal.
+Release: plugin `stay-setup` 1.9.0 (`stay-setup-guide` 1.8.1, `stay-setup-run` 0.15.1, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.0). The matched ERP release went to production on 2026-11-23; the promotion helper saves only on an ERP that carries it. This release does not claim a production or browser installation rehearsal.
+
+## 2026-11-23 promotion discount helper
+
+A fourth helper, `stay-promotion-change`, changes the values of a promotion's tiers (a discount percentage, a flat discount
+amount, a number of free nights) on one promotion of an offer or on one common to all offers, with the same preview, "적용",
+re-reading, ledger and rollback as the other three. It saves only on an ERP whose promotion edit window carries the mark
+that the server keeps the settings the window does not show (`data-stay-keeps-off-form-keys="1"`). That mark comes with an
+ERP fix that is not deployed yet; on an ERP without it the helper reads and previews and says plainly that it will not save,
+because a screen save there drops the cancellation settings stored on a tier. It never changes a promotion's conditions,
+dates, booking period, thresholds or tiers. Built and tested in the suites against hand-built screens; it has not run on a
+real ERP yet.
+
+## 2026-11-21 price helpers for hotels that already sell
+
+Three new skills change the prices of a hotel that is already selling, in the Chrome tab the person is logged into:
+`stay-price-change` changes price calendar cells (sell, list and supply prices, by amount, percent or new value, and can
+match a new rate sheet date by date), `stay-addon-price-change` changes add-on price lines (sell price and supply cost),
+and `stay-charge-change` changes charge amounts (the flat amount or rate, one time band, one age rate, the pay-at-property
+amount). Each one reads the current values from the ERP screens, shows a preview page, saves only after the person says
+"적용", reads the screen again to check what was saved, and can roll back. All three record every preview, save and
+rollback in one ledger on the person's computer. The setup skills are unchanged and point to the helpers for a hotel that
+already sells. See "Changing the prices of a hotel that already sells" under [Use](#use).
 
 ## 2026-11-18 promotion target offers and screen-help names
 
@@ -66,7 +90,8 @@ Question steps use the same input-guide contract as `stay-installer-mcp`. The br
 ```
 
 Then open `/plugin` → **Marketplaces** and turn on auto-update for `eoding-stay`. The skills are invoked as
-`/stay-setup:stay-setup-guide` and `/stay-setup:stay-setup-run`.
+`/stay-setup:stay-setup-guide` and `/stay-setup:stay-setup-run`, and the price helpers as `/stay-setup:stay-price-change`,
+`/stay-setup:stay-addon-price-change`, `/stay-setup:stay-charge-change` and `/stay-setup:stay-promotion-change`.
 
 **Codex plugin.** In the Codex app or terminal Codex:
 
@@ -76,11 +101,12 @@ codex plugin add stay-setup@eoding-stay
 ```
 
 Pick up a new release with `codex plugin marketplace upgrade`. Codex covers guide creation and entering the values
-by hand; automatic entry on Codex is 실측 전, not yet verified.
+by hand; automatic entry on Codex is 실측 전, not yet verified, and the price helpers have run only with Claude in Chrome.
 
 **Copying the folders** also works and is the way to install into an agent that is neither Claude Code nor Codex:
 put `skills/stay-setup-guide` and `skills/stay-setup-run` into the tool's skills directory (`~/.claude/skills/`,
-`~/.codex/skills/`, `.cursor/skills/`, and so on). A copied skill does not update itself.
+`~/.codex/skills/`, `.cursor/skills/`, and so on). The price helpers use code from `stay-price-change` and page files from
+`stay-setup-run` by relative path, so copy all six folders side by side. A copied skill does not update itself.
 
 Sales and operations staff who do not use a terminal should follow
 [`docs/설치-사용-안내.md`](docs/설치-사용-안내.md) instead — one page, Windows and Mac, install to first hotel.
@@ -139,6 +165,79 @@ is not open the agent skips it silently.
 
 Automatic entry took 13–19 minutes per hotel in production runs, photos included. At the end, read the validation
 banner. The pass mark is zero red and zero yellow items. Then press [판매 시작] yourself.
+
+**Changing the prices of a hotel that already sells.** Open the hotel's Stay edit screen in a logged-in Chrome tab and
+ask in plain words. Each helper confirms what it understood, reads the current values, opens a preview page and saves
+only after "적용". It reads the screen again afterwards, and "N번 되돌려" rolls a change back:
+
+```text
+/stay-setup:stay-price-change  12월 디럭스 판매가 10% 올려줘
+/stay-setup:stay-addon-price-change  조식 추가 가격 5,000원 올려줘
+/stay-setup:stay-charge-change  레이트 체크아웃 50% 를 60% 로
+/stay-setup:stay-promotion-change  얼리버드 10% 를 12% 로
+```
+
+(Raise the December Deluxe sell price by 10%; add 5,000 to the breakfast add-on; change the late check-out rate from 50% to
+60%; change the early-bird discount from 10% to 12%.) Changes over 30%, prices below cost and similar cases stop as red lines until the person chooses, in their own
+words. The helpers change amounts only. They never delete anything and never create offers, rooms, add-ons, charges or
+price cells. The promotion helper changes a promotion's tier values only, and only on an ERP whose promotion edit window
+carries the mark that the server keeps settings the screen does not show; elsewhere a person changes promotions in the ERP.
+Names and descriptions are not changed; when one still states the amount being replaced, the preview and the result say so.
+
+**시즌 다시 채우기 (season refill).** The price helper can also refill a season through the season's [가격 입력] window
+("시즌 [가격] 채우기"), which on its own has no preview and no undo. The helper reads the window, computes with the
+ERP's own rules what every cell of the season will become, and shows every cell that will change before anything is
+saved (changed cells, new cells, cells it had edited per date, reserved and closed days, days shared with another season,
+old rows the refill leaves alone, days without a sale day). From a rate sheet the command derives the window inputs and
+lists, under their own heading, every cell the window cannot make equal to the sheet; those can be fixed per date right
+after. Choices are per save and per rule (fill as shown, leave those dates out, or change the request); one cell cannot
+be kept on its own. After "적용" it types the window as shown and presses it once per save, reads the result back, and
+compares cell by cell and with the ERP's own cell counts; "N번 되돌려" restores the values through the price calendar.
+New cells cannot be removed, and the window's last inputs, the previous owner season of overwritten cells and the ERP's
+hand-edit mark do not come back. It never ticks "이번에 고르지 않은 인원·요금제 가격 지우기". The helper reads each save's range
+again just before that save; a change someone else makes in the seconds after that reading is overwritten, as on any ERP
+screen. If the person refills
+the season in the ERP by hand instead, the helper saves the state before, shows what changed and restores it on request.
+
+Every preview, save and rollback goes into one SQLite ledger on that computer,
+`~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3` (set `STAY_PRICE_LEDGER_DIR` to use another folder), with a work
+folder per request and the preview pages next to it. Nothing is deleted from it, and a rollback undoes only what that
+computer's ledger recorded.
+
+**What has run on a real ERP.** On a local ERP, not on production: price calendar changes by amount and by percent with
+reserved days, closed days, child rows and nights tiers; the three kinds of red line; a change cut off between saves and
+picked up by a new session; partial and full rollback; matching a short rate sheet by per-date prices; add-on price lines;
+charge amounts including a time band and a pay-at-property amount; a page answer miscopied on purpose and recovered with
+one retake; the new piece form in a real browser tool; a rate sheet whose child rows were matched by the command and whose
+percentage on child rows was asked; comparing a saved state with the present and restoring it; the note on a name that
+states the old amount; two same-named add-ons told apart by their offer; the ledger list by hotel; a comparison that names
+the helper's own ledger record; a restore to a saved state that settles the change it undid; a save refused at the
+moment of pressing because a colleague's change, made through a second ledger, had landed on its cells, followed by the
+check that forbids continuing, the stopped change's page and both rollbacks (run twice, before and after the page was
+fixed); child cells held together with a kept adults-only cell; a person's click passing the idle wall while a script's
+click is blocked. A read-only run on a real
+tab after the final trial confirmed that a command makes its missing reading folder, that the loader asks only for the
+file a tab is missing, and that `look` hands over the ids and names to choose from. Not yet run on a real ERP: creating
+new cells, the failure paths (a save that fails or whose outcome is unknown), a year-long reading, a real rate-sheet file
+from a hotel, and a comparison after an actual season refill in the ERP. Run in the test suites only: a failure ends in
+one JSON line instead of a traceback; every helper's list line says "모두 되돌림" or "일부 되돌림" with the record that
+did it; `look --find` and the newest look answer winning; add-on answers and previews naming the offer and the words
+said for a chosen red line; the instructions for showing the ledger, for a change already rolled back, and for a restore
+after a comparison. The last unit before handover has also run in the test suites only: every helper's list shows the
+hotel's whole ledger with each record's kind in plain words, an empty list has its own sentence, the price list line
+names the offer, `work` makes the `look/` folder and `calls --out` the folder for saved apply answers, and the wording of
+the add-on and charge views and of the price view's ledger entry. Other follow-ups of the fifth trial (a work folder per
+request, the edit-window view, room names taken from earlier readings, the one-line confirmations) are not counted above
+as run on a real ERP. Of the fixes that followed the independent review, these have run in the test suites only: a
+description that holds an address, a save window that closes mid-save, a drawer a person left open, the cost guard of an
+add-on rollback, output on a console that is not UTF-8, and a ledger file that has gone missing. The wording fixes after
+the second colleague trial (a re-read value shown with the time it was read, the list line giving the time applying
+began, the choices of a rollback that stopped) were checked in the suites and by rendering that trial's ledger again,
+not by a new run. The promotion helper (`stay-promotion-change`) has run in the test suites only, on hand-built screens drawn from
+the ERP templates; it has not run on a real ERP. The season refill is built, in the test suites (with the season window's page
+answers taken from the runner's captured ERP window and hand-built saved and refused renders), and its expansion is
+parity-checked against the ERP's own functions on a test database; it has not yet run on a real screen. Nothing has run on
+production, on Windows or macOS, or on Python 3.10.
 
 ## Optional room inventory
 
@@ -216,6 +315,9 @@ including when installed by copying only the skill folder.
 | [`.claude-plugin/`](.claude-plugin) · [`.codex-plugin/`](.codex-plugin) · [`.agents/plugins/`](.agents/plugins) | Plugin and marketplace manifests for Claude Code and Codex; bump every `version` field when a skill version changes |
 | [`skills/stay-setup-guide`](skills/stay-setup-guide) | The guide skill: procedure (`SKILL.md`), draft format rules, screen dictionary, facts guide, a worked example, converter/checker/renderer scripts |
 | [`skills/stay-setup-run`](skills/stay-setup-run) | The runner skill: parser, in-page helper and boot scripts, screen mechanics, run-log format |
+| [`skills/stay-price-change`](skills/stay-price-change) | The price calendar helper, and the code the four price helpers share: `scripts/change_core` (ledger, red-line rules, rollback, pages), the page kit `stay_price.js` and the loader `stay_price_loader.js` |
+| [`skills/stay-addon-price-change`](skills/stay-addon-price-change) · [`skills/stay-charge-change`](skills/stay-charge-change) · [`skills/stay-promotion-change`](skills/stay-promotion-change) | The add-on price, charge and promotion discount helpers: their commands, page modules and references, built on the shared code |
+| [`scripts/run_price_helper_tests.py`](scripts/run_price_helper_tests.py) | Runs every suite of the four price helpers (see [Maintaining the price helpers](#maintaining-the-price-helpers)) |
 | [`docs/`](docs) | [`설치-사용-안내.md`](docs/설치-사용-안내.md) — the one-page install and use guide for non-developers · [`파트너-가이드.html`](docs/파트너-가이드.html) — the partner guide: STEP 01–15 in ERP input order, real ERP and customer screenshots with numbered fields, captured 2026-10-15; a hand-made snapshot, so it does not regenerate when the screen dictionary is re-synced. In the public copy, staff names, product codes, other hotels, contact details, prices and hotel photos are masked · [`파트너-가이드-가격편.html`](docs/파트너-가이드-가격편.html) — pricing setup and maintenance, linked from the input guide · [`쉽게-보기/`](docs/쉽게-보기) — picture explainers for non-developers (open the HTML in a browser): [how the runner works](docs/쉽게-보기/레시피-요리사-손.html), [where child rates go](docs/쉽게-보기/아이-요금.html), [the first week](docs/쉽게-보기/일주일.html) |
 | [`LICENSE`](LICENSE) | eoding Partner Use License v1.3 |
 
@@ -241,6 +343,25 @@ quantities entered by an AI agent must be checked by the user before selling. Sc
 does not guarantee how screens behave. Liability for eoding's wilful misconduct or gross negligence is not excluded.
 The bundled Pretendard font is separately under the SIL Open Font License
 ([`skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt`](skills/stay-setup-guide/scripts/fonts/LICENSE-Pretendard.txt)).
+
+## Maintaining the price helpers
+
+- One command runs every suite of the four helpers, Python and page tests:
+  `NODE_PATH=<node_modules with jsdom> python3 scripts/run_price_helper_tests.py`. It runs on the Python that runs it
+  (3.10+, so `python3.11 scripts/run_price_helper_tests.py` is a 3.11 run, the page tests' Python calls included), prints
+  the Python, Node (18+) and jsdom it used, and fails when a suite fails, skips a test or cannot run. jsdom is not in this
+  repository; the page tests were written against jsdom 22, and any folder where `npm install jsdom@22` ran will do.
+- The page loader `skills/stay-price-change/scripts/page/stay_price_loader.js` runs only page files whose identity it
+  knows: `stay_helper.js` and `stay_boot.js` of `stay-setup-run`, and `stay_price.js`, `stay_price_season.js`,
+  `stay_addon_price.js`, `stay_charge.js` and `stay_promotion.js`. After changing any of the seven, a change to `stay-setup-run`'s two page files included, run
+  `python3 skills/stay-price-change/scripts/loader_identity.py` and commit the loader in the same commit. The price
+  calendar suite fails until you do, and a partner's tab refuses the files.
+- Each helper's `SKILL.md` has a size budget in its `tests/test_docs.py`; detail goes to its `references/`.
+- The ledger lives under `~/Documents`. When that folder is synced by a cloud service (for example iCloud "Desktop &
+  Documents" on macOS, or OneDrive folder backup on Windows), set `STAY_PRICE_LEDGER_DIR` to a folder that is not synced
+  and move the record folder there: a synced file can be evicted to the cloud or split into conflict copies. A command
+  that finds work folders or pages in the record folder but no ledger file stops and says so instead of starting an empty
+  ledger; `work` creates the ledger together with the first work folder.
 
 ## Repository rules
 

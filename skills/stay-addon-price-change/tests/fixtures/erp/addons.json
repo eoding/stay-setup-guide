@@ -1,0 +1,57 @@
+{
+  "_note": "손으로 지은 시험 데이터다. 호텔 · 오퍼 · 시즌 · 요금제 · 객실 · 부가옵션 · 가격 줄의 이름 · 번호 · 금액은 모두 지어낸 값이다(공개 저장소). 화면 마크업은 addons_erp.mjs 가 ERP 템플릿을 따라 그린다. 가격 줄의 sell_row 가 false 면 판매가 값 줄이 화면에 안 보이는 줄이다(목록은 「별도 금액 없음」, 편집 창의 공급 원가는 빈칸 — facts-extras-data.md 4절의 함정과 같은 모양).",
+  "currency": "USD",
+  "has_offers": true,
+  "offers": [
+    { "id": "31", "name": "데모 오퍼 2027" },
+    { "id": "32", "name": "데모 연말 오퍼" }
+  ],
+  "seasons": [
+    { "id": "41", "offer": "31", "name": "비수기" },
+    { "id": "42", "offer": "31", "name": "성수기" },
+    { "id": "43", "offer": "32", "name": "연말 시즌" }
+  ],
+  "rate_plans": [
+    { "id": "51", "offer": "31", "name": "데모 오퍼 2027 · 디럭스 · 조식 포함" },
+    { "id": "52", "offer": "31", "name": "데모 오퍼 2027 · 디럭스 · 룸온리" },
+    { "id": "53", "offer": "32", "name": "데모 연말 오퍼 · 디럭스 · 조식 포함" }
+  ],
+  "rooms": [
+    { "id": "61", "offer": "31", "name": "디럭스" },
+    { "id": "62", "offer": "31", "name": "스위트" },
+    { "id": "63", "offer": "32", "name": "디럭스" }
+  ],
+  "addons": [
+    {
+      "id": "201", "name": "조식 추가 (성인)", "offer": "31", "date_apply": 2, "room": null, "max_quantity": "2", "foc_quantity": null,
+      "lines": [
+        { "id": "301", "name": "비수기 조식", "description": "", "price": "20.00", "net": "15.00", "sell_row": true,
+          "season": "41", "date": "", "rate_plan": "" },
+        { "id": "302", "name": "연말 조식", "description": "갈라 디너 대신 고르는 조식", "price": "35.50", "net": "28.00", "sell_row": true,
+          "season": "", "date": "2026-12-31", "rate_plan": "" }
+      ]
+    },
+    {
+      "id": "202", "name": "공항 픽업", "offer": "31", "date_apply": 0, "room": null, "max_quantity": "1", "foc_quantity": "0",
+      "lines": [
+        { "id": "303", "name": "편도 픽업", "description": "", "price": "40.00", "net": null, "sell_row": false,
+          "season": "", "date": "", "rate_plan": "" }
+      ]
+    },
+    {
+      "id": "203", "name": "엑스트라베드", "offer": "31", "date_apply": 1, "room": null, "max_quantity": "1", "foc_quantity": null,
+      "lines": [
+        { "id": "304", "name": "엑스트라베드 1개", "description": "", "price": "30.00", "net": "25.00", "sell_row": true,
+          "season": "", "date": "", "rate_plan": "" }
+      ]
+    },
+    {
+      "id": "204", "name": "엑스트라베드", "offer": "32", "date_apply": 1, "room": null, "max_quantity": "1", "foc_quantity": null,
+      "lines": [
+        { "id": "305", "name": "엑스트라베드 1개", "description": "", "price": "33.00", "net": "27.50", "sell_row": true,
+          "season": "43", "date": "", "rate_plan": "",
+          "scope": { "rate_plan": { "mode": "2", "include": ["53"], "exclude": [] }, "room": { "mode": "0", "include": [], "exclude": [] } } }
+      ]
+    }
+  ]
+}
