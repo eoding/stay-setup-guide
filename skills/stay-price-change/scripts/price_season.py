@@ -403,10 +403,11 @@ def rule_said(save: "SavePlan", code: str, currency: str) -> str:
     example = ""
     if change is not None:
         before, after = change.before, change.after
-        was = "새로" if before.sell is None else money_text(before.sell)
-        extra = (f"(공급 원가 {money_text(after.supply)})" if code == "BELOW_COST" and after.supply is not None
-                 else f"(정가 {money_text(after.list)})" if code == "ABOVE_LIST" and after.list is not None else "")
-        example = f" 예: {cell_name(change.key)} — 판매가 {was} → {money_text(after.sell)}{extra}."
+        shown = (lambda value: money_text(round_money(value, currency)))   # noqa: E731 — 통화의 자릿수로(51 → 51.00)
+        was = "새로" if before.sell is None else shown(before.sell)
+        extra = (f"(공급 원가 {shown(after.supply)})" if code == "BELOW_COST" and after.supply is not None
+                 else f"(정가 {shown(after.list)})" if code == "ABOVE_LIST" and after.list is not None else "")
+        example = f" 예: {cell_name(change.key)} — 판매가 {was} → {shown(after.sell)}{extra}."
     whole = len(days) >= len(save.dates)
     offered = [f"「{CHOICE_WORDS[choice]}」" + ("(남는 날이 없어 이 저장을 통째로 뺌)" if choice == "exclude_dates" and whole else "")
                for choice in rule_choices(code)] + ["「요청을 고침」"]

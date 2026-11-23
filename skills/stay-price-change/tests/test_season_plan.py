@@ -102,7 +102,7 @@ class SeasonWordsTest(unittest.TestCase):
         self.assertEqual(rule_label(done, "BELOW_COST"), "이미 공급 원가보다 쌉니다 — 이번에도 그대로")
         self.assertEqual(rule_said(done, "BELOW_COST", "USD"),
                          "1번째 저장의 2칸(2일) — 이미 공급 원가보다 쌉니다 — 이번에도 그대로. 예: 12/1 화 · 디럭스 · 조식 포함 · 성인 2 · "
-                         "1박 이상 — 판매가 50 → 51(공급 원가 52). 창은 칸 하나를 뺄 수 없어 이 저장에서 고를 것은 「이대로 채움」 · "
+                         "1박 이상 — 판매가 50.00 → 51.00(공급 원가 52.00). 창은 칸 하나를 뺄 수 없어 이 저장에서 고를 것은 「이대로 채움」 · "
                          "「그 날은 빼고 채움」(남는 날이 없어 이 저장을 통째로 뺌) · 「요청을 고침」입니다. 어떻게 할까요?")
         fresh = plan({key: cell("60", supply="52") for key in below}, price="51", dates=["2026-12-01", "2026-12-02"]).saves[0]
         self.assertEqual(rule_label(fresh, "BELOW_COST"), "공급 원가보다 싸집니다")
