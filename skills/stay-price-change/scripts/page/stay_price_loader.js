@@ -51,11 +51,11 @@
   var INSTALLED = {
     'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
     'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
-    'stay_price.js': { bytes: 120436, crc32: '710cc825', fnv: '71e108e6' },
+    'stay_price.js': { bytes: 120745, crc32: 'd5d12fb9', fnv: '1c4a7b4c' },
     'stay_addon_price.js': { bytes: 17308, crc32: '028d30fa', fnv: '776372f9' },
     'stay_charge.js': { bytes: 20512, crc32: 'dddf5930', fnv: 'b205e611' },
     'stay_promotion.js': { bytes: 27201, crc32: 'b9824447', fnv: 'b7ada684' },
-    'stay_price_season.js': { bytes: 26530, crc32: 'bbd6e12d', fnv: 'b7c668fd' }
+    'stay_price_season.js': { bytes: 27066, crc32: '289750e7', fnv: 'd285ada0' }
   };
   var picked = {};                   // 파일 이름 → 읽은 글자(Promise). 업로드가 하나씩 와도 모인다
 

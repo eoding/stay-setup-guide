@@ -78,9 +78,11 @@
     window: function (el, pins) { return ours(el.closest(SCREEN), pins); },
     // 체크의 클릭 사건이 벽에 닿을 때 브라우저는 이미 체크를 바꿔 두었다(막으면 되돌린다) — 바뀐 상태가 want 와 같아야 지난다
     toward: function (el, pins) { return !!pins.want && ours(el.closest(SCREEN), pins) && el.checked === wanted(pins, el); },
+    // 벽은 거짓이면 「고른 대상이 아님」, 글이면 그 글을 막은 까닭으로 적는다 — 기한이 지난 누름은 그렇게 말한다
     target: function (el, pins) {
       var root = el.closest(SCREEN);
-      if (!pins.want || !ours(root, pins) || !fresh(pins)) return false;
+      if (!pins.want || !ours(root, pins)) return false;
+      if (!fresh(pins)) return '부를 값의 기한이 지났습니다(save)';
       var sent = K.sent(root);
       return !!sent && K.differs(sent, pins.want).length === 0;
     }
@@ -331,9 +333,16 @@
       var off = K.differs(after, lists.want);
       if (off.length) fail('친 뒤의 시즌 창이 보낼 값과 다릅니다(' + clip(off.join(', '), 120) + ') — 저장하지 않았습니다', { refused: true, differ: off.slice(0, 8) });
       if (!fresh(ctx.pins)) fail(EXPIRED, { expired: true });
-      var out = await K.saveOnce(ctx, { root: win, panel: 'stay_seasons', window: '시즌 창', what: clip(want.offer + ' · ' + want.name, 60),
-        waitMs: ctx.left(), banner: true });
-      if (!out.pressed && !fresh(ctx.pins)) { out.expired = true; out.error = EXPIRED; }   // 누르는 순간 기한이 지나 벽(target)이 막았다
+      var out;
+      try {
+        out = await K.saveOnce(ctx, { root: win, panel: 'stay_seasons', window: '시즌 창', what: clip(want.offer + ' · ' + want.name, 60),
+          no: p.no, waitMs: ctx.left(), banner: true });
+      } catch (e) {
+        // 누르는 순간 기한이 지나 벽(target)이 막았다 — saveOnce 는 막힌 누름에서 바로 멈춘다. 장부에 적지 않을 답(expired)으로 바꾼다
+        if (e instanceof K.Stop && !fresh(ctx.pins) && !ctx.wall.pressed('save')) fail(EXPIRED, { expired: true });
+        throw e;
+      }
+      if (!out.pressed && !fresh(ctx.pins)) { out.expired = true; out.error = EXPIRED; }
       if (out.saved === true) {
         var told = /새로 ([\d,]+)칸 · 덮어쓴 ([\d,]+)칸 \(룸 (\d+)개 × (\d+)일\)/.exec(out.banner || '');
         var skipped = /판매일이 없어 건너뛴 칸 ([\d,]+)개/.exec(out.banner || '');

@@ -222,8 +222,27 @@ test('검토 2 의 3 · applySeason — 부를 값의 기한이 없거나 지났
   const want = plain(page.w.stayPageKit.sent(root));
   const r = plain(await page.w.stayPriceSeason.guard('applySeason', () => root.querySelector('[data-stay-action="save"]').click(),
     { hotel: '1', season: IDS.season, want, until: Date.now() - 1 }));
-  assert.match(r.blocked[0].why, /고른 대상이 아닙니다/, '보낼 칸이 want 그대로여도 기한이 지나면 누르는 순간 막는다');
+  assert.match(r.blocked[0].why, /부를 값의 기한이 지났습니다/, '보낼 칸이 want 그대로여도 기한이 지나면 누르는 순간 막고 그 까닭을 적는다');
   assert.deepEqual(page.log.posts, []);
+  page.w.close();
+});
+
+test('검토 2 의 3 · applySeason — 친 뒤 누르기를 기다리는 사이 기한이 지나면 누르지 않고 expired 로 답한다(장부에 적지 않을 답)', async () => {
+  const page = seasonPage();
+  const { body } = await read(page);
+  // 날짜 칸을 치면 화면 스크립트가 요청 하나를 4초 돌린다 — 누르기는 그 요청이 끝나기를 기다리고, 그 사이 기한(2초)이 지난다
+  page.doc.addEventListener('input', (e) => {
+    if (e.target.name !== 'date_selection_0') return;
+    page.doc.dispatchEvent(new page.w.CustomEvent('htmx:before:request', { bubbles: true, detail: {} }));
+    page.w.setTimeout(() => page.doc.dispatchEvent(new page.w.CustomEvent('htmx:finally:request', { bubbles: true, detail: {} })), 4000);
+  });
+  const payload = payloadFrom(body, Object.assign({}, DELUXE, { texts: Object.assign({}, DELUXE.texts) }), 1, Date.now() + 2000);
+  payload.want = payload.want.map(([n, v]) => (n === 'date_selection_0' ? [n, '2026-07-01 '] : [n, v]));
+  const r = plain(await page.w.stayPriceSeason.applySeason(inPage(page.w, payload)));
+  assert.deepEqual([r.saved, r.pressed, r.expired], [false, false, true], r.error);
+  assert.match(r.error, /기한\(그 범위를 다시 읽은 지 2분\)이 지났습니다/);
+  assert.deepEqual(r.blocked.map((b) => b.why), ['부를 값의 기한이 지났습니다(save)'], '누르는 순간 벽이 막았다(누르기 전 확인이 아니라)');
+  assert.deepEqual(page.log.posts, [], '누르지 않았다');
   page.w.close();
 });
 
@@ -276,6 +295,27 @@ test('검토 2 의 page 4 · 「모름」으로 끝난 저장을 ERP 가 늦게 
   const next = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
   assert.equal(next.ok, true, next.error);
   assert.equal(page.log.posts.length, 1, '다시 누르지 않았다');
+  page.w.close();
+});
+
+test('검토 2 의 page 4 · 그 사이 드로어가 닫혀 거절한 창이 닫힌 드로어에 남아도 lateSave 한 번 — saveOnce 의 늦은 거절(late)로 두 번 알리지 않는다', async () => {
+  const page = seasonPage({ onSave: 'hang' });
+  const { body } = await read(page);
+  page.w.stayPrice.config({ budgetMs: 600, hardMs: 900, restMs: 300 });
+  const unknown = plain(await page.w.stayPriceSeason.applySeason(inPage(page.w, payloadFrom(body, DELUXE, 3))));
+  assert.deepEqual([unknown.saved, unknown.pressed], ['unknown', true], unknown.error);
+  page.w.dispatchEvent(new page.w.CustomEvent('stay-drawer-close'));   // 사람이 드로어를 닫았다(요청은 아직 돈다)
+  await new Promise((done) => setTimeout(done, 400));
+  const refused = WINDOW.replace('<div class="table1">', '<div class="stay-banner stay-banner--blocking" data-stay-result="error"><span>조정 값은 부호를 붙여 주세요</span></div><div class="table1">');
+  page.doc.getElementById('stay_drawer_body').innerHTML = refused;   // 늦은 거절이 닫힌 드로어에 들어왔다
+  page.doc.dispatchEvent(new page.w.CustomEvent('htmx:finally:request', { bubbles: true, detail: {} }));
+  assert.equal(page.drawerOpen(), false);
+  const r = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
+  assert.deepEqual([r.started, r.lateSave && r.lateSave.no, r.lateSave && r.lateSave.errors], [false, 3, ['조정 값은 부호를 붙여 주세요']], r.error);
+  assert.equal(page.doc.getElementById('stay_drawer_body').firstElementChild, null, '남은 창을 비웠다');
+  assert.equal(page.w.stayPageKit.late('season-price-fill'), undefined, '같은 거절을 kit 의 late 한 문장으로 한 번 더 알리지 않는다');
+  const next = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
+  assert.deepEqual([next.ok, next.late], [true, undefined], next.error);
   page.w.close();
 });
 

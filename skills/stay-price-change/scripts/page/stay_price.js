@@ -290,7 +290,8 @@
     return out;
   }
   // 거르기를 지나 800자 안으로. 넘으면 꼭 필요한 칸만 남기고 줄였다고 적는다
-  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'moved', 'rest', 'body', 'ms', 'doneAt', 'error', 'late'];
+  var ESSENTIAL = ['op', 'ok', 'no', 'ask', 'started', 'wait', 'saved', 'pressed', 'refused', 'moved', 'rest', 'body', 'ms', 'doneAt', 'error', 'late',
+    'lateSave', 'expired'];
   function fit(result) {
     var out = scrub(result);
     if (shownLength(out) <= RESULT_CHARS) return out;
@@ -507,26 +508,29 @@
     var busy = window.__stayPriceBusy;
     if (busy) return notStarted(op, input, '앞 작업(' + busy.op + ')이 아직 끝나지 않았습니다', BUSY_WAIT);
     var mid = input && typeof input.no === 'number' ? { no: input.no } : {};
-    // 「모름」으로 끝난 저장의 요청이 끝났고 드로어가 닫혔으면 ERP 가 거절해 창을 다시 그린 것이 아니다 — 기억을 내린다
-    if (GUARD.unknownSave && !drawerOpen()) GUARD.unknownSave = null;
-    // 열린 드로어가 이 도우미가 남긴 것이 아니면 사람이 하던 일이다 — 닫으면 친 값이 사라지므로 시작하지 않는다(열린 셀 창과 같다).
-    // 다만 「모름」으로 끝난 저장을 ERP 가 늦게 거절해 그 창을 다시 그린 것이면(모듈의 adopt 가 알아본다 — 도우미가 친 값이 든 그 창)
-    // 그 저장의 답(`lateSave` — ERP 의 오류 글)으로 알리고 닫는다. 사람에게 그 창을 저장하라고 하지 않는다
-    if (drawerOpen() && drawerContent() && drawerContent() !== GUARD.leftDrawer) {
-      var adopted = GUARD.unknownSave ? GUARD.unknownSave.adopt(drawerContent(), GUARD.unknownSave) : null;   // 어느 모듈의 작업이 와도
-      if (adopted) {
-        var pending = GUARD.unknownSave;
-        GUARD.unknownSave = null;
-        await closeDrawer(Date.now() + 3000);
-        GUARD.leftDrawer = drawerOpen() ? drawerContent() : null;
-        var said = adopted.errors.length ? adopted.errors.join(' / ') : 'ERP 가 오류 글 없이 창을 다시 그렸습니다';
-        return remember(fit(Object.assign({ op: op }, mid, { ok: false, started: false, wait: 0, ask: crc32(canon(askedOf(input))), clicks: {},
-          error: '앞 저장(' + pending.no + '번째, 「모름」)을 ERP 가 거절했습니다 — ' + clip(said, 120) + '. 그 창은 도우미가 친 창이라 닫았습니다. ' +
-            '답의 lateSave 를 record-result 에 주고 같은 값으로 다시 부릅니다. 아무것도 누르지 않았습니다',
-          lateSave: { op: pending.op, no: pending.no, ask: pending.ask, ok: false, saved: false, pressed: true, refused: true, late: true,
-            error: adopted.window + '이 저장을 거절했습니다 — ' + clip(said, 160), errors: adopted.errors.slice(0, 3).map(function (e) { return clip(e, 60); }) } },
-          spec.saves[op] ? { saved: false, pressed: false } : {})));
-      }
+    // 「모름」으로 끝난 저장의 요청이 끝났고 드로어가 닫혀 비었으면 ERP 가 거절해 창을 다시 그린 것이 아니다 — 기억을 내린다
+    if (GUARD.unknownSave && !drawerOpen() && !drawerContent() && quiet()) GUARD.unknownSave = null;
+    // 「모름」으로 끝난 저장을 ERP 가 늦게 거절해 그 창을 다시 그렸으면(모듈의 adopt 가 알아본다 — 도우미가 친 값이 든 그 창, 드로어가
+    // 열려 있든 닫힌 채 내용만 남았든) 그 저장의 답(`lateSave` — ERP 의 오류 글)으로 알리고 닫는다. 사람에게 그 창을 저장하라고 하지
+    // 않는다. 같은 거절을 saveOnce 의 기억(GUARD.unknown → closeDrawer 의 lateOf → `late` 한 문장)이 한 번 더 알리지 않게 그 기억도 내린다
+    var stray = drawerContent() && drawerContent() !== GUARD.leftDrawer;
+    var adopted = stray && GUARD.unknownSave ? GUARD.unknownSave.adopt(drawerContent(), GUARD.unknownSave) : null;   // 어느 모듈의 작업이 와도
+    if (adopted) {
+      var pending = GUARD.unknownSave;
+      GUARD.unknownSave = null;
+      GUARD.unknown = null;
+      await closeDrawer(Date.now() + 3000);
+      GUARD.leftDrawer = drawerOpen() ? drawerContent() : null;
+      var said = adopted.errors.length ? adopted.errors.join(' / ') : 'ERP 가 오류 글 없이 창을 다시 그렸습니다';
+      return remember(fit(Object.assign({ op: op }, mid, { ok: false, started: false, wait: 0, ask: crc32(canon(askedOf(input))), clicks: {},
+        error: '앞 저장(' + pending.no + '번째, 「모름」)을 ERP 가 거절했습니다 — ' + clip(said, 120) + '. 그 창은 도우미가 친 창이라 닫았습니다. ' +
+          '답의 lateSave 를 record-result 에 주고 같은 값으로 다시 부릅니다. 아무것도 누르지 않았습니다',
+        lateSave: { op: pending.op, no: pending.no, ask: pending.ask, ok: false, saved: false, pressed: true, refused: true, late: true,
+          error: adopted.window + '이 저장을 거절했습니다 — ' + clip(said, 160), errors: adopted.errors.slice(0, 3).map(function (e) { return clip(e, 60); }) } },
+        spec.saves[op] ? { saved: false, pressed: false } : {})));
+    }
+    // 열린 드로어가 이 도우미가 남긴 것이 아니면 사람이 하던 일이다 — 닫으면 친 값이 사라지므로 시작하지 않는다(열린 셀 창과 같다)
+    if (drawerOpen() && stray) {
       return remember(fit(Object.assign({ op: op }, mid, { ok: false, ask: crc32(canon(askedOf(input))), clicks: {},
         error: '드로어가 열려 있습니다 — 이 도우미가 연 것이 아니라 닫지 않았습니다. 사람이 닫은 뒤 다시 부릅니다. 아무것도 누르지 않았습니다' },
         spec.saves[op] ? { saved: false, pressed: false } : {})));
