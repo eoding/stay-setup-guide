@@ -194,9 +194,9 @@ after. Choices are per save and per rule (fill as shown, leave those dates out, 
 be kept on its own. After "적용" it types the window as shown and presses it once per save, reads the result back, and
 compares cell by cell and with the ERP's own cell counts; "N번 되돌려" restores the values through the price calendar.
 New cells cannot be removed, and the window's last inputs, the previous owner season of overwritten cells and the ERP's
-hand-edit mark do not come back. It never ticks "이번에 고르지 않은 인원·요금제 가격 지우기". Each save is given out only
-against a reading of its range taken at most two minutes earlier, but a change someone else makes in the seconds between
-that reading and the press is overwritten unseen; closing that gap needs a dry run on the ERP side. If the person refills
+hand-edit mark do not come back. It never ticks "이번에 고르지 않은 인원·요금제 가격 지우기". The helper reads each save's range
+again just before that save; a change someone else makes in the seconds after that reading is overwritten, as on any ERP
+screen. If the person refills
 the season in the ERP by hand instead, the helper saves the state before, shows what changed and restores it on request.
 
 Every preview, save and rollback goes into one SQLite ledger on that computer,

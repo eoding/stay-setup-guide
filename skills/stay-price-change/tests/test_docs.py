@@ -413,18 +413,27 @@ class SheetDocsTest(unittest.TestCase):
         not_done = (SKILL / "references" / "not-done.md").read_text(encoding="utf-8")
         self.assertIn("도우미는 시즌 창의 '이번에 고르지 않은 인원·요금제 가격 지우기'를 켜지 않습니다", not_done)
 
-    def test_s9_the_season_fill_flow_says_the_undo_limits_and_the_press_gap_the_pages_say(self):
+    def test_s9_the_season_fill_flow_says_the_undo_limits_the_pages_say_and_one_plain_line_on_reading_again(self):
         """season-fill.md 가 「적용」 전에 말하는 문장은 페이지(season_pages)가 보이는 문장과 같다 — 새 칸 · 되돌리기 · 다시 채우면 다시
-        들어감 · 누르는 순간의 빈틈(몇 초, dry run)."""
+        들어감. 다시 읽기와 누름 사이는 운영자 결정대로 season-fill.md 와 README 에 평범한 한 줄씩만 있고(저장 바로 전에 다시 읽는다 ·
+        그 뒤 몇 초 사이 남이 바꾼 칸은 다른 ERP 화면처럼 덮인다), 말할 문장 · 페이지 · 다른 안내에는 경고가 없고 dry run 은 어디에도 없다."""
         import season_pages
         flow = (SKILL / "references" / "season-fill.md").read_text(encoding="utf-8")
         for sentence in (season_pages.UNDO_WHAT, season_pages.UNDO_REFILL, season_pages.UNDO_CREATED.format(n="○")):
             self.assertIn(sentence, flow)
-        for said in ("몇 초", "보이지 않은 채 덮입니다", "미리 해 보기"):
-            self.assertIn(said, flow)
+        self.assertIn("도우미는 시즌 창을 누르기 바로 전에 그 저장의 범위를 다시 읽는다. 그 읽기 뒤 몇 초 사이에 다른 사람이 ERP 에서 바꾼 "
+                      "칸은 다른 ERP 화면에서처럼 이 저장이 덮어쓴다.", flow)
+        spoken = flow[flow.index("4. \"적용\"을 청하기 전에"):flow.index("## 4. 고르기")]
+        self.assertNotIn("몇 초", spoken)
         readme = (SKILL.parent.parent / "README.md").read_text(encoding="utf-8")
         self.assertIn("시즌 다시 채우기", readme)
-        self.assertIn("dry run", readme)
+        self.assertIn("reads each save's range\nagain just before that save; a change someone else makes in the seconds after that "
+                      "reading is overwritten, as on any ERP\nscreen.", readme)
+        pages = [path for path in (SKILL / "scripts").rglob("*") if path.suffix in (".py", ".js")]
+        for path in [*DOCS, SKILL.parent.parent / "README.md", *pages]:
+            text = path.read_text(encoding="utf-8")
+            for word in ("dry run", "dry-run", "미리 해 보기", "누르는 순간의 빈틈"):
+                self.assertNotIn(word, text, f"{path.name} — ERP 의 dry run 이나 누름 직전의 빈틈 경고는 쓰지 않는다(운영자 결정)")
 
     def test_the_child_percentage_question_reads_as_a_discount_and_names_every_guest_combination_it_covers(self):
         """K4 — 시운전의 물음 「'3박 이상 -10%'를 … 칸 전체에 하면」은 할인으로 읽히지 않았고, 한 답이 여러 인원 조합에 가는데 하나만 댔다."""

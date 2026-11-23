@@ -33,10 +33,6 @@ UNDO_WHAT = ("되돌리기는 가격 캘린더에서 날짜별로 전 값을 다
              "원래 어느 시즌 것이었는지와 ERP 의 '손입력' 표시는 되돌아가지 않습니다.")
 UNDO_EMPTY = "정가·공급 원가가 비어 있던 칸 {n}칸에 값을 넣습니다. 되돌릴 때는 그 칸마다 한 번씩 {n}번 저장해야 해서 오래 걸립니다."
 UNDO_REFILL = "되돌린 뒤 누가 이 시즌을 '덮기'로 다시 채우면 이번 값이 다시 들어갑니다."
-# 누르는 순간의 빈틈(A2) — 미리보기 · 안내 · README 가 같은 말을 한다
-PRESS_GAP = ("시즌 창은 칸 값을 보여 주지 않아, 누르는 순간 칸마다 견주지 못합니다. 그래서 저장마다 그 범위를 2분 안에 다시 읽어 미리보기 때와 "
-             "같을 때만 누릅니다. 다만 그 다시 읽기와 누름 사이(몇 초)에 다른 사람이 ERP 에서 바꾼 칸은 보이지 않은 채 덮입니다 — 이 빈틈을 "
-             "닫으려면 ERP 에 '미리 해 보기(dry run)'가 있어야 합니다.")
 NO_DELETE = "도우미는 시즌 창의 '이번에 고르지 않은 인원·요금제 가격 지우기'를 켜지 않습니다 — 이번 채우기에 없는 예전 칸은 예전 값으로 남습니다."
 GUESS = "「날짜별로 따로 넣은 것으로 보이는 칸」 · 객실 조합으로 빠질 수 있는 칸 · 새 칸의 판매 마감은 도우미의 짐작입니다(ERP 가 그 표시를 보이지 않습니다)."
 BUCKETS = (   # 미리보기 바구니 — (코드, 머리, 덧말). 차례가 보이는 차례다
@@ -249,7 +245,7 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
     if steps:
         body.append(f'<p class="sub">적용하면 시즌 [가격 입력] 창을 {times_word(len(steps))} 누릅니다(저장마다 한 번). 저장마다 그 범위를 '
                     "다시 읽어 미리보기 때와 같을 때만 누릅니다.</p>")
-    body.append("<h2>알아 두실 것</h2>" + notes([PRESS_GAP, NO_DELETE, GUESS, *undo_lines(plan),
+    body.append("<h2>알아 두실 것</h2>" + notes([NO_DELETE, GUESS, *undo_lines(plan),
                                                  "계산은 ERP 시즌 창과 같은 셈입니다(조정은 소수 둘째 자리 반올림, 공급 원가는 "
                                                  f"{'1 단위' if scale_of(currency) == 0 else '소수 둘째 자리'}로 반올림)."]))
     if not plan.ready:

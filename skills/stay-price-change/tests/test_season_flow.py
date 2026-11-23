@@ -127,9 +127,11 @@ class OneDaySeasonTest(FlowBase):
         plan = decode_plan(json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["plan"])
         self.assertEqual(sorted(str(change.after.sell) for change in plan.changes), ["173.00", "181"])
         page = Path(self.cli("render", "preview", "--plan", self.dir / "plan-1.json")["page"]).read_text(encoding="utf-8")
-        for words in ("시즌 「Peak」 다시 채우기", "「181」", "「-8」", "몇 초", "dry run", "지우기", "켜지 않음", "덮인 칸이 원래 어느 시즌"):
+        for words in ("시즌 「Peak」 다시 채우기", "「181」", "「-8」", "지우기", "켜지 않음", "덮인 칸이 원래 어느 시즌"):
             self.assertIn(words, page)
         self.assertNotIn("지금 값", page, "A5 — 미리 읽은 값을 「지금」이라고 하지 않는다")
+        for words in ("몇 초", "dry run", "미리 해 보기", "빈틈"):
+            self.assertNotIn(words, page, "A2 — 다시 읽기와 누름 사이는 미리보기가 경고하지 않는다(운영자 결정)")
 
         self.assertEqual(self.cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", self.snap(snapshot, at(30)),
                                   now=40)["status"], "applying")
@@ -170,6 +172,23 @@ class OneDaySeasonTest(FlowBase):
         line = next(item["line"] for item in listed["changes"] if item["id"] == change)
         self.assertIn("시즌 「Peak」 다시 채우기(덮기) · 저장 1번", line)
         self.assertIn("모두 되돌림 2/2칸", line)
+
+        # A4 — 시즌 채우기의 칸은 보통 가격 칸이라, 그 되돌리기를 되돌리면 장부의 셈이 시즌 채우기의 값을 다시 산 것으로 센다
+        again = self.cli("rollback", "--change", rollback["change_id"], "--snapshot", self.snap(snapshot, at(170)), "--record",
+                         "--sentence", "방금 되돌린 거 다시 되돌려", "--out", self.dir / "rollback-2.json", now=180)
+        self.assertEqual(again["restored"], 2)
+        self.assertEqual(self.cli("begin", "--change", again["change_id"], "--plan", self.dir / "rollback-2.json",
+                                  "--snapshot", self.snap(snapshot, at(190)), now=195)["status"], "applying")
+        for call in self.cli("calls", "--change", again["change_id"], now=196)["calls"]:
+            answer = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True,
+                      "note": "저장했습니다"}
+            last = self.cli("record-result", "--change", again["change_id"], "--result", self.write(f"rb2-{call['no']}.json", answer), now=200)
+        self.assertEqual(last["status"], "applied")
+        self.assertTrue(self.cli("verify", "--change", again["change_id"], "--snapshot", self.snap(after, at(210)), now=220)["same"])
+        line = next(item["line"] for item in self.cli("list", "--all", now=230)["changes"] if item["id"] == change)
+        self.assertIn("시즌 「Peak」 다시 채우기(덮기) · 저장 1번", line)
+        self.assertIn("되돌렸다가 다시 살림", line)
+        self.assertNotIn("모두 되돌림", line)
 
 
 class SheetSeasonTest(FlowBase):
