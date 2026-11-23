@@ -8,6 +8,7 @@ import json
 import sys
 import unittest
 from dataclasses import replace
+from datetime import datetime
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -262,6 +263,62 @@ class SaleStateTest(SeasonCase):
         opened = replace(closed, cells={cell: replace(value, state="open") for cell, value in closed.cells.items()})
         told = self.cli("verify", "--change", change, "--snapshot", self.snap(opened, at(80)), now=85, code=1)
         self.assertEqual([(item["want"], item["seen"]) for item in told["state_only"]], [("closed", "open")] * 2)
+
+
+class PressOnFreshReadingTest(SeasonCase):
+    """검토 2 의 2 · 3 — 시즌 창 저장은 calls 가 그 범위를 방금 읽은 값으로 낸 부를 값으로만, 그 기한 안에만 누른다. 같은 읽은 값으로
+    부를 값을 두 번 내지 않고, 누른 답을 잃은 뒤의 calls 는 「이미 된 것으로 보입니다」라고 답하며 장부에 거짓을 적지 않는다. 된
+    누름은 언제 적어도 받는다."""
+
+    def setup_change(self):
+        window = season_scene.window(dates=[DAY], rooms=["디럭스"])
+        ro = ("디럭스", "룸온리")
+        before = {key("A2"): CellValue(D("180"), None, None, "open"), key("A2", pair=ro): CellValue(D("172"), None, None, "open")}
+        snapshot = replace(season_scene.snapshot((), pairs=[BB, ro], dates=[DAY]), cells=before)
+        short, plan, plan_file = self.plan(window, snapshot, [{"pairs": [{"room": BB[0], "rate_plan": BB[1]}, {"room": ro[0], "rate_plan": ro[1]}],
+                                                               "price": "181", "occupancy_keys": "A2", "plan_adjust": "-8", "overwrite": True}])
+        change = short["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        return change, snapshot, plan, plan_file
+
+    def test_s4_the_payload_carries_the_deadline_of_its_reading_and_one_reading_gives_one_payload(self):
+        change, snapshot, _plan, _plan_file = self.setup_change()
+        reading = self.snap(snapshot, at(40))
+        given = self.cli("calls", "--change", change, "--snapshot", reading, now=50)
+        [call] = given["calls"]
+        deadline = int((datetime.fromisoformat(at(40)).timestamp() + 120) * 1000)
+        self.assertEqual((call["payload"]["freshUntil"], given["fresh"]["seconds"]), (deadline, 10), "읽은 때부터 120초 — 페이지가 이 기한을 본다")
+        again = self.cli("calls", "--change", change, "--snapshot", reading, now=55, code=2)
+        self.assertIn("이 읽은 값", again["error"])
+        self.assertIn("이미 냈습니다", again["error"])
+
+    def test_s4_a_payload_not_issued_by_calls_is_refused_and_an_issued_press_is_recorded_whatever_its_age(self):
+        change, snapshot, plan, plan_file = self.setup_change()
+        stored = json.loads(Path(plan_file).read_text(encoding="utf-8"))["steps"][0]["body"]["payload"]
+        self.assertNotIn("freshUntil", stored, "계산 파일의 페이로드에는 기한이 없다 — 페이지가 누르지 않는다")
+        fake = self.write("fake.json", {"op": "applySeason", "no": 1, "ask": ask_sum(dict(stored, no=1)), "saved": True, "pressed": True,
+                                        "ok": True})
+        self.assertIn("calls 가 낸 부를 값의 답이 아닙니다", self.cli("record-result", "--change", change, "--result", fake, now=40, code=2)["error"])
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        expired = self.cli("record-result", "--change", change, "--result", self.answer(call, ok=False, saved=False, pressed=False, expired=True,
+                                                                                       error="이 부를 값의 기한이 지났습니다"), now=200)
+        self.assertEqual((expired["started"], expired["expired"], expired["status"]), (False, True, "applying"), "기한이 지난 거절은 적지 않는다")
+        late = self.cli("record-result", "--change", change, "--result", self.write("late.json", self.saved_answer(call, plan.saves[0])), now=700)
+        self.assertEqual((late["saved"], late["status"]), (True, "applied"), "누른 저장은 10분 뒤에 적어도 받는다")
+
+    def test_s3_a_second_calls_after_a_press_whose_answer_was_lost_says_already_saved_and_writes_nothing(self):
+        change, snapshot, plan, _plan_file = self.setup_change()
+        self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)   # 눌렀고 저장됐는데 답을 잃었다
+        landed = applied(snapshot, plan)
+        answer = self.cli("calls", "--change", change, "--snapshot", self.snap(landed, at(80)), now=90)
+        self.assertEqual((answer["calls"], answer["saved_already"], answer["status"]), ([], 1, "applying"), answer)
+        self.assertIn("이미 된 것으로 보입니다", answer["said"])
+        listed = next(item for item in self.cli("list", "--all", now=95)["changes"] if item["id"] == change)
+        self.assertEqual((listed["status"], listed["saved_steps"]), ("applying", 0), "장부에 「그 사이 바뀜」을 적지 않았다")
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(landed, at(100)), now=105)
+        self.assertEqual((checked["status"], checked["steps"][0]["ledger"], checked["steps"][0]["settled"]), ("applied", "pending", "saved"))
+        self.assertEqual(self.cli("rollback", "--change", change, "--snapshot", self.snap(landed, at(110)), "--record",
+                                  "--out", self.dir / "rollback-1.json", now=115)["restored"], 2, "저장된 것으로 적혀 되돌릴 수 있다")
 
 
 if __name__ == "__main__":

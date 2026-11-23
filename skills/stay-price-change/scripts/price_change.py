@@ -476,9 +476,8 @@ def record_hotel(record) -> dict:
 
 def change_calls(ledger: Ledger, record) -> list[dict]:
     """그 변경의 저장 단계 전부의 부를 값(차례대로) — 칸마다 누르기 전에 화면에 있어야 할 값(`was` — 장부에 적힌 그 계산의 읽은
-    값 위에 앞 단계들이 넣은 값을 얹은 것)이 든다. 페이지는 화면이 그 값이 아니면 치지도 누르지도 않는다."""
-    if season_cli.is_season(record):
-        return season_cli.step_calls(record)
+    값 위에 앞 단계들이 넣은 값을 얹은 것)이 든다. 페이지는 화면이 그 값이 아니면 치지도 누르지도 않는다. 시즌 다시 채우기는 여기 없다
+    — 저장마다 calls 가 그 범위를 다시 읽은 값으로 낸다(season_cli.next_call · answer_call)."""
     return step_calls(record_hotel(record), record.offer, [(step.index, step.kind, step.body) for step in record.steps],
                       recorded_reading(ledger, record.id))
 
@@ -509,10 +508,12 @@ def cmd_record_result(args):
     step = next((step for step in record.steps if step.index == result.get("no")), None)
     if step is None:
         raise LedgerError(f"{args.change}번 변경에 {result.get('no')}번째 저장이 없습니다")
-    outcome = step_outcome(next(call for call in change_calls(ledger, record) if call["no"] == step.index), result)
-    if not outcome.started:
+    call = (season_cli.answer_call(ledger, record, step, result) if season_cli.is_season(record)
+            else next(call for call in change_calls(ledger, record) if call["no"] == step.index))
+    outcome = step_outcome(call, result)
+    if not outcome.started:   # 아무것도 누르지 않았다 — 적지 않는다(기한이 지났으면 다시 읽고 calls 부터)
         return dict(change_id=record.id, step=step.index, started=False, wait=outcome.wait, note=outcome.note,
-                    status=record.status)
+                    status=record.status, **({"expired": True} if outcome.expired else {}))
     moved = dict(moved=outcome.moved) if outcome.moved else {}
     note = step_note(result) if season_cli.is_season(record) and outcome.saved is True else outcome.note
     extra = {name: result[name] for name in ("counts", "warn") if season_cli.is_season(record) and result.get(name)}

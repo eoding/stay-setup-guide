@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Mapping
 
-from change_core.answers import attach_bodies
+from change_core.answers import BrowserError, ask_sum, attach_bodies
 from change_core.chrome import MOVED_ERRORS
 from change_core.items import encode_state, key_fields, stale_items
 from change_core.ledger import Ledger, clock
@@ -29,7 +29,8 @@ from price_season import (
     KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, day_items, decode_choices,
     decode_counts, decode_fill,
     decode_plan, decode_window, encode_plan, encode_window, expected_cells, fresh_problem, followup_targets, has_writes, missing_seasons,
-    plan_season, preview_rows, range_differences, recorded_request, rule_choices, rule_label, rule_said, season_range, season_steps, step_call, step_range,
+    FRESH_SECONDS, fresh_until, plan_season, preview_rows, range_differences, recorded_request, rule_choices, rule_label, rule_said, season_range,
+    season_steps, step_call, step_range,
     window_of, window_remembers,
 )
 from price_sheet import decode_check
@@ -195,27 +196,35 @@ def begin_steps(data: Mapping) -> tuple[list, dict]:
 # ─── calls ───
 
 
-def saved_values(record) -> dict[CellKey, CellValue]:
-    """장부가 저장됐다고 적은 단계들이 넣은 칸의 값(예상) — 전 값 위에 넣은 필드를 얹고, 판매 상태는 다시 읽으면 보일 것(expected_state)."""
-    cells: dict[CellKey, dict] = {}
+def written_values(record, steps) -> dict[CellKey, CellValue]:
+    """그 단계들이 넣은(넣을) 칸의 값(예상) — 칸마다 넣는 필드는 넣는 값, 나머지 필드는 전 값, 판매 상태는 다시 읽으면 보일 것
+    (expected_state)."""
+    keys = {row.item_key for row in record.rows if row.action is not None and row.step in steps and not row.rolled_back_by}
+    cells: dict[str, dict] = {}
     for row in record.rows:
-        if not row.written or row.rolled_back_by:
-            continue
-        key = key_of_item(row.item_key)
-        entry = cells.setdefault(key, dict(state=row.state, marks=row.marks, values={}))
-        entry["values"][row.field] = (row.before, row.after if row.action else row.before)
+        if row.item_key in keys:
+            entry = cells.setdefault(row.item_key, dict(state=row.state, marks=row.marks, values={}))
+            entry["values"][row.field] = row.after if row.action is not None else row.before
     out = {}
-    for key, entry in cells.items():
-        values = {name: entry["values"].get(name, (None, None))[1] for name in FIELDS}
-        if values["sell"] is not None:
-            out[key] = CellValue(values["sell"], values["list"], values["supply"], expected_state(entry["marks"], entry["state"]))
+    for item_key, entry in cells.items():
+        values = [entry["values"].get(name) for name in FIELDS]
+        if values[0] is not None:
+            out[key_of_item(item_key)] = CellValue(*values, expected_state(entry["marks"], entry["state"]))
     return out
+
+
+def saved_values(record) -> dict[CellKey, CellValue]:
+    """장부가 저장됐다고 적은 단계들이 넣은 칸의 값(예상)."""
+    return written_values(record, {step.index for step in record.steps if step.status == "saved"})
 
 
 def next_call(ledger: Ledger, record, now: Snapshot | None, then: Snapshot) -> dict:
     """다음 저장 하나의 부를 값 — A2. 그 저장의 범위(쌍 × 날)를 덮고, 앞 단계가 끝난 뒤(첫 단계는 그 번호를 계산한 뒤) FRESH_SECONDS
-    안에 읽은 값이어야 한다(아니면 아무것도 내지 않고 다시 읽으라고 거절). 그 범위의 칸이 있어야 할 값과 하나라도 다르면 아무것도 내지
-    않고, 그 저장을 「그 사이 바뀜」(페이지가 누르기 전에 거절한 것과 같은 메모)으로 적어 변경을 멈추고 다른 칸을 댄다."""
+    안에 읽은 값이어야 한다(아니면 아무것도 내지 않고 다시 읽으라고 거절). 그 범위가 있어야 할 값(미리보기 때 + 앞 저장들이 넣은 값)
+    그대로면 부를 값을 낸다 — 그 읽은 값의 기한(`freshUntil`)을 얹고 장부에 냈다고 적는다(같은 읽은 값으로는 두 번 내지 않는다).
+    그 범위가 있어야 할 값에 이 저장이 넣는 값까지 얹은 것과 같으면 이 저장은 이미 된 것으로 보인다(누른 답을 잃었다) — 아무것도
+    적지 않고 그렇게 답한다(record-result 나 check 로 가린다). 그 밖에 하나라도 다르면(판매일 없는 날 · 예약 있는 날도) 아무것도
+    내지 않고, 그 저장을 「그 사이 바뀜」(페이지가 누르기 전에 거절한 것과 같은 메모)으로 적어 변경을 멈추고 다른 칸을 댄다."""
     left = [step for step in record.steps if step.status != "saved"]
     if not left:
         return dict(change_id=record.id, status=record.status, calls=[])
@@ -227,8 +236,8 @@ def next_call(ledger: Ledger, record, now: Snapshot | None, then: Snapshot) -> d
     window = decode_window(record.request["window"])
     pairs, days = step_range(window, step.body)
     if now is None:
-        raise SeasonError(f"시즌 창 저장은 그 저장의 범위를 {120}초 안에 다시 읽은 값으로만 냅니다 — read-calls --record {record.id} --step "
-                          f"{step.index} 로 읽고 calls 에 --snapshot 을 줍니다")
+        raise SeasonError(f"시즌 창 저장은 그 저장의 범위를 {FRESH_SECONDS}초 안에 다시 읽은 값으로만 냅니다 — read-calls --record {record.id} "
+                          f"--step {step.index} 로 읽고 calls 에 --snapshot 을 줍니다")
     if not same_hotel(now.hotel, now.hotel_id, record.hotel, record.hotel_id) or now.offer != record.offer:
         raise SeasonError(f"방금 읽은 값은 호텔 {now.hotel_id} · {now.offer} 것이고, {record.id}번은 호텔 {record.hotel_id} · {record.offer} 입니다")
     gaps = covers(now, pairs, days)
@@ -239,20 +248,39 @@ def next_call(ledger: Ledger, record, now: Snapshot | None, then: Snapshot) -> d
     problem = fresh_problem(now.read_at, max(finished) if finished else record.created_at, clock()())
     if problem:
         raise SeasonError(problem)
-    expected = expected_cells(then, saved_values(record), pairs, days)
+    earlier = saved_values(record)
+    expected = expected_cells(then, earlier, pairs, days)
     differences = range_differences(expected, now, pairs, days)
     moved_days = stale_items(day_items(then, pairs, days), day_items(now, pairs, days))   # 판매일이 열림 · 예약이 듦(검토 2 의 7)
-    if differences or moved_days:
-        count = len(differences) + len(moved_days)
-        status = ledger.record_step(record.id, step.index, False,
-                                    f"{MOVED_ERRORS[0]}({count}칸) — 시즌 창 저장 직전에 그 범위를 다시 읽으니 미리보기 때와 다릅니다")
-        return dict(change_id=record.id, status=status, calls=[], stopped=True,
-                    differences=[dict(key=encode_key(key), then=encode_value(was), now=encode_value(seen))
-                                 for key, was, seen in differences]
-                    + [dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in moved_days])
-    age = int((clock()() - datetime.fromisoformat(now.read_at.replace("Z", "+00:00"))).total_seconds())
-    return dict(change_id=record.id, status=record.status, calls=[step_call(step.index, step.body)],
-                fresh=dict(read_at=now.read_at, seconds=age))
+    if not differences and not moved_days:
+        until = fresh_until(now.read_at)
+        if not ledger.issue(record.id, step.index, now.read_at, until):
+            raise SeasonError(f"이 읽은 값({_clock_text(now.read_at)})으로 {step.index}번째 저장의 부를 값을 이미 냈습니다 — 같은 읽은 값으로 두 번 "
+                              "내지 않습니다. 그 부를 값으로 누른 답이 있으면 record-result 에 줍니다. 누르지 않았거나 눌렀는지 모르면 그 저장의 "
+                              "범위를 새 읽기 폴더에 다시 읽고 calls 를 부릅니다(눌러서 저장됐으면 calls 가 「이미 된 것으로 보입니다」라고 답합니다)")
+        age = int((clock()() - datetime.fromisoformat(now.read_at.replace("Z", "+00:00"))).total_seconds())
+        return dict(change_id=record.id, status=record.status, calls=[step_call(step.index, step.body, until)],
+                    fresh=dict(read_at=now.read_at, seconds=age, until=_clock_text(until)))
+    landed = as_read(expected_cells(then, {**earlier, **written_values(record, {step.index})}, pairs, days))
+    if differences and not range_differences(landed, now, pairs, days):
+        return dict(change_id=record.id, status=record.status, calls=[], saved_already=step.index,
+                    said=(f"{step.index}번째 저장은 이미 된 것으로 보입니다 — 그 범위의 칸이 모두 이 저장이 넣는 값입니다(누른 뒤 답을 적지 "
+                          "못했을 수 있습니다). 다시 누르지 않았고 장부에도 아무것도 적지 않았습니다. 그 누름의 답 파일이 있으면 "
+                          "record-result 에 주고, 없으면 같은 범위를 다시 읽어 check 로 가립니다(칸이 모두 넣은 값이면 저장됨으로 적습니다)"))
+    count = len(differences) + len(moved_days)
+    status = ledger.record_step(record.id, step.index, False,
+                                f"{MOVED_ERRORS[0]}({count}칸) — 시즌 창 저장 직전에 그 범위를 다시 읽으니 미리보기 때와 다릅니다")
+    return dict(change_id=record.id, status=status, calls=[], stopped=True,
+                differences=[dict(key=encode_key(key), then=encode_value(was), now=encode_value(seen))
+                             for key, was, seen in differences]
+                + [dict(key=key_fields(item.key), then=encode_state(item.then), now=encode_state(item.now)) for item in moved_days])
+
+
+def _clock_text(moment) -> str:
+    """읽은 시각(ISO) · 기한(ms) → 이 컴퓨터 시각대의 「HH:MM:SS」."""
+    if isinstance(moment, int):
+        return datetime.fromtimestamp(moment / 1000).astimezone().strftime("%H:%M:%S")
+    return datetime.fromisoformat(str(moment).replace("Z", "+00:00")).astimezone().strftime("%H:%M:%S")
 
 
 def pair_unit(item_key: str) -> str:
@@ -262,9 +290,15 @@ def pair_unit(item_key: str) -> str:
     return f"{fields['room']}\u0000{fields['rate_plan']}"
 
 
-def step_calls(record) -> list[dict]:
-    """장부의 시즌 단계 전부의 부를 값(record-result 가 답을 그 단계에 맞춘다)."""
-    return [step_call(step.index, step.body) for step in record.steps]
+def answer_call(ledger: Ledger, record, step, result: Mapping) -> dict:
+    """저장 답 하나가 그 단계의 어느 부를 값의 것인지 — calls 가 그 단계에 낸 부를 값(기한을 얹은 것) 가운데 답의 지문(`ask`)이 같은
+    것. 누른 답은 언제 적어도 받는다(기한은 누르기를 막을 뿐, 된 저장을 잃게 하지 않는다). calls 가 낸 부를 값의 답이 아니면 거절한다."""
+    calls = [step_call(step.index, step.body, until) for _index, _read_at, until in ledger.issued(record.id, step.index)]
+    found = next((call for call in calls if ask_sum(call["payload"]) == result.get("ask")), None)
+    if found is None:
+        raise BrowserError(f"{step.index}번째 저장의 답이 calls 가 낸 부를 값의 답이 아닙니다 — 시즌 창 저장은 calls 가 그 범위를 다시 읽은 "
+                           "값으로 낸 부를 값(기한 freshUntil 이 든 것)으로만 누릅니다. 계산 파일 · 장부의 페이로드로는 누르지 않습니다")
+    return found
 
 
 def is_season(record) -> bool:

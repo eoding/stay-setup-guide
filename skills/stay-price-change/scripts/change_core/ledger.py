@@ -27,6 +27,9 @@
     begins       적용을 시작한 변경 하나에 한 줄 — begin 이 처음 받아들인 때. 목록의 「적용 중」 · 「적용하다 멈춤」이 이 시각이다
     unused_choices  미리보기 하나에 한 줄(있을 때만) — 담당자가 고른 빨간 줄 고름 가운데 어느 항목도 쓰지 않은 것(JSON, 고르며 한
                  말과 그 까닭). 항목 줄에는 남지 않아, 결과 페이지의 「고르신 빨간 줄」이 미리보기처럼 이것으로 댄다
+    halts        저장은 됐는데 ERP 가 다음 저장을 하지 말라고 한 단계와 그 까닭(시즌 창의 「공급 통화 없음」 띠)
+    issues       저장 하나의 부를 값을 낸 기록 — 어느 읽은 값으로(그 시각) 냈고 언제까지 누를 수 있는지(`until_ms`). 누를 때마다 그
+                 범위를 다시 읽어야 하는 저장(시즌 창)이 쓴다: 같은 읽은 값으로 두 번 내지 않고, 저장 답은 낸 부를 값의 것만 받는다
 
 어느 기록의 값이 ERP 에 살아 있는지(되돌렸는지 · 되돌렸다가 다시 살렸는지)는 장부에 적어 두지 않고 저장된 값들의 차례에서 그때마다
 셈한다(`_chain` — change_core.alive). 그래서 되돌리기도 저장 상태로 되돌리기도 바꾸기처럼 되돌릴 수 있고, 몇 번을 되돌려도 목록 ·
@@ -72,7 +75,7 @@ CLOCK_ENV = "STAY_PRICE_TEST_NOW"   # 시험용 — 주면 장부의 시계가 �
 FOLDER_NAME = "어딩 Stay 가격 변경 기록"
 DB_NAME = "가격장부.sqlite3"
 WORK = "작업"                        # 기록 폴더 안의 작업 폴더들(files.new_work) — 있으면 장부가 있던 기록 폴더다
-SCHEMA_VERSION = 3                   # 3 — 상태 empty(저장할 것이 없는 미리보기)
+SCHEMA_VERSION = 4                   # 3 — 상태 empty(저장할 것이 없는 미리보기) · 4 — 부를 값을 낸 기록(issues)
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off", "halted")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김 · 저장은 됐는데 ERP 가
 # 다음 저장을 하지 말라고 함(halts — 시즌 창의 「공급 통화 없음」 띠)
@@ -159,6 +162,15 @@ CREATE TABLE IF NOT EXISTS halts (
   note TEXT NOT NULL,
   PRIMARY KEY (change_id, idx)
 );
+CREATE TABLE IF NOT EXISTS issues (
+  change_id INTEGER NOT NULL REFERENCES changes(id),
+  idx INTEGER NOT NULL,
+  read_at TEXT NOT NULL,
+  until_ms INTEGER NOT NULL,
+  issued_at TEXT NOT NULL,
+  PRIMARY KEY (change_id, idx, read_at)
+);
+CREATE TRIGGER IF NOT EXISTS keep_issues BEFORE DELETE ON issues BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_begins BEFORE DELETE ON begins BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_halts BEFORE DELETE ON halts BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_unused BEFORE DELETE ON unused_choices BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
@@ -748,6 +760,25 @@ class Ledger:
                        " active_at = CASE WHEN ? THEN ? ELSE active_at END WHERE id = ?",
                        (status, stamp, stamp if status == "applied" else None, saved and alive, stamp, change_id))
             return self._status(self._header(db, change_id))
+
+    def issue(self, change_id: int, index: int, read_at: str, until_ms: int) -> bool:
+        """저장 하나의 부를 값을 그 읽은 값(`read_at`)으로 냈다고 적는다(`until_ms` — 누를 수 있는 마지막 때). 같은 읽은 값으로 이미
+        냈으면 아무것도 적지 않고 False 다(한 읽은 값에 부를 값은 하나)."""
+        with self._db() as db:
+            self._header(db, change_id)
+            found = db.execute("SELECT 1 FROM issues WHERE change_id = ? AND idx = ? AND read_at = ?", (change_id, index, read_at)).fetchone()
+            if found:
+                return False
+            db.execute("INSERT INTO issues (change_id, idx, read_at, until_ms, issued_at) VALUES (?, ?, ?, ?, ?)",
+                       (change_id, index, read_at, until_ms, self._stamp()))
+            return True
+
+    def issued(self, change_id: int, index: int | None = None) -> list[tuple[int, str, int]]:
+        """낸 부를 값들 — (단계, 읽은 값의 시각, 누를 수 있는 마지막 때), 낸 차례대로."""
+        with self._db() as db:
+            rows = db.execute("SELECT idx, read_at, until_ms FROM issues WHERE change_id = ?" + ("" if index is None else " AND idx = ?")
+                              + " ORDER BY rowid", (change_id,) if index is None else (change_id, index)).fetchall()
+        return [(row["idx"], row["read_at"], row["until_ms"]) for row in rows]
 
     @staticmethod
     def _written(db, change_id):

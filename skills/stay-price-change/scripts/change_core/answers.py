@@ -475,13 +475,15 @@ def reading_time(results: Iterable, reads: Iterable[str]) -> str:
 @dataclass(frozen=True)
 class Outcome:
     """저장 작업 답 하나의 뜻. `saved` 는 True 저장됨 · False 저장 안 됨 · "unknown" 단추는 눌렸고 저장됐는지 모름 ·
-    None 시작하지 않음(지나가는 까닭으로 아무것도 누르기 전에 멈췄다 — `wait` 초 뒤 같은 값으로 다시 부른다). `moved` 는 페이지가
+    None 시작하지 않음(지나가는 까닭으로 아무것도 누르기 전에 멈췄다 — `wait` 초 뒤 같은 값으로 다시 부른다. `expired` 면 부를 값의
+    기한이 지났다 — 다시 읽어 새 부를 값을 받는다). `moved` 는 페이지가
     누르기 전에 화면의 값이 그 단계가 실은 값(`was` — 그 계산이 바탕으로 삼은 읽은 값)과 달라 거절한 칸 수다(0 이면 그런 거절이
     아니다). 그 사이 다른 손이 탄 것이라 저장 안 됨이고 변경이 멈춘다(그 뒤는 앞 저장이 됐는지에 따라 다르다 — stopped.md 2)."""
     saved: bool | str | None
     note: str
     wait: int | None = None
     moved: int = 0
+    expired: bool = False      # 부를 값의 기한(그 범위를 다시 읽은 지 2분)이 지나 페이지가 누르기 전에 거절했다 — 다시 읽고 calls 부터
 
     @property
     def started(self) -> bool:
@@ -495,6 +497,8 @@ def step_outcome(call: Mapping, result: Mapping) -> Outcome:
     if result.get("ask") != ask_sum(call["payload"]):
         raise BrowserError(f"{call['no']}번 저장의 답이 장부의 그 단계와 다른 값을 물었습니다")
     reason = result.get("error") or "저장하지 못했습니다"
+    if result.get("expired") and not result.get("pressed") and result.get("saved") in (None, False):
+        return Outcome(None, reason, expired=True)
     if result.get("started") is False and not result.get("pressed") and result.get("saved") in (None, False):
         return Outcome(None, reason, int(result.get("wait") or 5))
     if result.get("saved") is True:

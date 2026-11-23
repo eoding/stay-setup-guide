@@ -1009,9 +1009,16 @@ def decode_counts(data: Mapping) -> SaveCounts:
                                                               "maybe_updated", "maybe_skipped")))
 
 
-def step_call(step_no: int, body: Mapping) -> dict:
-    """장부의 단계 → `{no, op, payload}` — 페이로드는 begin 때 정해져 장부에 그대로 있다."""
-    return {"no": step_no, "op": OP, "payload": dict(body["payload"], no=step_no)}
+def step_call(step_no: int, body: Mapping, until_ms: int) -> dict:
+    """장부의 단계 → `{no, op, payload}` — 페이로드는 begin 때 정해져 장부에 그대로 있고, calls 가 그 범위를 다시 읽은 값의 기한
+    (`freshUntil` — 이 컴퓨터 시계의 1970년부터 ms)을 얹는다. 페이지는 기한이 없거나 지난 페이로드로는 창을 열지도 누르지도 않는다
+    (계산 파일 · 장부의 페이로드는 기한이 없어 누를 수 없다)."""
+    return {"no": step_no, "op": OP, "payload": dict(body["payload"], no=step_no, freshUntil=until_ms)}
+
+
+def fresh_until(read_at: str) -> int:
+    """다시 읽은 값의 시각 → 그 값으로 낸 부를 값을 누를 수 있는 마지막 때(1970년부터 ms) — 읽은 때부터 FRESH_SECONDS."""
+    return int(_moment(read_at).timestamp() * 1000) + FRESH_SECONDS * 1000
 
 
 # ─── 저장 하나를 내기 전에 — 그 범위를 다시 읽은 값(A2) ───

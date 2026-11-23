@@ -77,7 +77,7 @@ class SharedMachineryTest(unittest.TestCase):
                 self.assertEqual((ledger.path, ledger.kind), (Path(folder) / DB_NAME, "charge"))
                 self.assertEqual(Ledger().path, ledger.path)
                 self.assertEqual(KIND_NAMES["charge"], "부과금 도우미")
-                self.assertEqual(SCHEMA_VERSION, 3, "항목 종류는 표의 모양을 바꾸지 않는다 — 3 은 세 도우미가 같이 쓰는 상태 empty 를 더한 판")
+                self.assertEqual(SCHEMA_VERSION, 4, "항목 종류는 표의 모양을 바꾸지 않는다 — 4 는 세 도우미가 같이 쓰는 장부에 부를 값을 낸 기록(issues)을 더한 판")
             finally:
                 del os.environ["STAY_PRICE_LEDGER_DIR"]
 

@@ -30,7 +30,9 @@ save = ps.SeasonSave(pairs=(("디럭스", "조식 포함"), ("디럭스", "룸�
 fill = ps.SeasonFill(window.hotel, window.hotel_id, window.offer, window.season_id, window.season_name, "KRW", "", (save,))
 plan = ps.plan_season(snap, window, fill, [ps.SeasonChoice(1, "NEW_ROW", "include", "응")])
 steps = ps.season_steps(plan)
-print(json.dumps({"call": ps.step_call(1, steps[0].body), "predicted": steps[0].body["predicted"],
+from datetime import datetime
+until = ps.fresh_until(datetime.now().astimezone().isoformat())   # calls 가 방금 읽은 값으로 낸 것처럼 — 기한은 지금부터 2분
+print(json.dumps({"call": ps.step_call(1, steps[0].body, until), "predicted": steps[0].body["predicted"],
                   "window": {"child": [[c.code, c.kind, c.blank] for c in window.child], "pairs": [[p.room, p.rate_plan] for p in window.plans]}},
                  ensure_ascii=False))
 `;
