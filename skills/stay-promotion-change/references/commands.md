@@ -9,7 +9,7 @@
 | 명령 | 플래그 | 하는 일 |
 |---|---|---|
 | `work` | 없음 | 새 작업 폴더를 그 안의 `look/` 과 함께 만들어 `{work}` 로 그 자리를 준다 — `<기록 폴더>/작업/<YYYY-MM-DD HHMMSS>/`. 담당자가 시킨 일 하나에 하나다 |
-| `look` | `--answers` (여러 번) · `--find` · `--out` | `stayPromotion.look()` 의 답과 조각 → 호텔의 카드마다(오퍼 · 「전 오퍼 공통」은 오퍼 `0`) 프로모션 전부(목록이 보인 그대로 — 번호 · 이름 · 코드 · 발동 조건 · 혜택 줄 · 중복 · 한정). `kind: promotion_listing`. 짧은 답의 `items` 는 고를 프로모션(40개까지, 넘으면 `more`) — `--find` 를 주면 카드 · 이름 · 코드 · 발동 조건 · 혜택 줄에 그 낱말이 든 것만(`found`) |
+| `look` | `--answers` (여러 번) · `--find` · `--out` | `stayPromotion.look()` 의 답과 조각 → 호텔의 카드마다(오퍼 · 「전 오퍼 공통」은 오퍼 `0`) 프로모션 전부(목록이 보인 그대로 — 번호 · 이름 · 코드 · 발동 조건 · 혜택 줄 · 중복 · 한정). `kind: promotion_listing`. 짧은 답의 `items` 는 고를 프로모션(40개까지, 넘으면 `more`) — `--find` 를 주면 카드 · 이름 · 코드 · 발동 조건 · 혜택 줄에 그 낱말이 든 것만(`found`) 기록 폴더의 다른 작업 폴더의 `look/`(같은 호텔)에서 다 받은 같은 조각(알아볼 값 넷이 같은 것)을 스스로 찾아 빌린다 — 그때는 `take` 없이 바로 묶인다(받을 조각이 없으면 `refetch` 를 내지 않는다) |
 | `read-calls` | `--request` 또는 `--record` 또는 `--promotion` (여러 번) · `--look` · `--out` | 읽을 프로모션 → `readPromotion` 부를 값 `{promotions: [{hotel, offer, promotion}]}`. `--look` 을 주면 요청의 번호가 목록에 있는지 본다. `--promotion` 은 바꾸지 않고 설정만 볼 때(`--look` 과 같이). 한 번에 200개까지 |
 | `read` | `--calls` · `--answers` (여러 번) · `--out` | `readPromotion` 답과 조각 → 지금 값(`kind: promotion_snapshot`). 기록 폴더의 앞선 읽기(같은 호텔)에서 다 받은 같은 조각을 스스로 찾아 빌린다 |
 | `plan` | `--snapshot` · `--request` · `--resolutions` · `--record` · `--replaces` · `--out` | 미리보기 계산과 저장 단계. `--record` 면 장부에 미리보기로 적는다(저장할 것이 없으면 `empty`). 계산 파일은 덮어쓰지 않는다(`plan-2.json` …, `--replaces <앞 번호>`) |
@@ -72,7 +72,7 @@
 | `INVERTS` | 빨간 줄 | 기준값이 더 큰 단보다 할인이 커진다(또는 작은 단보다 작아진다) — 더 오래 묵거나 더 일찍 예약한 손님이 덜 할인받는다 | 고름: `include` · `keep` |
 | `OVER_30` | 빨간 줄 | 지금보다 30% 넘게 오르거나 내린다 | 고름: `include` · `keep` |
 
-고름 파일(`--resolutions`): `[{"rule": "OVER_30", "choice": "include", "tiers": ["9004 4"], "said": "<담당자 말>"}]` — `tiers` 는 「<프로모션 번호> <기준값>」, 없으면 그 규칙의 모든 단. `said` 는 꼭 적는다.
+고름 파일(`--resolutions "<작업>/choices-<k>.json"` — 그 일의 작업 폴더에, k 는 그 고름으로 만들 계산 파일 `plan-<k>.json` 과 같은 번호이고 지금까지 고른 것을 모두 적는다): `[{"rule": "OVER_30", "choice": "include", "tiers": ["9004 4"], "said": "<담당자 말>"}]` — `tiers` 는 「<프로모션 번호> <기준값>」, 없으면 그 규칙의 모든 단. `said` 는 꼭 적는다.
 
 ## 짧은 답
 

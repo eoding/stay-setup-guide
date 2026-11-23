@@ -14,6 +14,10 @@
 | `stayPriceLoader.again('addon')` | 적어 둔 원본을 같은 차례로 다시 실행한다 — 탭에 올릴 때마다 먼저 부른다(설치된 것과 같을 때만 실행하므로 안전하다). 됐으면 `loaded` 에 네 파일. 원본이 없거나 예전 판인 파일이 있으면 아무것도 실행하지 않고 `want` 에 **그 파일만** 댄다(다른 묶음을 쓰던 탭이면 이 도우미의 파일 하나뿐일 수 있다). 그 파일만 올리고 `load('addon')` 를 부르면 나머지는 이 탭에 적어 둔 원본(설치된 것과 같은 것)을 쓴다 |
 | `stayPriceLoader.status('addon')` | `{ok, helper, price, addon, stored}` — 올라 있는지 볼 때 |
 
+**올릴 파일의 자리.** 모두 이 스킬 폴더(SKILL.md 가 있는 폴더)에서 본 자리다: `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · `scripts/page/stay_addon_price.js`. 파일 올리기 도구에는 이 스킬 폴더의 절대 경로를 앞에 붙인 온전한 경로로 준다. 같은 이름의 파일을 다른 곳(예전 복사본 · 내려받은 폴더)에서 찾아 올리지 않는다 — 예전 판이면 올리개가 `wrong` 으로 거절한다.
+
+**`stored` 의 키 이름이 가려져도.** `load` · `again` 의 답에서 `stored` 의 키 이름 하나가 브라우저 도구에 가려 `[BLOCKED: Base64 encoded data]` 처럼 보일 수 있다(도구가 긴 글을 숨긴다). 올랐는지는 `ok: true` 와 판 번호로 정한다 — 가려진 이름 때문에 다시 올리지 않는다.
+
 **파일 올리기 도구가 경로를 거절할 때.** Claude 를 연 폴더 아래에 `stay-addon-upload/` 를 만들어 네 파일을 복사하고 거기서 올린다. `load('addon')` 이 `ok: true` 면 그 폴더를 지운다. `load` 가 `올라온 파일이 설치된 도우미의 것과 다릅니다: <파일>` 이면 그 파일은 예전 복사본이다. 스킬 폴더의 것을 다시 복사해 올린다.
 
 **페이지에 남기는 것.** 이 탭의 출처(ERP 주소)의 localStorage 에 `stayPrice` 로 시작하는 키만 쓴다 — 원본 넷(`stayPriceHelperSrc` · `stayPriceBootSrc` · `stayPriceSrc` · `stayPriceAddonSrc`)과 마지막 작업의 답(`stayPriceLast`). 러너의 키는 읽지도 쓰지도 않는다. 같은 탭에서 러너(stay-setup-run)를 돌려야 하면 담당자에게 탭을 새로 고쳐 달라고 한다.

@@ -25,7 +25,7 @@ SKILL.md 「3. 되돌리기」가 이 파일을 연다. 담당자가 "어제 바
 
 **되돌려도 그대로인 것** — 미리보기와 함께 꼭 말한다: 이미 받은 예약의 금액, 저장할 때 ERP 가 다시 맞춘 분류 칸과 생긴 적용 범위 기록. 할인 값만 되돌린다. 화면에 안 보이는 설정(취소 조건 같은 것)은 처음부터 건드리지 않았으니 되돌릴 것도 없다.
 
-1. `read-calls --record <N>` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`.
+1. `read-calls --record <N>` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`(`--look` 은 주지 않아도 된다 — 장부 번호가 읽을 프로모션을 정한다).
 2. `python3 scripts/promotion_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(프로모션 몇 개만이면 `--promotion <프로모션 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M. 종료 2 에 `이 ERP 는 아직 …` 이면 지금 창에 표식이 없다 — 그 문장을 그대로 말하고 끝낸다.
 3. `python3 scripts/promotion_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. 먼저 "되돌리기 미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 짧은 답의 `undoing` 이 있으면(되돌리기를 되돌림) 그 문장을 그대로 말한다. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 단 수, 그대로 두는 것(`kept` — 그 사이 값이 달라진 단, 기준값이 바뀌어 없어진 단)의 수와 까닭(`kept_why`)을 반드시 말한다. 위의 「되돌려도 그대로인 것」을 말한다. 그리고 저장 횟수(`saves`)를 말하고 끝에 "맞으면 '되돌려'라고 해 주세요." `restored` 가 0 이면 되돌릴 것이 없다고만 하고 "되돌려"를 청하지 않는다.
 4. "되돌려" → SKILL.md 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그것도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.

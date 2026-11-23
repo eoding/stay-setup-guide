@@ -23,7 +23,7 @@ SKILL.md 「3. 되돌리기」가 이 파일을 연다. 담당자가 "어제 바
 
 **되돌리기를 되돌려 달라면.** "방금 되돌린 것 다시 되돌려줘"처럼 되돌리기(목록의 `kind: rollback`)를 되돌리라고 하면 바꾸기와 똑같이 한다 — 확인받은 그 번호로 아래 1~4. 되돌리면 그 번호가 덮은 값으로 돌아간다(되돌리기를 되돌리면 처음 바꾼 금액이 다시 들어간다). 몇 번이고 되고, 그 사이 다른 데서 바뀐 것은 바꾸기 때처럼 그대로 둔다. 장부는 어느 번호의 값이 ERP 에 살아 있는지 그때마다 셈한다 — 되돌린 것을 다시 살린 번호는 목록에서 다시 적용된 것으로 읽히고 범위 한 줄 끝에 「되돌렸다가 다시 살림 (장부 <되돌린 번호>번 · <다시 살린 번호>번)」이 붙는다.
 
-1. `read-calls --record <N>` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`.
+1. `read-calls --record <N>` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`(`--look` 은 주지 않아도 된다 — 장부 번호가 읽을 것을 정한다).
 2. `python3 scripts/charge_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(부과금 몇 개만이면 `--charge <부과금 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.
 3. `python3 scripts/charge_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. 먼저 "되돌리기 미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 짧은 답의 `undoing` 이 있으면(되돌리기를 되돌림) 그 문장을 그대로 말한다("장부 2번(1번 되돌리기)을 되돌립니다 — 1번이 넣었던 값으로 돌아갑니다."). "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 칸 수, 그대로 두는 것(`kept` — 그 사이 값이 달라진 것)의 수와 까닭(`kept_why`)을 반드시 말한다. ERP 번호와 적용 범위 기록은 되돌아오지 않는다고 말한다. 그리고 미리보기 때처럼 저장 횟수(`saves`)를 말하고 끝에 "맞으면 '되돌려'라고 해 주세요." `restored` 가 0 이면 되돌릴 것이 없다고만 하고 "되돌려"를 청하지 않는다(저장 횟수도 말하지 않는다).
 4. "되돌려" → SKILL.md 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그것도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.

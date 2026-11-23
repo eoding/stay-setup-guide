@@ -83,8 +83,7 @@ metadata:
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」 · 「단」). 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/promotion_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 가 저장 횟수(빨간 줄이 남았으면 null). 다시 계산하면 `plan-2.json` 처럼 새 이름에 쓰고 `--replaces <앞 번호>` 를 붙인다.
 3. `python3 scripts/promotion_change.py render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
-4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." `counts` 로 바뀌는 단 · 그대로인 단 · 바꿀 수 없는 단(`blocked` 의 단마다 `name` 과 `label` · `why`)을 말하고, `guest` 를 그대로 말한다. `off` 가 있으면 그 문장마다 그대로 말한다(화면에 안 보이는 설정은 그대로 둔다는 알림이다). `names` 가 있으면 그 문장을 그대로 말한다. `scope_card` 가 true 면 "저장할 때 적용 범위 기록이 하나 생길 수 있고(가격 영향 없음) 되돌려도 없어지지 않습니다."
-   - **표식이 없으면**(`gate` 가 비어 있지 않음) 그 `said` 를 그대로 말하고 끝낸다 — "적용"을 묻지 않는다. ERP 가 고쳐진 뒤에 다시 하면 된다.
+4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." **표식이 없으면**(`gate` 가 비어 있지 않음) 그 `said` 만 그대로 말하고 끝낸다 — 수 · 저장하면 생기는 것 · "적용"을 말하지 않는다. ERP 가 고쳐진 뒤에 다시 하면 된다. 그 밖에는 `counts` 로 바뀌는 단 · 그대로인 단(`unchanged` 와 짚지 않아 그대로 보내는 `sent`) · 바꿀 수 없는 단(`blocked` 의 단마다 `name` 과 `label` · `why`)을 말하고, `guest` 를 그대로 말한다. `off` 가 있으면 그 문장마다 그대로 말한다(화면에 안 보이는 설정은 그대로 둔다는 알림이다). `names` 가 있으면 그 문장을 그대로 말한다. `scope_card` 가 true 면(저장할 것이 있을 때만 true) "저장할 때 적용 범위 기록이 하나 생길 수 있고(가격 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 단과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 단은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다(고름마다 담당자의 말을 `said` 에 그대로).
    - **저장할 것이 없으면**(`saves` 가 0) "바뀌는 단이 없어 저장할 것이 없습니다"라고 하고 "적용"을 묻지 않는다.
    - **그 밖에는** 저장 횟수(`saves`)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.

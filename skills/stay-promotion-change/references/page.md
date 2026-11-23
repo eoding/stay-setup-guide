@@ -14,6 +14,10 @@
 | `stayPriceLoader.again('promotion')` | 이 탭에 적어 둔 원본을 다시 실행한다. 없거나 예전 판인 파일만 `want` 에 댄다 — 그 파일만 올리고 `load('promotion')` |
 | `stayPriceLoader.status('promotion')` | `{ok, helper, price, promotion, stored}` — 올라 있는 판들 |
 
+**올릴 파일의 자리.** 모두 이 스킬 폴더(SKILL.md 가 있는 폴더)에서 본 자리다: `../stay-setup-run/scripts/stay_helper.js` · `../stay-setup-run/scripts/stay_boot.js` · `../stay-price-change/scripts/page/stay_price.js` · `scripts/page/stay_promotion.js`. 파일 올리기 도구에는 이 스킬 폴더의 절대 경로를 앞에 붙인 온전한 경로로 준다. 같은 이름의 파일을 다른 곳(예전 복사본 · 내려받은 폴더)에서 찾아 올리지 않는다 — 예전 판이면 올리개가 `wrong` 으로 거절한다.
+
+**`stored` 의 키 이름이 가려져도.** `load` · `again` 의 답에서 `stored` 의 키 이름 하나가 브라우저 도구에 가려 `[BLOCKED: Base64 encoded data]` 처럼 보일 수 있다(도구가 긴 글을 숨긴다). 올랐는지는 `ok: true` 와 판 번호로 정한다 — 가려진 이름 때문에 다시 올리지 않는다.
+
 **페이지에 남기는 것.** 이 탭의 출처(ERP 주소)의 localStorage 에 `stayPrice` 로 시작하는 키만 쓴다. 올리개가 원본 넷 `stayPriceHelperSrc` · `stayPriceBootSrc` · `stayPriceSrc` · `stayPricePromotionSrc` 를 적어 두고 `again('promotion')` 이 다시 실행한다. 작업 틀이 마지막 작업의 답을 `stayPriceLast` 에 적고 `last()` 가 읽는다. 러너의 키는 읽지도 쓰지도 않는다.
 
 ## 벽
