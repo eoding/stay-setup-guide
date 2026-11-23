@@ -911,21 +911,31 @@ class Ledger:
                            next((step for step in seen_steps if step.index == remaining[0]), None) if remaining else None, note)
 
     def recorded_change(self, change_id: int) -> RecordedChange:
-        """되돌리기 계산 · 견주기의 재료 — 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만(_ours, 장부의 차례에서 셈한다).
+        """되돌리기 계산 · 견주기의 재료 — 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만(장부의 차례에서 셈한다 — _chain).
+        항목마다 그 기록의 값이 살아 있지 않은 필드는 지금 그 칸을 쥔 뒤 기록을 단다(`held` — 되돌리기는 그 칸을 그대로 둔다).
         되돌리기 · 저장 상태로 되돌리기도 바꾸기처럼 재료를 낸다(되돌린 기록 · 저장 번호를 함께)."""
         with self._db() as db:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
                 raise LedgerError(_saved_state(change_id))
+            alive = self._chain(db, header["hotel_id"], header["offer"])
+            statuses = alive.of(change_id)
             ours: dict[tuple[str, str], dict] = {}
-            for row in self._ours(db, header):
-                ours.setdefault((row["item_kind"], row["item_key"]), {})[row["field"]] = money(row["after"])
+            held: dict[tuple[str, str], dict] = {}
+            for row in self._written(db, change_id):
+                item, status = (row["item_kind"], row["item_key"]), statuses[(row["item_kind"], row["item_key"])][row["field"]]
+                if status.undone_by is not None:
+                    continue
+                ours.setdefault(item, {})[row["field"]] = money(row["after"])
+                holder = alive.holder.get((header["hotel_id"], header["offer"], *item, row["field"]))
+                if not status.live and holder not in (None, change_id):
+                    held.setdefault(item, {})[row["field"]] = holder
             items = []
             for (kind, key), written in ours.items():
                 rows = db.execute("SELECT * FROM item_values WHERE change_id = ? AND item_kind = ? AND item_key = ?"
                                   " ORDER BY rowid", (change_id, kind, key)).fetchall()
                 items.append(RecordedItem(kind, key, rows[0]["label"], rows[0]["state"],
-                                          {row["field"]: money(row["before"]) for row in rows}, written))
+                                          {row["field"]: money(row["before"]) for row in rows}, written, held.get((kind, key), {})))
         return RecordedChange(header["id"], header["kind"], header["hotel"], header["offer"], header["currency"],
                               header["sentence"], header["read_at"], header["applied_at"], tuple(items), header["hotel_id"],
                               header["reverses"], _restored(header["kind"], header["request"]))

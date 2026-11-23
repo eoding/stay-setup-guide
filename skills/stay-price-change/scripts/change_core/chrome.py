@@ -426,7 +426,7 @@ def kept_table(plan: RollbackPlan, field_labels: Mapping[str, str]) -> str:
     stays = [item for item in plan.kept if item.cause.why]
     changed = [item for item in plan.kept if not item.cause.why]
     heading = ("그 사이 값이 달라졌지만 말씀대로 같이 되돌리는 것" if plan.include_kept
-               else "그대로 두는 것 — 그 사이 값이 달라졌습니다")
+               else "그대로 두는 것 — 그 사이 값이 달라졌거나 뒤 기록이 다시 넣었습니다")
     return (_kept_rows(plan, changed, field_labels, heading)
             + _kept_rows(plan, stays, field_labels, "그대로 두는 것 — 지금 저장하면 안 됩니다(같이 되돌리라고 하셔도 넣지 않습니다)"))
 
@@ -442,8 +442,8 @@ def _kept_rows(plan: RollbackPlan, items, field_labels: Mapping[str, str], headi
         elif item.cause.outside:
             why = '도우미 밖에서 바뀜 <span class="sub">(ERP 에서 직접 고친 것으로 보임)</span>'
         else:
-            why = (f'이 컴퓨터의 다른 변경 <span class="sub">({esc(fmt_time(item.cause.at))} '
-                   f'“{esc(item.cause.sentence)}”, 장부 {item.cause.change_id}번)</span>')
+            said = " ".join(part for part in (esc(fmt_time(item.cause.at)), f"“{esc(item.cause.sentence)}”" if item.cause.sentence else "") if part)
+            why = f'이 컴퓨터의 다른 변경 <span class="sub">({said + ", " if said else ""}장부 {item.cause.change_id}번)</span>'
         now = {name: item.now.fields.get(name) for name in item.written}
         now_html = "없음" if item.now.state == "missing" else _values(now, field_labels, currency, "비어 있음")
         rows.append(f'<tr><td class="text">{esc(item.label)}</td>'

@@ -100,5 +100,38 @@ class LaterByTimeTest(BookCase):
         self.assertEqual([write.change_id for write in book.ledger.later_writes(newer)[(KIND, "c1")]], [older])
 
 
+class RollbackReadsTheHolderTest(BookCase):
+    """검토 2 의 5 — 뒤 기록이 그 칸을 다시 넣었으면 값이 우연히 같아도 앞 기록을 되돌릴 때 그 칸을 그대로 두고 그 기록을 까닭으로 댄다."""
+
+    def test_a_later_change_that_set_the_same_value_keeps_the_cell_and_is_named(self):
+        book = self.book
+        first = book.change({"c1": D("150"), "c2": D("250")})
+        book.change({"c1": D("120")})
+        third = book.change({"c1": D("150")})                     # 우연히 1번과 같은 값
+        plan = book.rollback_plan(first)
+        self.assertEqual([item.key for item in plan.restored], ["c2"])
+        [kept] = plan.kept
+        self.assertEqual((kept.key, kept.cause.change_id, kept.cause.sentence), ("c1", third, "1칸"),
+                         "3번이 쥔 칸 — 3번이 까닭이다(값으로 보면 1번의 값이라 되돌리던 칸)")
+        self.assertIsNotNone(kept.cause.at)
+
+    def test_a_cell_whose_value_differs_still_names_the_later_change(self):
+        book = self.book
+        first = book.change({"c1": D("150")})
+        second = book.change({"c1": D("151")})
+        [kept] = book.rollback_plan(first).kept
+        self.assertEqual(kept.cause.change_id, second)
+
+    def test_an_undone_rollback_gives_the_cell_back_to_the_first_change(self):
+        book = self.book
+        first = book.change({"c1": D("150")})
+        undo = book.preview({"c1": D("100")}, reverses=first)
+        book.apply(undo, {"c1": D("100")})
+        redo = book.preview({"c1": D("150")}, reverses=undo)      # 되돌리기를 되돌림 — 1번이 다시 임자
+        book.apply(redo, {"c1": D("150")})
+        plan = book.rollback_plan(first)
+        self.assertEqual(([item.key for item in plan.restored], plan.kept), (["c1"], ()), "다시 산 1번의 칸은 되돌린다")
+
+
 if __name__ == "__main__":
     unittest.main()

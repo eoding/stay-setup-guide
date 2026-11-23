@@ -14,7 +14,8 @@ ERP(모델)와 장부에 같이 한다. 걸음마다 — 장부가 말하는 살
 - 도우미 밖의 손은 임자를 지운다 — 장부는 그 칸을 다시 넣을 때에야 안다(그때까지 장부의 셈은 옛 임자를 댄다). 밖의 손은 늘 처음
   보는 값을 넣는다(어느 기록의 값과 우연히 같지 않게).
 
-되돌리기가 되돌리는 것은 그 기록이 저장했고 아직 되돌리지 않은 칸 가운데 ERP 가 지금도 그 기록이 넣은 값을 갖는 항목이다(기존 규칙).
+되돌리기가 되돌리는 것은 그 기록이 저장했고 아직 되돌리지 않은 칸 가운데 그 기록이 아직 임자이고(뒤 기록이 다시 넣지 않았고) ERP 도
+지금 그 기록이 넣은 값을 갖는 항목이다 — 뒤 기록이 우연히 같은 값을 다시 넣었으면 그 칸은 뒤 기록의 것이라 그대로 둔다(검토 2 의 5).
 
     python3 -m unittest discover -s tests
 """
@@ -144,7 +145,7 @@ class Model:
     def offer(self, number: int, chosen, include_kept: bool):
         """그 기록을 지금 되돌리자고 하면 — None(되돌릴 것이 없다는 답) 또는 (되돌릴 항목들, 그대로 둘 항목들)."""
         record = self.records[number]
-        ours = {item: {name: record.writes[(item, name)] for name, now in fields.items() if now.undone_by is None}
+        ours = {item: {name: (*record.writes[(item, name)], now.live) for name, now in fields.items() if now.undone_by is None}
                 for item, fields in self.items_of(number).items()}
         ours = {item: fields for item, fields in ours.items() if fields}
         if not ours:
@@ -154,11 +155,12 @@ class Model:
             return "nothing chosen"
         restored, kept = set(), set()
         for item, fields in picked.items():
-            if all(self.value[(item, name)] == after for name, (_before, after) in fields.items()):
+            # 그 기록이 아직 임자이고(뒤 기록이 다시 넣지 않았고) ERP 도 그 값일 때만 — 뒤 기록이 같은 값을 다시 넣었으면 그 기록의 것이다
+            if all(live and self.value[(item, name)] == after for name, (_before, after, live) in fields.items()):
                 restored.add(item)
                 continue
             kept.add(item)
-            if include_kept and any(self.value[(item, name)] != before for name, (before, _after) in fields.items()):
+            if include_kept and any(self.value[(item, name)] != before for name, (before, _after, _live) in fields.items()):
                 restored.add(item)
         return restored, kept
 

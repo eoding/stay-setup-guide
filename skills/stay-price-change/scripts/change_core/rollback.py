@@ -1,8 +1,9 @@
 """되돌리기 계산 — 장부의 변경 하나(또는 그 일부)를 적어 둔 값으로 돌리거나(plan_rollback), 저장해 둔 상태로 돌린다(plan_restore).
 
-되돌리기는 항목마다 본다: 그 변경이 쓴 필드(아직 되돌리지 않은 것 — 장부가 셈한다, change_core.alive)가 지금도 모두 그때 넣은
-값이면 적어 둔 값으로 돌리고, 하나라도 다르면 그대로 둔다. 그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을
-단다. 까닭은 이 장부의 나중 변경 가운데 지금 값을 넣은 가장 최근 것, 없으면 도우미 밖이다. 되돌리기 · 저장 상태로 되돌리기도 같은
+되돌리기는 항목마다 본다: 그 변경이 쓴 필드(아직 되돌리지 않은 것 — 장부가 셈한다, change_core.alive)가 장부의 셈으로 모두
+아직 그 변경의 값이고 지금도 모두 그때 넣은 값이면 적어 둔 값으로 돌리고, 아니면 그대로 둔다 — 뒤 기록이 그 칸을 다시 넣었으면
+값이 우연히 같아도 그 칸은 뒤 기록의 것이다. 그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다. 까닭은
+그 칸을 쥔 뒤 기록, 없으면 이 장부의 나중 변경 가운데 지금 값을 넣은 가장 최근 것, 그것도 없으면 도우미 밖이다. 되돌리기 · 저장 상태로 되돌리기도 같은
 규칙으로 되돌린다 — 적어 둔 값이 그것이 덮은 값이다. 도우미가 그 항목을 지금 저장하면 안 된다고 본 것(부가옵션 줄의 금액이 목록과 편집 창에서
 다르게 보임 같은 것 — `Cause.why`)은 같이 되돌리라고 해도 그대로 둔다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 「지울 수 없는 것」이다.
 
@@ -12,7 +13,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Callable, Mapping, Sequence
 
@@ -26,7 +27,8 @@ Fields = Mapping[str, Decimal | None]
 class RecordedItem:
     """장부의 항목 하나 — 적어 둔 전 값(필드 전부)과 그 변경이 실제로 저장했고 아직 되돌리지 않은 필드의 넣은 값.
 
-    넣은 값이 None 이면 그 필드를 비웠다는 뜻이다.
+    넣은 값이 None 이면 그 필드를 비웠다는 뜻이다. `held` 는 그 가운데 장부의 셈으로 이 변경의 값이 살아 있지 않은 필드 → 지금 그
+    칸을 쥔 뒤 기록(그 기록이 뒤에 그 칸을 다시 넣었다 — change_core.alive).
     """
     kind: str
     key: str
@@ -34,6 +36,7 @@ class RecordedItem:
     state: str
     before: Fields
     written: Fields
+    held: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -150,12 +153,18 @@ def plan_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequ
         targets = {name: value for name, value in recorded_values.items()
                    if current.state == MISSING_STATE or current.fields.get(name) != value}
         restore = RestoredItem(item.kind, item.key, item.label, current, targets) if targets else None
-        if holds(current, item.written):
+        writes = later.get((item.kind, item.key), ())
+        holder = max(item.held.values(), default=None)
+        if holder is None and holds(current, item.written):
             if restore:
                 restored.append(restore)
             continue
-        cause = next((Cause(write.change_id, write.at, write.sentence)
-                      for write in reversed(later.get((item.kind, item.key), ())) if holds(current, write.written)), Cause())
+        if holder is not None:   # 장부의 셈으로 뒤 기록이 그 칸을 쥐었다 — 값이 우연히 같아도 그 기록의 것이다
+            write = next((write for write in writes if write.change_id == holder), None)
+            cause = Cause(holder, write.at if write else None, write.sentence if write else None)
+        else:
+            cause = next((Cause(write.change_id, write.at, write.sentence) for write in reversed(writes) if holds(current, write.written)),
+                         Cause())
         kept.append(KeptItem(item.kind, item.key, item.label, recorded_values, item.written, current, cause))
         if include_kept and restore:
             restored.append(restore)
