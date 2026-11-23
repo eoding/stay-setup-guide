@@ -46,7 +46,7 @@ import sys
 from charge_model import (
     ITEM_KIND, OFFERLESS, ModelError, Snapshot, charge_of, charge_of_key, decode_hotel, decode_listing, decode_request,
     decode_snapshot, encode_hotel, encode_listing, encode_request, encode_snapshot, field_label_of, hotel_label,
-    known_charges, listing_of, name_notes_of, part_of_key, refs_text, snapshot_items,
+    known_charges, listing_of, name_notes_of, part_of_key, snapshot_items,
 )
 from charge_pages import (
     UNIT, blocked_amounts, chosen_amounts, free_amounts, red_lines, render_preview, render_prices, render_result,

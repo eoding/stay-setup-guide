@@ -15,8 +15,8 @@ from addon_model import (
 from addon_plan import CHOICE_LABELS, LINE_RULES, Plan, counts
 from change_core.chrome import (
     MOVED_TAG, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner, nothing_left,
-    notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_view, stopped_choices,
-    times_word, undo_hint, unremovable_table,
+    nothing_to_save, notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_view,
+    stopped_choices, times_word, undo_hint, unremovable_table,
 )
 from change_core.ledger import ChangeRecord
 from change_core.money import example_step
@@ -178,8 +178,8 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
         said.insert(1, SCOPE_NOTE)
     if steps is None:
         body += [notes(said), '<div class="banner red">아직 적용할 수 없습니다. 먼저 빨간 줄을 골라 주세요.</div>']
-    elif not steps:     # 고른 대로면 바꿀 줄이 없다 — 저장이 하는 일도, "적용"도 말하지 않는다
-        body.append('<div class="banner blue">바꿀 줄이 없어 적용할 것이 없습니다. 아무것도 바뀌지 않았습니다.</div>')
+    elif not steps:     # 바꿀 줄이 없다 — 저장이 하는 일도, "적용"도 말하지 않는다. plan 의 답 `nothing` 과 같은 말
+        body.append(f'<div class="banner blue">{esc(nothing_to_save(bool(chosen), UNIT))}</div>')
     else:
         body += [notes(said), f'<div class="banner blue">저장 {times_word(len(steps))}{"(줄마다 한 번)" if len(steps) > 1 else ""}. 맞으면 "적용"이라고 해 주세요.</div>']
     return page(title, "\n".join(body), MAKER)

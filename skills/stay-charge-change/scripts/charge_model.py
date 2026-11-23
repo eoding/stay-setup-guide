@@ -598,7 +598,3 @@ def known_charges(request: ChangeRequest, listing: Listing | None) -> tuple[Char
     if unknown:
         raise ModelError(f"목록에 없는 부과금입니다(오퍼 · 부과금): {', '.join(unknown)} — look 의 번호를 씁니다")
     return refs
-
-
-def refs_text(refs: Iterable[ChargeRef]) -> list[dict]:
-    return [dict(offer=offer, charge=charge) for offer, charge in refs]

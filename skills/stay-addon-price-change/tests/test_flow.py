@@ -448,7 +448,7 @@ class NothingToSaveTest(Flow):
                          "W1 — 도우미가 그대로 하는 말. 고른 것이 있을 때만 「고르신 대로면」")
 
         text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
-        self.assertIn("바꿀 줄이 없어 적용할 것이 없습니다", text)
+        self.assertIn(short["nothing"], text, "페이지도 짧은 답의 `nothing` 과 같은 말을 한다")
         self.assertIn("고르신 대로 그대로 둡니다(저장하지 않습니다)", text, "줄에서도 저장하지 않는다고 말한다")
         self.assertIn("공급 원가보다 싸집니다 | 그 줄은 안 바꿈 | 1 | “그 칸은 그냥 둬”", text,
                       "N6 — 안 바꾸기로 고르며 하신 말이 저장할 것이 없는 미리보기에도 보인다(장부에만 있지 않다)")
