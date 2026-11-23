@@ -989,6 +989,7 @@ class Ledger:
         `redone_by` 그 번호들(되돌린 · 다시 살린) · `live` 넣은 값이 모두 살아 있는 항목(나머지는 뒤 기록이 덮었다).
         `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None),
         `begun_at` 은 적용을 시작한 때(`begins` — 시작하지 않았거나 그 표를 두기 전에 시작한 번호는 None).
+        `replaced_by` 는 이 미리보기를 다시 계산해 바꾼 번호(`replaces` 가 이 번호인 것 — 없으면 None).
         `planned` 는 적힌 항목 가운데 저장이 값을 넣는(넣을) 항목 수다 — 안 바꾸기로 고른 항목 · 적용할 수 없는 항목은 들지 않는다."""
         item = "item_values.item_kind || '|' || item_values.item_key"
         where, params = [], []
@@ -1001,7 +1002,8 @@ class Ledger:
                 f" COUNT(DISTINCT CASE WHEN item_values.action IS NOT NULL THEN {item} END) AS planned,"
                 " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id) AS step_count,"
                 " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id AND s.status = 'saved') AS saved_steps,"
-                " (SELECT begun_at FROM begins WHERE begins.change_id = changes.id) AS begun_at"
+                " (SELECT begun_at FROM begins WHERE begins.change_id = changes.id) AS begun_at,"
+                " (SELECT MIN(later.id) FROM changes AS later WHERE later.replaces = changes.id) AS replaced_by"
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
                 + (" WHERE " + " AND ".join(where) if where else "") + " GROUP BY changes.id ORDER BY changes.id DESC",
                 params).fetchall()
@@ -1017,7 +1019,8 @@ class Ledger:
                             hotel=row["hotel"], hotel_id=row["hotel_id"], offer=row["offer"], currency=row["currency"],
                             sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
                             begun_at=row["begun_at"], applied_at=row["applied_at"], verified_at=row["verified_at"],
-                            reverses=row["reverses"], replaces=row["replaces"], items=row["items"], planned=row["planned"],
+                            reverses=row["reverses"], replaces=row["replaces"], replaced_by=row["replaced_by"],
+                            items=row["items"], planned=row["planned"],
                             **tally, steps=row["step_count"], saved_steps=row["saved_steps"],
                             request=None if row["request"] is None else json.loads(row["request"])))
         return out

@@ -332,43 +332,70 @@ def cmd_rollback(args):
     fresh_record(args, "rollback")
     ledger = open_ledger()
     now = decode_snapshot(load(args.snapshot))
-    select, scope = charge_filter(args.charge or ())
+    select, _picked = charge_filter(args.charge or ())
     plan = plan_charge_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept,
                                 select)
-    steps = rollback_steps(plan, now)
+    steps, rows = rollback_steps(plan, now), rollback_rows(plan, now)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
-                                      sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan, now),
+                                      sentence=args.sentence, read_at=plan.read_at, rows=rows,
                                       reverses=args.change, reading=encode_snapshot(now),
                                       replaces=args.replaces, empty=not steps) if args.record else None
-    return dict(change_id=change_id, replaces=args.replaces, scope=scope or listed(ledger, args.change)[0]["scope"],
+    # 되돌리기 확인 · 미리보기의 「되돌리는 범위」 — 이 되돌리기의 줄(「N번 되돌리기」)이다. 되돌리는 변경의 줄을 옮기지 않는다
+    # (「… · 정률(%) 60 으로」로 읽혀 되돌리기가 60 을 넣는 것처럼 들렸다 — 시운전 9 · 11). 장부에 적었으면 `list` 의 그 번호 줄.
+    if change_id is not None:
+        scope = listed(ledger, change_id)[0]["scope"]
+    else:
+        scope = scope_line(scope_labels(rows), f"{args.change}번 되돌리기")
+    return dict(change_id=change_id, replaces=args.replaces, scope=scope,
                 rollback=encode_rollback(plan), steps=[encode_step(step) for step in steps])
 
 
-def record_scope(entry: dict, labels: list[str]) -> str:
-    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일, 어디까지
-    갔는지(멈춤 · 적용 중 · 모두 · 일부 되돌림 · 저장할 것 없음 — 세 도우미가 같은 말, files.record_progress)."""
+def scope_line(labels: list[str], did: str, progress: str = "") -> str:
+    """범위 한 줄의 차례 — 부과금 몇 개와 처음 부과금 이름, 한 일, 어디까지 갔는지."""
     names = list(dict.fromkeys(labels))
     head = f"부과금 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
+    return " · ".join(part for part in (head, did, progress) if part)
+
+
+def record_scope(entry: dict, rows) -> str:
+    """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 부과금 몇 개와 처음 부과금 이름(넣을 것이 없으면 짚은 부과금), 한 일(연령별 단가 ·
+    시간대 줄이면 어느 것인지 — 「소아 단가 · 1인 단가 55로」), 어디까지 갔는지(멈춤 · 적용 중 · 모두 · 일부 되돌림 · 저장할 것
+    없음 — 세 도우미가 같은 말, files.record_progress). `rows` 는 그 번호의 장부 줄."""
     request = entry.get("request") or {}
     did = ""
     if request.get("kind") == "charge_change":
         try:
-            did = " · " + decode_request(request).describe()
+            did = decode_request(request).describe(part_words(rows))
         except (ModelError, KeyError, TypeError, ValueError):
             did = ""
     elif entry.get("reverses"):
-        did = f" · {entry['reverses']}번 되돌리기"
-    progress = files.record_progress(entry, UNIT)
-    return head + did + (f" · {progress}" if progress else "")
+        did = f"{entry['reverses']}번 되돌리기"
+    return scope_line(scope_labels(rows), did, files.record_progress(entry, UNIT))
+
+
+def part_words(rows) -> dict[str, str]:
+    """장부의 줄에서 연령별 단가 · 시간대 줄의 항목 키 → 그 부분의 이름(줄 이름에서 부과금 이름을 뗀 것 — 「소아 단가」 ·
+    「14:01~18:00 시간대」)."""
+    heads = {charge_of_key(row.item_key): row.label for row in rows if part_of_key(row.item_key)[1] == "main"}
+    out = {}
+    for row in rows:
+        head = heads.get(charge_of_key(row.item_key))
+        if part_of_key(row.item_key)[1] != "main" and head and row.label.startswith(f"{head} · "):
+            out[row.item_key] = row.label[len(head) + 3:]
+    return out
+
+
+def scope_labels(rows) -> list[str]:
+    """장부의 줄(또는 되돌리기 계산의 줄)에서 범위 한 줄이 이름을 대는 부과금 — 값을 넣는 부과금(넣는 것이 없으면 짚은 부과금)마다
+    그 부과금의 금액 줄 이름."""
+    touched = {charge_of_key(row.item_key) for row in rows if row.action} or {charge_of_key(row.item_key) for row in rows}
+    return [row.label for row in rows if part_of_key(row.item_key)[1] == "main" and row.field == "amount"
+            and charge_of_key(row.item_key) in touched]
 
 
 def described(ledger: Ledger, entry: dict) -> dict:
     """부과금 기록 한 줄에 범위 한 줄(`scope`)을 단다. 다른 두 도우미의 `list` 도 이것으로 이 종류의 줄을 만든다."""
-    rows = ledger.change(entry["id"]).rows
-    touched = {charge_of_key(row.item_key) for row in rows if row.action} or {charge_of_key(row.item_key) for row in rows}
-    labels = [row.label for row in rows if part_of_key(row.item_key)[1] == "main" and row.field == "amount"
-              and charge_of_key(row.item_key) in touched]
-    return dict(entry, scope=record_scope(entry, labels))
+    return dict(entry, scope=record_scope(entry, ledger.change(entry["id"]).rows))
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:

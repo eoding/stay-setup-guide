@@ -327,7 +327,12 @@ def undoes(record) -> bool:
 
 
 def undo_hint(record) -> str:
-    """결과 페이지 끝의 되돌리는 법(세 도우미) — 되돌리기 · 저장 상태로 되돌리기는 되돌리면 되돌리기 전 값으로 돌아간다고 말한다."""
+    """결과 페이지 끝의 되돌리는 법(세 도우미) — 되돌리기 · 저장 상태로 되돌리기는 되돌리면 되돌리기 전 값으로 돌아간다고 말한다.
+    이 번호가 넣은 값이 뒤에 모두 되돌려졌으면 되돌리라고 하지 않고 그렇게 말한다(되돌릴 것이 없다 — 목록의 `rolled_back`)."""
+    written = [row for row in record.rows if row.written and row.action]
+    if written and not _alive(record):
+        by = ", ".join(f"{number}번" for number in dict.fromkeys(row.rolled_back_by for row in written if row.rolled_back_by))
+        return f"이 번호가 넣은 값은 뒤에 장부 {by}이 모두 되돌렸습니다 — 되돌릴 것이 없습니다."
     if undoes(record):
         return f'이 되돌리기도 되돌릴 수 있습니다 — 대화창에서 "{record.id}번 되돌려"라고 하시면 되돌리기 전 값으로 돌아갑니다.'
     return f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.'
@@ -390,8 +395,9 @@ def rollback_head(plan: RollbackPlan, scope: str = "") -> str:
                 f"그때 한 일: “{esc(plan.original_sentence)}” ({esc(applied)}, 장부 {plan.reverses}번)")
     if plan.undoing:
         head += f"<br>{esc(plan.undoing)}"
+    currency = f" 통화 {esc(plan.currency)}." if plan.currency else ""   # 프로모션 할인은 통화가 없다 — 「통화 .」를 쓰지 않는다
     return (f'<p class="sub"><b>아직 아무것도 바뀌지 않았습니다.</b> 지금 값은 {esc(fmt_time(plan.read_at))} 에 ERP 에서 읽은 '
-            f"것입니다. 통화 {esc(plan.currency)}.</p>"
+            f"것입니다.{currency}</p>"
             f'<div class="banner blue">{head}{f"<br>되돌리는 범위: {esc(scope)}" if scope else ""}</div>')
 
 

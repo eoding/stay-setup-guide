@@ -22,6 +22,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import scene  # noqa: E402
 import trial_scene  # noqa: E402
+from change_core.files import confirm_line  # noqa: E402
 from change_core.ledger import DB_NAME, Ledger  # noqa: E402
 from change_core.rules import Resolution  # noqa: E402
 from price_change import listed  # noqa: E402
@@ -100,6 +101,20 @@ class ListScopeTest(unittest.TestCase):
         for step in range(1, len(plan_steps(plan)) + 1):
             self.ledger(1).record_step(number, step, saved=True)
         self.assertTrue(self.scope(2, number).endswith("· 새 요금표 2칸"), "적용한 뒤에도 넣은 칸 수 — 되돌리기 확인이 읽어 준다")
+
+    def test_a_replaced_preview_reads_as_replaced_by_its_new_number(self):
+        """W3 (시운전 9 · 12) — 빨간 줄을 골라 다시 계산하면 앞 미리보기와 새 번호의 줄이 같은 말로 들렸다. 바뀐 미리보기의 줄은
+        「미리보기 (장부 N번으로 바뀜)」이고 `replaced_by` 가 그 번호다. 새 번호의 줄은 그대로 「미리보기」다."""
+        plan = resolve(plan_change(self.snapshot, trial_scene.request()), [Resolution("ABOVE_LIST", "keep")])
+        later = self.ledger(1).record_preview(
+            hotel=trial_scene.HOTEL, hotel_id=trial_scene.HOTEL_ID, offer=trial_scene.OFFER, currency="USD",
+            sentence=trial_scene.SENTENCE, read_at=self.snapshot.read_at, rows=preview_rows(plan),
+            request=encode_request(plan.request), reading=encode_snapshot(self.snapshot), replaces=self.change)
+        lines = {entry["id"]: entry for entry in listed(self.ledger(2))}
+        self.assertEqual((lines[self.change]["status"], lines[self.change]["replaced_by"]), ("replaced", later))
+        self.assertEqual(confirm_line(lines[self.change]), f"장부 {self.change}번 · 11/21 10:00 미리보기 (장부 {later}번으로 바뀜) · "
+                                                           f"{HEAD} · 판매가 +12%")
+        self.assertEqual(confirm_line(lines[later]), f"장부 {later}번 · 11/21 10:01 미리보기 · {HEAD} · 판매가 +12%")
 
     def test_check_gives_the_same_line(self):
         env = scene.env(str(self.dir))

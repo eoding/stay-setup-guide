@@ -332,46 +332,56 @@ def cmd_rollback(args):
     files.fresh_record(args.out, args.replaces, args.record, "rollback")
     ledger = open_ledger()
     now = decode_snapshot(load(args.snapshot))
-    select, scope = promotion_filter(args.promotion or ())
+    select, _picked = promotion_filter(args.promotion or ())
     plan = plan_promotion_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept,
                                    select)
-    steps = rollback_steps(plan, now)
+    steps, rows = rollback_steps(plan, now), rollback_rows(plan, now)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
-                                      sentence=args.sentence, read_at=plan.read_at, rows=rollback_rows(plan, now),
+                                      sentence=args.sentence, read_at=plan.read_at, rows=rows,
                                       reverses=args.change, reading=encode_snapshot(now),
                                       replaces=args.replaces, empty=not steps) if args.record else None
-    return dict(change_id=change_id, replaces=args.replaces, scope=scope or listed(ledger, args.change)[0]["scope"],
+    # 되돌리기 확인 · 미리보기의 「되돌리는 범위」 — 이 되돌리기의 줄(「N번 되돌리기」)이다. 되돌리는 변경의 줄(「할인 값 16으로」)을
+    # 옮기지 않는다(부과금 도우미에서 되돌리기가 그 값을 넣는 것처럼 읽혔다 — 시운전 9 · 11). 장부에 적었으면 `list` 의 그 번호 줄.
+    if change_id is not None:
+        scope = listed(ledger, change_id)[0]["scope"]
+    else:
+        scope = scope_line(scope_labels(rows), f"{args.change}번 되돌리기")
+    return dict(change_id=change_id, replaces=args.replaces, scope=scope,
                 rollback=encode_rollback(plan), reading=encode_snapshot(now), steps=[encode_step(step) for step in steps])
+
+
+def scope_line(labels: list[str], did: str, progress: str = "") -> str:
+    """범위 한 줄의 차례 — 프로모션 몇 개와 처음 프로모션 이름, 한 일, 어디까지 갔는지."""
+    names = list(dict.fromkeys(labels))
+    head = f"프로모션 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
+    return " · ".join(part for part in (head, did, progress) if part)
 
 
 def record_scope(entry: dict, labels: list[str]) -> str:
     """장부 한 줄의 범위 — 저장이 값을 넣는(넣을) 프로모션 몇 개와 처음 프로모션 이름(넣을 것이 없으면 짚은 프로모션), 한 일, 어디까지
     갔는지(네 도우미가 같은 말, files.record_progress)."""
-    names = list(dict.fromkeys(labels))
-    head = f"프로모션 {len(names)}개" + (f" ({names[0]}{' 외' if len(names) > 1 else ''})" if names else "")
     request = entry.get("request") or {}
     did = ""
     if request.get("kind") == "promotion_change":
         try:
-            did = " · " + decode_request(request).describe()
+            did = decode_request(request).describe()
         except (ModelError, KeyError, TypeError, ValueError):
             did = ""
     elif entry.get("reverses"):
-        did = f" · {entry['reverses']}번 되돌리기"
-    progress = files.record_progress(entry, UNIT)
-    return head + did + (f" · {progress}" if progress else "")
+        did = f"{entry['reverses']}번 되돌리기"
+    return scope_line(labels, did, files.record_progress(entry, UNIT))
+
+
+def scope_labels(rows) -> list[str]:
+    """장부의 줄(또는 되돌리기 계산의 줄)에서 범위 한 줄이 이름을 대는 프로모션 — 값을 넣는 프로모션(넣는 것이 없으면 짚은
+    프로모션)마다 그 이름."""
+    touched = {promotion_of_key(row.item_key) for row in rows if row.action} or {promotion_of_key(row.item_key) for row in rows}
+    return [row.label.rsplit(" · ", 1)[0] for row in rows if promotion_of_key(row.item_key) in touched]
 
 
 def described(ledger: Ledger, entry: dict) -> dict:
     """프로모션 기록 한 줄에 범위 한 줄(`scope`)을 단다. 다른 도우미의 `list` 도 이것으로 이 종류의 줄을 만든다."""
-    rows = ledger.change(entry["id"]).rows
-    touched = {promotion_of_key(row.item_key) for row in rows if row.action} or {promotion_of_key(row.item_key) for row in rows}
-    labels = []
-    for row in rows:
-        promotion = promotion_of_key(row.item_key)
-        if promotion in touched:
-            labels.append(row.label.rsplit(" · ", 1)[0])
-    return dict(entry, scope=record_scope(entry, labels))
+    return dict(entry, scope=record_scope(entry, scope_labels(ledger.change(entry["id"]).rows)))
 
 
 def listed(ledger: Ledger, change_id: int | None = None) -> list[dict]:

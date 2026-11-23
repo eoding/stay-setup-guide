@@ -307,7 +307,8 @@ class RollbackKeepsTest(Flow):
         out = self.work / "rollback-1.json"
         short = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--charge", "705", "--record",
                          "--out", out)
-        self.assertEqual((short["scope"], short["saves"]), ("부과금 705번", 1))
+        self.assertEqual((short["scope"], short["saves"]), ("부과금 1개 (데모 연말 오퍼 · 연말 갈라 디너 (12/31 · 의무 · 연령별)) · "
+                                                            f"{change}번 되돌리기", 1), "이 되돌리기가 값을 넣는 부과금만 댄다")
         self.apply(short["change_id"], out)
         self.assertEqual((self.erp.charge("705")["ages"]["82"], self.erp.charge("701")["tiers"][1]["pct"]), ("50.00", "55.00"))
 
@@ -703,6 +704,27 @@ class UndoAgainTest(Flow):
         result = self.cli("render", "result", "--change", again, "--snapshot", self.read(record=again), "--text")
         self.assertIn(f'이 되돌리기도 되돌릴 수 있습니다 — 대화창에서 "{again}번 되돌려"라고 하시면 되돌리기 전 값으로 돌아갑니다.',
                       result["text"])
+
+    def test_a_rollback_says_it_is_a_rollback_and_names_the_age_band_and_the_replaced_preview_says_by_what(self):
+        """W3 (시운전 9 · 11) — 되돌리기의 짧은 답 `scope` 와 미리보기의 「되돌리는 범위」는 「N번 되돌리기」다. 되돌리는 변경의 말
+        (「1인 단가 55로」)을 옮기면 되돌리기가 그 값을 넣는 것처럼 읽힌다. 연령별 단가가 둘인 부과금의 줄은 어느 단가인지 댄다.
+        다시 계산해 바뀐 미리보기의 줄은 어느 번호로 바뀌었는지 말한다. 모두 되돌려진 번호의 결과 페이지는 되돌리라고 하지 않는다."""
+        first, _plan = self.preview(self.request(CHILD, value="54"))
+        change, plan = self.preview(self.request(CHILD, value="55"), "plan-2.json", replaces=first)
+        rows = self.listed()
+        self.assertTrue(rows[change]["line"].endswith("· 소아 단가 · 1인 단가 55로"), rows[change]["line"])
+        self.assertRegex(rows[first]["line"], rf"^장부 {first}번 · \d+/\d+ \d\d:\d\d 미리보기 \(장부 {change}번으로 바뀜\) · ")
+        self.apply(change, plan)
+        rollback, short = self.undo(change)
+        self.assertTrue(short["scope"].endswith(f"· {change}번 되돌리기"), short["scope"])
+        self.assertNotIn("55", short["scope"])
+        again, short = self.undo(rollback)
+        self.assertTrue(short["scope"].endswith(f"· {rollback}번 되돌리기"), short["scope"])
+        page = self.cli("render", "rollback", "--plan", self.work / f"rollback-of-{rollback}.json", "--text")["text"]
+        self.assertIn(f"되돌리는 범위: 부과금 1개 (데모 연말 오퍼 · 연말 갈라 디너 (12/31 · 의무 · 연령별)) · {rollback}번 되돌리기", page)
+        result = self.cli("render", "result", "--change", rollback, "--text")["text"]
+        self.assertNotIn(f"{rollback}번 되돌려", result, "모두 되돌려진 번호는 되돌리라고 하지 않는다")
+        self.assertIn(f"장부 {again}번이 모두 되돌렸습니다", result)
 
 
 if __name__ == "__main__":
