@@ -1,0 +1,45 @@
+[
+  {
+    "op": "readPromotion",
+    "ok": true,
+    "what": "데모 오퍼 2027 · 얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프",
+    "keeps": true,
+    "body": {
+      "id": "bgoldenread",
+      "chars": 1328,
+      "bytes": 1673,
+      "crc32": "20db2601",
+      "fnv": "bcadd553"
+    },
+    "rest": true,
+    "ask": "cee024e6",
+    "clicks": {
+      "promotionOpen": 1
+    },
+    "blocked": [],
+    "ms": 0,
+    "doneAt": "2026-11-23T00:00:00.000Z"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenread",
+    "at": 0,
+    "size": 800,
+    "next": 673,
+    "end": 1328,
+    "sum": "d42bb354",
+    "text": "{'op':'readPromotion','asked':{'hotel':{'id':'1','name':'데모 호텔'},'offer':'601','promotion':'9005'},'hotel':{'id':'1','name':'데모 호텔'},'offer':{'id':'601','name':'데모 오퍼 2027'},'promotion':{'id':'9005','title':'얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프','code':'','trigger':'얼리버드','benefit':['체크인 D-N일 전 46 → 15.0%','체크인 D-N일 전 31 → 10.0%','※ 만족하는 단 중 가장 높은 하나만 적용'],'combo':['택일'],'limits':['요금제: 기존 범위 그대로','객실: 기존 범위 그대로','숙박일 제한 없음'],'warnings':[]},'window':{'title':'프로모션 편집 — 얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프','form':[['title','얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프'],['code',''],['trigger_type','LEAD_TIME'],['basis','PCT'],['unit','0'],['tiers_submitted','1'],['tiers_origin','46'],"
+  },
+  {
+    "op": "take",
+    "ok": true,
+    "id": "bgoldenread",
+    "at": 673,
+    "size": 800,
+    "next": 1328,
+    "end": 1328,
+    "sum": "1d3d9dfe",
+    "text": "['tiers_threshold','46'],['tiers_value','15.0'],['tiers_origin','31'],['tiers_threshold','31'],['tiers_value','10.0'],['start_date',''],['end_date',''],['promotion_apply_start_date',''],['promotion_apply_end_date',''],['season',''],['rate_plan',''],['exclusivity_group',''],['cancellation_policy',''],['scope_rate_plan_mode','0'],['scope_room_mode','0']],'labels':{'trigger_type':'얼리버드 — 체크인 D-N일 전에 예약하면','basis':'정률 — 요금의 %','unit':'박당','season':'(전 시즌)','rate_plan':'(전 요금제)','cancellation_policy':'(요금제·오퍼 정책을 따름)','scope_rate_plan_mode':'기존 범위 그대로','scope_room_mode':'기존 범위 그대로'},'keeps':true,'marks':[['cancellation'],['cancellation']],'errors':[]}}"
+  }
+]

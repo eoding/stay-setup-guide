@@ -1,0 +1,66 @@
+{
+  "_note": "손으로 지은 시험 데이터다. 호텔 · 오퍼 · 시즌 · 요금제 · 취소 정책 · 프로모션의 이름 · 번호 · 값은 모두 지어낸 값이다(공개 저장소). 모양만 facts-extras-data.md 3절 · 4절의 로컬 기록과 ERP 의 프로모션 저장(services/promotion.py — 화면 밖 설정을 지키는 고침)을 따랐다 — 연박 두 단 할인율(9002), 상시 정액(9003), 연박 무료 숙박(9004), 단마다 취소 조건이 붙은 얼리버드(9005), 시즌 · 숙박일 · 취소 정책에 묶인 얼리버드(9007), 전 오퍼 공통 카드의 상시 할인율(9006, 진행기간 제한 켜짐 · 중복 허용 · 배타 그룹). trigger 는 저장된 그대로(값은 글자, 무료 숙박은 정수)다. 화면 마크업은 promotions_erp.mjs(페이지 시험)와 promotion_scene.py(파이썬 시험)가 같은 규칙으로 그린다.",
+  "hotel": { "id": "1", "name": "데모 호텔" },
+  "currency": "USD",
+  "keeps": true,
+  "policies": [ { "id": "31", "name": "환불 불가" }, { "id": "32", "name": "7일 전까지 무료 취소" } ],
+  "rate_plans": [ { "id": "41", "name": "디럭스 · 조식 포함" } ],
+  "cards": [
+    {
+      "offer": { "id": "602", "name": "데모 연말 오퍼" },
+      "seasons": [ { "id": "71", "name": "연말 성수기" } ],
+      "promotions": [
+        {
+          "id": "9007", "title": "연말 얼리버드 31일 전 10%", "code": "",
+          "trigger": { "type": "LEAD_TIME", "basis": "PCT", "unit": "PER_NIGHT", "tiers": [ { "threshold": 31, "pct": "10" } ] },
+          "unit": 0, "combinability": false, "group": "", "season": "71", "rate_plan": "41",
+          "start": "2026-12-20", "end": "2027-01-05", "apply_flag": false, "apply_start": "", "apply_end": "", "policy": "32"
+        }
+      ]
+    },
+    {
+      "offer": { "id": "601", "name": "데모 오퍼 2027" },
+      "seasons": [],
+      "promotions": [
+        {
+          "id": "9002", "title": "롱스테이 2박 7% / 3박 10%", "code": "",
+          "trigger": { "type": "LOS", "basis": "PCT", "unit": "PER_NIGHT", "tiers": [ { "threshold": 2, "pct": "7" }, { "threshold": 3, "pct": "10" } ] },
+          "unit": 0, "combinability": false, "group": "DEMO-PROMO", "season": null, "rate_plan": null,
+          "start": "", "end": "", "apply_flag": false, "apply_start": "", "apply_end": "", "policy": null
+        },
+        {
+          "id": "9003", "title": "상시 정액 할인", "code": "FLAT-20",
+          "trigger": { "type": "ALWAYS", "basis": "FLAT", "unit": "PER_STAY", "tiers": [ { "threshold": 0, "amount": "20" } ] },
+          "unit": 1, "combinability": false, "group": "", "season": null, "rate_plan": null,
+          "start": "", "end": "", "apply_flag": false, "apply_start": "", "apply_end": "", "policy": null
+        },
+        {
+          "id": "9004", "title": "4박 이상이면 1박 무료", "code": "",
+          "trigger": { "type": "LOS", "basis": "FREE_NIGHT", "unit": "PER_STAY", "tiers": [ { "threshold": 4, "free_nights": 1 } ] },
+          "unit": 1, "combinability": false, "group": "", "season": null, "rate_plan": null,
+          "start": "", "end": "", "apply_flag": false, "apply_start": "", "apply_end": "", "policy": null
+        },
+        {
+          "id": "9005", "title": "얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프", "code": "",
+          "trigger": { "type": "LEAD_TIME", "basis": "PCT", "unit": "PER_NIGHT", "tiers": [
+            { "threshold": 46, "pct": "15.0", "cancellation": "NRF" },
+            { "threshold": 31, "pct": "10.0", "cancellation": "CUTOFF_AT_THRESHOLD" } ] },
+          "unit": 0, "combinability": false, "group": "", "season": null, "rate_plan": null,
+          "start": "", "end": "", "apply_flag": false, "apply_start": "", "apply_end": "", "policy": null
+        }
+      ]
+    },
+    {
+      "offer": null,
+      "seasons": [],
+      "promotions": [
+        {
+          "id": "9006", "title": "전 오퍼 공통 상시 5%", "code": "ALL-5",
+          "trigger": { "type": "ALWAYS", "basis": "PCT", "unit": "PER_NIGHT", "tiers": [ { "threshold": 0, "pct": "5" } ] },
+          "unit": 0, "combinability": true, "group": "DEMO-ALL", "season": null, "rate_plan": null,
+          "start": "", "end": "", "apply_flag": true, "apply_start": "2026-11-01", "apply_end": "2027-02-28", "policy": null
+        }
+      ]
+    }
+  ]
+}

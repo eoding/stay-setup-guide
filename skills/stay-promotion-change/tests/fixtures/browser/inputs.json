@@ -1,0 +1,231 @@
+{
+  "_note": "손 조각(tests/fixtures/erp/promotions.json · promotions_erp.mjs)을 받침에 세우고 진짜 stay_promotion.js 를 돌려 얻은 답의 입력이다. 답 파일마다 [답, take 쪽…] 목록이고, 시각에 따라 바뀌는 칸은 normalized 의 값으로 적었다. posted 는 저장 요청이 실어 보낸 [이름, 값] 쌍이다.",
+  "normalized": {
+    "ms": 0,
+    "doneAt": "2026-11-23T00:00:00.000Z",
+    "body.id 와 쪽의 id": {
+      "look": "bgoldenlook",
+      "readPromotion": "bgoldenread"
+    }
+  },
+  "hotel": {
+    "id": "1",
+    "name": "데모 호텔"
+  },
+  "look": {},
+  "readPromotion": {
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "offer": "601",
+    "promotion": "9005"
+  },
+  "applyPromotion": {
+    "no": 1,
+    "hotel": {
+      "id": "1",
+      "name": "데모 호텔"
+    },
+    "offer": "601",
+    "promotion": "9005",
+    "title": "얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프",
+    "form": [
+      [
+        "title",
+        "얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프"
+      ],
+      [
+        "code",
+        ""
+      ],
+      [
+        "trigger_type",
+        "LEAD_TIME"
+      ],
+      [
+        "basis",
+        "PCT"
+      ],
+      [
+        "unit",
+        "0"
+      ],
+      [
+        "tiers_submitted",
+        "1"
+      ],
+      [
+        "tiers_origin",
+        "46"
+      ],
+      [
+        "tiers_threshold",
+        "46"
+      ],
+      [
+        "tiers_value",
+        "15.0"
+      ],
+      [
+        "tiers_origin",
+        "31"
+      ],
+      [
+        "tiers_threshold",
+        "31"
+      ],
+      [
+        "tiers_value",
+        "10.0"
+      ],
+      [
+        "start_date",
+        ""
+      ],
+      [
+        "end_date",
+        ""
+      ],
+      [
+        "promotion_apply_start_date",
+        ""
+      ],
+      [
+        "promotion_apply_end_date",
+        ""
+      ],
+      [
+        "season",
+        ""
+      ],
+      [
+        "rate_plan",
+        ""
+      ],
+      [
+        "exclusivity_group",
+        ""
+      ],
+      [
+        "cancellation_policy",
+        ""
+      ],
+      [
+        "scope_rate_plan_mode",
+        "0"
+      ],
+      [
+        "scope_room_mode",
+        "0"
+      ]
+    ],
+    "marks": [
+      [
+        "cancellation"
+      ],
+      [
+        "cancellation"
+      ]
+    ],
+    "set": [
+      [
+        "tiers_value",
+        0,
+        "16"
+      ]
+    ]
+  },
+  "posted": [
+    [
+      [
+        "title",
+        "얼리버드 46일 15% 환불 불가 / 31일 10% 컷오프"
+      ],
+      [
+        "code",
+        ""
+      ],
+      [
+        "trigger_type",
+        "LEAD_TIME"
+      ],
+      [
+        "basis",
+        "PCT"
+      ],
+      [
+        "unit",
+        "0"
+      ],
+      [
+        "tiers_submitted",
+        "1"
+      ],
+      [
+        "tiers_origin",
+        "46"
+      ],
+      [
+        "tiers_threshold",
+        "46"
+      ],
+      [
+        "tiers_value",
+        "16"
+      ],
+      [
+        "tiers_origin",
+        "31"
+      ],
+      [
+        "tiers_threshold",
+        "31"
+      ],
+      [
+        "tiers_value",
+        "10.0"
+      ],
+      [
+        "start_date",
+        ""
+      ],
+      [
+        "end_date",
+        ""
+      ],
+      [
+        "promotion_apply_start_date",
+        ""
+      ],
+      [
+        "promotion_apply_end_date",
+        ""
+      ],
+      [
+        "season",
+        ""
+      ],
+      [
+        "rate_plan",
+        ""
+      ],
+      [
+        "exclusivity_group",
+        ""
+      ],
+      [
+        "cancellation_policy",
+        ""
+      ],
+      [
+        "scope_rate_plan_mode",
+        "0"
+      ],
+      [
+        "scope_room_mode",
+        "0"
+      ]
+    ]
+  ]
+}
