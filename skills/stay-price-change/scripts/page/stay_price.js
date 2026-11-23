@@ -1390,8 +1390,10 @@
     return after;
   }
   // 편집 창의 저장 한 번 — 저장 단추를 press 로 한 번 누르고 결과를 본다. opts 는 {root: 창 뿌리, panel: 저장 응답이 다시 그리는 목록의
-  // id, window: 창 이름, what: 답의 what}. 저장됨: 창이 사라지고 저장 표지(`#stay_save_result` 의 저장 시각이 바뀌었거나 새로 온 ·
-  // 바뀐 목록의 저장 배너)가 왔다. 거절: 창이 오류와 함께 다시 그려졌다. 둘 다 아니면 "unknown" — 다시 누르지 않는다
+  // id, window: 창 이름, what: 답의 what, waitMs: 결과를 기다리는 천장(기본 10초 — 서버가 오래 걸리는 저장은 남은 시간을 준다),
+  // banner: 참이면 저장됐을 때 목록의 저장 배너 글을 `banner` 로 싣는다}. 저장됨: 창이 사라지고 저장 표지(`#stay_save_result` 의 저장
+  // 시각이 바뀌었거나 새로 온 · 바뀐 목록의 저장 배너)가 왔다. 거절: 창이 오류와 함께 다시 그려졌다. 둘 다 아니면 "unknown" — 다시
+  // 누르지 않는다
   async function saveOnce(ctx, opts) {
     var root = opts.root, rootId = root.id, screen = root.getAttribute('data-stay-screen');
     var windowRoot = function () { return document.querySelector('#stay_drawer_body [data-stay-screen="' + screen + '"]'); };
@@ -1409,12 +1411,14 @@
       var redrawn = !!r && (r !== root || r.id !== rootId) && windowErrors(r).length > 0;
       return { saved: !r && (stamped || fresh), refused: redrawn, errors: redrawn ? windowErrors(r) : [] };
     };
-    await ctx.wait(function () { var o = outcome(); return quiet() && (o.saved || o.refused); }, 10000);
+    await ctx.wait(function () { var o = outcome(); return quiet() && (o.saved || o.refused); }, opts.waitMs || 10000);
     var done = outcome();
     var saved = !pressed ? false : done.saved ? true : done.refused ? false : 'unknown';
     var out = { ok: saved === true, what: opts.what, saved: saved, pressed: pressed };
-    if (saved === true) out.note = '저장했습니다';
-    else if (pressed && done.refused) {
+    if (saved === true) {
+      out.note = '저장했습니다';
+      if (opts.banner && signs().banner) out.banner = clip(C(signs().banner.textContent), 300);
+    } else if (pressed && done.refused) {
       out.error = opts.window + '이 저장을 거절했습니다 — ' + done.errors.join(' / ');
       out.errors = done.errors.slice(0, 3).map(function (e) { return clip(e, 60); });
     } else if (pressed) out.error = '[저장] 은 눌렸고 저장됐는지 알 수 없습니다 — 다시 읽어 확인합니다(다시 누르지 않았습니다)';
