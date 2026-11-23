@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""loader_identity.py — 올리개(`page/stay_price_loader.js`)의 `INSTALLED` 를 디스크의 여섯 파일로 다시 적는다.
+"""loader_identity.py — 올리개(`page/stay_price_loader.js`)의 `INSTALLED` 를 디스크의 일곱 파일로 다시 적는다.
 
-올리개는 설치된 여섯 파일(러너의 `stay_helper.js` · `stay_boot.js`, 이 스킬의 `stay_price.js`, 부가옵션 가격 스킬의
+올리개는 설치된 일곱 파일(러너의 `stay_helper.js` · `stay_boot.js`, 이 스킬의 `stay_price.js` · `stay_price_season.js`, 부가옵션 가격 스킬의
 `stay_addon_price.js`, 부과금 스킬의 `stay_charge.js`, 프로모션 할인 스킬의 `stay_promotion.js`)의 알아볼 값을 안다. 그 값과 다른
-파일은 올리지도(`load`) 다시 실행하지도(`again`) 않는다. 여섯 파일 가운데 하나라도 고치면 이 스킬 폴더에서 이 명령을 한 번 부른다:
+파일은 올리지도(`load`) 다시 실행하지도(`again`) 않는다. 일곱 파일 가운데 하나라도 고치면 이 스킬 폴더에서 이 명령을 한 번 부른다:
 
     python3 scripts/loader_identity.py
 
@@ -28,7 +28,8 @@ CHARGE = SCRIPTS.parent.parent / "stay-charge-change" / "scripts" / "page"
 PROMOTION = SCRIPTS.parent.parent / "stay-promotion-change" / "scripts" / "page"
 FILES = {"stay_helper.js": RUNNER / "stay_helper.js", "stay_boot.js": RUNNER / "stay_boot.js",
          "stay_price.js": SCRIPTS / "page" / "stay_price.js", "stay_addon_price.js": ADDON / "stay_addon_price.js",
-         "stay_charge.js": CHARGE / "stay_charge.js", "stay_promotion.js": PROMOTION / "stay_promotion.js"}
+         "stay_charge.js": CHARGE / "stay_charge.js", "stay_promotion.js": PROMOTION / "stay_promotion.js",
+         "stay_price_season.js": SCRIPTS / "page" / "stay_price_season.js"}
 BLOCK = re.compile(r"^  var INSTALLED = \{\n(.*?)\n  \};$", re.S | re.M)
 ENTRY = re.compile(r"'([\w.]+)': \{ bytes: (\d+), crc32: '([0-9a-f]{8})', fnv: '([0-9a-f]{8})' \}")
 
@@ -39,7 +40,7 @@ def identity(data: bytes) -> dict:
 
 
 def installed() -> dict[str, dict]:
-    """디스크의 여섯 파일의 알아볼 값."""
+    """디스크의 일곱 파일의 알아볼 값."""
     return {name: identity(path.read_bytes()) for name, path in FILES.items()}
 
 
@@ -52,7 +53,7 @@ def written(loader: Path = LOADER) -> dict[str, dict]:
 
 
 def rewrite(loader: Path = LOADER) -> list[str]:
-    """올리개의 값을 디스크의 여섯 파일로 다시 적고, 값이 바뀐 파일 이름을 돌려준다(같으면 아무것도 쓰지 않는다)."""
+    """올리개의 값을 디스크의 일곱 파일로 다시 적고, 값이 바뀐 파일 이름을 돌려준다(같으면 아무것도 쓰지 않는다)."""
     now, before = installed(), written(loader)
     lines = ",\n".join(f"    '{name}': {{ bytes: {item['bytes']}, crc32: '{item['crc32']}', fnv: '{item['fnv']}' }}"
                        for name, item in now.items())
@@ -63,5 +64,5 @@ def rewrite(loader: Path = LOADER) -> list[str]:
 
 if __name__ == "__main__":
     changed = rewrite()
-    print(f"{LOADER.name}: " + (f"다시 적음 — {', '.join(changed)}" if changed else "여섯 파일 모두 이미 같습니다"))
+    print(f"{LOADER.name}: " + (f"다시 적음 — {', '.join(changed)}" if changed else "일곱 파일 모두 이미 같습니다"))
     sys.exit(0)

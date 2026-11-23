@@ -116,7 +116,7 @@ test('C7 · 모르는 묶음 이름은 아무것도 하지 않고 거절하며 �
   page.w.eval(LOADER);
   for (const call of [(l) => l.bridge('promo'), (l) => l.status('promo'), (l) => l.again('promo')]) {
     const r = plain(call(page.w.stayPriceLoader));
-    assert.match(r.error, /^모르는 묶음입니다: promo — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격, "charge" 면 부과금, "promotion" 이면 프로모션 할인입니다$/);
+    assert.match(r.error, /^모르는 묶음입니다: promo — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격, "charge" 면 부과금, "promotion" 이면 프로모션 할인, "season" 이면 가격 캘린더의 시즌 창입니다$/);
   }
   assert.match(plain(await page.w.stayPriceLoader.load('promo')).error, /^모르는 묶음입니다: promo/);
   page.w.close();
