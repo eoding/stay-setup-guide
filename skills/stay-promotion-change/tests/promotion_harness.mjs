@@ -105,7 +105,9 @@ function judge(db, card, promotion, pairs, keeps) {
  *   promotions   'loaded'(기본) | 'stub'(스텁만 있고, stubMs(기본 60ms) 뒤에 목록이 온다)
  *   db           promotions.json 대신 쓸 데이터(복사해 쓴다)
  *   keeps        false 면 화면 밖 설정을 지키지 않는 예전 ERP — 표식 · 숨은 칸이 없고 저장이 그 설정을 지운다(기본은 데이터의 keeps)
- *   onSave       'ok'(기본) | 'refuse'(늘 적용 범위 오류로 다시 그린다) | 'silent'(요청은 끝나지만 아무것도 바뀌지 않는다)
+ *   onSave       'ok'(기본) | 'refuse'(늘 창 맨 위 오류로 다시 그린다 — 글은 refusal, 기본은 적용 범위 오류) | 'silent'(요청은
+ *                끝나지만 아무것도 바뀌지 않는다)
+ *   refusal      'refuse' 일 때 창 맨 위 오류의 글(ERP 가 단을 짚어 거절하는 글 — services/promotion_trigger.keep_off_form_keys)
  *   windowFor    {프로모션 번호: 다른 번호} — 서버가 그 프로모션의 [편집] 에 다른 프로모션의 창을 내준다(서버 결함 흉내)
  *   withCharge   true 면 부과금 도우미(stay_charge.js)도 올린다(모듈을 통틀어 작업은 하나인지 볼 때)
  *   hotel · login · withScripts · withPage · bare   가격 도우미 받침과 같은 뜻
@@ -180,7 +182,7 @@ ${o.promotions === 'stub' ? stub(hotelId) : panel(db, hotelId)}
       return;
     }
     const { errors, values, saved } = judge(db, card, promotion, pairs, keeps());
-    const nonField = o.onSave === 'refuse' ? '이 프로모션의 적용 범위가 맞지 않습니다 — 저장하지 않았습니다' : '';
+    const nonField = o.onSave === 'refuse' ? (o.refusal || '이 프로모션의 적용 범위가 맞지 않습니다 — 저장하지 않았습니다') : '';
     if (nonField || Object.keys(errors).length) {
       swap(() => { body.innerHTML = windowOf(promotionId, { values, errors, nonField }); return body; });
       return;

@@ -112,6 +112,19 @@ test('M4 · 서버가 거절하면 saved false 이고, 응답이 없으면 "unkn
   }
 });
 
+test('M4 · ERP 가 단을 짚어 저장을 거절하면(화면 밖 설정을 이을 단을 정할 수 없음) saved false 이고 그 글을 그대로 돌려주며 다시 누르지 않는다', async () => {
+  const refusal = '발동 조건을 바꾸면 기준값 46 단에 저장된 화면에 없는 설정(cancellation)의 뜻이 달라집니다 — 발동 조건을 되돌리거나, 그 단을 지우고 새로 넣어 그 설정 없이 저장하세요';
+  const page = promotionPage({ onSave: 'refuse', refusal });
+  const win = await readWindow(page, '601', '9005');
+  const r = await apply(page, '601', '9005', win, [['tiers_value', 0, '16']]);
+  assert.deepEqual([r.ok, r.saved, r.pressed], [false, false, true]);
+  assert.ok(r.error.includes('기준값 46 단'), r.error);
+  assert.match(r.errors[0], /^발동 조건을 바꾸면 기준값 46 단/);
+  assert.equal(page.log.posts.length, 1);
+  assert.deepEqual(page.promotion('9005').trigger.tiers[0], { threshold: 46, pct: '15.0', cancellation: 'NRF' }, '저장되지 않았다');
+  page.w.close();
+});
+
 test('M7 · 한 작업 안에서 저장 단추를 두 번 누르면 두 번째는 벽이 막는다(서버가 아직 답하지 않아 창이 그대로일 때)', async () => {
   const page = promotionPage({ onSave: 'silent' });
   const root = page.showPromotion('9002');
