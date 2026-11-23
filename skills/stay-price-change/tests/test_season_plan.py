@@ -67,10 +67,10 @@ class BucketsTest(unittest.TestCase):
         self.assertNotIn("looks_edited", marks, "장부가 넣은 칸은 짐작하지 않는다")
 
     def test_other_season_days_and_left_old_and_no_sale_days(self):
-        window = scene.window(others=[("590", "Normal", ("2026-12-01",))])
+        window = scene.window(others=[("8800", "Normal", ("2026-12-01",))])
         left = cells({"2026-12-01": "200"}, key="A3")
         done = plan({**cells({"2026-12-01": "170"}), **left}, window=window).saves[0]
-        self.assertIn("other_season:590", next(change.marks for change in done.changes if change.key.date == "2026-12-01"))
+        self.assertIn("other_season:8800", next(change.marks for change in done.changes if change.key.date == "2026-12-01"))
         self.assertEqual(done.left_old, tuple(left))
         with_no_sale = plan(cells({"2026-12-01": "170"}), dates=["2026-12-02", "2026-12-03"]).saves[0]
         self.assertEqual((with_no_sale.no_sale, with_no_sale.counts.skipped), ((("디럭스", "2026-12-03"),), 1))

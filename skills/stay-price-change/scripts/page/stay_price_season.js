@@ -190,7 +190,7 @@
     var s = p.season && typeof p.season === 'object' ? p.season : null;
     var id = s && typeof s.id === 'string' && /^\d+$/.test(s.id) ? s.id : '';
     var name = s && typeof s.name === 'string' ? C(s.name) : '';
-    if (!id && !name) fail('`season` 은 {id: "591"} 이나 {name: "Peak"} 입니다(시즌 목록의 번호 · 이름 그대로)');
+    if (!id && !name) fail('`season` 은 {id: "8801"} 이나 {name: "Peak"} 입니다(시즌 목록의 번호 · 이름 그대로)');
     if (typeof p.offer !== 'string' || !C(p.offer)) fail('`offer` 는 오퍼 이름입니다(look() 의 offer 그대로)');
     return { offer: C(p.offer), id: id, name: name };
   }

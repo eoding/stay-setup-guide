@@ -14,7 +14,7 @@ from price_season import (
 HERE = Path(__file__).resolve().parent
 CASES = json.loads((HERE / "fixtures" / "season_fill_cases.json").read_text(encoding="utf-8"))
 HOTEL, HOTEL_ID, OFFER = "데모 호텔", "1", "기본 오퍼"
-SEASON_ID, SEASON_NAME = "591", "Peak"
+SEASON_ID, SEASON_NAME = "8801", "Peak"
 ROOM_IDS = {"디럭스": "301", "스위트": "302"}
 PLAN_IDS = {("디럭스", "조식 포함"): "9001", ("디럭스", "룸온리"): "9002", ("스위트", "조식 포함"): "9003",
             ("스위트", "룸온리"): "9004"}

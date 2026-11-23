@@ -182,7 +182,7 @@ python3 scripts/price_change.py <하위 명령> [플래그] [--out "<파일>"]
 
 ```json
 {"kind": "season_fill", "hotel": {"id": "1", "name": "데모 호텔"}, "offer": "기본 오퍼",
- "season": {"id": "591", "name": "Peak"}, "currency": "USD",
+ "season": {"id": "8801", "name": "Peak"}, "currency": "USD",
  "sentence": "Peak 시즌 디럭스 180 으로 다시 채워줘, 룸온리는 8 싸게",
  "saves": [
   {"pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}, {"room": "디럭스", "rate_plan": "룸온리"}],

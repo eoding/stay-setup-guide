@@ -59,7 +59,7 @@ class SeasonLedgerTest(unittest.TestCase):
                                             sentence="10% 올려", read_at=snapshot.read_at, rows=[], request={"kind": "change"})
         with self.assertRaises(LedgerError) as caught:
             self.record(snapshot, plan, replaces=change)
-        self.assertIn("가격 바꾸기 미리보기이고 이 계산은 시즌 591 다시 채우기", str(caught.exception))
+        self.assertIn("가격 바꾸기 미리보기이고 이 계산은 시즌 8801 다시 채우기", str(caught.exception))
 
     def test_the_list_line_names_the_season_overwrite_and_the_save_count(self):
         _snapshot, plan = self.plan(choices=[SeasonChoice(1, "NEW_ROW", "include", "응")])

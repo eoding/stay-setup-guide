@@ -100,11 +100,11 @@ class OneDaySeasonTest(FlowBase):
 
     def test_words_to_preview_apply_verify_rollback_and_list(self):
         window = season_scene.window(dates=["2026-12-31"], rooms=["디럭스"],
-                                     others=[("590", "Normal", tuple(f"2026-12-{day:02d}" for day in range(1, 31)))])
+                                     others=[("8800", "Normal", tuple(f"2026-12-{day:02d}" for day in range(1, 31)))])
         folder = self.window_answers(window, "작업/시즌", window.seasons)
         asked = self.cli("season", "--answers", f"{folder}/season-1.json", "--answers", f"{folder}/take-w1.json",
                          "--answers", f"{folder}/take-w2.json", "--answers", f"{folder}/take-w3.json", code=2)
-        self.assertEqual(asked["ask"], [{"hotel": HOTEL, "offer": window.offer, "season": {"id": "590", "name": "Normal"}, "datesOnly": True}],
+        self.assertEqual(asked["ask"], [{"hotel": HOTEL, "offer": window.offer, "season": {"id": "8800", "name": "Normal"}, "datesOnly": True}],
                          "S1 · 같은 오퍼의 다른 시즌 날을 읽으라고 묻는다")
         short = self.cli("season", "--answers", folder, "--out", self.dir / "season.json")
         self.assertEqual((short["dates"]["count"], short["other_seasons"]), (1, [{"name": "Normal", "days": 30}]))

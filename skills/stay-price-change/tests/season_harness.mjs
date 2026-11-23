@@ -17,7 +17,7 @@ const JSDOM = loadJsdom();
 export const SEASON = readFileSync(join(SKILL, 'scripts', 'page', 'stay_price_season.js'), 'utf8');
 
 export const OFFER = '〈오퍼 관리용 이름〉';
-export const IDS = { master: '1', season: '591', offer: '11', room: { 1: '301', 2: '302' }, plan: { 1: '9001', 2: '9002', 3: '9003', 4: '9004', 5: '9005' } };
+export const IDS = { master: '1', season: '8801', offer: '11', room: { 1: '301', 2: '302' }, plan: { 1: '9001', 2: '9002', 3: '9003', 4: '9004', 5: '9005' } };
 // 캡처의 자리 표시 → 지어낸 번호
 export function filled(html) {
   return html.replaceAll('{master:1}', IDS.master).replaceAll('{season:1}', IDS.season).replaceAll('{offer:1}', IDS.offer)

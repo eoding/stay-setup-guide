@@ -111,7 +111,7 @@ test('S1 · 이름으로 고른 시즌이 그 오퍼에 없으면 아무것도 �
   const page = seasonPage({ tab: 'seasons' });
   const r = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask({ name: 'Normal' }))));
   assert.equal(r.ok, false);
-  assert.match(r.error, /시즌 `Normal` 이 없습니다 — 이 오퍼의 시즌: PEAK\(591\)/);
+  assert.match(r.error, /시즌 `Normal` 이 없습니다 — 이 오퍼의 시즌: PEAK\(8801\)/);
   assert.deepEqual(page.log.reached, []);
   page.w.close();
 });
