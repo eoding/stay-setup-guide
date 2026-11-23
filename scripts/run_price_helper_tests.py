@@ -18,10 +18,9 @@ node --test 와 jsdom). 여덟을 차례로 돌려 무엇을 돌렸는지 찍고
 - __pycache__ 를 만들지 않는다(-B · PYTHONDONTWRITEBYTECODE — 페이지 시험은 `python3 -I` 로 불러 환경 변수가 듣지 않으므로 위의
   `python3` 가 -B 를 붙인다).
 
-여섯 페이지 파일(러너의 stay_helper.js · stay_boot.js, stay_price.js · stay_addon_price.js · stay_charge.js · stay_promotion.js)을
-고치면 먼저
-`python3 skills/stay-price-change/scripts/loader_identity.py` 로 올리개의 알아볼 값을 다시 적는다 — 가격 캘린더 도우미의 파이썬 시험
-(test_loader_identity)이 견준다.
+일곱 페이지 파일(러너의 stay_helper.js · stay_boot.js, stay_price.js · stay_price_season.js · stay_addon_price.js · stay_charge.js ·
+stay_promotion.js)을 고치면 먼저 `python3 skills/stay-price-change/scripts/loader_identity.py` 로 올리개의 알아볼 값을 다시 적는다 —
+가격 캘린더 도우미의 파이썬 시험(test_loader_identity)이 견준다.
 """
 
 from __future__ import annotations

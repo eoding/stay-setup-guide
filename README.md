@@ -181,10 +181,23 @@ only after "적용". It reads the screen again afterwards, and "N번 되돌려" 
 60%; change the early-bird discount from 10% to 12%.) Changes over 30%, prices below cost and similar cases stop as red lines until the person chooses, in their own
 words. The helpers change amounts only. They never delete anything and never create offers, rooms, add-ons, charges or
 price cells. The promotion helper changes a promotion's tier values only, and only on an ERP whose promotion edit window
-carries the mark that the server keeps settings the screen does not show; elsewhere a person changes promotions in the ERP. They never drive the season screen either: for a season refill the
-price helper saves the state before, the person refills the season, and the helper shows what changed and restores the
-saved state on request. Names and descriptions are not changed; when one still states the amount being replaced, the
-preview and the result say so.
+carries the mark that the server keeps settings the screen does not show; elsewhere a person changes promotions in the ERP.
+Names and descriptions are not changed; when one still states the amount being replaced, the preview and the result say so.
+
+**시즌 다시 채우기 (season refill).** The price helper can also refill a season through the season's [가격 입력] window
+("시즌 [가격] 채우기"), which on its own has no preview and no undo. The helper reads the window, computes with the
+ERP's own rules what every cell of the season will become, and shows every cell that will change before anything is
+saved (changed cells, new cells, cells it had edited per date, reserved and closed days, days shared with another season,
+old rows the refill leaves alone, days without a sale day). From a rate sheet the command derives the window inputs and
+lists, under their own heading, every cell the window cannot make equal to the sheet; those can be fixed per date right
+after. Choices are per save and per rule (fill as shown, leave those dates out, or change the request); one cell cannot
+be kept on its own. After "적용" it types the window as shown and presses it once per save, reads the result back, and
+compares cell by cell and with the ERP's own cell counts; "N번 되돌려" restores the values through the price calendar.
+New cells cannot be removed, and the window's last inputs, the previous owner season of overwritten cells and the ERP's
+hand-edit mark do not come back. It never ticks "이번에 고르지 않은 인원·요금제 가격 지우기". Each save is given out only
+against a reading of its range taken at most two minutes earlier, but a change someone else makes in the seconds between
+that reading and the press is overwritten unseen; closing that gap needs a dry run on the ERP side. If the person refills
+the season in the ERP by hand instead, the helper saves the state before, shows what changed and restores it on request.
 
 Every preview, save and rollback goes into one SQLite ledger on that computer,
 `~/Documents/어딩 Stay 가격 변경 기록/가격장부.sqlite3` (set `STAY_PRICE_LEDGER_DIR` to use another folder), with a work
@@ -221,7 +234,10 @@ add-on rollback, output on a console that is not UTF-8, and a ledger file that h
 the second colleague trial (a re-read value shown with the time it was read, the list line giving the time applying
 began, the choices of a rollback that stopped) were checked in the suites and by rendering that trial's ledger again,
 not by a new run. The promotion helper (`stay-promotion-change`) has run in the test suites only, on hand-built screens drawn from
-the ERP templates; it has not run on a real ERP. Nothing has run on production, on Windows or macOS, or on Python 3.10.
+the ERP templates; it has not run on a real ERP. The season refill is built, in the test suites (with the season window's page
+answers taken from the runner's captured ERP window and hand-built saved and refused renders), and its expansion is
+parity-checked against the ERP's own functions on a test database; it has not yet run on a real screen. Nothing has run on
+production, on Windows or macOS, or on Python 3.10.
 
 ## Optional room inventory
 
@@ -336,8 +352,8 @@ The bundled Pretendard font is separately under the SIL Open Font License
   the Python, Node (18+) and jsdom it used, and fails when a suite fails, skips a test or cannot run. jsdom is not in this
   repository; the page tests were written against jsdom 22, and any folder where `npm install jsdom@22` ran will do.
 - The page loader `skills/stay-price-change/scripts/page/stay_price_loader.js` runs only page files whose identity it
-  knows: `stay_helper.js` and `stay_boot.js` of `stay-setup-run`, and `stay_price.js`, `stay_addon_price.js`,
-  `stay_charge.js` and `stay_promotion.js`. After changing any of the six, a change to `stay-setup-run`'s two page files included, run
+  knows: `stay_helper.js` and `stay_boot.js` of `stay-setup-run`, and `stay_price.js`, `stay_price_season.js`,
+  `stay_addon_price.js`, `stay_charge.js` and `stay_promotion.js`. After changing any of the seven, a change to `stay-setup-run`'s two page files included, run
   `python3 skills/stay-price-change/scripts/loader_identity.py` and commit the loader in the same commit. The price
   calendar suite fails until you do, and a partner's tab refuses the files.
 - Each helper's `SKILL.md` has a size budget in its `tests/test_docs.py`; detail goes to its `references/`.

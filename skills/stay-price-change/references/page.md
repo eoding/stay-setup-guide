@@ -18,7 +18,7 @@
 
 **예전 판은 올리지 않는다.** 올리개는 설치된 세 파일의 알아볼 값(줄 끝을 맞춘 UTF-8 의 바이트 수 · CRC-32 · FNV-1a)을 안다. 도우미는 올리개를 늘 설치된 스킬에서 새로 붙여 넣으므로, 그 값과 다른 글자는 예전 판이다. 플러그인을 새로 깐 뒤에도 예전 탭이 예전 코드를 되살리지 않는다.
 
-**페이지에 남기는 것.** 이 탭의 출처(ERP 주소)의 localStorage 에 `stayPrice` 로 시작하는 키 일곱까지만 쓴다. 올리개가 적어 두는 원본 셋 `stayPriceHelperSrc`(러너의 도우미) · `stayPriceBootSrc`(러너의 부트) · `stayPriceSrc`(가격 도우미) — `again()` 이 다시 실행한다. 부가옵션 가격 도우미를 같이 올렸으면(`load('addon')`) 그 원본 `stayPriceAddonSrc` 도 적어 두고 `again('addon')` 이 다시 실행한다. 부과금 도우미를 같이 올렸으면(`load('charge')`) 그 원본 `stayPriceChargeSrc` 를 적어 두고 `again('charge')` 가 다시 실행한다. 프로모션 할인 도우미면(`load('promotion')`) `stayPricePromotionSrc` 와 `again('promotion')` 이다. 그리고 가격 도우미가 적는 `stayPriceLast`(마지막 작업의 답 · 도는 중이면 `{running}`) — `last()` 가 읽는다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다.
+**페이지에 남기는 것.** 이 탭의 출처(ERP 주소)의 localStorage 에 `stayPrice` 로 시작하는 키 여덟까지만 쓴다. 올리개가 적어 두는 원본 셋 `stayPriceHelperSrc`(러너의 도우미) · `stayPriceBootSrc`(러너의 부트) · `stayPriceSrc`(가격 도우미) — `again()` 이 다시 실행한다. 부가옵션 가격 도우미를 같이 올렸으면(`load('addon')`) 그 원본 `stayPriceAddonSrc` 도 적어 두고 `again('addon')` 이 다시 실행한다. 부과금 도우미를 같이 올렸으면(`load('charge')`) 그 원본 `stayPriceChargeSrc` 를 적어 두고 `again('charge')` 가 다시 실행한다. 프로모션 할인 도우미면(`load('promotion')`) `stayPricePromotionSrc` 와 `again('promotion')` 이다. 시즌 창 묶음을 올렸으면(`load('season')`) 그 원본 `stayPriceSeasonSrc` 를 적어 두고 `again('season')` 이 다시 실행한다. 그리고 가격 도우미가 적는 `stayPriceLast`(마지막 작업의 답 · 도는 중이면 `{running}`) — `last()` 가 읽는다. 러너의 키(`stayHelperSrc`·`stayBoot`·`staySteps`·`stayRunCursor`)는 읽지도 쓰지도 않는다.
 
 올리면 페이지에 벽이 선다. 작업이 도는 동안에는 그 작업의 허용 목록에 없는 클릭·폼 제출을 막고, 작업 밖에서는 사람이 방금 움직이지 않았을 때 스크립트가 만든 클릭을 막는다. 사람이 직접 누른 클릭은 지나고, 그 클릭이 부른 ERP 화면의 클릭(확인창이 누르는 저장 · 탭을 바꾸는 링크 · 뒤로/앞으로)도 지난다 — 브라우저가 사람이 누른 뒤 몇 초 동안 켜 두는 표지(`navigator.userActivation`)로 가른다. 그래서 사람이 누른 지 몇 초 안에 브라우저 도구의 스크립트가 누르는 클릭은 작업 밖의 벽이 막지 못한다(작업 안의 벽은 이 표지를 보지 않고 허용 목록만 본다). 이 도우미는 작업 밖에서 아무것도 누르지 않는다. 같은 탭에서 러너(stay-setup-run)를 돌려야 하면 담당자에게 그 탭을 새로 고쳐 달라고 한다. 새로 고치면 도우미가 내려간다.
 
@@ -42,6 +42,16 @@
 | `stayPrice.idle()` | 없음 | 작업 밖 벽의 상태 `{idle, blocked, count}` |
 
 `standDown()`·`standUp()`·`config()`·`guard()` 는 시험용이다. 이 도우미는 부르지 않는다.
+
+## 시즌 창
+
+시즌 다시 채우기([season-fill.md](season-fill.md))는 `window.stayPriceSeason` 이다 — 시즌 창 묶음(`stayPriceLoader.again('season')` · `load('season')`)으로 올린다. 벽 · 작업 틀 · 누르기 · 조각은 가격 도우미의 것을 그대로 쓰므로 작업은 도우미들을 통틀어 한 번에 하나다.
+
+- `readSeason({hotel, offer, season: {id} | {name}, datesOnly})` — 시즌 탭의 그 시즌 [가격 입력] 창을 열어 읽고 닫는다. 누르는 것은 [시즌] 탭(목록이 안 보일 때) · 그 시즌 줄의 [가격 입력] · (마지막 입력값이 채워져 열렸으면) [비우기]뿐이다. 답은 늘 조각(`body`)이고 `season` 명령이 묶는다. `datesOnly` 면 시즌 날까지만 읽는다(`season` 의 `ask`).
+- `applySeason(<calls 의 payload 그대로>)` — 그 창을 열어 창이 미리보기 때와 같은지 먼저 본다(시즌 · 시즌 날 · 객실 · 요금제 · 읽기 전용 아동 글 · 보낼 칸 = `form`). 다르면 한 글자도 치지 않고 `refused: true, pressed: false, saved: false, differ: [...]`. 같으면 금액 · 글 칸 → 객실 체크 → 요금제 체크 → 덮기 → 날짜 칸 차례로 치고, 보낼 칸이 `want` 와 꼭 같을 때만 [가격 적용]을 한 번 누른다. 체크는 `want` 쪽으로 옮기는 클릭만 벽을 지난다. 「이번에 고르지 않은 인원·요금제 가격 지우기」 · 날짜 달력 · 시즌 [편집] · 삭제 · 판매 마감·해제는 어떤 경우에도 막힌다.
+- 답: 저장됨이면 `saved: true` 와 `counts`(ERP 의 저장 띠 — `created` · `updated` · `skipped` · `rooms` · `days`) · `banner`(띠의 앞부분), 공급 통화가 없다는 띠가 있으면 `warn`. 창이 오류와 함께 다시 그려지면 `saved: false, pressed: true` 와 그 오류. 저장이 호출보다 오래 걸리면 `saved: "unknown", pressed: true` — 다시 누르지 않는다. 그 요청이 끝날 때까지 다음 작업은 드로어를 닫지 않고 `started: false`(`wait` 5)로 답한다.
+- 시간 천장은 저장만 길다(40초 + 정리 4초 — 45초 호출 안). `stayPrice.config(...)` 로 낮춘 천장은 그대로 이긴다(시운전).
+- `take` · `last` · `idle` 은 가격 도우미의 것과 같다(`stayPriceSeason.take(id, at, size)`).
 
 ## 답의 모양
 

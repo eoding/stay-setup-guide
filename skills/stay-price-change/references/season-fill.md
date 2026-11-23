@@ -1,0 +1,67 @@
+# 시즌 다시 채우기 — 도우미가 시즌 [가격 입력] 창을 누르는 길
+
+ERP 시즌의 [가격 입력] 창("시즌 [가격] 채우기")은 입력 몇 칸을 시즌의 모든 날 · 고른 객실 · 요금제 · 인원 · 박수의 칸으로 한 번에 펼친다. 창에는 미리보기도 되돌리기도 없다. 도우미는 ERP 와 같은 셈으로 칸마다 무엇이 될지 먼저 보여 주고, "적용"이면 창에 그대로 쳐서 한 번 누르고, 다시 읽어 칸마다 견주고, 되돌릴 수 있게 장부에 적는다.
+
+SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가)를 고르면, 또는 담당자가 "Peak 시즌 디럭스 180 으로 다시 채워줘"처럼 시즌을 다시 채우라고 하면 여기다. 명령은 SKILL.md 와 같이 이 스킬 폴더에서 부르는 꼴이고, 파일 모양 · 오류는 [commands.md](commands.md) 「시즌 다시 채우기」, 페이지 작업은 [page.md](page.md) 「시즌 창」에 있다.
+
+**변경 하나 = 시즌 하나.** 시즌이 둘이면 차례로 두 번이다. 한 변경 안에서 창을 한 번 누르는 것이 저장 하나다(객실끼리 입력이 다르면 저장이 여럿).
+
+## 1. 준비 · 창 읽기
+
+1. SKILL.md 「준비」 1 ~ 5. 2 의 올리기는 시즌 창 묶음이다 — 올리개 뒤에 `stayPriceLoader.again('season')` 한 줄을 붙여 실행하고, 거절하면 답의 `want` 파일(러너의 둘, `scripts/page/stay_price.js`, `scripts/page/stay_price_season.js`)을 「stay price file bridge」 칸에 올려 `await stayPriceLoader.load('season')`.
+2. 시즌 이름을 묻는다(오퍼는 `look` 의 답에서). `await stayPriceSeason.readSeason({hotel: <look 의 hotel>, offer: "<오퍼>", season: {name: "<시즌 이름>"}})` 의 답을 `<작업>/시즌/season-1.json` 에 저장한다. 이름이 같은 시즌이 둘이면 답이 시즌 번호를 대며 거절한다 — `season: {id: "<번호>"}` 로 다시 부른다.
+3. `python3 scripts/price_change.py season --answers "<작업>/시즌" --out "<작업>/season.json"`.
+   - 종료 2 의 `ask` 는 같은 오퍼의 다른 시즌이다(그 날에도 드는 칸을 미리보기가 말한다) — 값마다 `stayPriceSeason.readSeason(<값 그대로>)` 의 답을 `season-2.json`, `season-3.json` … 에 저장하고 다시 한다. `refetch` 는 SKILL.md 「읽기」 5 처럼 받되 `stayPriceSeason.take` 로 받는다.
+   - 짧은 답의 `pairs` 가 창이 고를 수 있는 객실 · 요금제(캘린더 이름, `base` 는 기준 요금제), `child` 가 아동 칸(`amount` 고칠 수 있음 · `percent` 비율로 셈 · `none` 깔리지 않음), `last_fill_note` 가 창에 남은 마지막 입력값이다.
+
+## 2. 요청
+
+- **말씀으로.** 빠진 것(객실 · 요금제 · 판매 단가 · 인원별 차이 · 박수 층 · 아동 금액 · 날짜 일부인지)을 묻고, SKILL.md 「3. 가격 바꾸기」의 확인 상자처럼 보여 확인받은 뒤 `<작업>/request.json`(kind `season_fill`, commands.md 「시즌 다시 채우기 요청」)을 쓴다. 칸은 창에 칠 글자 그대로이고 담당자의 말에서만 옮긴다 — 차이는 차이 그대로(`A3:+30`, `-8`), 박수 층은 그 박수의 1박 판매가(`3:160`). `sources` 에 칸마다 "말씀"이라고 적는다.
+- **요금표로.** [sheet.md](sheet.md) 1 ~ 5(요금표 파일 · `sheet` · 이렇게 읽었다고 보여 주기)를 한 뒤 `python3 scripts/price_change.py season-request --sheet "<check>" --season "<작업>/season.json" --out "<작업>/request.json"`. 명령이 요금표에서 창의 입력을 셈한다(객실 묶기 · 판매 단가 · 인원별 금액 차이 · 요금제 조정 · 박수 층 · 고칠 수 있는 아동 금액). 도우미는 셈하지 않는다. 짧은 답의 `saves` 를 그대로 말한다.
+
+## 3. 읽고 미리보기
+
+1. `read-calls --request "<작업>/request.json" --season "<작업>/season.json"` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`. 읽기 한 번에 들지 않으면 저장을 객실끼리 나눠 요청을 둘 이상 쓰고 하나씩 한다(저마다 변경 하나).
+2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --season "<작업>/season.json" --record --out "<작업>/plan-1.json"` → `change_id` 가 N, `saves` 는 창을 누를 횟수(고를 것이 남았으면 null), `per_save` 는 저장마다 걸린 규칙 · 바구니(`rules`)와 거절한 입력(`refused`).
+3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸 · 새로 생기는 칸 · 날짜별로 바꿔 둔 칸 · 예약 있는 날의 칸 · 다른 시즌 날의 칸 · 판매 마감인 칸 · 이번 채우기에 없는 예전 칸 · 판매일 없는 날의 칸 · 요금표와 다르게 채워지는 칸 수를 말한다(0 인 것은 뺀다).
+4. "적용"을 청하기 전에 해당되는 것을 꼭 말한다.
+   - "새로 생기는 칸 ○칸은 되돌려도 지울 수 없습니다(ERP 에 칸을 지우는 길이 없습니다)."
+   - "되돌리기는 가격 캘린더에서 날짜별로 전 값을 다시 넣는 것입니다. 시즌 창의 마지막 입력값은 이번에 친 값으로 남고, 덮인 칸이 원래 어느 시즌 것이었는지와 ERP 의 '손입력' 표시는 되돌아가지 않습니다."
+   - "정가·공급 원가가 비어 있던 칸 ○칸에 값을 넣습니다. 되돌릴 때는 그 칸마다 한 번씩 ○번 저장해야 해서 오래 걸립니다."
+   - "되돌린 뒤 누가 이 시즌을 '덮기'로 다시 채우면 이번 값이 다시 들어갑니다."
+   - "시즌 창은 칸 값을 보여 주지 않아, 저장마다 그 범위를 2분 안에 다시 읽어 미리보기 때와 같을 때만 누릅니다. 그 다시 읽기와 누름 사이(몇 초)에 다른 사람이 ERP 에서 바꾼 칸은 보이지 않은 채 덮입니다. 이 빈틈을 닫으려면 ERP 에 '미리 해 보기'가 있어야 합니다."
+   - 도우미는 '이번에 고르지 않은 인원·요금제 가격 지우기'를 켜지 않는다 — 예전 칸은 예전 값으로 남는다.
+
+## 4. 고르기
+
+창은 칸 하나를 뺄 수 없다. 고름은 저장마다 · 규칙마다 셋이다: **이대로 채움**(`include`) · **그 날은 빼고 채움**(`exclude_dates` — 그 규칙에 걸린 날을 그 저장의 날에서 빼고 다시 셈한다, 남는 날이 없으면 그 저장은 빠진다) · **요청을 고침**(새 요청을 쓰고 `--replaces`). "그 칸만 그대로"는 없다 — 그렇게 말하면 이 셋을 말한다.
+
+- 빨간 줄(`NEW_ROW` 없던 줄이 생김 · `ABOVE_LIST` · `ABOVE_ONE_NIGHT` · `BELOW_COST` · `OVER_30` · `SHEET_DIFFERS` 요금표와 다르게 채워짐)은 셋 다. 막힘(`NOT_POSITIVE` · `NEGATIVE_SUPPLY` · `WHOLE_UNIT_FRACTION` 원화처럼 소수 없는 통화의 소수)은 그 날은 빼고 채움 · 요청을 고침, `ERP_REFUSES`(창이 거절할 입력 — `refused` 의 ERP 문장을 그대로 말한다)는 요청을 고침뿐이다.
+- 바구니(`helper_edited` · `looks_edited` · `reserved` · `other_season` · `left_old`)는 빨간 줄이 아니다. 담당자가 그 칸을 지키자고 하면 그 날은 빼고 채움을 낸다.
+- `SHEET_DIFFERS` 를 이대로 채우면 채운 뒤 그 칸들을 날짜별 변경으로 맞추는 것을 바로 내놓는다(6).
+- 고름은 담당자의 말에서만 나온다. `<작업>/choices-<k>.json`([commands.md](commands.md) 「시즌 고름 파일」, 지금까지 고른 것을 모두)을 쓰고 3 의 2 를 `--resolutions "<작업>/choices-<k>.json" --replaces <N>` 을 붙여 `--out "<작업>/plan-<k>.json"` 으로 다시 하고 미리보기를 다시 연다. 고를 것이 남았는데 "적용"이라고만 하면 저장하지 않는다.
+
+## 5. 적용하기
+
+분명한 "적용" 뒤에만. 저장들은 사이에 다른 일 없이 잇달아 한다.
+
+1. **직전에 다시 읽고 시작.** `read-calls --record N` 으로 「읽기」 → S2. `begin --change N --plan "<작업>/plan-<k>.json" --snapshot "<S2>"`(SKILL.md 「적용하기」 1 과 같다).
+2. **저장마다(k = 1, 2 …).**
+   1. `read-calls --record N --step k --out "<작업>/적용-N/읽기-k/calls.json"` 으로 그 저장의 범위만 「읽기」 → `<R>/snapshot.json`. 앞에서 받은 조각과 같은 조각은 다시 받지 않는다.
+   2. `calls --change N --snapshot "<R>/snapshot.json" --out "<작업>/적용-N/calls-k.json"` → `calls` 의 하나. 종료 2 가 「…초 전 것입니다」 · 「…앞에 읽은 것입니다」면 1 부터 다시 한다(읽은 값이 2분보다 오래됐거나 앞 저장보다 먼저 읽었다). 답이 `stopped: true` 면 그 저장의 칸이 미리보기 뒤에 ERP 에서 바뀌어 아무것도 누르지 않았다 — `differences` 의 수를 말하고 [stopped.md](stopped.md).
+   3. `await stayPriceSeason.applySeason(<payload 그대로>)` → 답을 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result "<그 파일>"`.
+   4. `saved: true` 면 다음 저장으로(`status: applied` 면 3 으로). 답의 `warn`(공급 통화 없음)이 있으면 다음 저장을 하지 않고 그 글을 그대로 전한다 — 칸은 써졌지만 팔리지 않는다.
+   5. 답이 `saved: "unknown"` 이면: "시즌 창의 [가격 적용]은 눌렸고 ERP 가 아직 답하지 않았습니다. 다시 누르지 않습니다. ERP 가 끝나면 다시 읽어 저장됐는지 확인하겠습니다." 그리고 [stopped.md](stopped.md) — 다음 읽기는 요청이 끝날 때까지 `started: false` 로 스스로 기다린다. 창이 다르다는 거절(`refused` · `differ`)이나 저장 안 됨이면 [stopped.md](stopped.md). `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 같은 저장을 두 번 누르지 않는다.
+3. **뒤에 다시 읽기.** `read-calls --record N` 으로 「읽기」 → S3. `verify --change N --snapshot "<S3>"`, `render result --change N` → `page` 를 연다.
+   - `same: true`: "적용했고, 다시 읽어 확인했습니다. ERP 도 '새로 C칸 · 덮어쓴 U칸'이라고 답했습니다. 손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."(C · U 는 `counts[].told`)
+   - `mismatches` 가 있으면: "저장은 됐지만 다시 읽었더니 ○칸이 미리보기와 다릅니다. 페이지의 빨간 칸을 확인해 주세요. 원하시면 'N번 되돌려'로 저장 전 값으로 돌립니다." 다시 저장하지 않는다.
+   - 값은 맞는데 `counts[].agree` 가 false 면: "적용했고 다시 읽은 값은 모두 맞습니다. 다만 ERP 가 말한 칸 수(새로 C · 덮어쓴 U)가 미리보기(새로 C′ · 덮어쓴 U′)와 달라 도우미 계산을 점검해야 합니다."
+   - `state_only` 가 있으면: "값은 모두 맞습니다. 다만 새로 생긴 칸 ○칸의 판매 상태가 미리보기와 다릅니다." `left_out` 은 ERP 가 객실 조합으로 넣지 않은 칸이다(미리보기가 그럴 수 있다고 한 칸).
+
+## 6. 요금표와 다르게 채워진 칸
+
+`plan` 의 짧은 답의 `followup` 이 0 보다 크면, 결과를 말한 뒤 바로 묻는다: "시즌 창으로 요금표 값을 만들지 못한 ○칸이 있습니다. 그 칸을 날짜별로 요금표 값에 맞출까요?" 맞추자고 하면 새 작업 폴더에서 SKILL.md 「3. 가격 바꾸기」의 「읽고 미리보기」를 그 계산 파일로 한다 — `read-calls --request "<작업>/plan-<k>.json"`, `plan --snapshot "<R>/snapshot.json" --request "<작업>/plan-<k>.json" --record --out "<새 작업>/plan-1.json"`(요금표와 다르게 채워진 칸의 목표 값 표다). 그 미리보기 · 결과에는 sheet.md (나)의 문장을 붙인다.
+
+## 7. 되돌리기
+
+SKILL.md 「4. 되돌리기」 · [rollback.md](rollback.md) 와 같다. 되돌리기 미리보기에는 되돌려도 돌아오지 않는 것과 채우기 전에 시즌 창에 있던 입력값이 나온다 — "되돌려"를 청하기 전에 3 의 4 의 되돌리기 문장들을 말한다. 도우미는 예전 입력값을 창에 다시 치지 않는다(그것도 시즌 창 저장이라 칸을 또 쓴다). 그 값을 창에 다시 남기고 싶으면 담당자가 직접 친다.

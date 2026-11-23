@@ -88,6 +88,7 @@ class DocNamesTest(unittest.TestCase):
         self.commands = commands()
         self.page = exported(SKILL / "scripts" / "page" / "stay_price.js", "stayPrice")
         self.loader = exported(SKILL / "scripts" / "page" / "stay_price_loader.js", "stayPriceLoader")
+        self.season = exported(SKILL / "scripts" / "page" / "stay_price_season.js", "stayPriceSeason")
 
     def test_the_lever_sees_the_code(self):
         self.assertIn("--record", self.commands["read-calls"])
@@ -153,8 +154,8 @@ class DocNamesTest(unittest.TestCase):
     def test_page_md_names_every_storage_key_the_page_and_loader_write_and_no_other(self):
         scripts = SKILL / "scripts" / "page"
         keys = {key for name in ("stay_price.js", "stay_price_loader.js")
-                for key in re.findall(r"'(stayPrice[A-Z]\w*)'", (scripts / name).read_text(encoding="utf-8"))}
-        self.assertEqual(len(keys), 7, keys)
+                for key in re.findall(r"(?:key: |LAST_KEY = )'(stayPrice[A-Z]\w*)'", (scripts / name).read_text(encoding="utf-8"))}
+        self.assertEqual(len(keys), 8, keys)
         text = (SKILL / "references" / "page.md").read_text(encoding="utf-8")
         paragraph = text[text.index("**페이지에 남기는 것.**"):].split("\n\n", 1)[0]
         self.assertEqual(set(re.findall(r"`(stayPrice[A-Z]\w*)`", paragraph)), keys)
@@ -166,6 +167,8 @@ class DocNamesTest(unittest.TestCase):
                 self.assertIn(name, self.page, f"{doc.name}: stayPrice.{name}")
             for name in re.findall(r"stayPriceLoader\.(\w+)", text):
                 self.assertIn(name, self.loader, f"{doc.name}: stayPriceLoader.{name}")
+            for name in re.findall(r"stayPriceSeason\.(\w+)", text):
+                self.assertIn(name, self.season, f"{doc.name}: stayPriceSeason.{name}")
 
 
 def section(text: str, heading: str) -> str:
@@ -388,13 +391,18 @@ class SheetDocsTest(unittest.TestCase):
                          "(가)는 「아직 못 함」이 아니라 저장 · 견주기 · 되돌리기의 안전망이다(G1)")
         self.assertNotIn("새 요금표로 통째 바꾸기는 아직 못 한다", self.skill + self.sheet)
 
-    def test_g1_the_season_refill_way_saves_compares_and_restores_and_says_why_the_helper_does_not_fill(self):
+    def test_g1_the_season_refill_way_is_the_helper_s_own_window_path_and_hand_filling_keeps_its_safety_net(self):
+        """(가) 시즌 원판 바꾸기는 도우미가 시즌 창을 누르는 길(season-fill.md)이다 — 두 길을 말하는 문장이 미리보기 · 적용 · 다시 읽기 ·
+        새 칸은 지울 수 없음을 말하고, 담당자가 ERP 에서 직접 채우겠다면 저장 → 견주기 → 되돌리기의 차례가 남는다."""
+        bullet = self.sheet[self.sheet.index('- "(가) 시즌 원판 바꾸기'):].split("\n", 1)[0]
+        for said in ("ERP 와 같은 계산으로 무엇이 바뀔지 칸마다 먼저 보여 드리고", "시즌 창에 그대로 쳐서 저장한 뒤 다시 읽어 맞는지 확인합니다",
+                     "새로 생기는 칸은 되돌려도 지울 수 없습니다"):
+            self.assertIn(said, bullet)
+        self.assertNotIn("시즌을 직접 채우지 않습니다", self.sheet + (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"))
         way = section(self.sheet, "## (가) 시즌 원판 바꾸기")
-        why = re.search(r"도우미는 시즌을 직접 채우지 않습니다 — [^\"]+때문입니다\.", way)
-        self.assertIsNotNone(why, "시즌을 채우지 않는다는 것과 그 까닭을 한 문장으로")
-        self.assertIn(why.group(0), (SKILL / "references" / "not-done.md").read_text(encoding="utf-8"), "「하지 않는 것」도 같은 문장")
+        self.assertIn("[season-fill.md](season-fill.md)", way)
         steps = ["「2. 지금 상태만 저장」", "[compare.md](compare.md)", "restore --saved S"]
-        self.assertEqual([step for step in steps if step in way], steps, "저장 → 다시 읽어 견주기(compare.md) → 되돌리기")
+        self.assertEqual([step for step in steps if step in way], steps, "손으로 채울 때 — 저장 → 다시 읽어 견주기(compare.md) → 되돌리기")
         self.assertLess(way.index(steps[0]), way.index(steps[1]))
         self.assertLess(way.index(steps[1]), way.index(steps[2]))
         compare = (SKILL / "references" / "compare.md").read_text(encoding="utf-8")
@@ -402,6 +410,21 @@ class SheetDocsTest(unittest.TestCase):
         self.assertEqual([step for step in steps if step in compare], steps, "다시 읽기 → 견주기 → 페이지 → 되돌리기")
         self.assertEqual(sorted(steps, key=compare.index), steps)
         self.assertIn("시즌 창에는 다시 채운 입력값이 그대로 보이고, 캘린더의 날짜별 값만 저장해 둔 값으로 돌아갑니다", way)
+        not_done = (SKILL / "references" / "not-done.md").read_text(encoding="utf-8")
+        self.assertIn("도우미는 시즌 창의 '이번에 고르지 않은 인원·요금제 가격 지우기'를 켜지 않습니다", not_done)
+
+    def test_s9_the_season_fill_flow_says_the_undo_limits_and_the_press_gap_the_pages_say(self):
+        """season-fill.md 가 「적용」 전에 말하는 문장은 페이지(season_pages)가 보이는 문장과 같다 — 새 칸 · 되돌리기 · 다시 채우면 다시
+        들어감 · 누르는 순간의 빈틈(몇 초, dry run)."""
+        import season_pages
+        flow = (SKILL / "references" / "season-fill.md").read_text(encoding="utf-8")
+        for sentence in (season_pages.UNDO_WHAT, season_pages.UNDO_REFILL, season_pages.UNDO_CREATED.format(n="○")):
+            self.assertIn(sentence, flow)
+        for said in ("몇 초", "보이지 않은 채 덮입니다", "미리 해 보기"):
+            self.assertIn(said, flow)
+        readme = (SKILL.parent.parent / "README.md").read_text(encoding="utf-8")
+        self.assertIn("시즌 다시 채우기", readme)
+        self.assertIn("dry run", readme)
 
     def test_the_child_percentage_question_reads_as_a_discount_and_names_every_guest_combination_it_covers(self):
         """K4 — 시운전의 물음 「'3박 이상 -10%'를 … 칸 전체에 하면」은 할인으로 읽히지 않았고, 한 답이 여러 인원 조합에 가는데 하나만 댔다."""

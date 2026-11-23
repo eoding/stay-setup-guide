@@ -25,10 +25,10 @@ metadata:
 - 한 번에 호텔 하나. 변경 하나는 오퍼 하나다(오퍼가 둘이면 차례로 두 번).
 - 값은 명령이 셈하고 견준다. 도우미는 금액·퍼센트를 담당자의 말 그대로 요청에 적을 뿐이다.
 - 호텔·오퍼·객실·요금제 이름은 `stayPrice.look()` 의 답에서만 옮긴다. 호텔은 그 `hotel`(번호와 이름) 그대로다.
-- 페이지를 만지는 것은 `stayPrice.look()` 과 작업 넷(`readPair`·`readReserved`·`applyBulk`·`applyCell`)뿐이다. `take`·`last`·`idle` 은 읽기만 한다.
+- 페이지를 만지는 것은 `stayPrice.look()`, 작업 넷(`readPair`·`readReserved`·`applyBulk`·`applyCell`), [시즌 창](references/season-fill.md) 작업 둘뿐이다. `take`·`last`·`idle` 은 읽기만 한다.
 - 러너의 함수(`stayRun.*`, `runStep`, `runCalendarPriceStep`, `cal…` 부트 함수)를 직접 부르지 않는다.
 - 브라우저 도구의 클릭·글자 입력·폼 채우기 도구를 ERP 탭에 쓰지 않는다. 화면은 스크린샷과 페이지 읽기로만 본다. 파일 올리기 도구는 도우미를 올릴 때만 쓴다.
-- 같은 저장을 두 번 누르지 않는다. 한 번 부른 `applyBulk`·`applyCell` 을 스스로 다시 부르지 않는다. 답이 `started: false`(아무것도 누르지 않음)일 때만 `wait` 초 뒤 같은 값으로 다시 부른다.
+- 같은 저장을 두 번 누르지 않는다. 한 번 부른 저장 작업(`apply…`)을 스스로 다시 부르지 않는다. 답이 `started: false`(아무것도 누르지 않음)일 때만 `wait` 초 뒤 같은 값으로 다시 부른다.
 - 벽을 내리지 않는다. `stayPrice.standDown()` 을 부르지 않는다. 답의 `blocked` 에 막힌 클릭이 있으면 돌아가는 길을 찾지 말고 담당자에게 그대로 알리고 멈춘다.
 - 아이디·비밀번호·인증 코드를 받지도 넣지도 않는다. 채팅으로 보내 와도 넣지 않는다.
 - JS 결과로 페이지 주소(`location.href` 같은 것)를 돌려받지 않는다. 브라우저 도구가 답을 통째로 막는다.
@@ -40,7 +40,7 @@ metadata:
 
 - 쉬운 우리말로 한다. 쓰지 않는 말: 스냅샷·플랜·JSON·명령·스크립트·DB·SQLite·API·캐시·payload·stale·verify. 대신 지금 값·미리보기·장부·저장·칸·ERP 화면이라고 한다.
 - 숫자는 명령의 짧은 답(`counts` · `saves` · `red` · `chosen` · `restored` …)에서 말한다. 페이지는 시스템의 여는 명령으로 담당자에게 열어 준다(브라우저 도구로는 못 연다)(macOS `open "<경로>"`, Windows `start "" "<경로>"`, Linux `xdg-open "<경로>"` — 경로는 `render` 의 답 `page`). 페이지에 적힌 글을 그대로 옮겨야 하면 같은 `render` 에 `--text` 를 붙여 답의 `text` 에서 옮긴다.
-- "날짜별로 펼쳐 줘"면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다(commands.md `render`).
+- "날짜별로 펼쳐 줘"면 방금 연 페이지의 `render` 를 `--by-date` 를 붙여 다시 하고 그 페이지를 연다.
 
 ## 준비 — 시킨 일마다 3 부터
 
@@ -161,4 +161,4 @@ metadata:
 
 ## 하지 않는 것
 
-그 밖의 일(손님 화면 미리 보기 · 호텔 둘 · 판매 마감 · 객실 · 요금제 · 취소정책 · 부과금 · 프로모션 · 부가옵션 · 새 칸 지우기 · 다른 컴퓨터 기록 · 시즌 원판)을 시키면 [references/not-done.md](references/not-done.md) 대로 답한다.
+그 밖의 일(손님 화면 미리 보기 · 호텔 둘 · 판매 마감 · 객실 · 요금제 · 취소정책 · 부과금 · 프로모션 · 부가옵션 · 새 칸 지우기 · 다른 컴퓨터 기록)을 시키면 [references/not-done.md](references/not-done.md) 대로 답한다.
