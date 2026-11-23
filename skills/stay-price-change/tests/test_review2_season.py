@@ -398,5 +398,25 @@ class UnknownSaveTest(SeasonCase):
                           "「모름」인 2번째 저장 뒤의 띠는 1번째 저장의 수로 읽어 주지 않는다")
 
 
+class StoppedPageWordsTest(SeasonCase):
+    """W 보고 5 의 남은 것 — 멈춘 시즌 변경의 결과 페이지 「고르신 빨간 줄」은 규칙 코드가 아니라 쉬운 말이다."""
+
+    def test_s13_the_stopped_season_result_page_names_chosen_rules_in_plain_words(self):
+        window = season_scene.window(dates=[DAY], rooms=["디럭스"])
+        snapshot = replace(season_scene.snapshot((), pairs=[BB], dates=[DAY]), cells={key("A2"): CellValue(D("180"), None, None, "open")})
+        short, _plan, plan_file = self.plan(window, snapshot, [{"pairs": [{"room": BB[0], "rate_plan": BB[1]}], "price": "190",
+                                                                "occupancy_keys": "A2", "los_prices": "3:170", "overwrite": True}],
+                                            choices=[{"save": 1, "rule": "NEW_ROW", "choice": "include", "said": "3박 줄 생겨도 돼"}])
+        change = short["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.answer(call, ok=False, saved=False, refused=True,
+                                                                             error="시즌 창이 저장을 거절했습니다 — 조정 값은 부호를 붙여 주세요"), now=60)
+        page = self.cli("render", "result", "--change", change, "--text", now=70)["text"]
+        self.assertIn("고르신 빨간 줄", page)
+        self.assertIn("이 객실 · 요금제에 없던 인원 조합 · 박수 줄이 생깁니다 | 이대로 채움", page)
+        self.assertNotIn("NEW_ROW", page)
+
+
 if __name__ == "__main__":
     unittest.main()

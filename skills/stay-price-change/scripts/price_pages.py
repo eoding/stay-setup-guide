@@ -41,6 +41,7 @@ from price_model import (
 )
 from price_compare import MOVED, Comparison, compare_counts
 from price_plan import counts, day_runs, days_summary
+from price_season import CHOICE_WORDS as SEASON_CHOICES, KEEPS as SEASON_KEEPS, KIND as SEASON_KIND, RULES as SEASON_RULES
 from price_sheet import CHILD_READINGS, SheetCheck, SheetLine, coverage_counts, line_figures, periods_label, runs_label
 
 MAKER = "어딩 Stay 가격 변경 도우미"
@@ -845,11 +846,16 @@ def _chosen_table(record: ChangeRecord) -> str:
     """고르신 빨간 줄마다 — 빨간 줄 · 고르신 것 · 칸 수 · 고르실 때 하신 말(장부의 줄에서). 고르셨지만 어느 칸도 쓰지 않은 고름도
     그 까닭과 하신 말과 함께 0칸으로 싣는다(장부의 `unused_choices` — 미리보기의 「고르신 빨간 줄」과 같은 고름)."""
     request = decode_request(record.request) if record.request and record.request.get("kind") in ("change", "targets") else None
+    season = (record.request or {}).get("kind") == SEASON_KIND   # 시즌 다시 채우기 — 규칙 · 고름의 이름이 시즌 창의 것이다
 
     def words(choice: str, keys) -> str:
+        if season:
+            return SEASON_CHOICES.get(choice, choice)
         return choice_words(request, choice, record.currency, keys) if request else CHOICE_LABELS[choice]
 
     def label(code: str) -> str:
+        if season and (code in SEASON_RULES or code in SEASON_KEEPS):
+            return SEASON_RULES[code][0] if code in SEASON_RULES else SEASON_KEEPS[code]
         rule = CELL_RULES.by_code.get(code)
         return rule.label if rule else str(code)
 
@@ -980,8 +986,9 @@ def render_compare(comparison: Comparison, scope: str = "", by_date: bool = Fals
         if item.kind == "gone":
             return "red", (f'<span class="was">{fmt_money(item.then.sell, currency)}</span><span class="tag red">없어짐</span>'
                            + edited)
-        if item.kind == "closed":
-            was, now = ("판매 가능", "판매 마감") if item.now.state == "closed" else ("판매 마감", "판매 가능")
+        if item.kind == "closed":   # 판매 상태만 달라짐 — 「인원·박수별 상태 다름」인 날의 칸은 칸마다 어느 쪽인지 모른다(mixed)
+            words = {"open": "판매 가능", "closed": "판매 마감", "mixed": "칸마다 판매 상태 다름"}
+            was, now = words.get(item.then.state, item.then.state), words.get(item.now.state, item.now.state)
             return "", f'<span class="now">{fmt_money(item.now.sell, currency)}</span><small class="more">{was} → {now}</small>'
         return "", _move(item.then, item.now, currency) + edited
 
