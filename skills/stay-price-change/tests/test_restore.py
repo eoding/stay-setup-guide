@@ -72,7 +72,7 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual({k: v for k, v in after.cells.items() if k != CREATED},
                          {k: v for k, v in self.saved_state.cells.items() if k != CREATED})
 
-    def test_a_restore_is_recorded_as_a_change_and_is_not_rolled_back_again(self):
+    def test_a_restore_is_recorded_as_a_change_and_is_rolled_back_like_one(self):
         plan = plan_cell_restore(self.ledger.recorded_snapshot(self.saved), self.saved_state.range, self.now)
         restore = self.ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
                                              sentence="저장해 둔 상태로", read_at=plan.read_at, rows=rollback_rows(plan),
@@ -87,11 +87,14 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual((record.kind, record.status, record.request["kind"]), ("change", "applied", "restore_snapshot"))
         self.assertIn(f"되돌리기 결과 · {scene.HOTEL} · {scene.OFFER} 장부 {restore}번 · 요청 “저장해 둔 상태로” · "
                       f"{self.saved}번에 저장해 둔 상태로 되돌림", visible(render_result(record)), "Z8 — 저장 상태로 되돌린 결과도 되돌리기 결과")
-        with self.assertRaisesRegex(LedgerError, f"{restore}번은 {self.saved}번 저장 상태로 되돌리기입니다 — 되돌리기는 다시 되돌리지 않습니다"):
-            self.ledger.undoable(restore)
-        with self.assertRaisesRegex(LedgerError, "다시 되돌리지 않습니다"):
-            self.ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency,
-                                       sentence="되돌려", read_at=restored.read_at, rows=[], reverses=restore, empty=True)
+        written = self.ledger.list_changes(restore)[0]["written"]
+        again = plan_cell_rollback(self.ledger.recorded_change(restore), self.ledger.later_writes(restore), restored)
+        self.assertEqual((len(again.restored), len(again.kept)), (written, 0), "저장 상태로 되돌리기도 되돌린다 — 그것이 덮은 값으로")
+        self.assertEqual({item.key: dict(item.targets) for item in again.restored},
+                         {item.key: {name: item.now.fields.get(name) for name in item.targets} for item in plan.restored
+                          if item.key in {i.key for i in again.restored}}, "되돌리기 전(지금 읽은) 값으로 돌아간다")
+        self.assertEqual(again.undoing, f"장부 {restore}번({self.saved}번 저장 상태로 되돌리기)을 되돌립니다 — {restore}번이 바꾸기 전 "
+                                        "값으로 돌아갑니다.")
 
     def test_a_cell_the_saved_state_never_had_is_unremovable_and_a_cell_outside_its_range_is_not_named(self):
         tier = CellKey("디럭스", "조식 포함", "2026-12-25", "A2", 5)        # 5박 이상 — 저장할 때는 없던 박수 층(시즌을 다시 채워 생김)

@@ -29,8 +29,8 @@
                  말과 그 까닭). 항목 줄에는 남지 않아, 결과 페이지의 「고르신 빨간 줄」이 미리보기처럼 이것으로 댄다
 
 어느 기록의 값이 ERP 에 살아 있는지(되돌렸는지 · 되돌렸다가 다시 살렸는지)는 장부에 적어 두지 않고 저장된 값들의 차례에서 그때마다
-셈한다(`_chain` — change_core.alive). 목록 · 되돌리기 · 결과 페이지 · 견주기가 같은 셈을 읽는다. 되돌리기와 저장 상태로 되돌리기는
-아직 다시 되돌리지 않는다(`_undoable`).
+셈한다(`_chain` — change_core.alive). 그래서 되돌리기도 저장 상태로 되돌리기도 바꾸기처럼 되돌릴 수 있고, 몇 번을 되돌려도 목록 ·
+되돌리기 · 결과 페이지 · 견주기가 같은 셈을 읽는다.
 
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 다(적용한 것이 아니다 — 목록에서 적용된 변경과 갈린다).
 바뀌는 항목이 없거나 빨간 줄을 모두 안 바꾸기로 고른 미리보기는 적는 순간 상태가 empty 다 — 적용할 것이 없어 begin 이 받지 않고,
@@ -517,8 +517,8 @@ class Ledger:
         if empty and any(row.action for row in rows):
             raise LedgerError("저장할 것이 없다는 미리보기에 넣는 값이 있습니다 — 미리보기를 다시 계산합니다")
         with self._db() as db:
-            if reverses is not None:
-                self._undoable(db, reverses)
+            if reverses is not None and self._header(db, reverses)["kind"] == "snapshot":
+                raise LedgerError(_saved_state(reverses))
             if replaces is not None:
                 self._replace(db, replaces, self._acts(kind, reverses, request), hotel_id, offer)
             change_id = self._insert(db, kind, "empty" if empty else "previewed", hotel, hotel_id, offer, currency, sentence,
@@ -881,27 +881,9 @@ class Ledger:
                            saved[-1] if saved else None,
                            next((step for step in seen_steps if step.index == remaining[0]), None) if remaining else None, note)
 
-    def _undoable(self, db, change_id: int):
-        """되돌릴 수 있는 번호의 머리 — 지금 상태 저장 · 되돌리기 · 저장 상태로 되돌리기는 거절한다(모듈 머리글)."""
-        header = self._header(db, change_id)
-        if header["kind"] == "snapshot":
-            raise LedgerError(_saved_state(change_id))
-        request = None if header["request"] is None else json.loads(header["request"])
-        if header["kind"] == "rollback" or (request or {}).get("kind") == "restore_snapshot":
-            acts = self._acts(header["kind"], header["reverses"], request)
-            raise LedgerError(f"{change_id}번은 {acts}입니다 — 되돌리기는 다시 되돌리지 않습니다. 되돌린 값으로 다시 바꾸려면 되돌린 "
-                              "변경(목록에서 이 번호가 되돌린 줄)과 같은 요청으로 새로 바꿉니다 — 지금 값을 다시 읽어 미리보기부터")
-        return header
-
-    def undoable(self, change_id: int) -> RecordedChange:
-        """되돌리기 계산의 재료(recorded_change) — 되돌릴 수 있는 번호일 때만(_undoable)."""
-        with self._db() as db:
-            self._undoable(db, change_id)
-        return self.recorded_change(change_id)
-
     def recorded_change(self, change_id: int) -> RecordedChange:
         """되돌리기 계산 · 견주기의 재료 — 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만(_ours, 장부의 차례에서 셈한다).
-        견주기는 되돌리기 · 저장 상태로 되돌리기의 재료도 읽는다."""
+        되돌리기 · 저장 상태로 되돌리기도 바꾸기처럼 재료를 낸다(되돌린 기록 · 저장 번호를 함께)."""
         with self._db() as db:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
@@ -916,7 +898,8 @@ class Ledger:
                 items.append(RecordedItem(kind, key, rows[0]["label"], rows[0]["state"],
                                           {row["field"]: money(row["before"]) for row in rows}, written))
         return RecordedChange(header["id"], header["kind"], header["hotel"], header["offer"], header["currency"],
-                              header["sentence"], header["read_at"], header["applied_at"], tuple(items), header["hotel_id"])
+                              header["sentence"], header["read_at"], header["applied_at"], tuple(items), header["hotel_id"],
+                              header["reverses"], _restored(header["kind"], header["request"]))
 
     def recorded_snapshot(self, change_id: int) -> RecordedChange:
         """저장해 둔 상태로 돌리기의 재료 — snapshot 에 적은 항목 전부와 그때 값(넣은 값은 없다)."""

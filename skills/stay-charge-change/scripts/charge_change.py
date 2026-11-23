@@ -333,7 +333,7 @@ def cmd_rollback(args):
     ledger = open_ledger()
     now = decode_snapshot(load(args.snapshot))
     select, scope = charge_filter(args.charge or ())
-    plan = plan_charge_rollback(ledger.undoable(args.change), ledger.later_writes(args.change), now, args.include_kept,
+    plan = plan_charge_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept,
                                 select)
     steps = rollback_steps(plan, now)
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
@@ -430,7 +430,7 @@ def short_rollback(result: dict) -> dict:
                 restored=len(plan.restored), kept=len(plan.kept),
                 kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, items=count)
                           for (change_id, at, sentence), count in causes.items()],
-                saves=len(result["steps"]))
+                saves=len(result["steps"]), undoing=plan.undoing or None)
 
 
 SHORT = {"look": short_look, "read-calls": short_read_calls, "read": short_read, "plan": short_plan, "rollback": short_rollback}

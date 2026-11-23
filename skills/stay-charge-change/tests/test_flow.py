@@ -662,25 +662,47 @@ class ReadAgainTest(Flow):
         self.assertEqual(self.cli("check", "--change", change, "--snapshot", self.read(record=change))["cause"], "failed")
 
 
-class UndoOnceTest(Flow):
-    """검토 3 — 되돌리기는 다시 되돌리지 않는다(change_core.ledger 의 _undoable). 거절하고 아무것도 적지 않으며, 목록의 「모두 되돌림」과
-    「되돌릴 것이 없습니다」는 ERP 에 살아 있는 값(바꾸기 전 값)과 같다."""
+class UndoAgainTest(Flow):
+    """검토 3 — 되돌리기도 바꾸기처럼 되돌린다(장부가 차례에서 셈한다 — change_core.alive). 바꾸기 → 되돌리기 → 그 되돌리기의
+    되돌리기를 이 도우미의 명령으로 하면 ERP 는 바꾼 값을 다시 갖고, 목록과 되돌릴 것이 그것과 같다."""
 
-    def test_a_rollback_is_not_rolled_back_again_and_the_list_stays_true(self):
+    def undo(self, number: int) -> tuple[int, dict]:
+        out = self.work / f"rollback-of-{number}.json"
+        short = self.cli("rollback", "--change", number, "--snapshot", self.read(record=number), "--record", "--out", out)
+        self.apply(short["change_id"], out)
+        return short["change_id"], short
+
+    def offered(self, number: int) -> int:
+        """그 번호를 지금 되돌리자고 하면 되돌릴 칸 수(장부에 적지 않는 계산) — 되돌릴 것이 없다고 하면 0."""
+        out = self.work / f"offer-{number}-{len(self.erp.posts)}-{self.erp.reads}.json"
+        env = dict(self.env, STAY_PRICE_TEST_NOW=self.erp.clock.isoformat())
+        done = subprocess.run([sys.executable, str(SCRIPT), "rollback", "--change", str(number), "--snapshot", str(self.read(record=number)),
+                               "--out", str(out)], capture_output=True, text=True, env=env)
+        if done.returncode == 2:
+            self.assertIn("아직 되돌리지 않은 것이 없습니다", json.loads(done.stderr)["error"])
+            return 0
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)["restored"]
+
+    def test_a_rollback_of_a_rollback_brings_the_change_back_and_the_list_stays_true(self):
+        before = scene.copy.deepcopy(self.erp.data)
         change, plan = self.preview(self.request(GALA, value="100"))
         self.apply(change, plan)
-        back = self.work / "rollback-1.json"
-        rollback = self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), "--record", "--out", back)["change_id"]
-        self.apply(rollback, back)
-        again = self.work / "rollback-2.json"
-        refused = self.cli("rollback", "--change", rollback, "--snapshot", self.read(record=rollback), "--record", "--out", again,
-                           code=2)["error"]
-        self.assertIn(f"{rollback}번은 {change}번 되돌리기입니다 — 되돌리기는 다시 되돌리지 않습니다", refused)
-        self.assertFalse(again.exists())
-        rows = {entry["id"]: entry for entry in self.cli("list", "--all")["changes"]}
-        self.assertEqual((sorted(rows), rows[change]["status"], rows[change]["undone_by"]), ([change, rollback], "rolled_back", [rollback]))
-        self.assertIn("아직 되돌리지 않은 것이 없습니다",
-                      self.cli("rollback", "--change", change, "--snapshot", self.read(record=change), code=2)["error"])
+        changed = scene.copy.deepcopy(self.erp.data)
+        self.assertNotEqual(changed, before)
+        rollback, _short = self.undo(change)
+        self.assertEqual(self.erp.data, before)
+        again, short = self.undo(rollback)
+        self.assertEqual(short["undoing"], f"장부 {rollback}번({change}번 되돌리기)을 되돌립니다 — {change}번이 넣었던 값으로 돌아갑니다.")
+        self.assertEqual(self.erp.data, changed, "되돌리기를 되돌리면 ERP 는 바꾼 값을 다시 갖는다")
+        rows = self.listed()
+        self.assertEqual((rows[change]["status"], rows[change]["redone_by"]), ("applied", [rollback, again]))
+        self.assertTrue(rows[change]["scope"].endswith(f"되돌렸다가 다시 살림 (장부 {rollback}번 · {again}번)"), rows[change]["scope"])
+        self.assertEqual((rows[rollback]["status"], rows[rollback]["undone_by"]), ("rolled_back", [again]))
+        self.assertEqual([self.offered(number) for number in (change, rollback, again)], [1, 0, 1])
+        result = self.cli("render", "result", "--change", again, "--snapshot", self.read(record=again), "--text")
+        self.assertIn(f'이 되돌리기도 되돌릴 수 있습니다 — 대화창에서 "{again}번 되돌려"라고 하시면 되돌리기 전 값으로 돌아갑니다.',
+                      result["text"])
 
 
 if __name__ == "__main__":

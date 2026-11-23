@@ -1,8 +1,9 @@
 """되돌리기 계산 — 장부의 변경 하나(또는 그 일부)를 적어 둔 값으로 돌리거나(plan_rollback), 저장해 둔 상태로 돌린다(plan_restore).
 
-되돌리기는 항목마다 본다: 그 변경이 쓴 필드가 지금도 모두 그때 넣은 값이면 적어 둔 값으로 돌리고, 하나라도 다르면 그대로 둔다.
-그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을 단다. 까닭은 이 장부의 나중 변경 가운데 지금 값을
-넣은 가장 최근 것, 없으면 도우미 밖이다. 도우미가 그 항목을 지금 저장하면 안 된다고 본 것(부가옵션 줄의 금액이 목록과 편집 창에서
+되돌리기는 항목마다 본다: 그 변경이 쓴 필드(아직 되돌리지 않은 것 — 장부가 셈한다, change_core.alive)가 지금도 모두 그때 넣은
+값이면 적어 둔 값으로 돌리고, 하나라도 다르면 그대로 둔다. 그대로 두는 항목에는 세 값(적어 둔 값 · 넣은 값 · 지금 값)과 까닭을
+단다. 까닭은 이 장부의 나중 변경 가운데 지금 값을 넣은 가장 최근 것, 없으면 도우미 밖이다. 되돌리기 · 저장 상태로 되돌리기도 같은
+규칙으로 되돌린다 — 적어 둔 값이 그것이 덮은 값이다. 도우미가 그 항목을 지금 저장하면 안 된다고 본 것(부가옵션 줄의 금액이 목록과 편집 창에서
 다르게 보임 같은 것 — `Cause.why`)은 같이 되돌리라고 해도 그대로 둔다. 그 변경이 새로 만든 항목(전 상태가 missing)은 지울 길이 없어 「지울 수 없는 것」이다.
 
 저장해 둔 상태로 돌리기는 그 범위의 모든 항목을 저장해 둔 값으로 맞춘다. 그때 없던 항목(없음으로 적었거나 아예 적지 않은 것 —
@@ -47,6 +48,20 @@ class RecordedChange:
     applied_at: str | None
     items: tuple[RecordedItem, ...]
     hotel_id: str = ""
+    reverses: int | None = None      # 되돌리기면 되돌린 기록
+    restores: int | None = None      # 저장 상태로 되돌리기면 그 저장 번호
+
+
+def undoing(recorded: RecordedChange) -> str:
+    """되돌리기 · 저장 상태로 되돌리기를 되돌릴 때 담당자에게 먼저 하는 말 — 무엇을 되돌리고 어느 값으로 돌아가는지. 바꾸기면 빈
+    글자."""
+    if recorded.reverses is not None:
+        return (f"장부 {recorded.id}번({recorded.reverses}번 되돌리기)을 되돌립니다 — {recorded.reverses}번이 넣었던 값으로 "
+                "돌아갑니다.")
+    if recorded.restores is not None:
+        return (f"장부 {recorded.id}번({recorded.restores}번 저장 상태로 되돌리기)을 되돌립니다 — {recorded.id}번이 바꾸기 전 "
+                "값으로 돌아갑니다.")
+    return ""
 
 
 @dataclass(frozen=True)
@@ -93,7 +108,8 @@ class KeptItem:
 
 @dataclass(frozen=True)
 class RollbackPlan:
-    """`mode` 가 rollback 이면 `reverses` 변경을 되돌리고, restore 면 `reverses` 번 저장해 둔 상태로 돌린다."""
+    """`mode` 가 rollback 이면 `reverses` 변경을 되돌리고, restore 면 `reverses` 번 저장해 둔 상태로 돌린다. `undoing` 은 되돌리는
+    것이 되돌리기 · 저장 상태로 되돌리기일 때 먼저 하는 말(undoing), 아니면 빈 글자."""
     reverses: int
     hotel: str
     offer: str
@@ -108,6 +124,7 @@ class RollbackPlan:
     unremovable: tuple[KeptItem, ...] = ()
     mode: str = "rollback"
     hotel_id: str = ""
+    undoing: str = ""
 
 
 def holds(state: ItemState, written: Fields) -> bool:
@@ -144,7 +161,7 @@ def plan_rollback(recorded: RecordedChange, later: Mapping[tuple[str, str], Sequ
             restored.append(restore)
     return RollbackPlan(recorded.id, recorded.hotel, recorded.offer, recorded.currency, recorded.read_at,
                         recorded.sentence, recorded.applied_at, read_at, tuple(restored), tuple(kept), include_kept,
-                        tuple(unremovable), hotel_id=recorded.hotel_id)
+                        tuple(unremovable), hotel_id=recorded.hotel_id, undoing=undoing(recorded))
 
 
 def plan_restore(snapshot: RecordedChange, now: Reading, read_at: str,
@@ -203,7 +220,7 @@ def encode_rollback(plan: RollbackPlan) -> dict:
     return dict(
         mode=plan.mode, reverses=plan.reverses, hotel=plan.hotel, hotel_id=plan.hotel_id, offer=plan.offer, currency=plan.currency, restore_to=plan.restore_to,
         original_sentence=plan.original_sentence, original_applied_at=plan.original_applied_at, read_at=plan.read_at,
-        include_kept=plan.include_kept,
+        include_kept=plan.include_kept, undoing=plan.undoing,
         restored=[dict(kind=item.kind, key=item.key, label=item.label, now=encode_state(item.now),
                        targets=_fields(item.targets)) for item in plan.restored],
         kept=[_encode_kept(item) for item in plan.kept],
@@ -222,4 +239,5 @@ def decode_rollback(data: Mapping) -> RollbackPlan:
         tuple(_decode_kept(item) for item in data.get("unremovable") or ()),
         str(data.get("mode") or "rollback"),
         str(data.get("hotel_id") or ""),
+        str(data.get("undoing") or ""),
     )

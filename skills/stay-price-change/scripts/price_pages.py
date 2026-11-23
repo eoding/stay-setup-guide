@@ -23,9 +23,9 @@ from decimal import Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from change_core.chrome import (
-    MOVED_TAG, UNDO_ONCE, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
+    MOVED_TAG, checked_when, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, nothing_left,
     notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_mode, stop_view,
-    stopped_choices, undoes, unremovable_table,
+    stopped_choices, undo_hint, undoes, unremovable_table,
 )
 from change_core.files import record_progress
 from change_core.ledger import ChangeRecord
@@ -801,11 +801,11 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
         if stop is None:
             lines = ["손님 화면에는 길어야 5분 안에 새 가격이 보입니다. 결제 금액은 바로 새 가격입니다.",
                      "이미 받은 예약의 금액은 그대로입니다.", MARK_ON_ROLLBACK if undoes else MARK,
-                     UNDO_ONCE if undoes else f'되돌리려면 대화창에서 "{record.id}번 되돌려" 또는 "방금 것 되돌려"라고 하세요.']
+                     undo_hint(record)]
         else:   # 멈췄다 — 새 가격 · 출처 표시는 저장한 칸만이고, 되돌리는 법은 위의 「어떻게 할까요?」가 말한다
             saved = f"저장한 {len(written):,}칸은"
             lines = [f"{saved} 손님 화면에 길어야 5분 안에 새 가격으로 보입니다. 결제 금액은 바로 새 가격입니다.",
-                     "이미 받은 예약의 금액은 그대로입니다.", f"{saved} ERP 에서 '손입력'으로 표시됩니다.", *([UNDO_ONCE] if undoes else [])]
+                     "이미 받은 예약의 금액은 그대로입니다.", f"{saved} ERP 에서 '손입력'으로 표시됩니다."]
         if ledger_path:
             lines.insert(3, f"기록: {ledger_path}")
         body.append(notes(lines))

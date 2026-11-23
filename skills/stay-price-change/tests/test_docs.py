@@ -22,7 +22,6 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL / "scripts"))
 
-from change_core.chrome import UNDO_ONCE_STOPPED  # noqa: E402
 from change_core.ledger import CAUSES, IDLE  # noqa: E402
 from price_browser import PAGE_KEEPS, READ_SPAN, read_calls, reserved_probes  # noqa: E402
 from price_change import parser  # noqa: E402
@@ -307,12 +306,22 @@ class TrialEightDocsTest(unittest.TestCase):
     def read(self, skill: str, place: str) -> str:
         return (SKILL.parent / skill / place).read_text(encoding="utf-8")
 
-    def test_a_stopped_rollback_is_not_offered_to_be_undone_and_the_page_says_the_same(self):
-        """되돌리기는 다시 되돌리지 않는다 — 멈춘 되돌리기에는 「된 것까지 되돌리기」가 없고, 세 도우미의 stopped.md 가 페이지와 같은 말을 한다."""
+    def test_a_rollback_is_undone_like_a_change_in_every_document(self):
+        """검토 3 — 되돌리기도 바꾸기처럼 되돌린다. 멈춘 되돌리기의 「된 것까지 되돌리기」는 된 저장을 되돌리기 전 값으로 되돌리고(페이지와
+        같은 말), 되돌리기를 되돌려 달라는 말은 같은 길로 하며, 되돌리기를 되돌리면 먼저 `undoing` 을 그대로 말한다. 세 도우미의 어느
+        문서도 되돌리기를 다시 되돌리지 않는다고 하지 않는다."""
         for skill in ("stay-price-change", "stay-addon-price-change", "stay-charge-change"):
             stopped = self.read(skill, "references/stopped.md")
             self.assertIn("멈춘 것이 되돌리기면", stopped, skill)
-            self.assertIn(f'"{UNDO_ONCE_STOPPED}"', stopped, skill)
+            self.assertIn("되돌리기 전 값", stopped, skill)
+            self.assertIn("`undoing`", self.read(skill, "references/commands.md"), skill)
+            for path in sorted((SKILL.parent / skill).rglob("*.md")):
+                self.assertNotIn("다시 되돌리지 않", path.read_text(encoding="utf-8"), path)
+        for skill in ("stay-price-change", "stay-charge-change"):
+            rollback = self.read(skill, "references/rollback.md")
+            self.assertIn("**되돌리기를 되돌려 달라면.** \"방금 되돌린 것 다시 되돌려줘\"처럼", rollback, skill)
+            self.assertIn("짧은 답의 `undoing` 이 있으면", rollback, skill)
+        self.assertIn("`undoing` 이 있으면 그 말부터.", self.read("stay-addon-price-change", "SKILL.md"))
 
     def test_u1_the_value_a_check_read_is_told_with_its_time_never_as_now(self):
         stopped = self.read("stay-price-change", "references/stopped.md")

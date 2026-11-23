@@ -28,7 +28,7 @@ from change_core.rules import Resolution  # noqa: E402
 from dataclasses import replace  # noqa: E402
 
 from price_model import (  # noqa: E402
-    CellKey, decode_resolution_items, encode_key, encode_request, encode_snapshot, encode_step, snapshot_reading,
+    CellKey, decode_resolution_items, encode_key, encode_request, encode_snapshot, encode_step, key_of_item, snapshot_reading,
 )
 from price_pages import render_result, result_name  # noqa: E402
 from price_plan import (  # noqa: E402
@@ -317,17 +317,17 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
             self.ledger(minutes + 0.5).record_step(rid, index, saved=True)
         return rid
 
-    def test_a_rollback_that_stopped_does_not_offer_to_undo_what_it_undid(self):
-        """되돌리기가 중간에 멈췄다(둘 가운데 첫 저장만 됨). 되돌리기는 다시 되돌리지 않으므로(`rollback` 이 거절한다) 페이지는
-        「된 것까지 되돌리기」를 권하지 않고, 남은 것은 되돌리던 변경을 새로 되돌리면 된다고 말한다 — 그때 나머지만 되돌린다."""
+    def test_a_rollback_that_stopped_offers_to_undo_what_it_undid_like_a_change(self):
+        """되돌리기가 중간에 멈췄다(둘 가운데 첫 저장만 됨). 되돌리기도 바꾸기처럼 되돌릴 수 있으므로 페이지는 「된 것까지 되돌리기」를
+        권한다 — 그 되돌리기가 되돌린 칸을 되돌리기 전 값(그 변경이 넣은 값)으로. 되돌리던 변경을 새로 되돌리면 나머지만 되돌린다."""
         self.ledger(2).record_step(self.change, 2, saved=True)
 
         def at(minutes):
             return (REAL + timedelta(minutes=minutes)).isoformat(timespec="seconds")
 
         ledger = self.ledger(10)
-        rollback = plan_cell_rollback(ledger.recorded_change(self.change), ledger.later_writes(self.change),
-                                      scene.applied(self.snapshot, self.steps, at(9)))
+        changed = scene.applied(self.snapshot, self.steps, at(9))
+        rollback = plan_cell_rollback(ledger.recorded_change(self.change), ledger.later_writes(self.change), changed)
         rid = ledger.record_preview(hotel=rollback.hotel, hotel_id=rollback.hotel_id, offer=rollback.offer, currency=rollback.currency,
                                     sentence="되돌려", read_at=rollback.read_at, rows=rollback_rows(rollback), reverses=self.change)
         steps = save_steps(rollback_writes(rollback))
@@ -338,11 +338,15 @@ class StoppedAfterARefusedSaveTest(unittest.TestCase):
         record = self.ledger(13).change(rid)
         text = page_text(render_result(record))
         self.assertEqual((record.status, result_name(record)), ("stopped", "되돌리다 멈춤"))
-        self.assertNotIn("된 것까지 되돌리기", text)
+        self.assertIn("된 것까지 되돌리기 — 이미 된 저장 한 번을 되돌리기 전 값으로 되돌립니다(미리보기를 먼저 보여 드립니다).", text)
         self.assertIn("이어서 — 남은 저장 한 번을 마저 적용합니다", text)
-        self.assertIn("남은 것을 되돌리려면 되돌리던 것을 새로 되돌려 달라고 하세요 — 이미 되돌린 것은 빼고 나머지만 되돌립니다.", text)
-        with self.assertRaisesRegex(Exception, "다시 되돌리지 않습니다"):
-            self.ledger(14).undoable(rid)
+        self.assertNotIn("다시 되돌리지 않습니다", text)
+        # 멈춘 되돌리기를 되돌리면 — 첫 저장이 되돌린 객실만, 그 변경이 넣은 값으로
+        half = scene.applied(changed, steps[:1], at(14))
+        back = plan_cell_rollback(self.ledger(14).recorded_change(rid), self.ledger(14).later_writes(rid), half)
+        self.assertEqual({key_of_item(item.key).room for item in back.restored}, {steps[0].room})
+        self.assertEqual([dict(item.targets) for item in back.restored],
+                         [{name: getattr(changed.cells[key_of_item(item.key)], name) for name in item.targets} for item in back.restored])
         # 되돌리던 변경을 새로 되돌리면 — 첫 저장이 되돌린 객실은 빼고, 아직 그 변경의 값인 객실만 되돌린다
         still = [step for step in self.steps if step.room != steps[0].room]
         again = plan_cell_rollback(self.ledger(15).recorded_change(self.change), self.ledger(15).later_writes(self.change),

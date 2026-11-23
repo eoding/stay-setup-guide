@@ -352,7 +352,7 @@ def cmd_rollback(args):
     ledger = open_ledger()
     now = decode_snapshot(load(args.snapshot))
     select, picked = line_filter(args.line or ())
-    plan = plan_line_rollback(ledger.undoable(args.change), ledger.later_writes(args.change), now, args.include_kept, select)
+    plan = plan_line_rollback(ledger.recorded_change(args.change), ledger.later_writes(args.change), now, args.include_kept, select)
     steps, rows = rollback_steps(plan, now), rollback_rows(plan, now)
     request = dict(kind="rollback", scope=picked) if picked else None      # 고른 줄 — 장부 목록의 범위 한 줄이 말한다
     change_id = ledger.record_preview(hotel=plan.hotel, hotel_id=plan.hotel_id, offer=OFFERLESS, currency=plan.currency,
@@ -467,7 +467,7 @@ def short_rollback(result: dict) -> dict:
                 kept_why=[dict(change_id=change_id, at=at, sentence=sentence, why=why, outside=change_id is None and why is None,
                                lines=count)
                           for (change_id, at, sentence, why), count in causes.items()],
-                saves=len(result["steps"]))
+                saves=len(result["steps"]), undoing=plan.undoing or None)
 
 
 SHORT = {"look": short_look, "read-calls": short_read_calls, "read": short_read, "plan": short_plan, "rollback": short_rollback}
