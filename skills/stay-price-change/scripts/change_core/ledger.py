@@ -946,8 +946,9 @@ class Ledger:
                               header["sentence"], header["read_at"], header["applied_at"], items, header["hotel_id"])
 
     def later_writes(self, change_id: int) -> dict[tuple[str, str], list[LaterWrite]]:
-        """이 변경 뒤에 같은 호텔·오퍼에 이 장부가 저장한 값 — 항목마다, 변경마다 하나씩, 저장한 차례대로(_chain 과 같은 차례 —
-        저장한 시각, 같은 초면 번호, 단계)."""
+        """이 기록 뒤에 같은 호텔·오퍼에 이 장부가 저장한 값 — 항목마다, 변경마다 하나씩, 저장한 차례대로. 「뒤」는 번호가 아니라
+        _chain 과 같은 차례다(저장한 시각, 같은 초면 번호, 단계): 지금 상태 저장은 적은 때 뒤, 변경은 그 항목을 저장한 단계 뒤(그
+        항목을 저장하지 않았으면 계산한 때 뒤). 그래서 미리보기와 그 적용 사이에 적은 지금 상태 저장 뒤의 그 적용도 「뒤」다."""
         grouped: dict[tuple[str, str, int], dict] = {}
         with self._db() as db:
             header = self._header(db, change_id)
@@ -955,10 +956,18 @@ class Ledger:
                 "SELECT item_values.*, steps.finished_at, changes.sentence FROM item_values"
                 " JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 " JOIN changes ON changes.id = item_values.change_id"
-                " WHERE item_values.change_id > ? AND steps.status = 'saved' AND changes.kind != 'snapshot'"
+                " WHERE steps.status = 'saved' AND changes.kind != 'snapshot'"
                 " AND changes.hotel_id = ? AND changes.offer = ? ORDER BY item_values.rowid",
-                (change_id, header["hotel_id"], header["offer"])).fetchall()
-        for row in sorted(rows, key=lambda row: (_moment(row["finished_at"]), row["change_id"], row["step"])):
+                (header["hotel_id"], header["offer"])).fetchall()
+        order = (lambda row: (_moment(row["finished_at"]), row["change_id"], row["step"]))   # noqa: E731
+        floor = (_moment(header["created_at"]), change_id, 0)
+        own: dict[tuple[str, str], tuple] = {}
+        for row in rows:
+            if row["change_id"] == change_id:
+                item = (row["item_kind"], row["item_key"])
+                own[item] = max(own.get(item, floor), order(row))
+        rows = [row for row in rows if row["change_id"] != change_id and order(row) > own.get((row["item_kind"], row["item_key"]), floor)]
+        for row in sorted(rows, key=order):
             entry = grouped.setdefault((row["item_kind"], row["item_key"], row["change_id"]),
                                        dict(at=row["finished_at"], sentence=row["sentence"], written={}))
             entry["at"] = max(entry["at"], row["finished_at"])
