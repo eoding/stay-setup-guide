@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import promotion_scene as scene
@@ -278,6 +279,27 @@ class LadderFlowTest(Flow):
         self.assertEqual((third["saves"], third["counts"]["will_change"]), (1, 1))
         self.apply(third["change_id"], self.work / "plan-3.json")
         self.assertEqual(self.erp.promotion("9002")["trigger"]["tiers"], [{"threshold": 2, "pct": "12"}, {"threshold": 3, "pct": "10"}])
+
+
+class NoCurrencyFlowTest(Flow):
+    """P5 (리뷰 2 · 파이썬 10) — 목록의 할인 금액 줄에 통화가 없는 호텔(ERP 의 마스터 통화는 비울 수 없어 실제로는 나오지 않을 것 —
+    도우미가 통화를 못 읽었을 때의 대비)에서 정액 할인을 7% 올리면 20 → 21.4 로 소수가 생긴다. 소수 둘로 짐작하지 않고 바꿀 수 없는
+    단으로 두고, 짧은 답과 미리보기가 그 문장을 말한다. 저장할 것이 없다."""
+
+    def test_a_fixed_amount_with_decimals_is_not_rounded_on_a_guessed_currency(self):
+        with mock.patch.dict(scene.DATA, {"currency": ""}):
+            change, plan, short = self.preview(self.request(FLAT, percent="7", sentence="정액 할인 7% 올려"))
+        self.assertEqual((short["saves"], short["counts"]["NO_CURRENCY"], short["counts"]["will_change"]), (0, 1, 0))
+        self.assertEqual(short["blocked"], [{
+            "tier": "9003 0", "name": "데모 오퍼 2027 · 상시 정액 할인 · 상시 단", "rule": "NO_CURRENCY",
+            "label": "호텔 통화를 읽지 못해(목록의 할인 금액에 통화가 없습니다) 소수가 생기는 할인 금액을 몇 자리로 맞출지 몰라 바꾸지 않습니다 — "
+                     "소수 없는 금액으로 말씀해 주시면 바꿉니다",
+            "why": "셈하면 21.4 — 소수가 생깁니다"}])
+        text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
+        self.assertIn("상시 단 · 할인 금액 | 20 → 21.4 | 바꿀 수 없음 호텔 통화를 읽지 못해(목록의 할인 금액에 통화가 없습니다) 소수가 생기는 할인 "
+                      "금액을 몇 자리로 맞출지 몰라 바꾸지 않습니다 — 소수 없는 금액으로 말씀해 주시면 바꿉니다 셈하면 21.4 — 소수가 생깁니다", text)
+        self.assertIn("저장할 것이 없습니다.", text)
+        self.assertNotIn("21.40", text, "소수 둘로 맞추지 않았다")
 
 
 class GateTest(Flow):

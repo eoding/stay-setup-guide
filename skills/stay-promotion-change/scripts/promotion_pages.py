@@ -50,7 +50,9 @@ def shown(value: Decimal | None, basis: str, currency: str) -> str:
         return f"{typed(value)}%"
     if basis == "FREE_NIGHT":
         return f"{typed(value)}박"
-    return f"{fmt_money(value, currency)} {currency}".strip()
+    if not currency:    # 호텔 통화를 모른다 — 통화 자릿수로 맞추지 않고 값 그대로(소수 둘로 짐작하지 않는다)
+        return f"{value:,f}"
+    return f"{fmt_money(value, currency)} {currency}"
 
 
 def _move(before, after, basis: str, currency: str) -> str:
@@ -169,6 +171,8 @@ def _why(plan: Plan, change: TierChange) -> str:
         return form_refusal(plan.promotion(change.promotion), {change.tier: change.after}) or ""
     if change.verdict == INVERTS:
         return ladder_text(plan, change)
+    if change.verdict == "NO_CURRENCY":
+        return f"셈하면 {typed(change.after)} — 소수가 생깁니다"
     return ""
 
 

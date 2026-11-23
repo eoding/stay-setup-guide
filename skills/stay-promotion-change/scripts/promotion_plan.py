@@ -46,10 +46,16 @@ class Facts:
     origin_known: bool
     free_stay: bool
     inverts: bool
+    no_currency: bool = False
 
 
 def _whole(value: Decimal | None) -> bool:
     return value is not None and value == value.to_integral_value()
+
+
+# 정액 할인인데 호텔 통화를 읽지 못했고(목록의 할인 금액 줄에 통화가 없음) 셈한 값에 소수가 생긴다 — 자릿수를 짐작해 반올림하지 않는다
+NO_CURRENCY = ("호텔 통화를 읽지 못해(목록의 할인 금액에 통화가 없습니다) 소수가 생기는 할인 금액을 몇 자리로 맞출지 몰라 바꾸지 않습니다 — "
+               "소수 없는 금액으로 말씀해 주시면 바꿉니다")
 
 
 # 판정 함수는 Facts 하나를 받는다. 위에서부터 처음 맞는 한 줄이 그 단의 판정이다.
@@ -61,6 +67,7 @@ RULES = RuleTable(
     Rule("PCT_RANGE", "할인율이 100% 를 넘습니다", BLOCKED, (), lambda f: f.basis == "PCT" and f.after is not None and f.after > HUNDRED),
     Rule("NOT_WHOLE", "무료 숙박은 박 단위 정수여야 합니다", BLOCKED, (), lambda f: f.basis == "FREE_NIGHT" and f.after is not None
          and not _whole(f.after)),
+    Rule("NO_CURRENCY", NO_CURRENCY, BLOCKED, (), lambda f: f.no_currency),
     Rule("FORM_REFUSES", "ERP 가 이 프로모션을 그 값으로 저장하지 않습니다", BLOCKED, (), lambda f: f.refused is not None),
     Rule("ZERO", "할인이 없어집니다", RED, ("include", "keep"), lambda f: f.after == 0),
     Rule("ROOM_FREE", "객실 요금이 무료가 됩니다", RED, ("include", "keep"), lambda f: f.free_stay),
@@ -88,7 +95,8 @@ def plain(value: Decimal) -> Decimal:
 
 def rounder(promotion: Promotion, currency: str) -> Callable[[Decimal], Decimal]:
     """단의 값의 반올림 — 할인율은 소수 둘, 할인 금액은 호텔 통화의 자릿수, 무료 숙박은 반올림하지 않는다(정수가 아니면 바꿀 수
-    없는 단으로 남긴다 — 도우미가 박수를 지어내지 않는다)."""
+    없는 단으로 남긴다 — 도우미가 박수를 지어내지 않는다). 통화를 모르는 할인 금액은 소수 없는 값만 쓴다(guessed_scale — 소수가
+    생기면 NO_CURRENCY 로 바꾸지 않는다)."""
     basis = promotion.basis
     if basis == "PCT":
         return lambda value: value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -251,6 +259,12 @@ def _after(before: Decimal | None, request: ChangeRequest, rounding: Callable[[D
     return plain(rounding(before * (HUNDRED + request.figure) / HUNDRED))
 
 
+def guessed_scale(promotion: Promotion, currency: str, exact: Decimal | None) -> bool:
+    """정액 할인의 셈한 값(반올림 전)을 맞출 자릿수를 짐작해야 하는지 — 호텔 통화를 모르고(그 프로모션 · 읽은 값 모두) 소수가 생길 때.
+    소수 없는 값은 어느 통화의 자릿수로도 그대로라 짐작이 없다."""
+    return promotion.basis == "FLAT" and not (promotion.currency or currency) and exact is not None and not _whole(exact)
+
+
 def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
     """짚은 단마다 전 → 후와 판정. 짚은 프로모션 가운데 읽은 값에 없는 것(지워졌거나 번호가 바뀐 것)은 `missing` 이다."""
     if snapshot.hotel_id != request.hotel_id:
@@ -271,27 +285,31 @@ def plan_change(snapshot: Snapshot, request: ChangeRequest) -> Plan:
                             f"{target.offer}) — look 의 번호를 씁니다")
         tier = promotion.tier(target.tier)
         before = promotion.value(tier)
-        found.append((target, promotion, tier, before, _after(before, request, rounder(promotion, currency))))
+        exact = _after(before, request, lambda value: value)
+        guessed = guessed_scale(promotion, currency, exact)
+        after = exact if guessed else _after(before, request, rounder(promotion, currency))   # 짐작해야 하면 셈한 값 그대로(저장하지 않는다)
+        found.append((target, promotion, tier, before, after, guessed))
         promotions[promotion.id] = promotion
     if not found and not missing:
         raise PlanError("읽은 값에 요청이 짚은 프로모션이 없습니다")
     changes = []
-    for target, promotion, tier, before, after in found:
+    for target, promotion, tier, before, after, guessed in found:
         planned = {other.at: promotion.value(other) for other in promotion.tiers()}
         then = dict(planned)
-        planned.update({t.at: a for t_, p, t, _b, a in found if p.id == promotion.id and a is not None})
+        planned.update({t.at: a for t_, p, t, _b, a, _g in found if p.id == promotion.id and a is not None})
         changes.append(TierChange(target.offer, promotion.id, tier.at, promotion.tier_label(tier), before, after,
-                                  _verdict(promotion, tier.at, before, after, then, planned)))
+                                  _verdict(promotion, tier.at, before, after, then, planned, guessed)))
     return Plan(request, snapshot.read_at, currency, tuple(changes), tuple(promotions.values()), tuple(dict.fromkeys(missing)))
 
 
-def _verdict(promotion: Promotion, at: str, before, after, then: Mapping, planned: Mapping) -> str | None:
+def _verdict(promotion: Promotion, at: str, before, after, then: Mapping, planned: Mapping,
+             guessed: bool = False) -> str | None:
     if after is not None and after == before:
         return None
     refused = form_refusal(promotion, {at: after}) if after is not None else None
     inverts = _inverted(promotion, at, planned) and not _inverted(promotion, at, then)
     return RULES.verdict(Facts(before, after, promotion.keeps, promotion.basis, refused, promotion.origin_known,
-                               free_stay(promotion, at, after), inverts))
+                               free_stay(promotion, at, after), inverts, guessed))
 
 
 def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:

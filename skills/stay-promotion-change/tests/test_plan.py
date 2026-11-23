@@ -6,11 +6,12 @@
 
 import unicodedata
 import unittest
+from unittest import mock
 from decimal import Decimal
 
 import promotion_scene as scene
 from promotion_model import GATE, ORIGIN_UNKNOWN, ModelError, Refused, Snapshot, decode_request, promotion_of, snapshot_items, tier_key
-from promotion_plan import PlanError, PromotionStep, Edit, plan_change, plan_steps, resolve, step_call
+from promotion_plan import RULES, PlanError, PromotionStep, Edit, plan_change, plan_steps, resolve, step_call
 from change_core.answers import BrowserError, attach_bodies
 from change_core.rules import Resolution
 
@@ -253,3 +254,35 @@ class LadderTest(unittest.TestCase):
         with self.assertRaises(Refused) as caught:
             resolve(plan, [Resolution("INVERTS", "include", ("9002 2",), "올려")])
         self.assertIn("항목이 아닙니다: 단 9002 2", str(caught.exception))
+
+
+class CurrencyTest(unittest.TestCase):
+    """P5 (리뷰 2 · 파이썬 10) — 정액 할인인데 호텔 통화를 읽지 못하면(목록의 할인 금액 줄에 통화가 없음) 소수가 생기는 셈은 짐작한
+    자릿수(소수 둘)로 반올림하지 않고 바꿀 수 없는 단(NO_CURRENCY)으로 둔다. 소수 없는 값은 어느 통화로도 그대로라 바꾼다."""
+
+    def snap(self):
+        with mock.patch.dict(scene.DATA, {"currency": ""}):
+            return snapshot("9003")
+
+    def test_a_fixed_amount_that_would_need_a_guessed_scale_is_refused_with_a_sentence(self):
+        snap = self.snap()
+        self.assertEqual((snap.currency, snap.promotions["9003"].currency), ("", ""))
+        for change, after in (({"percent": "7"}, "21.4"), ({"value": "25.5"}, "25.5"), ({"amount": "0.25"}, "20.25")):
+            plan, tier = one(snap, "601", "9003", "0", **change)
+            self.assertEqual((tier.verdict, tier.after, tier.writes), ("NO_CURRENCY", Decimal(after), False), change)
+            self.assertEqual(plan_steps(plan), (), change)
+        self.assertEqual(RULES.by_code["NO_CURRENCY"].label,
+                         "호텔 통화를 읽지 못해(목록의 할인 금액에 통화가 없습니다) 소수가 생기는 할인 금액을 몇 자리로 맞출지 몰라 바꾸지 않습니다 — "
+                         "소수 없는 금액으로 말씀해 주시면 바꿉니다")
+
+    def test_a_whole_result_needs_no_scale_and_is_changed(self):
+        snap = self.snap()
+        for change, after in (({"amount": "5"}, "25"), ({"percent": "10"}, "22"), ({"value": "24"}, "24")):
+            plan, tier = one(snap, "601", "9003", "0", **change)
+            self.assertEqual((tier.verdict, tier.after), (None, Decimal(after)), change)
+            step, = plan_steps(plan)
+            self.assertEqual([edit.value for edit in step.edits], [after])
+
+    def test_a_known_currency_still_rounds_to_its_scale(self):
+        self.assertEqual(one(snapshot("9003"), "601", "9003", "0", percent="7")[1].after, Decimal("21.4"), "USD 소수 둘")
+        self.assertEqual(one(snapshot("9003"), "601", "9003", "0", value="25.005")[1].after, Decimal("25.01"))
