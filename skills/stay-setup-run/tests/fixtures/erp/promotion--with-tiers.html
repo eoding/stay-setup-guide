@@ -3,8 +3,8 @@
 
 
 
-<script id="stay_promotion_tier_rows_initial" type="application/json">[{"threshold": "2", "value": "10"}, {"threshold": "4", "value": "15"}]</script>
-<div id="stay_promotion_form_00000000" data-stay-screen="promotion"
+<script id="stay_promotion_tier_rows_initial" type="application/json">[{"threshold": "2", "value": "10", "origin": "2", "off_form_keys": [], "off_form_keys_attr": null}, {"threshold": "4", "value": "15", "origin": "4", "off_form_keys": [], "off_form_keys_attr": null}]</script>
+<div id="stay_promotion_form_00000000" data-stay-screen="promotion" data-stay-keeps-off-form-keys="1"
      x-data="{
        tiers: JSON.parse(document.getElementById('stay_promotion_tier_rows_initial').textContent) || [],
        trigger: 'LOS',
@@ -99,7 +99,7 @@
     <div class="stay-card__head">
       <h4 class="stay-section-title" data-stay-label-for="tiers">할인 단계 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></h4>
       <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="add_row"
-              x-on:click="tiers.push({ threshold: trigger === 'ALWAYS' ? '0' : '', value: '' })">
+              x-on:click="tiers.push({ threshold: trigger === 'ALWAYS' ? '0' : '', value: '', origin: '', off_form_keys_attr: null })">
         단 추가
       </button>
     </div>
@@ -124,8 +124,9 @@
         <tbody>
           
           <template x-for="(tier, index) in tiers" :key="index">
-            <tr :data-stay-row="index">
+            <tr :data-stay-row="index" :data-stay-off-form-keys="tier.off_form_keys_attr">
               <td>
+                <input type="hidden" name="tiers_origin" value="?" :value="tier.origin">
                 <input type="number" name="tiers_threshold" step="1" min="0" data-stay-col="threshold" :aria-label="thresholdLabel"
                        x-model="tier.threshold" :disabled="false">
               </td>
