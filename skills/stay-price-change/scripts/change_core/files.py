@@ -23,7 +23,7 @@ from .answers import named
 from .ledger import KIND_NAMES, WORK, Ledger, clock, ledger_dir
 
 HELPERS = {"price_cell": ("stay-price-change", "price_change"), "addon_price": ("stay-addon-price-change", "addon_change"),
-           "charge": ("stay-charge-change", "charge_change")}   # 항목 종류 → 그 기록을 쓰는 도우미의 스킬 폴더와 명령 모듈
+           "charge": ("stay-charge-change", "charge_change"), "promotion": ("stay-promotion-change", "promotion_change")}   # 항목 종류 → 그 기록을 쓰는 도우미의 스킬 폴더와 명령 모듈
 
 LOOK = "look"   # 작업 폴더 안에서 look 답을 두는 폴더(SKILL.md 「준비」) — 다음 작업의 look 이 여기서 조각을 빌린다
 

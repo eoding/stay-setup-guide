@@ -19,6 +19,7 @@ from .items import MISSING_STATE, Reading, Refused
 from .money import money_text
 
 Form = tuple[tuple[str, str], ...]
+WATCHED = ("form.", "mark.")     # 적용 뒤 그대로여야 할 딸린 칸 — 창이 보내는 칸(`form.`)과 창의 표식(`mark.` — 프로모션의 화면 밖 설정 이름)
 Place = tuple[str, int]          # (칸 이름, 같은 이름 가운데 몇 번째 — 0 부터)
 
 
@@ -56,8 +57,8 @@ def _shown(value) -> str:
 def moved_since(ledger, change_id: int, then: Reading, now: Reading, unit: Callable[[str], str] | None = None,
                 label_of: Callable[[str, str], str] | None = None) -> list[dict]:
     """저장한 것 가운데 그대로여야 할 것이 달라진 것 — 저장 단위(`unit(항목 키)`, 주지 않으면 항목 하나)마다:
-    넣지 않은 금액이 미리보기 때 값과 다른 것(장부 `untouched`), 창이 보내는 딸린 칸(`form.` 으로 시작)이 그 번호의 읽은 값(`then`)과
-    다른 것, 그 단위에 미리보기 때 없던 항목이 생긴 것. 저장 한 번이 기록 하나를 통째로 다시 쓰는 화면에서, 저장이 바꾸라고 하지
+    넣지 않은 금액이 미리보기 때 값과 다른 것(장부 `untouched`), 창이 보내는 딸린 칸(`form.` 으로 시작)과 창의 표식(`mark.` 으로
+    시작)이 그 번호의 읽은 값(`then`)과 다른 것, 그 단위에 미리보기 때 없던 항목이 생긴 것. 저장 한 번이 기록 하나를 통째로 다시 쓰는 화면에서, 저장이 바꾸라고 하지
     않은 곳을 건드리지 않았는지 본다. `label_of(키, 필드)` 는 금액 칸의 이름(주지 않으면 필드 이름)."""
     unit = unit or (lambda key: key)
     label_of = label_of or (lambda key, field: field)
@@ -76,7 +77,8 @@ def moved_since(ledger, change_id: int, then: Reading, now: Reading, unit: Calla
         if before is None or after is None or after.state == MISSING_STATE:
             continue
         for name in sorted(set(before.others) | set(after.others)):
-            if name.startswith("form.") and before.others.get(name) != after.others.get(name):
+            if name.startswith(WATCHED) and before.others.get(name) != after.others.get(name):
+                word = " 칸" if name.startswith("form.") else ""
                 moved.append(dict(key=key, label=before.label,
-                                  what=f"{name[5:]} 칸 {before.others.get(name, '없음')!r} → {after.others.get(name, '없음')!r}"))
+                                  what=f"{name[5:]}{word} {before.others.get(name, '없음')!r} → {after.others.get(name, '없음')!r}"))
     return moved

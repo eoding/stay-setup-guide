@@ -75,7 +75,8 @@ WORK = "작업"                        # 기록 폴더 안의 작업 폴더들(f
 SCHEMA_VERSION = 3                   # 3 — 상태 empty(저장할 것이 없는 미리보기)
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
 CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
-KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장 · 목록)
+KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미",
+              "promotion": "프로모션 할인 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장 · 목록)
 OFFER_KIND = "price_cell"            # 장부의 오퍼 칸을 채우는 단 하나의 종류 — 부가옵션 · 부과금 도우미는 비운다(항목 줄이 없는 번호를 가른다)
 
 SCHEMA = """
