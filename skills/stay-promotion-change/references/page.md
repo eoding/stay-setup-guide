@@ -38,7 +38,7 @@
 |---|---|
 | `await stayPromotion.look()` | 이 탭이 어디인지 — 로그인 화면이면 `login: true`. 아니면 호텔(`{id, name}`)과 카드마다 프로모션 줄 전부(조각 `body`). 표의 머리가 「프로모션 / 발동 조건 / 혜택 / 중복 / 한정 / 액션」이 아니면 읽지 않는다 |
 | `await stayPromotion.readPromotion({hotel, offer, promotion})` | 그 줄의 [편집] 을 눌러 창을 열고, 창이 그 프로모션의 것인지(저장 주소) · 단 줄이 다 그려졌는지 본 뒤 저장 단추가 보낼 칸(`form`) · 고르기의 글자(`labels`) · 뿌리의 표식(`keeps`) · 단 줄마다 화면 밖 설정의 이름(`marks`) · 오류를 읽고 닫는다. 목록에 없으면 `missing: true` |
-| `await stayPromotion.applyPromotion({no, hotel, offer, promotion, title, form, marks, set})` | 명령의 `calls` 가 준 `payload` 그대로. 창을 열고 이름 · 표식 · 단 줄의 숨은 칸 `tiers_origin`(`?` 가 없어야 한다) · 단 표식이 읽은 것과 같은지 본 뒤, 창이 보낼 칸이 `form` 과 꼭 같을 때만 `set`(단의 값 칸 `tiers_value` 만)을 치고 저장을 한 번 누른다. `tiers_origin` 은 `form` 에 읽은 그대로 있고 치지 않는다(commands.md 「단」) |
+| `await stayPromotion.applyPromotion({no, hotel, offer, promotion, title, form, marks, set})` | 명령의 `calls` 가 준 `payload` 그대로. 창을 열고 이름 · 표식 · 단 줄의 숨은 칸 `tiers_origin`(줄마다 그 줄이 실려 온 단의 기준값 글자여야 한다 — `?` · 빈 값 · 다른 값이면 치지 않는다) · 단 표식이 읽은 것과 같은지 본 뒤, 창이 보낼 칸이 `form` 과 꼭 같을 때만 `set`(단의 값 칸 `tiers_value` 만)을 치고 저장을 한 번 누른다. `tiers_origin` 은 `form` 에 읽은 그대로 있고 치지 않는다(commands.md 「단」) |
 | `stayPromotion.take(id, at, size)` · `last()` · `idle()` | 조각의 한 쪽 · 마지막 작업의 답 · 쉬는 벽 — 읽기만 한다 |
 
 ## 답의 모양
@@ -50,6 +50,7 @@
 | 오류 (앞부분) | 뜻 · 할 일 |
 |---|---|
 | `이 프로모션의 편집 창은 ERP 가 할인 단 줄이 어느 저장된 단에서 왔는지 모르는 상태라…` (`refused: true`) | 그 창의 단 줄 가운데 숨은 칸 `tiers_origin` 이 `?` 인 줄이 있다. 아무것도 치지 않았고 누르지 않았다. 그 문장을 그대로 말하고 끝낸다 |
+| `이 프로모션의 편집 창은 할인 단 …번째 줄이 어느 저장된 단에서 왔는지 도우미가 알아볼 수 없어…` (`refused: true`) | 그 줄의 숨은 칸 `tiers_origin` 이 그 줄이 실려 온 단의 기준값이 아니다(빈 값 · 다른 값 · ERP 가 새로 쓰는 표시). 아무것도 치지 않았고 누르지 않았다. 장부에 적고(`record-result`) 그 문장을 그대로 말하고 끝낸다 |
 | `이 ERP 는 아직 프로모션을 화면으로 저장하면 …` (`gate: true`) | 그 창에 표식이 없다. 아무것도 치지 않았고 누르지 않았다. 그 문장을 그대로 말하고 끝낸다 |
 | `창의 단 표식(화면에 없는 설정)이 읽은 것과 다릅니다` · `창의 값이 읽은 값과 다릅니다` | 미리보기 뒤에 ERP 에서 그 프로모션이 바뀌었다. 아무것도 넣지 않았다 — 기록하고(`record-result`) stopped.md |
 | `친 뒤에 창이 바뀌었습니다(…) — 저장을 누르지 않았습니다` (`refused: true`) | 값을 친 뒤 [저장] 을 누르기 전(앞 요청이 끝나기를 기다리는 사이)에 창의 칸이 바뀌어 벽이 그 클릭을 막았다. 저장 요청은 나가지 않았다(`saved: false`). 다시 부르지 않는다 — 장부에 적고 stopped.md |

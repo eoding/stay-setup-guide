@@ -99,6 +99,21 @@ test('W4 · 단 줄의 숨은 칸 tiers_origin 이 「?」(ERP 가 그 줄의 �
   page.w.close();
 });
 
+test('P6 · 단 줄의 숨은 칸 tiers_origin 이 그 줄이 실려 온 단의 기준값이 아니면(「?」 · 빈 값 · 다른 단의 기준값 · ERP 가 더할 다른 표시) 명령이 그 창을 읽은 그대로 넘겨도 페이지가 치지 않는다', async () => {
+  const notOwn = '이 프로모션의 편집 창은 할인 단 1번째 줄이 어느 저장된 단에서 왔는지 도우미가 알아볼 수 없어(숨은 칸이 그 줄의 기준값이 아닙니다), 저장하면 화면에 안 보이는 설정이 다른 단에 붙거나 빠질 수 있어 도우미가 저장하지 않습니다 — 아무것도 치지 않았고 누르지 않았습니다';
+  for (const [origin, said] of [['?', ORIGIN_UNKNOWN], ['', notOwn], ['31', notOwn], ['46.0', notOwn], ['stored:none', notOwn]]) {
+    const page = promotionPage();
+    page.setOrigin(origin);
+    const win = await readWindow(page, '601', '9005');
+    assert.equal(win.form.find(([name]) => name === 'tiers_origin')[1], origin, '읽은 창이 그 값을 들고 있다');
+    const r = await apply(page, '601', '9005', win, [['tiers_value', 0, '16']]);
+    assert.deepEqual([r.ok, r.saved, r.pressed, r.refused], [false, false, false, true], JSON.stringify(origin));
+    assert.ok(r.error.startsWith(said.slice(0, 150)), `${JSON.stringify(origin)}: ${r.error}`);
+    assert.deepEqual([page.log.typed, page.log.posts], [[], []], JSON.stringify(origin));
+    page.w.close();
+  }
+});
+
 test('M4 · 단 줄의 화면 밖 설정 이름이 읽은 것과 다르면 아무것도 치지 않는다', async () => {
   const page = promotionPage();
   const win = await readWindow(page, '601', '9005');
