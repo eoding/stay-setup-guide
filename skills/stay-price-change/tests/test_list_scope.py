@@ -174,9 +174,9 @@ class NarrowedScopeTest(unittest.TestCase):
     def test_r5_a_narrowed_change_says_which_cells_and_its_rollback_and_restore_answers_carry_the_scope(self):
         nights, after = self.applied_change("nights", nights=(1,))
         self.assertEqual(self.line(nights), f"{HEAD} · 판매가 -5% (1박 이상만)")
-        both, _after = self.applied_change("both", nights=(1,), occupancies=("A2",))
-        self.assertEqual(self.line(both), f"{HEAD} · 판매가 -5% (성인 2 / 1박 이상만)")
 
+        # 되돌리기 계산은 둘째 변경을 적용하기 전에 한다 — 둘째 변경은 미리보기 때의 값 위에 셈해 성인 2 칸을 다시 넣으므로, 그 뒤에는
+        # 장부가 그 칸을 둘째 변경의 것으로 셈해 첫 변경의 되돌리기가 그대로 둔다(검토 2 의 5)
         back = self.cli("rollback", "--change", nights, "--snapshot", after, "--record", "--out", self.dir / "rollback-1.json")
         self.assertEqual(back["scope"], self.line(back["change_id"]), "짧은 답의 범위 = 장부 목록의 그 번호 줄")
         self.assertTrue(back["scope"].endswith(f"· {nights}번 되돌리기"), back["scope"])
@@ -186,6 +186,8 @@ class NarrowedScopeTest(unittest.TestCase):
         self.assertTrue(part["scope"].endswith(f"· {nights}번 되돌리기 (성인 2만)"), part["scope"])
         unrecorded = self.cli("rollback", "--change", nights, "--snapshot", after, "--out", self.dir / "rollback-3.json")
         self.assertEqual(unrecorded["scope"], back["scope"], "장부에 적지 않은 계산도 같은 줄")
+        both, _after = self.applied_change("both", nights=(1,), occupancies=("A2",))
+        self.assertEqual(self.line(both), f"{HEAD} · 판매가 -5% (성인 2 / 1박 이상만)")
 
         saved = self.cli("save-snapshot", "--snapshot", self.write("saved.json", encode_snapshot(self.snapshot)))["change_id"]
         restore = self.cli("restore", "--saved", saved, "--snapshot", after, "--record", "--out", self.dir / "restore-1.json")
