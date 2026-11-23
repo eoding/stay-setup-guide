@@ -91,11 +91,7 @@ metadata:
 
 ## 3. 되돌리기
 
-"어제 바꾼 프로모션 되돌려줘"면 [references/rollback.md](references/rollback.md) 대로 — 목록에서 맞는 줄을 골라 확인받고(하나뿐이어도), 되돌리기 미리보기를 연다. 분명한 "되돌려" 없이는 「적용하기」로 가지 않는다. `restored` 가 0 이면 "되돌려"를 청하지 않는다. 줄이 `rolled_back` · `previewed` · `empty` · `replaced` 면 「되돌릴 것이 없을 때」.
-
-## 되돌릴 것이 없을 때
-
-되돌리라고 한 줄이 목록에서 `rolled_back` 이면 읽지도 장부에 적지도 않고 목록으로만 답한다: "장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다." `previewed` · `empty` · `replaced` 면: "장부 <`id`>번은 미리보기만 하고 적용하지 않아 ERP 에 넣은 것이 없습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다."
+"어제 바꾼 프로모션 되돌려줘"면 [references/rollback.md](references/rollback.md) 대로 — 그 파일의 「줄 고르기」("방금 것" · "처음 값으로")대로 목록에서 맞는 줄을 골라 확인받고(하나뿐이어도), 되돌리기 미리보기를 연다. 분명한 "되돌려" 없이는 「적용하기」로 가지 않는다. `restored` 가 0 이면 "되돌려"를 청하지 않는다. 줄이 `rolled_back` · `previewed` · `empty` · `replaced` 면 그 파일의 「되돌릴 것이 없을 때」.
 
 ## 장부 보여줘
 

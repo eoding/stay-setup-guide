@@ -17,7 +17,7 @@ metadata:
 
 - 명령: 이 스킬 폴더의 `scripts/addon_change.py`(다른 폴더에서는 절대 경로로). JSON 파일을 받고 JSON 을 낸다. 파일에 쓰는 명령은 `--out` 을 주면 짧은 답만 낸다. 도우미는 짧은 답으로 말하고 정한다.
 - 페이지: 탭에 올린 `window.stayAddonPrice`. 가격 캘린더 도우미의 페이지 파일 위에 올린다(「준비」).
-- 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/not-done.md](references/not-done.md) 하지 않는 일.
+- 필요할 때만 여는 파일: [references/commands.md](references/commands.md) 명령 · 요청 파일 · 판정 · 오류, [references/page.md](references/page.md) 페이지 호출 · 답 · 오류, [references/rollback.md](references/rollback.md) 되돌리기, [references/stopped.md](references/stopped.md) 멈춘 변경, [references/not-done.md](references/not-done.md) 하지 않는 일.
 
 ## 반드시 지킬 것
 
@@ -89,16 +89,7 @@ metadata:
 
 ## 3. 되돌리기
 
-「준비」 5 의 목록에서 맞는 줄을 골라 확인받는다(하나뿐이어도 묻는다): "이것 맞나요? <그 줄의 `line`>". `rolled_back` · `previewed` · `empty` · `replaced` 는 「되돌릴 것이 없을 때」다.
-
-1. `read-calls --record <N>` 으로 「읽기」 → `<R>/snapshot.json`.
-2. `python3 scripts/addon_change.py rollback --change <N> --snapshot "<R>/snapshot.json" --record --sentence "<담당자 말>" --out "<작업>/rollback-1.json"`(줄 몇 개만이면 `--line <줄 번호>` 를 여러 번). 짧은 답의 `change_id` 가 M.
-3. `python3 scripts/addon_change.py render rollback --plan "<작업>/rollback-1.json"` → `page` 를 연다. `undoing` 이 있으면 그 말부터. "○월 ○일 ○시 ○분에 적어 둔 값으로 되돌립니다(`restore_to`)." 되돌리는 줄 수, 그대로 두는 줄(`kept`)의 수와 까닭(`kept_why`)을 반드시 말한다. 출처 표시('ERP 손입력')는 되돌아오지 않는다고 말한다. 저장 횟수(`saves`)를 말하고 끝에 "맞으면 '되돌려'라고 해 주세요." `saves` 가 0 이면 되돌릴 줄이 없다고만 하고 "되돌려"를 청하지 않는다(그 번호는 `begin` 이 받지 않는다).
-4. "되돌려" → 「적용하기」(번호 M, 계산 파일 `rollback-1.json`). "그 줄도 되돌려"면 2 에 `--include-kept --replaces <M>` 을 붙여 `rollback-2.json` 으로 다시 계산하고 3 부터 한다.
-
-## 되돌릴 것이 없을 때
-
-되돌리라고 한 줄이 목록에서 `rolled_back` 이면 읽지도 장부에 적지도 않고 목록으로만 답한다: "장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다." `previewed` · `empty` · `replaced` 면: "장부 <`id`>번은 미리보기만 하고 적용하지 않아 ERP 에 넣은 것이 없습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다."
+"어제 바꾼 부가옵션 가격 되돌려줘"면 [references/rollback.md](references/rollback.md) 대로 — 그 파일의 「줄 고르기」("방금 것" · "처음 값으로")대로 목록에서 맞는 줄을 골라 확인받고(하나뿐이어도), 되돌리기 미리보기를 연다. 분명한 "되돌려" 없이는 「적용하기」로 가지 않는다. `saves` 가 0 이면 "되돌려"를 청하지 않는다. 줄이 `rolled_back` · `previewed` · `empty` · `replaced` 면 그 파일의 「되돌릴 것이 없을 때」.
 
 ## 장부 보여줘
 

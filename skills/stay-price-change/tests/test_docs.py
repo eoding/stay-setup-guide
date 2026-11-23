@@ -255,11 +255,13 @@ class SkillBudgetTest(unittest.TestCase):
         ledger = ledger[:ledger.index("\n## ", 1)]
         for said in ("「준비」 1~5 만", "새것부터", "`line` 그대로", "덧붙이지 않고", "읽지도 장부에 적지도 않는다"):
             self.assertIn(said, ledger)
-        none = self.skill[self.skill.index("## 되돌릴 것이 없을 때"):]
+        rollback = (SKILL / "references" / "rollback.md").read_text(encoding="utf-8")
+        none = rollback[rollback.index("## 되돌릴 것이 없을 때"):]
         none = none[:none.index("\n## ", 1)]
         for said in ("`rolled_back`", "읽지도 장부에 적지도 않고", "\"장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다.\"",
-                     "`previewed` · `empty` · `replaced`"):
+                     "`previewed` · `empty`", "`replaced`", "장부 <`replaced_by`>번", "말씀인가요?"):
             self.assertIn(said, none)
+        self.assertIn("「되돌릴 것이 없을 때」", self.skill, "SKILL.md 가 그 절을 가리킨다")
 
     def test_n5_compare_and_skill_md_give_one_folder_rule_and_one_one_word_question(self):
         """N5 — 견주기 뒤의 되돌리기: 준비의 폴더 규칙과 compare.md 5 가 같은 말을 하고, 변경 되돌리기와 저장 상태로 되돌리기 사이의
@@ -324,7 +326,10 @@ class TrialEightDocsTest(unittest.TestCase):
             rollback = self.read(skill, "references/rollback.md")
             self.assertIn("**되돌리기를 되돌려 달라면.** \"방금 되돌린 것 다시 되돌려줘\"처럼", rollback, skill)
             self.assertIn("짧은 답의 `undoing` 이 있으면", rollback, skill)
-        self.assertIn("`undoing` 이 있으면 그 말부터.", self.read("stay-addon-price-change", "SKILL.md"))
+        self.assertIn("`undoing` 이 있으면 그 말을 그대로.", self.read("stay-addon-price-change", "references/rollback.md"))
+        for skill in ("stay-price-change", "stay-addon-price-change", "stay-charge-change", "stay-promotion-change"):
+            self.assertIn("먼저 \"되돌리기 미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다.\"",
+                          self.read(skill, "references/rollback.md"), f"W3 — {skill}: 되돌리기 미리보기도 여는 말이 있다")
 
     def test_u1_the_value_a_check_read_is_told_with_its_time_never_as_now(self):
         stopped = self.read("stay-price-change", "references/stopped.md")
@@ -343,7 +348,7 @@ class TrialEightDocsTest(unittest.TestCase):
     def test_u5_the_rollback_preview_ends_with_the_number_of_saves_and_asks_for_the_word(self):
         for skill, place, start in (("stay-price-change", "references/rollback.md", "\n3. "),
                                     ("stay-charge-change", "references/rollback.md", "\n3. "),
-                                    ("stay-addon-price-change", "SKILL.md", "\n3. `python3 scripts/addon_change.py render rollback")):
+                                    ("stay-addon-price-change", "references/rollback.md", "\n3. `python3 scripts/addon_change.py render rollback")):
             text = self.read(skill, place)
             step = text[text.index(start):]
             step = step[:step.index("\n4. ")]

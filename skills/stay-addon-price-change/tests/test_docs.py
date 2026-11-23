@@ -222,11 +222,13 @@ class SkillShapeTest(unittest.TestCase):
         ledger = ledger[:ledger.index("\n## ", 1)]
         for said in ("「준비」 1~5 만", "새것부터", "`line` 그대로", "덧붙이지 않고", "읽지도 장부에 적지도 않는다"):
             self.assertIn(said, ledger)
-        none = self.skill[self.skill.index("## 되돌릴 것이 없을 때"):]
+        rollback = (SKILL / "references" / "rollback.md").read_text(encoding="utf-8")
+        none = rollback[rollback.index("## 되돌릴 것이 없을 때"):]
         none = none[:none.index("\n## ", 1)]
         for said in ("`rolled_back`", "읽지도 장부에 적지도 않고", "\"장부 <`id`>번은 장부 <`undone_by`>번이 이미 모두 되돌렸습니다. 되돌릴 것이 없어 아무것도 하지 않았습니다.\"",
-                     "`previewed` · `empty` · `replaced`"):
+                     "`previewed` · `empty`", "`replaced`", "장부 <`replaced_by`>번", "말씀인가요?"):
             self.assertIn(said, none)
+        self.assertIn("「되돌릴 것이 없을 때」", self.skill, "SKILL.md 가 그 절을 가리킨다")
 
 class RoutingTest(unittest.TestCase):
     """H7 — 담당자가 「가격 바꿔줘」라고 하면 세 도우미 가운데 어느 것이 열려도 된다. 그래서 설명(description)과 「하지 않는 일」이
