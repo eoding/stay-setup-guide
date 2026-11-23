@@ -16,7 +16,9 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Iterable, Mapping, Sequence
 
-from change_core.chrome import esc, fmt_money, fmt_time, notes, page, result_word, stats, stop_view, stopped_choices, steps_list, times_word
+from change_core.chrome import (
+    esc, fmt_money, fmt_time, notes, page, result_word, stats, stop_view, stopped_choices, steps_list, times_word, undo_hint,
+)
 from change_core.ledger import ChangeRecord
 from change_core.money import scale_of
 from price_model import CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellValue, below_cost_label, cell_name, key_of_item
@@ -363,7 +365,7 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
         body.append(f'<div class="banner amber"><b>시즌 창의 기억.</b> {esc(remembers)}</div>')
     if record.status == "applied":
         body.append(notes(["손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다.", UNDO_WHAT, UNDO_REFILL,
-                           f"되돌리려면 '{record.id}번 되돌려'라고 하세요."]))
+                           undo_hint(record)]))   # 뒤에 모두 되돌렸으면 되돌리라고 하지 않는다
     if ledger_path:
         body.append(f'<p class="sub">장부: {esc(ledger_path)}</p>')
     return page(title, "\n".join(part for part in body if part), MAKER)

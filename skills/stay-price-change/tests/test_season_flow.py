@@ -252,6 +252,9 @@ class SomeDatesSeasonTest(FlowBase):
         undone = self.cli("render", "result", "--change", rollback["change_id"], "--text", now=140)["text"]
         self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.", undone)
         self.assertIn("예약 있는 날", undone, "W7 — 되돌리기 결과 표도 되돌리기 미리보기처럼 예약 있는 날을 표시한다")
+        filled = self.cli("render", "result", "--change", change, "--text", now=141)["text"]
+        self.assertIn(f"장부 {rollback['change_id']}번이 모두 되돌렸습니다", filled, "W3 — 모두 되돌린 채우기의 결과 페이지는 되돌리라고 하지 않는다")
+        self.assertNotIn(f"'{change}번 되돌려'", filled)
 
     def test_w8_the_no_supply_currency_banner_stops_the_change_at_once_through_record_result(self):
         """W8 — 저장 답의 `warn`(공급 통화 없음 띠)이 있으면 record-result 가 그 저장을 저장됨으로 적고 변경을 바로 멈춘다 — 남은 저장이
