@@ -111,12 +111,12 @@ test('C7 · 페이지 이동 뒤 again("charge") 는 적어 둔 네 원본을 �
   price.w.close();
 });
 
-test('C7 · 모르는 묶음 이름은 아무것도 하지 않고 거절하며 세 묶음의 이름을 댄다', async () => {
+test('C7 · 모르는 묶음 이름은 아무것도 하지 않고 거절하며 묶음마다의 이름을 댄다', async () => {
   const page = chargePage({ bare: true });
   page.w.eval(LOADER);
   for (const call of [(l) => l.bridge('promo'), (l) => l.status('promo'), (l) => l.again('promo')]) {
     const r = plain(call(page.w.stayPriceLoader));
-    assert.match(r.error, /^모르는 묶음입니다: promo — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격, "charge" 면 부과금입니다$/);
+    assert.match(r.error, /^모르는 묶음입니다: promo — 비우면 가격 캘린더, "addon" 이면 부가옵션 가격, "charge" 면 부과금, "promotion" 이면 프로모션 할인입니다$/);
   }
   assert.match(plain(await page.w.stayPriceLoader.load('promo')).error, /^모르는 묶음입니다: promo/);
   page.w.close();

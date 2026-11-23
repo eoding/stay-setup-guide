@@ -154,7 +154,7 @@ class DocNamesTest(unittest.TestCase):
         scripts = SKILL / "scripts" / "page"
         keys = {key for name in ("stay_price.js", "stay_price_loader.js")
                 for key in re.findall(r"'(stayPrice[A-Z]\w*)'", (scripts / name).read_text(encoding="utf-8"))}
-        self.assertEqual(len(keys), 6, keys)
+        self.assertEqual(len(keys), 7, keys)
         text = (SKILL / "references" / "page.md").read_text(encoding="utf-8")
         paragraph = text[text.index("**페이지에 남기는 것.**"):].split("\n\n", 1)[0]
         self.assertEqual(set(re.findall(r"`(stayPrice[A-Z]\w*)`", paragraph)), keys)
