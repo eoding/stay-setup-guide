@@ -303,8 +303,9 @@ def season_section(record: ChangeRecord, check: Mapping) -> str:
     for item in check["steps"]:
         told = "아직 저장 안 함" if item["told"] is None else _counts_text(item["told"])
         mark = "맞음" if item["agree"] else ("—" if item["told"] is None else "다름")
+        shade = ' class="red"' if mark == "다름" else ""
         rows.append(f'<tr><td class="text">{item["no"]}. {esc(item["label"])}</td><td>{esc(_counts_text(item["predicted"]))}</td>'
-                    f'<td{" class=\"red\"" if mark == "다름" else ""}>{esc(told)}</td><td>{mark}</td></tr>')
+                    f'<td{shade}>{esc(told)}</td><td>{mark}</td></tr>')
     request = record.request or {}
     return ("<h2>ERP 가 말한 칸 수</h2><div class=\"scroll\"><table><tr><th>저장</th><th>미리보기의 예상</th><th>ERP 의 저장 띠</th><th></th></tr>"
             + "".join(rows) + "</table></div>"
