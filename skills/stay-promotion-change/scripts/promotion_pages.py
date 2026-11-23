@@ -23,6 +23,7 @@ from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
 from change_core.window import form_values
+from change_core.words import josa
 
 MAKER = "어딩 Stay 프로모션 할인 도우미"
 UNIT = "단"
@@ -33,7 +34,7 @@ SIDE_NOTE = ("저장하면 ERP 가 화면에 보이지 않는 분류 칸(할인 
              "이미 같아 바뀌는 것이 없고, 되돌려도 그 칸은 그대로 둡니다.")
 SCOPE_NOTE = ("편집 창에 「적용 범위」 칸이 있는 프로모션은, 저장할 때 ERP 가 그 프로모션의 적용 범위 기록이 없으면 하나 만듭니다(값은 지금과 "
               "같은 '기존 범위 그대로'라 손님이 내는 금액은 그대로). 화면에 보이지 않고 되돌려도 없어지지 않습니다.")
-OFF_NOTE = "이 단에는 화면에 안 보이는 {what}이(가) 붙어 있습니다 — 그대로 둡니다."
+OFF_NOTE = "이 단에는 화면에 안 보이는 {what} 붙어 있습니다 — 그대로 둡니다."   # {what} 은 조사까지(josa)
 GUEST_TAIL = ("할인은 손님이 이 프로모션을 고를 때만, 객실 요금에만 붙습니다(부과금 · 부가옵션은 그대로). 저장 뒤 새 견적부터 바뀌고 이미 받은 "
               "예약의 금액은 그대로입니다.")
 KEEPS = ("이미 받은 예약의 금액은 되돌려도 바뀌지 않습니다.",
@@ -92,7 +93,7 @@ def _shape(promotion: Promotion) -> str:
 
 def off_notes(promotion: Promotion) -> list[str]:
     """화면 밖 설정이 붙은 단마다 한 문장 — 「이 단에는 화면에 안 보이는 취소 조건이 붙어 있습니다 — 그대로 둡니다」."""
-    return [f"{promotion.threshold_words(tier)} 단: " + OFF_NOTE.format(what=off_words(tier.off))
+    return [f"{promotion.threshold_words(tier)} 단: " + OFF_NOTE.format(what=josa(off_words(tier.off), "이가"))
             for tier in promotion.tiers() if tier.off]
 
 

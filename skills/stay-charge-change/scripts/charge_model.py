@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "stay-price-change"
 from change_core.answers import BrowserError  # noqa: E402
 from change_core.items import ItemState, Reading, Refused, absent, item_key, key_fields  # noqa: E402
 from change_core.money import money, money_text  # noqa: E402
+from change_core.words import josa  # noqa: E402
 from change_core.names import NameNote, name_notes  # noqa: E402
 from change_core.window import Form, form_value, form_values  # noqa: E402
 
@@ -304,7 +305,7 @@ class Charge:
             raise ModelError(f"부과금 {self.id}번의 「{place.at}」 요금은 연령별 단가가 아니라 부과금 자체의 금액입니다 — "
                              '"age" 없이 "field": "amount" 로 적습니다')
         if len(named) != 1:
-            raise ModelError(f"부과금 {self.id}번에 연령 구간 {place.at} 이(가) {'둘 이상' if named else '없습니다'} — 구간 코드로 적습니다")
+            raise ModelError(f"부과금 {self.id}번에 연령 구간 {josa(place.at, '이가')} {'둘 이상' if named else '없습니다'} — 구간 코드로 적습니다")
         return Place(place.charge, place.part, named[0], place.field)
 
     def where(self, place: Place) -> tuple[str, int]:
@@ -513,10 +514,14 @@ class ChangeRequest:
     def charges(self) -> tuple[ChargeRef, ...]:
         return tuple(dict.fromkeys((target.offer, target.place.charge) for target in self.targets))
 
-    def describe(self) -> str:
-        names = " · ".join(dict.fromkeys(target.place.field_label for target in self.targets))
+    def describe(self, parts: Mapping[str, str] | None = None) -> str:
+        """장부 한 줄의 한 일 — 「정률(%) 60으로」. `parts` 는 금액 칸의 부분(항목 키) → 그 부분의 이름(「소아 단가」 ·
+        「14:01~18:00 시간대」) — 연령별 단가 · 시간대 줄이면 어느 것인지 앞에 댄다(같은 종류가 여럿인 부과금 — 시운전 9)."""
+        names = " · ".join(dict.fromkeys(
+            f"{(parts or {})[target.place.key]} · {target.place.field_label}" if (parts or {}).get(target.place.key)
+            else target.place.field_label for target in self.targets))
         if self.how == "value":
-            return f"{names} {money_text(self.figure)} 으로"
+            return f"{names} {josa(money_text(self.figure), '으로')}"
         sign = "+" if self.figure >= 0 else ""
         return f"{names} {sign}{money_text(self.figure)}{'%' if self.how == 'percent' else ''}"
 

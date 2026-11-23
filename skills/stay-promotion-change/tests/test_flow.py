@@ -210,8 +210,8 @@ class FiveShapesTest(Flow):
     def test_a_tier_carrying_off_form_keys_keeps_them_and_the_preview_says_so(self):
         _change, _plan, posts, short = self.round_trip(self.request(EARLY_NRF, value="16", sentence="얼리버드 46일 16% 로"))
         self.assertEqual(posts[0], replaced(form("9005"), {("tiers_value", 0): "16"}))
-        self.assertEqual(short["off"], ["체크인 46일 전 단: 이 단에는 화면에 안 보이는 취소 조건이(가) 붙어 있습니다 — 그대로 둡니다.",
-                                        "체크인 31일 전 단: 이 단에는 화면에 안 보이는 취소 조건이(가) 붙어 있습니다 — 그대로 둡니다."])
+        self.assertEqual(short["off"], ["체크인 46일 전 단: 이 단에는 화면에 안 보이는 취소 조건이 붙어 있습니다 — 그대로 둡니다.",
+                                        "체크인 31일 전 단: 이 단에는 화면에 안 보이는 취소 조건이 붙어 있습니다 — 그대로 둡니다."])
         tiers = self.erp.promotion("9005")["trigger"]["tiers"]
         self.assertEqual(tiers[1], {"threshold": 31, "pct": "10.0", "cancellation": "CUTOFF_AT_THRESHOLD"}, "건드리지 않은 단은 표기까지 그대로")
 
@@ -366,7 +366,7 @@ class AwayFromThePathTest(Flow):
         self.apply(change, plan)
         mine = self.listed()[change]
         self.assertEqual(mine["helper"], "프로모션 할인 도우미")
-        self.assertTrue(mine["scope"].startswith("프로모션 1개 (데모 오퍼 2027 · 롱스테이 2박 7% / 3박 10%) · 할인 값 8 으로"), mine["scope"])
+        self.assertTrue(mine["scope"].startswith("프로모션 1개 (데모 오퍼 2027 · 롱스테이 2박 7% / 3박 10%) · 할인 값 8로"), mine["scope"])
         theirs = self.cli("list", "--look", self.look(), script=CHARGE_SCRIPT)["changes"]
         self.assertEqual(next(entry for entry in theirs if entry["id"] == change)["line"], mine["line"])
         refused = self.cli("read-calls", "--record", change, script=CHARGE_SCRIPT, code=2)

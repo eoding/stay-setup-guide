@@ -19,6 +19,7 @@ from change_core.chrome import (
 from change_core.ledger import ChangeRecord
 from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
+from change_core.words import josa
 
 MAKER = "어딩 Stay 부과금 도우미"
 UNIT = "칸"
@@ -134,7 +135,7 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
         body.append(f'<div class="banner amber"><b>바꿀 수 없는 칸 {found["blocked"]}칸</b>은 그대로 둡니다(아래 표의 까닭).</div>')
     free = [change.label for change in plan.changes if change.free]
     if free:
-        body.append(f'<div class="banner amber"><b>무료가 됩니다 — {len(free)}칸.</b> {esc(" · ".join(free))} 은(는) 저장하면 '
+        body.append(f'<div class="banner amber"><b>무료가 됩니다 — {len(free)}칸.</b> {esc(josa(" · ".join(free), "은는"))} 저장하면 '
                     "0 이 되어 손님이 내는 금액이 없어집니다.</div>")
     body.append(names_banner(names))
     sent = 0

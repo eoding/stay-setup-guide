@@ -32,6 +32,7 @@ from change_core.ledger import ChangeRecord
 from change_core.money import example_step, scale_of
 from change_core.rollback import RollbackPlan
 from change_core.rules import BLOCKED, RED
+from change_core.words import josa
 
 from price_model import (
     CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
@@ -129,7 +130,7 @@ def grid(keys: Iterable[CellKey], cell: Callable[[CellKey], tuple[str, str]], re
 
 
 def operation_label(request: ChangeRequest, currency: str) -> str:
-    """바꾸는 값과 방법 — "판매가 +10%" · "정가 -5,000 USD" · "공급 원가 지움" · "판매가 성인 2 · 1박 이상 350.00 USD 으로"."""
+    """바꾸는 값과 방법 — "판매가 +10%" · "정가 -5,000 USD" · "공급 원가 지움" · "판매가 성인 2 · 1박 이상 350.00 USD로"."""
     return f"{FIELD_LABELS[request.field]} {_how(request, currency)}"
 
 
@@ -141,7 +142,7 @@ def _how(request: ChangeRequest, currency: str) -> str:
         return f"{'+' if value >= 0 else '-'}{abs(value).normalize():f}%"
     if request.operation == "amount":
         return f"{'+' if value >= 0 else '-'}{fmt_money(abs(value), currency)} {currency}"
-    return f"{occupancy_label(request.base_occupancy)} · {nights_label(1)} {fmt_money(value, currency)} {currency} 으로"
+    return f"{occupancy_label(request.base_occupancy)} · {nights_label(1)} {fmt_money(value, currency)} {josa(currency, '으로')}"
 
 
 def _flag(verdict: str, after: CellValue, currency: str, key: CellKey) -> str:

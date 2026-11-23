@@ -12,7 +12,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 CORE = SCRIPTS / "change_core"
 CELL_MODULES = {"price_model", "price_plan", "price_pages", "price_change", "price_browser", "erp_read"}
-SHARED = {"ledger", "alive", "rules", "items", "rollback", "chrome", "money", "answers", "files", "window", "names", "cli"}
+SHARED = {"ledger", "alive", "rules", "items", "rollback", "chrome", "money", "answers", "files", "window", "names", "cli", "words"}
 
 
 class SharedPackageTest(unittest.TestCase):

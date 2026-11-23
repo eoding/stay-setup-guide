@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "stay-price-change"
 
 from change_core.answers import BrowserError  # noqa: E402
 from change_core.items import ItemState, Reading as Items, Refused, absent, item_key, key_fields  # noqa: E402
+from change_core.words import josa  # noqa: E402
 from change_core.money import money, money_text  # noqa: E402
 from change_core.names import NameNote, name_notes  # noqa: E402
 from change_core.window import Form, form_value, form_values  # noqa: E402
@@ -381,7 +382,7 @@ class ChangeRequest:
         if self.how == "clear":
             return f"{what} 비우기"
         if self.how == "value":
-            return f"{what} {money_text(self.figure)} 으로"
+            return f"{what} {josa(money_text(self.figure), '으로')}"
         sign = "+" if self.figure >= 0 else ""
         return f"{what} {sign}{money_text(self.figure)}{'%' if self.how == 'percent' else ''}"
 
