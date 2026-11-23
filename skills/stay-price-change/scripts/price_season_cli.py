@@ -28,7 +28,7 @@ from price_season import (
     KEEPS, KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, decode_choices, decode_counts, decode_fill,
     decode_plan, decode_window, encode_plan, encode_window, expected_cells, fresh_problem, followup_targets, has_writes, missing_seasons,
     plan_season, preview_rows, range_differences, recorded_request, rule_choices, season_range, season_steps, step_call, step_range,
-    window_of,
+    window_of, window_remembers,
 )
 from price_sheet import decode_check
 from season_sheet import targets_of
@@ -152,10 +152,14 @@ def short_plan(result: Mapping) -> dict:
         saves.append(dict(save=save.index, dropped=save.dropped, excluded=list(save.excluded), refused=save.refused,
                           waiting=save.waiting(), rules=rules, predicted=dict(created=save.counts.created, updated=save.counts.updated,
                                                                                 skipped=save.counts.skipped)))
-    return dict(kind="season_plan", change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
-                saves=None if result["steps"] is None else len(result["steps"]), per_save=saves,
-                misses=len(plan.misses), followup=len((result.get("followup") or {}).get("targets") or ()),
-                unused=[dict(save=choice.save, rule=choice.rule, said=choice.said) for choice in plan.unused])
+    short = dict(kind="season_plan", change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
+                 saves=None if result["steps"] is None else len(result["steps"]), per_save=saves,
+                 misses=len(plan.misses), followup=len((result.get("followup") or {}).get("targets") or ()),
+                 unused=[dict(save=choice.save, rule=choice.rule, said=choice.said) for choice in plan.unused])
+    remembers = window_remembers(recorded_request(plan))
+    if remembers:   # 날짜 일부만 채우는 저장 — "적용"을 청하기 전에 그대로 말한다(season-fill.md 3)
+        short["remembers"] = remembers
+    return short
 
 
 def begin_steps(data: Mapping) -> tuple[list, dict]:
@@ -295,7 +299,8 @@ def rollback_inputs(ledger: Ledger, change_id: int) -> dict | None:
     if request.get("kind") != KIND:
         return None
     window = request.get("window") or {}
-    return dict(season=(request.get("season") or {}).get("name") or "", form=[list(pair) for pair in window.get("form") or ()])
+    return dict(season=(request.get("season") or {}).get("name") or "", form=[list(pair) for pair in window.get("form") or ()],
+                remembers=window_remembers(request))
 
 
 def short_window(result: Mapping) -> dict:

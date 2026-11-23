@@ -67,7 +67,7 @@ from pathlib import Path
 
 from change_core import cli, files
 from change_core.answers import BrowserError, answers_for, attach_bodies, step_outcome, unanswered
-from change_core.chrome import nothing_to_save, page_text
+from change_core.chrome import esc, nothing_to_save, page_text
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
@@ -405,6 +405,10 @@ def cmd_render(args):
             html, hotel, name = season_pages.render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
         else:
             html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
+            undone = season_cli.rollback_inputs(ledger, record.reverses) if record.kind == "rollback" else None
+            if undone and undone.get("remembers"):   # 날짜 일부를 채운 시즌을 되돌렸다 — 시즌 창의 기억은 그대로다
+                html = html.replace("<h2>저장 단계</h2>", f'<div class="banner amber"><b>시즌 창의 기억.</b> {esc(undone["remembers"])} '
+                                    "되돌려도 창의 기억은 그대로입니다.</div><h2>저장 단계</h2>", 1)
     if args.text:   # 페이지의 글을 읽기만 한다 — 파일을 쓰지 않는다(같은 페이지가 「… (2).html」로 또 생기지 않게)
         return dict(text=page_text(html))
     path = files.write_out(args.out or page_path(hotel, name), html)
@@ -711,7 +715,8 @@ def short_rollback(result: dict) -> dict:
                 kept_why=[dict(change_id=change_id, at=at, sentence=sentence, outside=change_id is None, cells=count)
                           for (change_id, at, sentence), count in causes.items()],
                 saves=len(result["steps"]), reserved=sum((key.room, key.date) in reserved for key in restored),
-                undone=result["undone"], undoing=plan.undoing or None)
+                undone=result["undone"], undoing=plan.undoing or None,
+                **({"remembers": result["season"]["remembers"]} if (result.get("season") or {}).get("remembers") else {}))
 
 
 def short_compare(result: dict) -> dict:

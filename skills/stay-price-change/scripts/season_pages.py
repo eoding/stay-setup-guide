@@ -23,7 +23,7 @@ from price_model import CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellVal
 from price_pages import MAKER, cell_views, grid, render_result as render_cells_result
 from price_season import (
     CHOICE_WORDS, FRACTION_SENTENCE, INPUT_LABELS, KEEPS, RULES, SeasonPlan, banner_counts, counts, counts_agree, date_runs,
-    decode_counts, rule_choices, verdict,
+    decode_counts, recorded_request, rule_choices, verdict, window_remembers,
 )
 from price_season_cli import OPENS_CLOSED
 
@@ -245,6 +245,9 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
     if steps:
         body.append(f'<p class="sub">적용하면 시즌 [가격 입력] 창을 {times_word(len(steps))} 누릅니다(저장마다 한 번). 저장마다 그 범위를 '
                     "다시 읽어 미리보기 때와 같을 때만 누릅니다.</p>")
+    remembers = window_remembers(recorded_request(plan))
+    if remembers:
+        body.append(f'<div class="banner amber"><b>시즌 창의 기억.</b> {esc(remembers)}</div>')
     body.append("<h2>알아 두실 것</h2>" + notes([NO_DELETE, GUESS, *undo_lines(plan),
                                                  "계산은 ERP 시즌 창과 같은 셈입니다(조정은 소수 둘째 자리 반올림, 공급 원가는 "
                                                  f"{'1 단위' if scale_of(currency) == 0 else '소수 둘째 자리'}로 반올림)."]))
@@ -365,6 +368,9 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
             season_section(record, check), steps_list(record.steps),
             "<h2>칸마다 넣은 값</h2>", grid(written, cell, reserved, closed, by_date) if written else '<p class="sub">넣은 칸이 없습니다.</p>',
             stopped_choices(record)]
+    remembers = window_remembers(record.request or {})
+    if remembers and record.status in ("applied", "applying"):
+        body.append(f'<div class="banner amber"><b>시즌 창의 기억.</b> {esc(remembers)}</div>')
     if record.status == "applied":
         body.append(notes(["손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다.", UNDO_WHAT, UNDO_REFILL,
                            f"되돌리려면 '{record.id}번 되돌려'라고 하세요."]))
@@ -378,7 +384,10 @@ def rollback_notes(season: Mapping) -> str:
     않는다 — 그것도 시즌 창 저장이라 칸을 또 쓴다)."""
     shown = [(name, value) for name, value in season.get("form") or () if name in INPUT_LABELS or name.startswith("child_extra_")]
     rows = "".join(f"<dt>{esc(INPUT_LABELS.get(name, name))}</dt><dd>{esc(value) if value else '비움'}</dd>" for name, value in shown)
+    remembers = season.get("remembers")
     return (f'<div class="banner amber"><b>시즌 「{esc(season.get("season") or "")}」 다시 채우기를 되돌립니다.</b> {esc(UNDO_WHAT)} '
-            f"{esc(UNDO_REFILL)}</div><h2>채우기 전에 시즌 창에 있던 입력값</h2><p class=\"sub\">도우미는 이 값을 다시 치지 않습니다(그것도 "
+            f"{esc(UNDO_REFILL)}</div>"
+            + (f'<div class="banner amber"><b>시즌 창의 기억.</b> {esc(remembers)} 되돌려도 창의 기억은 그대로입니다.</div>' if remembers else "")
+            + f"<h2>채우기 전에 시즌 창에 있던 입력값</h2><p class=\"sub\">도우미는 이 값을 다시 치지 않습니다(그것도 "
             f"시즌 창 저장이라 칸을 또 씁니다). 창의 기억을 되돌리고 싶으시면 직접 쳐 주세요.</p><dl class=\"kv\">{rows}</dl>")
 

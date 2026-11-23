@@ -124,6 +124,7 @@ class OneDaySeasonTest(FlowBase):
                               "--record", "--out", self.dir / "plan-1.json")
         change = plan_short["change_id"]
         self.assertEqual((plan_short["saves"], plan_short["counts"]["changes"], plan_short["counts"]["new"]), (1, 2, 0))
+        self.assertNotIn("remembers", plan_short, "W6 — 시즌 전체를 채우면 창의 날짜가 남는 문제가 없다")
         plan = decode_plan(json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["plan"])
         self.assertEqual(sorted(str(change.after.sell) for change in plan.changes), ["173.00", "181"])
         page = Path(self.cli("render", "preview", "--plan", self.dir / "plan-1.json")["page"]).read_text(encoding="utf-8")
@@ -189,6 +190,59 @@ class OneDaySeasonTest(FlowBase):
         self.assertIn("시즌 「Peak」 다시 채우기(덮기) · 저장 1번", line)
         self.assertIn("되돌렸다가 다시 살림", line)
         self.assertNotIn("모두 되돌림", line)
+
+
+class SomeDatesSeasonTest(FlowBase):
+    """W6 (시운전 12) — 시즌의 날 일부만 채우면 ERP 의 시즌 창이 친 금액은 기억하고 날짜는 시즌 전체로 연다. 누가 그 창을 열어
+    그대로 누르면 그 금액이 시즌의 모든 날에 퍼진다. 미리보기(「적용」 전) · 결과 · 되돌리기 미리보기 · 되돌리기 결과가 그렇게 말하고,
+    plan · rollback 의 짧은 답 `remembers` 가 도우미가 그대로 하는 말이다."""
+
+    def apply_all(self, change, plan_file, snapshot, after, start):
+        self.assertEqual(self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(start)),
+                                  now=start + 5)["status"], "applying")
+        for call in self.cli("calls", "--change", change, now=start + 6)["calls"]:
+            answer = {"ok": True, "op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "saved": True, "pressed": True,
+                      "note": "저장했습니다"}
+            self.cli("record-result", "--change", change, "--result", self.write(f"r-{change}-{call['no']}.json", answer), now=start + 8)
+        self.assertTrue(self.cli("verify", "--change", change, "--snapshot", self.snap(after, at(start + 10)), now=start + 12)["same"])
+
+    def test_a_refill_of_some_dates_says_the_window_remembers_the_amounts_but_not_the_dates(self):
+        window = season_scene.window(dates=["2026-12-30", "2026-12-31"], rooms=["디럭스"])
+        folder = self.window_answers(window, "작업/시즌")
+        self.cli("season", "--answers", folder, "--out", self.dir / "season.json")
+        before = {CellKey("디럭스", "조식 포함", day, "A2", 1): CellValue(D("180"), None, None, "open") for day in window.dates}
+        snapshot = replace(season_scene.snapshot((), pairs=[("디럭스", "조식 포함")], dates=list(window.dates)), cells=before)
+        request = self.write("request.json", {"kind": "season_fill", "hotel": HOTEL, "offer": window.offer,
+                                              "season": {"id": window.season_id, "name": window.season_name}, "currency": "USD",
+                                              "sentence": "31일만 디럭스 181 로",
+                                              "saves": [{"pairs": [{"room": "디럭스", "rate_plan": "조식 포함"}], "price": "181",
+                                                         "occupancy_keys": "A2", "overwrite": True, "dates": ["2026-12-31"],
+                                                         "sources": {"price": "말씀"}}]})
+        said = ("시즌 「Peak」의 [가격 입력] 창은 이번에 친 금액을 기억하지만 고른 날짜는 기억하지 않습니다 — 다음에 누가 그 창을 열면 시즌 "
+                "전체(2026-12-30 ~ 2026-12-31)로 열리고, 그대로 [가격 적용]을 누르면 이번 금액이 시즌의 모든 날에 들어갑니다. 그 창을 열면 "
+                "[비우기]를 누르거나 날짜를 확인한 뒤 눌러야 합니다.")
+        short = self.cli("plan", "--snapshot", self.snap(snapshot, at(-60)), "--request", request, "--season", self.dir / "season.json",
+                         "--record", "--out", self.dir / "plan-1.json")
+        self.assertEqual((short["saves"], short["counts"]["changes"], short["remembers"]), (1, 1, said))
+        self.assertIn(said, self.cli("render", "preview", "--plan", self.dir / "plan-1.json", "--text")["text"])
+        plan = decode_plan(json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["plan"])
+        after = applied(snapshot, plan)
+        change = short["change_id"]
+        self.assertEqual(self.cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", self.snap(snapshot, at(30)),
+                                  now=40)["status"], "applying")
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(50)), now=60)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.write("r1.json", self.saved_answer(call, plan.saves[0])), now=70)
+        self.assertTrue(self.cli("verify", "--change", change, "--snapshot", self.snap(after, at(80)), now=90)["same"])
+        self.assertIn(said, self.cli("render", "result", "--change", change, "--text", now=95)["text"])
+
+        rollback = self.cli("rollback", "--change", change, "--snapshot", self.snap(after, at(100)), "--record", "--out",
+                            self.dir / "rollback.json", now=110)
+        self.assertEqual(rollback["remembers"], said)
+        page = self.cli("render", "rollback", "--plan", self.dir / "rollback.json", "--text", now=111)["text"]
+        self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.", page)
+        self.apply_all(rollback["change_id"], self.dir / "rollback.json", after, snapshot, 120)
+        self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.",
+                      self.cli("render", "result", "--change", rollback["change_id"], "--text", now=140)["text"])
 
 
 class SheetSeasonTest(FlowBase):

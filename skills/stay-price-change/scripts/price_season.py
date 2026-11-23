@@ -1130,6 +1130,21 @@ def counts(plan: SeasonPlan) -> dict:
 
 
 
+WINDOW_REMEMBERS = ("시즌 「{season}」의 [가격 입력] 창은 이번에 친 금액을 기억하지만 고른 날짜는 기억하지 않습니다 — 다음에 누가 그 창을 "
+                    "열면 시즌 전체({span})로 열리고, 그대로 [가격 적용]을 누르면 이번 금액이 시즌의 모든 날에 들어갑니다. 그 창을 열면 "
+                    "[비우기]를 누르거나 날짜를 확인한 뒤 눌러야 합니다.")
+
+
+def window_remembers(request: Mapping) -> str | None:
+    """날짜 일부만 채우는(채운) 저장이 있으면 시즌 창의 기억에 대한 한 문장(시운전 12 — 12/9~11 만 채운 뒤 창이 그 금액과 시즌 전체
+    날짜로 열렸다. 누가 그대로 누르면 115일에 퍼진다), 없으면 None. `request` 는 장부에 적는 시즌 채우기 요청(recorded_request)."""
+    if not any(save.get("dates") is not None for save in request.get("saves") or ()):
+        return None
+    dates = (request.get("window") or {}).get("dates") or ()
+    return WINDOW_REMEMBERS.format(season=(request.get("season") or {}).get("name") or "",
+                                   span=f"{dates[0]} ~ {dates[-1]}" if dates else "시즌의 모든 날")
+
+
 def season_what(request: Mapping) -> str:
     """장부 목록의 한 일 — 「시즌 「Peak」 다시 채우기(덮기) · 저장 2번」. 저장이 모두 덮기를 끄면 「(빈 칸만)」, 날짜를 고른 저장이 있으면
     「 · 날짜 일부」. 저장 수는 창을 누를 횟수다(빠진 저장은 세지 않는다 — 장부에 적힌 요청은 담당자가 준 그대로라 그 수다)."""
