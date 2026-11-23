@@ -74,7 +74,8 @@ DB_NAME = "가격장부.sqlite3"
 WORK = "작업"                        # 기록 폴더 안의 작업 폴더들(files.new_work) — 있으면 장부가 있던 기록 폴더다
 SCHEMA_VERSION = 3                   # 3 — 상태 empty(저장할 것이 없는 미리보기)
 IDLE = timedelta(minutes=15)         # 적용 중인 변경이 이만큼 아무 일이 없으면 멈춘 것이다(끊긴 세션). 받아들이는 읽은 값도 이만큼 안이다
-CAUSES = ("failed", "unknown", "cut_off")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김
+CAUSES = ("failed", "unknown", "cut_off", "halted")   # 멈춘 까닭 — 저장이 실패함 · 저장됐는지 모름 · 실패 없이 끊김 · 저장은 됐는데 ERP 가
+# 다음 저장을 하지 말라고 함(halts — 시즌 창의 「공급 통화 없음」 띠)
 KIND_NAMES = {"price_cell": "가격 캘린더 도우미", "addon_price": "부가옵션 가격 도우미", "charge": "부과금 도우미",
               "promotion": "프로모션 할인 도우미"}   # 항목 종류 → 그 기록을 쓰는 도우미(거절 문장 · 목록)
 OFFER_KIND = "price_cell"            # 장부의 오퍼 칸을 채우는 단 하나의 종류 — 부가옵션 · 부과금 도우미는 비운다(항목 줄이 없는 번호를 가른다)
@@ -152,7 +153,14 @@ CREATE TABLE IF NOT EXISTS unused_choices (
   change_id INTEGER PRIMARY KEY REFERENCES changes(id),
   choices TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS halts (
+  change_id INTEGER NOT NULL REFERENCES changes(id),
+  idx INTEGER NOT NULL,
+  note TEXT NOT NULL,
+  PRIMARY KEY (change_id, idx)
+);
 CREATE TRIGGER IF NOT EXISTS keep_begins BEFORE DELETE ON begins BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
+CREATE TRIGGER IF NOT EXISTS keep_halts BEFORE DELETE ON halts BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_unused BEFORE DELETE ON unused_choices BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_meta BEFORE DELETE ON meta BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
 CREATE TRIGGER IF NOT EXISTS keep_changes BEFORE DELETE ON changes BEGIN SELECT RAISE(ABORT, '장부는 지우지 않습니다'); END;
@@ -340,6 +348,7 @@ class ChangeRecord:
     checked: Checked | None = None
     as_of: str | None = None
     unused: tuple[dict, ...] = ()
+    halt: str | None = None   # 저장 뒤 ERP 가 다음 저장을 하지 말라고 한 까닭(halts) — 멈춘 까닭이 halted 일 때
 
 
 @dataclass(frozen=True)
@@ -358,8 +367,8 @@ class StepSeen:
 
 @dataclass(frozen=True)
 class CheckReport:
-    """`cause` 는 멈춘 까닭 — failed 저장이 실패함 · unknown 저장됐는지 모름 · cut_off 실패 없이 중간에 끊김(멈추지 않았으면
-    None). `last_saved` · `next` 는 마지막으로 저장된 단계와 다음에 할 단계(없으면 None), `note` 는 멈춘 저장의 메모."""
+    """`cause` 는 멈춘 까닭 — failed 저장이 실패함 · unknown 저장됐는지 모름 · cut_off 실패 없이 중간에 끊김 · halted 저장 뒤 ERP 가
+    다음 저장을 하지 말라고 함(멈추지 않았으면 None). `last_saved` · `next` 는 마지막으로 저장된 단계와 다음에 할 단계(없으면 None), `note` 는 멈춘 저장의 메모."""
     change_id: int
     status: str
     steps: tuple[StepSeen, ...]
@@ -586,12 +595,15 @@ class Ledger:
             return "stopped"
         return header["status"]
 
-    def _cause(self, header, steps) -> str | None:
-        """멈춘 까닭. 장부가 적용 중인데 멈춘 것이면 끊긴 것이다(실패한 저장이 그 앞에 있었어도 그 뒤 이어서 했다)."""
+    def _cause(self, header, steps, halted: bool = False) -> str | None:
+        """멈춘 까닭. 장부가 적용 중인데 멈춘 것이면 끊긴 것이다(실패한 저장이 그 앞에 있었어도 그 뒤 이어서 했다). 저장 뒤 ERP 가 다음
+        저장을 하지 말라고 해 멈췄으면(`halted` — halts) halted 다."""
         if self._status(header) != "stopped":
             return None
+        if halted and header["status"] == "stopped":
+            return "halted"
         failed = [step for step in steps if step["status"] == "failed"]
-        missed, unknown, cut_off = CAUSES
+        missed, unknown, cut_off, _halted = CAUSES
         if header["status"] == "applying" or not failed:
             return cut_off
         return unknown if any(step["unknown"] for step in failed) else missed
@@ -681,8 +693,13 @@ class Ledger:
         self.begin(change_id, steps, request, read_at=read_at)
         return ()
 
-    def record_step(self, change_id: int, index: int, saved: bool, note: str | None = None, unknown: bool = False) -> str:
+    def record_step(self, change_id: int, index: int, saved: bool, note: str | None = None, unknown: bool = False,
+                    halt: str | None = None) -> str:
         """저장 한 번이 끝날 때마다 부른다. 새 상태를 돌려준다.
+
+        `halt` 는 저장은 됐는데 ERP 가 다음 저장을 하지 말라고 한 까닭이다(시즌 창의 「공급 통화 없음」 띠) — 그 단계를 저장됨으로 적고
+        `halts` 에 까닭을 적어, 남은 저장이 있으면 변경을 바로 멈춘다(적용 중으로 15분을 기다리지 않는다). 남은 저장이 없으면 다
+        적용한 것이다. 그 밖의 저장(halt 없음)은 전과 같다.
 
         `unknown` 은 저장 단추는 눌렸고 저장됐는지 모르는 단계다 — failed 로 적고 표시를 단다(다시 읽어 가린다). 저장 결과는
         활동이다. 다만 이미 멈춘 변경(실패했거나 IDLE 동안 아무 일이 없던)에 적힌 저장은 적기만 하고 변경을 다시 살리지
@@ -704,6 +721,10 @@ class Ledger:
             left = db.execute("SELECT COUNT(*) FROM steps WHERE change_id = ? AND status != 'saved'",
                               (change_id,)).fetchone()[0]
             status = "stopped" if not saved else "applied" if left == 0 else header["status"]
+            if saved and halt:
+                db.execute("INSERT INTO halts (change_id, idx, note) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", (change_id, index, halt))
+                if left:
+                    status = "stopped"
             db.execute("UPDATE changes SET status = ?, updated_at = ?, applied_at = COALESCE(applied_at, ?),"
                        " active_at = CASE WHEN ? THEN ? ELSE active_at END WHERE id = ?",
                        (status, stamp, stamp if status == "applied" else None, saved and alive, stamp, change_id))
@@ -822,8 +843,11 @@ class Ledger:
                                   "읽기 폴더에 다시 읽고 check 를 부릅니다")
             rows = {step["idx"]: db.execute("SELECT * FROM item_values WHERE change_id = ? AND step = ? ORDER BY rowid",
                                             (change_id, step["idx"])).fetchall() for step in steps}
-        cause = self._cause(header, steps)
+            halt = db.execute("SELECT idx, note FROM halts WHERE change_id = ? ORDER BY idx LIMIT 1", (change_id,)).fetchone()
+        cause = self._cause(header, steps, halt is not None)
         note = next((step["note"] for step in steps if step["status"] == "failed"), None) if cause in ("failed", "unknown") else None
+        if cause == "halted":
+            note = halt["note"]
         seen_steps, settle, moved_items = [], [], {}
         for step in steps:
             kinds = {_field_seen(row, now.get((row["item_kind"], row["item_key"]))) for row in rows[step["idx"]]}
@@ -860,6 +884,8 @@ class Ledger:
                 why.append(f"{name}의 칸이 넣으려던 값도 그 전 값도 아닙니다")
             if step.moved:   # 넣으려던 값도 그 전 값도 아닌 칸은 미리보기 때 읽은 값과 다른 칸이다 — 한 번만 말한다
                 why.append(f"{name}의 칸 {step.moved}개가 미리보기 때 읽은 값과 다릅니다")
+        if halt is not None and remaining:   # ERP 가 다음 저장을 하지 말라고 했다 — 다시 읽어도 이어 가지 않는다
+            why.append(f"{halt['idx']}번째 저장 뒤 ERP 가 다음 저장을 하지 말라고 했습니다({halt['note']}) — 이어서 하지 않습니다")
         if remaining and self._age(read_at) > IDLE:
             why.append(f"읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — {_minutes(IDLE)}분 안에 읽은 값으로만 이어 가니 "
                        "다시 읽습니다")
@@ -961,7 +987,8 @@ class Ledger:
             last = db.execute("SELECT * FROM checks WHERE change_id = ? AND spent = 0 ORDER BY rowid DESC LIMIT 1",
                               (change_id,)).fetchone()
             unused = db.execute("SELECT choices FROM unused_choices WHERE change_id = ?", (change_id,)).fetchone()
-        cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps])
+            halt = db.execute("SELECT note FROM halts WHERE change_id = ? ORDER BY idx LIMIT 1", (change_id,)).fetchone()
+        cause = self._cause(header, [dict(status=step.status, unknown=step.unknown) for step in steps], halt is not None)
         status = self._status(header)
         checked = None
         if last is not None and (status == "applying" if last["can_continue"] else status == "stopped"):
@@ -971,7 +998,8 @@ class Ledger:
                             header["offer"], header["currency"], header["sentence"], header["read_at"], header["created_at"],
                             header["applied_at"], header["verified_at"], header["reverses"],
                             None if header["request"] is None else json.loads(header["request"]), steps, rows, cause,
-                            header["replaces"], checked, self._stamp(), tuple(json.loads(unused["choices"])) if unused else ())
+                            header["replaces"], checked, self._stamp(), tuple(json.loads(unused["choices"])) if unused else (),
+                            None if halt is None else halt["note"])
 
     def reading(self, change_id: int) -> dict:
         """그 번호의 계산이 바탕으로 삼은 읽은 값(적을 때 준 JSON 그대로). 적지 않은 번호면 거절한다."""

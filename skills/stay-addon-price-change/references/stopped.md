@@ -4,7 +4,7 @@
 
 1. `read-calls --record N` 으로 새 읽기 폴더에 읽기(SKILL.md 「읽기」) → S. 적용 직전의 읽은 값이나 앞선 폴더의 답을 다시 쓰지 않는다 — `check` 는 장부가 그 번호에 마지막으로 적은 것(계산 · 저장 결과) 뒤에 읽은 값만 받고, 아니면 `… 뒤에 읽은 것이 아닙니다` 로 아무것도 가리지 않고 거절한다(새로 읽어 다시 한다).
 2. `python3 scripts/addon_change.py check --change N --snapshot "<S>"`.
-   - `cause` 는 멈춘 까닭 — `failed` 저장이 실패함 · `unknown` 저장 단추는 눌렸고 저장됐는지 모름(읽은 값으로 가려 장부에 적는다) · `cut_off` 실패 없이 끊김(15분 동안 아무 일이 없었다).
+   - `cause` 는 멈춘 까닭 — `failed` 저장이 실패함 · `unknown` 저장 단추는 눌렸고 저장됐는지 모름(읽은 값으로 가려 장부에 적는다) · `cut_off` 실패 없이 끊김(15분 동안 아무 일이 없었다). 장부의 까닭 `halted`(저장 뒤 ERP 가 다음 저장을 하지 말라고 함)는 가격 캘린더 도우미의 시즌 창 저장에만 있다 — 이 도우미의 변경에는 나오지 않는다.
    - `last_saved` · `next` 는 마지막으로 저장된 단계와 다음 단계, `why` 는 이어서 할 수 없는 까닭(줄마다).
 3. `python3 scripts/addon_change.py render result --change N` → `page` 를 열고 고를 것을 한 번만 묻는다(2 의 `check` 뒤에 연다 — 페이지는 그 `check` 대로 이어서를 보이거나 뺀다).
    - `can_continue: true` 면 "이어서 · 된 것까지 되돌리기 · 이대로 두기". **이어서** 는 15분 안에 `calls --change N` 부터 SKILL.md 「적용하기」 2 를 한다(그보다 늦으면 1 부터 다시).

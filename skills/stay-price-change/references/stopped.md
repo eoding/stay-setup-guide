@@ -20,7 +20,7 @@ python3 scripts/price_change.py check --change N --snapshot "<S4>"
 - 저장마다 `seen` 이 `saved`(됨)·`not_saved`(안 됨)·`mixed`(섞임)·`changed`(그 사이 바뀜)다. `saved: "unknown"`(단추는 눌렸고 저장됐는지 모름)이던 저장은 읽은 값으로 가려져 장부에 적힌다(`settled`).
 - `status` 가 `applied` 면 다 저장된 것이다. SKILL.md 「적용하기」 3 으로 간다.
 - `last_saved` 는 마지막으로 저장된 단계, `next` 는 다음에 할 단계다(`{no, label}`, 없으면 null). 저장은 차례로 하므로 `last_saved.no` 가 이미 된 저장 횟수다. `remaining` 은 남은 단계 번호들이고 그 수가 남은 저장 횟수다.
-- `cause` 는 멈춘 까닭이다: `failed` 저장이 실패함(`note` 가 그 까닭) · `unknown` 저장 단추는 눌렸고 저장됐는지 몰랐음 · `cut_off` 실패한 저장 없이 중간에 끊김.
+- `cause` 는 멈춘 까닭이다: `failed` 저장이 실패함(`note` 가 그 까닭) · `unknown` 저장 단추는 눌렸고 저장됐는지 몰랐음 · `cut_off` 실패한 저장 없이 중간에 끊김 · `halted` 저장은 됐는데 ERP 가 다음 저장을 하지 말라고 함(시즌 창의 「공급 통화 없음」 띠 — `note` 가 그 글. record-result 가 그 저장 바로 뒤에 변경을 멈춘다).
 - `can_continue` 는 남은 저장을 계획대로 해도 되는지, `why` 는 안 되는 까닭이다.
 
 ## 2. 페이지를 열고 한 번 묻는다
@@ -36,6 +36,7 @@ python3 scripts/price_change.py check --change N --snapshot "<S4>"
 
 - `cause: cut_off` 이고 `last_saved` 가 있으면: "<`last_saved.no` — 단계 번호>번째 저장까지 하고 끊겼습니다. 저장이 실패한 것은 아닙니다. 지금은 일부만 바뀐 상태입니다."
 - `cause: cut_off` 이고 `last_saved` 가 null 이면: "첫 저장을 하기 전에 끊겼습니다. 아무것도 바뀌지 않았습니다."
+- `cause: halted` 면: "<`last_saved.no`>번째 저장까지 했는데 ERP 가 다음 저장을 하지 말라고 해 멈췄습니다(<`note` 그대로>). 지금은 일부만 바뀐 상태입니다. 이어서 하지 않습니다 — 된 것까지 되돌리거나 이대로 두고, 그 까닭(예: 기본정보의 통화)을 고친 뒤 새로 말씀해 주세요." `can_continue` 는 늘 false 다.
 - 그 밖이면: "<`next.no` — 단계 번호>번째 저장에서 멈췄습니다(<`note` 를 쉬운 말로>). 지금은 일부만 바뀐 상태입니다."
 
 그다음 고를 것을 묻는다. 이 물음은 여기서 한 번만 한다(「준비」 5 에서는 알리기만 했다).

@@ -228,6 +228,8 @@ def stop_mode(record) -> str | None:
         return None
     if any(row.rolled_back_by for row in record.rows):
         return "undone"
+    if stop[0] == "halted":   # ERP 가 다음 저장을 하지 말라고 했다 — 다시 읽어도 이어서 하지 않는다
+        return "halted"
     checked = stop[1]
     return "unchecked" if checked is None else "allows" if checked.can_continue else "forbids"
 
@@ -270,6 +272,10 @@ def _stop_banner(record, cause: str | None) -> str:
     at = waiting.index if waiting else len(record.steps)
     now = ("지금은 일부만 바뀐 상태입니다." if _alive(record) else "저장한 것은 뒤에 모두 되돌렸습니다." if done
            else "아무것도 바뀌지 않았습니다.")
+    if cause == "halted":   # 저장은 됐고 ERP 가 다음 저장을 하지 말라고 했다(halts)
+        why = f"({esc(record.halt.rstrip('.'))})" if getattr(record, "halt", None) else ""
+        return (f'<div class="banner red"><b>{done}번째 저장 뒤에 멈췄습니다</b>{why}. ERP 가 다음 저장을 하지 말라고 해 도우미가 남은 저장을 '
+                f'하지 않았습니다. {now}</div>')
     if cause == "cut_off":
         if not done:
             return '<div class="banner red"><b>첫 저장 전에 끊겼습니다.</b> 저장이 실패한 것은 아니고, 아무것도 바뀌지 않았습니다.</div>'
@@ -345,6 +351,13 @@ def stopped_choices(record, waiting: int | None = None, unit: str = "칸") -> st
     mode = stop_mode(record)
     if mode is None:
         return ""
+    if mode == "halted":
+        rest = "남은 부분은 ERP 의 그 까닭(예: 기본정보의 통화)을 고친 뒤 새로 말씀해 주세요(새 미리보기부터)."
+        back = (f'<div><b>된 것까지 되돌리기</b> — 이미 된 저장 {times_word(sum(step.status == "saved" for step in record.steps))}을 '
+                f'{"되돌리기 전 값" if undoes(record) else "원래 값"}으로 되돌립니다(미리보기를 먼저 보여 드립니다).</div>') if _alive(record) else ""
+        return (f'<h2>어떻게 할까요?</h2><p>ERP 가 이 저장 뒤에 다음 저장을 하지 말라고 했습니다 — 이어서 하지 않습니다.</p>'
+                f'<p>대화창에서 골라 주세요.</p><div class="choices">{back}<div><b>이대로 두기</b> — 장부에 "중간에 멈춤"으로 남습니다. '
+                f"{rest}</div></div>")
     cause, checked = stop_view(record)
     done = sum(step.status == "saved" for step in record.steps)
     left = len(record.steps) - done

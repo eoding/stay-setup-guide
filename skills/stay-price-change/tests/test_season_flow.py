@@ -253,6 +253,36 @@ class SomeDatesSeasonTest(FlowBase):
         self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.", undone)
         self.assertIn("예약 있는 날", undone, "W7 — 되돌리기 결과 표도 되돌리기 미리보기처럼 예약 있는 날을 표시한다")
 
+    def test_w8_the_no_supply_currency_banner_stops_the_change_at_once_through_record_result(self):
+        """W8 — 저장 답의 `warn`(공급 통화 없음 띠)이 있으면 record-result 가 그 저장을 저장됨으로 적고 변경을 바로 멈춘다 — 남은 저장이
+        있는 변경이 15분 동안 「적용 중」으로 남지 않는다."""
+        window = season_scene.window(dates=["2026-12-31"], rooms=["디럭스"])
+        folder = self.window_answers(window, "작업/시즌")
+        self.cli("season", "--answers", folder, "--out", self.dir / "season.json")
+        pairs = [("디럭스", "조식 포함"), ("디럭스", "룸온리")]
+        before = {CellKey(room, plan, "2026-12-31", "A2", 1): CellValue(D("180"), None, None, "open") for room, plan in pairs}
+        snapshot = replace(season_scene.snapshot((), pairs=pairs, dates=["2026-12-31"]), cells=before)
+        request = self.write("request.json", {"kind": "season_fill", "hotel": HOTEL, "offer": window.offer,
+                                              "season": {"id": window.season_id, "name": window.season_name}, "currency": "USD",
+                                              "sentence": "조식 포함 181, 룸온리 175",
+                                              "saves": [{"pairs": [{"room": room, "rate_plan": plan}], "price": price, "occupancy_keys": "A2",
+                                                         "overwrite": True, "sources": {"price": "말씀"}}
+                                                        for (room, plan), price in zip(pairs, ("181", "175"))]})
+        short = self.cli("plan", "--snapshot", self.snap(snapshot, at(-60)), "--request", request, "--season", self.dir / "season.json",
+                         "--record", "--out", self.dir / "plan-1.json")
+        self.assertEqual(short["saves"], 2)
+        change = short["change_id"]
+        plan = decode_plan(json.loads((self.dir / "plan-1.json").read_text(encoding="utf-8"))["plan"])
+        self.cli("begin", "--change", change, "--plan", self.dir / "plan-1.json", "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        warn = "공급 통화가 없어 가격 원장을 기록하지 못했습니다 — 기본정보에서 통화를 지정하세요."
+        result = self.cli("record-result", "--change", change, "--result",
+                          self.write("r1.json", self.saved_answer(call, plan.saves[0], warn=warn)), now=60)
+        self.assertEqual((result["saved"], result["status"], result["warn"]), (True, "stopped", warn))
+        line = next(item for item in self.cli("list", "--all", now=61)["changes"] if item["id"] == change)
+        self.assertEqual(line["status"], "stopped", "15분을 기다리지 않고 바로 멈춘 변경이다")
+        self.assertIn("저장 2번 중 1번 하고 멈춤", line["line"])
+
 
 class SheetSeasonTest(FlowBase):
     """다섯 날 시즌을 요금표로 — 예약 있는 날 · 판매 마감 칸 · 판매일 없는 날 · 아동 칸 · 3박 층, 저장 둘. 둘째 저장은 답이 늦어 「모름」 →

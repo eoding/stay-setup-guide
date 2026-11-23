@@ -513,9 +513,11 @@ def cmd_record_result(args):
     moved = dict(moved=outcome.moved) if outcome.moved else {}
     note = step_note(result) if season_cli.is_season(record) and outcome.saved is True else outcome.note
     extra = {name: result[name] for name in ("counts", "warn") if season_cli.is_season(record) and result.get(name)}
+    # 시즌 창의 「공급 통화 없음」 띠 — 저장은 됐지만 다음 저장을 하지 않는다. 장부가 그 변경을 바로 멈춘 것으로 적는다(W8)
+    halt = str(result["warn"]) if season_cli.is_season(record) and outcome.saved is True and result.get("warn") else None
     return dict(change_id=record.id, step=step.index, started=True, saved=outcome.saved is True, note=note, **moved, **extra,
                 status=ledger.record_step(record.id, step.index, outcome.saved is True, note,
-                                          unknown=outcome.saved == "unknown"))
+                                          unknown=outcome.saved == "unknown", halt=halt))
 
 
 def same_record_hotel(ledger: Ledger, change_id: int, now) -> None:

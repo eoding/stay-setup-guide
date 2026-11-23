@@ -51,7 +51,7 @@ SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가
    1. `read-calls --record N --step k --out "<작업>/적용-N/읽기-k/calls.json"` 으로 그 저장의 범위만 「읽기」 → `<R>/snapshot.json`. 앞에서 받은 조각과 같은 조각은 다시 받지 않는다.
    2. `calls --change N --snapshot "<R>/snapshot.json" --out "<작업>/적용-N/calls-k.json"` → `calls` 의 하나. 종료 2 가 「…초 전 것입니다」 · 「…앞에 읽은 것입니다」면 1 부터 다시 한다(읽은 값이 2분보다 오래됐거나 앞 저장보다 먼저 읽었다). 답이 `stopped: true` 면 그 저장의 칸이 미리보기 뒤에 ERP 에서 바뀌어 아무것도 누르지 않았다 — `differences` 의 수를 말하고 [stopped.md](stopped.md).
    3. `await stayPriceSeason.applySeason(<payload 그대로>)` → 답을 `<작업>/적용-N/<no>.json` 에 저장하고 `record-result --change N --result "<그 파일>"`.
-   4. `saved: true` 면 다음 저장으로(`status: applied` 면 3 으로). 답의 `warn`(공급 통화 없음)이 있으면 다음 저장을 하지 않고 그 글을 그대로 전한다 — 칸은 써졌지만 팔리지 않는다.
+   4. `saved: true` 면 다음 저장으로(`status: applied` 면 3 으로). 답의 `warn`(공급 통화 없음)이 있으면 다음 저장을 하지 않고 그 글을 그대로 전한다 — 칸은 써졌지만 팔리지 않는다. 그때 `record-result` 의 `status` 는 `stopped` 다(남은 저장이 있으면 장부가 바로 멈춘 변경으로 적는다 — 까닭 `halted`, [stopped.md](stopped.md)). 3 의 다시 읽기를 하고 결과 페이지를 열어 준 뒤 stopped.md 대로 고를 것(된 것까지 되돌리기 · 이대로 두기)을 묻는다.
    5. 답이 `saved: "unknown"` 이면: "시즌 창의 [가격 적용]은 눌렸고 ERP 가 아직 답하지 않았습니다. 다시 누르지 않습니다. ERP 가 끝나면 다시 읽어 저장됐는지 확인하겠습니다." 그리고 [stopped.md](stopped.md) — 다음 읽기는 요청이 끝날 때까지 `started: false` 로 스스로 기다린다. 창이 다르다는 거절(`refused` · `differ`)이나 저장 안 됨이면 [stopped.md](stopped.md). `started: false` 면 `wait` 초 뒤 같은 값으로 다시 부른다. 같은 저장을 두 번 누르지 않는다.
 3. **뒤에 다시 읽기.** `read-calls --record N` 으로 「읽기」 → S3. `verify --change N --snapshot "<S3>"`, `render result --change N` → `page` 를 연다.
    - `same: true`: "적용했고, 다시 읽어 확인했습니다. ERP 도 '새로 C칸 · 덮어쓴 U칸'이라고 답했습니다. 손님 화면에는 5분 안에 새 가격이 보입니다. 이미 받은 예약의 금액은 그대로입니다. 되돌리려면 'N번 되돌려'라고 하세요."(C · U 는 `counts[].told`) 미리보기의 `remembers` 가 있었으면 그 문장을 한 번 더 말한다(결과 페이지에도 있다).

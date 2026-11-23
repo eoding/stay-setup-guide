@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -20,6 +21,7 @@ from price_model import CellKey, CellValue, encode_snapshot, snapshot_reading  #
 from price_season import SeasonChoice, plan_season, recorded_request, season_steps, season_what  # noqa: E402
 from price_season import SeasonError  # noqa: E402
 from price_season_cli import next_call, season_rows, verify_season  # noqa: E402
+import season_pages  # noqa: E402
 
 DELUXE = ("디럭스", "조식 포함")
 
@@ -118,6 +120,43 @@ class SeasonLedgerTest(unittest.TestCase):
         with self.assertRaises(SeasonError) as caught:
             next_call(self.ledger, self.ledger.change(change), snapshot, snapshot)
         self.assertIn("다음 저장을 내지 않습니다", str(caught.exception))
+        self.assertEqual(self.ledger.change(change).status, "applying", "halt 를 주지 않은 저장은 전처럼 적용 중이다")
+
+    def two_saves(self):
+        two = [list(DELUXE)], [["디럭스", "룸온리"]]
+        snapshot = replace(season_scene.snapshot((), pairs=[DELUXE, ("디럭스", "룸온리")]), cells={})
+        fill = season_scene.fill_of(*(season_scene.save_of(dict(pairs=pairs, price="180", occupancy_keys="A2", dates=["2026-12-01"]))
+                                      for pairs in two))
+        plan = plan_season(snapshot, season_scene.window(), fill, [SeasonChoice(1, "NEW_ROW", "include", "응"),
+                                                                    SeasonChoice(2, "NEW_ROW", "include", "응")])
+        change = self.record(snapshot, plan)
+        self.ledger.begin(change, season_steps(plan), recorded_request(plan), read_at=scene.read_after(snapshot.read_at))
+        return snapshot, plan, change
+
+    def test_w8_a_save_the_erp_says_not_to_follow_stops_the_change_at_once(self):
+        """W8 — 「공급 통화 없음」 띠가 붙은 저장은 저장됨으로 적되, 남은 저장이 있으면 변경이 바로 멈춘다(적용 중으로 15분을 기다리지
+        않는다). 까닭은 halted 이고, 다시 읽어도(check) 이어서 하지 않으며, 결과 페이지가 그 저장 뒤에 멈췄다고 말한다."""
+        snapshot, plan, change = self.two_saves()
+        warn = "공급 통화가 없어 가격 원장을 기록하지 못했습니다."
+        status = self.ledger.record_step(change, 1, True, f"가격을 넣었습니다 — 새로 1칸 · 덮어쓴 0칸 (룸 1개 × 1일). · {warn}", halt=warn)
+        record = self.ledger.change(change)
+        self.assertEqual((status, record.status, record.cause, record.halt), ("stopped", "stopped", "halted", warn))
+        self.assertEqual(self.ledger.list_changes(change)[0]["status"], "stopped", "목록도 바로 멈춘 변경이다")
+        after = replace(snapshot, read_at=scene.read_after(snapshot.read_at), cells={
+            change_item.key: change_item.after for change_item in plan.saves[0].changes})
+        report = self.ledger.check(change, snapshot_reading(after), snapshot_reading(snapshot), after.read_at)
+        self.assertFalse(report.can_continue)
+        self.assertEqual(report.cause, "halted")
+        self.assertTrue(any("이어서 하지 않습니다" in why for why in report.why), report.why)
+        text = " ".join(re.sub(r"<[^>]+>", " ", season_pages.render_result(self.ledger.change(change))).split())
+        self.assertIn(f"1번째 저장 뒤에 멈췄습니다 ({warn.rstrip('.')}).", text)
+        self.assertIn("이어서 하지 않습니다", text)
+        self.assertNotIn("<b>이어서</b>", season_pages.render_result(self.ledger.change(change)))
+
+    def test_w8_the_halt_on_the_last_save_leaves_the_change_applied(self):
+        snapshot, plan, change = self.two_saves()
+        self.ledger.record_step(change, 1, True, "저장했습니다")
+        self.assertEqual(self.ledger.record_step(change, 2, True, "저장했습니다 · 공급 통화 없음", halt="공급 통화 없음"), "applied")
 
 
 if __name__ == "__main__":
