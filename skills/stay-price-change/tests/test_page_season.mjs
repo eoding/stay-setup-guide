@@ -35,8 +35,10 @@ test('S5 · 벽 — 삭제 · 시즌 [편집] · 판매 마감·해제 · 지우
     page.doc.querySelector('ul.tab-container a[data-stay-tab="offers"]'), page.doc.querySelector('[data-stay-action="activate"]')];
   for (const op of ['readSeason', 'applySeason']) {
     const pins = { hotel: '1', season: IDS.season, want: [['stale_cleanup', 'on']] };
-    const r = await page.w.stayPriceSeason.guard(op, () => targets.forEach((el) => el.click()), pins);
-    assert.equal(plain(r).blocked.length, targets.length, op);
+    const r = plain(await page.w.stayPriceSeason.guard(op, () => targets.forEach((el) => el.click()), pins));
+    assert.equal(r.blocked.length, targets.length, op);
+    assert.match(r.blocked[3].why, /^이번에 고르지 않은 인원·요금제 가격 지우기 — 이 도우미는 누르지 않습니다$/,
+      '지우기 칸은 허용 목록보다 먼저 보는 금지 목록이 막는다(허용 줄이 잘못 넓어져도 막힌다)');
   }
   assert.equal(root.querySelector('input[name="stale_cleanup"]').checked, false, '지우기 칸은 켜지지 않았다');
   assert.deepEqual(page.log.reached, [], '막힌 클릭은 화면에 닿지 않는다');
