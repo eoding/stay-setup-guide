@@ -173,7 +173,7 @@ export function takeAll(w, result) {
   return { takes, body: unpack(takes.map((t) => t.text).join('')) };
 }
 // 시즌 창 저장의 부를 값을 읽은 창에서 손으로 만든다(파이썬 `price_season.want_form` 과 같은 차례) — 계약 시험은 파이썬이 만든 값을 쓴다
-export function payloadFrom(read, save, no = 1) {
+export function payloadFrom(read, save, no = 1, freshUntil = Date.now() + 120000) {
   const want = [];
   read.order.forEach((name) => {
     if (name === 'rooms') read.rooms.filter((r) => save.rooms.includes(r.id)).forEach((r) => want.push(['rooms', r.id]));
@@ -185,5 +185,5 @@ export function payloadFrom(read, save, no = 1) {
   });
   return { no, hotel: HOTEL, offer: OFFER, season: { id: IDS.season, name: 'PEAK' }, dates: read.dates, form: read.form, want,
     candidates: { rooms: read.rooms.map((r) => [r.id, r.label]), plans: read.plans.map((r) => [r.id, r.roomId, r.label]) },
-    child: read.child.filter((c) => !c.editable).map((c) => [c.field, c.text]) };
+    child: read.child.filter((c) => !c.editable).map((c) => [c.field, c.text]), freshUntil };
 }

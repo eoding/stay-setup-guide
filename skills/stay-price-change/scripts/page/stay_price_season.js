@@ -8,11 +8,14 @@
  *        시즌 탭의 그 시즌 [가격 입력] 창을 열어 읽고 닫는다 — 열린 그대로의 칸(form) · 칸 차례(order) · 객실 · 요금제 · 아동 칸 ·
  *        시즌 날(창의 data-date-allowed), 마지막 입력값이 채워져 열렸으면 [비우기] 한 창의 칸(blank). 편집 화면에 이미 있는 요금제
  *        탭 목록(요금제 번호 → 캘린더의 객실 · 요금제 이름, 기준 ✓, 정렬) · 객실 타입 목록(허용 인원 조합) · 시즌 목록도 클릭 없이
- *        읽는다. 답은 늘 조각(body)이다. datesOnly 면 시즌 날까지만 읽고 닫는다
- *   stayPriceSeason.applySeason({no, hotel, offer, season, dates, form, want, candidates, child})
+ *        읽는다. 시즌 목록의 저장 띠(banner)와 「공급 통화 없음」 띠(supplyWarn)도 싣는다. 답은 늘 조각(body)이다. datesOnly 면 시즌 날까지만
+ *        읽고 닫는다
+ *   stayPriceSeason.applySeason({no, hotel, offer, season, dates, form, want, candidates, child, freshUntil})
  *        그 창을 열어, 창이 미리보기 때와 같은지 먼저 보고(시즌 · 날 · 객실 · 요금제 · 아동 글 · 보낼 칸 = form), 같을 때만 금액 · 글
  *        칸을 치고 객실 → 요금제 → 덮기 체크를 want 쪽으로 누르고 날짜 칸을 친 뒤, 보낼 칸이 want 와 꼭 같을 때만 [가격 적용]을 한
- *        번 누른다. 저장됨은 ERP 의 저장 표지와 시즌 목록의 저장 띠(새로 · 덮어쓴 · 건너뛴 칸 수)로 안다
+ *        번 누른다. 저장됨은 ERP 의 저장 표지와 시즌 목록의 저장 띠(새로 · 덮어쓴 · 건너뛴 칸 수)로 안다. `freshUntil` 은 calls 가
+ *        그 범위를 다시 읽은 값의 기한(이 컴퓨터 시계의 1970년부터 ms)이다 — 없거나 지났으면 창을 열지 않고, 누르는 순간에도 다시 본다
+ *        (답 `expired: true` — 다시 읽고 calls 부터. 창은 칸 값을 보이지 않아 누르는 순간 견줄 수 없으니 읽은 지 오래된 부를 값은 누르지 않는다)
  *   stayPriceSeason.take(id, at, size) · last() · idle()     조각 받기 · 마지막 답 · 쉬는 벽 보기(가격 도우미와 같은 것)
  *
  * 지키는 것
@@ -67,6 +70,9 @@
   // 열린 창이 그 호텔 · 그 시즌의 [가격 입력] 창인가 — 저장 단추의 주소로 본다
   function ours(root, pins) { return !!(root && pins.hotel && pins.season) && endsWith(hxPost(saveOf(root)), fillPath(pins.hotel, pins.season)); }
   function wanted(pins, el) { return (pins.want || []).some(function (x) { return x[0] === el.name && x[1] === el.value; }); }
+  // 부를 값의 기한 — calls 가 그 범위를 다시 읽은 때부터 2분(같은 컴퓨터의 시계). 지나면 창을 열지도 누르지도 않는다
+  function fresh(pins) { return typeof pins.until === 'number' && Date.now() <= pins.until; }
+  var EXPIRED = '이 부를 값의 기한(그 범위를 다시 읽은 지 2분)이 지났습니다 — 아무것도 누르지 않았습니다. 그 저장의 범위를 다시 읽고 calls 를 다시 부릅니다';
   var WHEN = {
     season: function (el, pins) { var tr = el.closest('tr[data-stay-entity="season"]'); return !!(tr && pins.season) && tr.getAttribute('data-stay-entity-id') === pins.season; },
     window: function (el, pins) { return ours(el.closest(SCREEN), pins); },
@@ -74,7 +80,7 @@
     toward: function (el, pins) { return !!pins.want && ours(el.closest(SCREEN), pins) && el.checked === wanted(pins, el); },
     target: function (el, pins) {
       var root = el.closest(SCREEN);
-      if (!pins.want || !ours(root, pins)) return false;
+      if (!pins.want || !ours(root, pins) || !fresh(pins)) return false;
       var sent = K.sent(root);
       return !!sent && K.differs(sent, pins.want).length === 0;
     }
@@ -85,7 +91,14 @@
     // 저장 요청이 아직 돌면 드로어를 닫지 않는다 — 닫으면 그 저장의 끝을 못 본다(다음 작업은 요청이 끝날 때까지 시작하지 않는다)
     tidy: function (op, untilMs) { return K.quiet() ? K.closeDrawer(untilMs) : null; },
     // 시즌이 길면 ERP 가 저장에 10초를 넘게 쓴다 — 45초 호출 안에서 더 기다린다(hardMs 40초 + 정리 4초)
-    limits: { applySeason: { budgetMs: 38000, hardMs: 40000 } }
+    limits: { applySeason: { budgetMs: 38000, hardMs: 40000 } },
+    // 「모름」으로 끝난 저장을 ERP 가 늦게 거절해 다시 그린 창 — 그 호텔 · 그 시즌의 [가격 입력] 창(도우미가 친 값이 들어 있다)이면 그
+    // 저장의 답으로 알아본다(작업 틀 run 이 닫고 lateSave 로 알린다). 사람이 연 창으로 보고 저장하라고 하지 않는다
+    adopt: function (content, pending) {
+      var root = windowRoot();
+      if (!root || !(content === root || content.contains(root)) || !ours(root, pending.pins || {})) return null;
+      return { window: '시즌 창', errors: K.errors(root) };
+    }
   };
 
   /* ───────────── 2. 시즌 목록과 편집 화면에 이미 있는 목록 ───────────── */
@@ -145,6 +158,11 @@
   function bannerText() {
     var banner = document.querySelector('#stay_seasons [data-stay-result="saved"]');
     return banner ? clip(C(banner.textContent), 300) : null;
+  }
+  // 시즌 목록의 「공급 통화 없음」 띠 — 시즌 채우기 저장 뒤 ERP 가 단다(이 호텔은 기본정보에 통화가 없어 넣은 칸이 팔리지 않는다)
+  function supplyWarn() {
+    var warn = document.querySelector('#stay_seasons [data-stay-banner="no_supply_currency"]');
+    return warn ? clip(C(warn.textContent), 120) : null;
   }
 
   /* ───────────── 3. 창 ───────────── */
@@ -228,7 +246,7 @@
         ok: true, what: what, count: { dates: dates.length, rooms: read.rooms.length, plans: read.plans.length },
         keep: { offer: want.offer, season: season, title: title, dates: dates, form: read.form, order: read.order, rooms: read.rooms,
           plans: read.plans, child: read.child, note: read.note, blank: blank, ratePlans: ratePlans(want.offer), roomTypes: roomTypes(),
-          seasons: seasonRows(card).map(seasonOf), banner: bannerText() }
+          seasons: seasonRows(card).map(seasonOf), banner: bannerText(), supplyWarn: supplyWarn() }
       };
     }, SPEC);
   }
@@ -264,6 +282,9 @@
     var cand = p.candidates;
     if (!cand || !Array.isArray(cand.rooms) || !Array.isArray(cand.plans)) fail('`candidates` 는 {rooms, plans} 입니다(readSeason 의 객실 · 요금제 그대로)');
     if (!Array.isArray(p.child)) fail('`child` 는 [칸 이름, 읽기 전용 글] 목록입니다');
+    if (typeof p.freshUntil !== 'number') {
+      fail('`freshUntil`(부를 값의 기한)이 없습니다 — 시즌 창 저장은 calls 가 그 범위를 다시 읽은 값으로 낸 부를 값으로만 누릅니다(계산 파일 · 장부의 페이로드는 누르지 않습니다). 아무것도 누르지 않았습니다', { expired: true });
+    }
     return { want: want, form: form };
   }
 
@@ -275,6 +296,8 @@
       ctx.pins.hotel = ctx.hotel.id;
       ctx.pins.season = want.id;
       ctx.pins.want = lists.want;
+      ctx.pins.until = p.freshUntil;
+      if (!fresh(ctx.pins)) fail(EXPIRED, { expired: true });
       var root = await toSeasons(ctx);
       var card = cardOf(root, want.offer);
       if (!card) fail('시즌 목록에 오퍼 `' + clip(want.offer, 40) + '` 이 없습니다 — 저장하지 않았습니다', { refused: true });
@@ -307,15 +330,17 @@
       var after = K.sent(win) || [];
       var off = K.differs(after, lists.want);
       if (off.length) fail('친 뒤의 시즌 창이 보낼 값과 다릅니다(' + clip(off.join(', '), 120) + ') — 저장하지 않았습니다', { refused: true, differ: off.slice(0, 8) });
+      if (!fresh(ctx.pins)) fail(EXPIRED, { expired: true });
       var out = await K.saveOnce(ctx, { root: win, panel: 'stay_seasons', window: '시즌 창', what: clip(want.offer + ' · ' + want.name, 60),
         waitMs: ctx.left(), banner: true });
+      if (!out.pressed && !fresh(ctx.pins)) { out.expired = true; out.error = EXPIRED; }   // 누르는 순간 기한이 지나 벽(target)이 막았다
       if (out.saved === true) {
         var told = /새로 ([\d,]+)칸 · 덮어쓴 ([\d,]+)칸 \(룸 (\d+)개 × (\d+)일\)/.exec(out.banner || '');
         var skipped = /판매일이 없어 건너뛴 칸 ([\d,]+)개/.exec(out.banner || '');
         var n = function (t) { return Number(String(t).replace(/,/g, '')); };
         if (told) out.counts = { created: n(told[1]), updated: n(told[2]), rooms: n(told[3]), days: n(told[4]), skipped: skipped ? n(skipped[1]) : 0 };
-        var warn = document.querySelector('#stay_seasons [data-stay-banner="no_supply_currency"]');
-        if (warn) out.warn = clip(C(warn.textContent), 80);
+        var warn = supplyWarn();
+        if (warn) out.warn = clip(warn, 80);
         // 띠의 요금제 · 인원 · 박수 줄까지 실으면 답이 800자를 넘어 수가 잘린다 — 수는 위에서 셌고 띠는 앞부분만 장부 메모로 싣는다
         out.banner = clip(out.banner || '', 160);
       }

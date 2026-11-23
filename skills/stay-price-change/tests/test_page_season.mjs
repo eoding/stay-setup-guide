@@ -7,6 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { seasonPage, inPage, plain, takeAll, payloadFrom, withDates, childPercent, WINDOW, LAST_FILL, OFFER, IDS, HOTEL, SEASON, personClick } from './season_harness.mjs';
 import { SKILL } from './page_harness.mjs';
 
@@ -54,7 +55,7 @@ test('S5 · 벽 — 체크는 want 쪽으로만, [가격 적용]은 보낼 칸�
   room.checked = true; overwrite.checked = false;
   const want = plain(page.w.stayPageKit.sent(root));
   room.checked = false; overwrite.checked = true;
-  const pins = { hotel: '1', season: IDS.season, want };
+  const pins = { hotel: '1', season: IDS.season, want, until: Date.now() + 60000 };
   let r = plain(await page.w.stayPriceSeason.guard('applySeason', () => { room.click(); room.click(); }, pins));
   assert.deepEqual([r.clicks, r.blocked.length, room.checked], [['room'], 1, true], '켜는 클릭은 지나고, 다시 끄는 클릭은 막힌다');
   r = plain(await page.w.stayPriceSeason.guard('applySeason', () => save.click(), pins));
@@ -201,6 +202,78 @@ test('S5 · applySeason — 저장이 호출보다 오래 걸리면 「모름」
   const after = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
   assert.equal(after.ok, true, after.error);
   assert.match(takeAll(page.w, after).body.banner, /^가격을 넣었습니다/, '끝난 저장의 띠가 시즌 목록에 남아 있다');
+  assert.equal(page.log.posts.length, 1, '다시 누르지 않았다');
+  page.w.close();
+});
+
+test('검토 2 의 3 · applySeason — 부를 값의 기한이 없거나 지났으면 창을 열지 않고, 누르는 순간 지났으면 벽이 [가격 적용]을 막는다', async () => {
+  const page = seasonPage();
+  const { body } = await read(page);
+  const late = plain(await page.w.stayPriceSeason.applySeason(inPage(page.w, payloadFrom(body, DELUXE, 1, Date.now() - 1))));
+  assert.deepEqual([late.saved, late.pressed, late.expired, late.clicks], [false, false, true, {}], late.error);
+  assert.match(late.error, /기한\(그 범위를 다시 읽은 지 2분\)이 지났습니다 — 아무것도 누르지 않았습니다/);
+  const bare = payloadFrom(body, DELUXE);
+  delete bare.freshUntil;
+  const none = plain(await page.w.stayPriceSeason.applySeason(inPage(page.w, bare)));
+  assert.deepEqual([none.saved, none.pressed, none.expired, none.clicks], [false, false, true, {}], none.error);
+  assert.match(none.error, /calls 가 그 범위를 다시 읽은 값으로 낸 부를 값으로만 누릅니다/);
+  assert.deepEqual(page.log.posts, []);
+  const root = page.showWindow();
+  const want = plain(page.w.stayPageKit.sent(root));
+  const r = plain(await page.w.stayPriceSeason.guard('applySeason', () => root.querySelector('[data-stay-action="save"]').click(),
+    { hotel: '1', season: IDS.season, want, until: Date.now() - 1 }));
+  assert.match(r.blocked[0].why, /고른 대상이 아닙니다/, '보낼 칸이 want 그대로여도 기한이 지나면 누르는 순간 막는다');
+  assert.deepEqual(page.log.posts, []);
+  page.w.close();
+});
+
+test('검토 2 의 page 2 · 공급 통화 없음 띠는 저장 뒤 화면이 쉬지 않아도 답의 warn 에 남고, 파이썬이 그 저장 뒤에 변경을 멈춘다', async () => {
+  // 검토자의 재현 — 저장 응답의 HX-Trigger 가 부르는 다시 읽기처럼, 저장의 정착(after:settle) 안에서 htmx 요청 하나를 더 시작한다
+  const page = seasonPage({ onSave: 'nosupply' });
+  const { body } = await read(page);
+  page.w.stayPrice.config({ budgetMs: 3000, hardMs: 3500, restMs: 1000 });   // 검토자는 6 · 7 · 1.5초 — 같은 셈을 짧게
+  let refetch = false;
+  page.doc.addEventListener('htmx:after:settle', () => {
+    if (refetch || !page.doc.querySelector('#stay_seasons [data-stay-banner="no_supply_currency"]')) return;
+    refetch = true;
+    page.doc.dispatchEvent(new page.w.CustomEvent('htmx:before:request', { bubbles: true, detail: {} }));
+    page.w.setTimeout(() => page.doc.dispatchEvent(new page.w.CustomEvent('htmx:finally:request', { bubbles: true, detail: {} })), 4500);
+  });
+  const r = plain(await page.w.stayPriceSeason.applySeason(inPage(page.w, payloadFrom(body, DELUXE))));
+  assert.deepEqual([r.saved, r.rest, refetch], [true, false, true], r.error);
+  assert.match(r.warn, /^공급 통화가 없어/, '화면이 아직 정리되지 않았다는 말이 경고를 덮지 않는다');
+  const stop = spawnSync('python3', ['-I', '-c', `import json, sys; sys.path.insert(0, ${JSON.stringify(join(SKILL, 'scripts'))})
+from price_season import NO_SUPPLY, step_note
+result = json.load(sys.stdin)
+print(json.dumps([NO_SUPPLY in step_note(result), bool(result.get("warn"))]))`], { input: JSON.stringify(r), encoding: 'utf8' });
+  assert.equal(stop.status, 0, stop.stderr);
+  assert.deepEqual(JSON.parse(stop.stdout), [true, true], '장부 메모에 그 띠가 들고 record-result 가 halt 로 변경을 멈춘다(W8)');
+  await new Promise((done) => setTimeout(done, 1500));
+  const again = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
+  assert.match(takeAll(page.w, again).body.supplyWarn, /^공급 통화가 없어/, '시즌 창 읽기도 그 띠를 싣는다(「모름」 뒤의 check --season)');
+  page.w.close();
+});
+
+test('검토 2 의 page 4 · 「모름」으로 끝난 저장을 ERP 가 늦게 거절해 다시 그린 창은 그 저장의 답(lateSave)으로 알리고 닫는다', async () => {
+  const page = seasonPage({ onSave: 'hang' });
+  const { body } = await read(page);
+  page.w.stayPrice.config({ budgetMs: 600, hardMs: 900, restMs: 300 });
+  const unknown = plain(await page.w.stayPriceSeason.applySeason(inPage(page.w, payloadFrom(body, DELUXE, 2))));
+  assert.deepEqual([unknown.saved, unknown.pressed], ['unknown', true], unknown.error);
+  // ERP 가 늦게 거절하고 창(도우미가 친 값이 든 그 창)을 오류와 함께 새 요소로 다시 그린다
+  const refused = WINDOW.replace('<div class="table1">', '<div class="stay-banner stay-banner--blocking" data-stay-result="error"><span>조정 값은 부호를 붙여 주세요</span></div><div class="table1">');
+  page.doc.getElementById('stay_drawer_body').innerHTML = refused;
+  page.doc.dispatchEvent(new page.w.CustomEvent('htmx:finally:request', { bubbles: true, detail: {} }));
+  const r = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
+  assert.deepEqual([r.ok, r.started], [false, false], r.error);
+  assert.doesNotMatch(r.error, /사람이 닫은 뒤/, '사람에게 그 창을 닫거나 저장하라고 하지 않는다');
+  assert.deepEqual([r.lateSave.op, r.lateSave.no, r.lateSave.ask, r.lateSave.saved, r.lateSave.pressed, r.lateSave.refused],
+    ['applySeason', 2, unknown.ask, false, true, true], '그 저장(2번째)의 답 — record-result 가 그 저장으로 받는다');
+  assert.deepEqual(r.lateSave.errors, ['조정 값은 부호를 붙여 주세요'], 'ERP 의 오류 글 그대로');
+  assert.equal(page.drawerOpen(), false, '도우미가 친 창이라 닫았다');
+  await new Promise((done) => setTimeout(done, 400));
+  const next = plain(await page.w.stayPriceSeason.readSeason(inPage(page.w, ask())));
+  assert.equal(next.ok, true, next.error);
   assert.equal(page.log.posts.length, 1, '다시 누르지 않았다');
   page.w.close();
 });
