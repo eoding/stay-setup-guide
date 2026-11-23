@@ -4,7 +4,7 @@
 //   NODE_PATH=<jsdom 이 있는 node_modules> node --test tests/test_page_*.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { promotionPage, inPage, plain, takeAll, HOTEL, GATE } from './promotion_harness.mjs';
+import { promotionPage, inPage, plain, takeAll, HOTEL, GATE, ORIGIN_UNKNOWN } from './promotion_harness.mjs';
 
 async function readWindow(page, offer, promotion) {
   const r = plain(await page.w.stayPromotion.readPromotion(inPage(page.w, { hotel: HOTEL, offer, promotion })));
@@ -64,6 +64,21 @@ test('M4 · 표식 없는 창이면 아무것도 치지 않고 누르지 않는�
   assert.deepEqual([r.ok, r.saved, r.pressed, r.refused, r.gate], [false, false, false, true, true]);
   assert.ok(r.error.startsWith(GATE), r.error);
   assert.deepEqual([page.log.typed, page.log.posts], [[], []]);
+  page.w.close();
+});
+
+test('W4 · 단 줄의 숨은 칸 tiers_origin 이 「?」(ERP 가 그 줄의 저장된 단을 모름 — 거절된 요청 뒤 다시 그린 창)인 창에서는 아무것도 치지 않고 창을 다시 열라고 한다', async () => {
+  const page = promotionPage();
+  const win = await readWindow(page, '601', '9005');
+  page.setOrigin('?');
+  const r = await apply(page, '601', '9005', win, [['tiers_value', 0, '16']]);
+  assert.deepEqual([r.ok, r.saved, r.pressed, r.refused], [false, false, false, true]);
+  assert.ok(r.error.startsWith(ORIGIN_UNKNOWN), r.error);
+  assert.match(r.error, /편집 창을 닫았다가 다시 열어/);
+  assert.deepEqual([page.log.typed, page.log.posts], [[], []]);
+  page.setOrigin(undefined);
+  const ok = await apply(page, '601', '9005', win, [['tiers_value', 0, '16']]);
+  assert.equal(ok.saved, true, ok.error);
   page.w.close();
 });
 

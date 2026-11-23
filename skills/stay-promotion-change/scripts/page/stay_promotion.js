@@ -23,6 +23,8 @@
  *    차례다. 치기 전에 단 줄마다 화면 밖 설정의 이름(`data-stay-off-form-keys`)이 읽은 marks 와 같아야 한다.
  *  - applyPromotion 은 kit 의 fill 로 친다 — 치기 전에 창이 보낼 칸이 앞서 읽은 form 과 꼭 같아야 하고(`tiers_origin` · 진행기간
  *    체크까지), 친 뒤에는 form 에서 set 의 자리만 바뀌어야 한다. 저장은 kit 의 saveOnce 로 한 번 누른다.
+ *  - 단 줄의 숨은 칸 `tiers_origin`(그 줄이 저장된 어느 단에서 왔는지 — 저장된 단의 기준값, 새 줄은 빈 값)은 읽은 그대로 두고 치지
+ *    않는다. 그 값이 `?`(ERP 가 모름 — 거절된 요청 뒤 다시 그린 창)인 줄이 하나라도 있으면 applyPromotion 은 아무것도 치지 않는다.
  *  - 저장 단추의 주소(hx-post)는 페이지 안에서 견주기만 하고 돌려주지 않는다.
  */
 (function () {
@@ -33,6 +35,10 @@
   var VERSION = '0.1.0';
   var C = K.C, all = K.all, fail = K.fail, clip = K.clip;
   var GATE = '이 ERP 는 아직 프로모션을 화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어, 도우미가 저장하지 않습니다 — ERP 가 고쳐진 뒤에 됩니다';
+  // 단 줄의 숨은 칸 tiers_origin 이 「?」 — ERP 가 그 줄이 어느 저장된 단에서 왔는지 모른다(숨은 칸 없이 보낸 요청이 거절된 뒤 다시
+  // 그린 창). 그런 창에서는 치지 않는다(명령의 ORIGIN_UNKNOWN 과 같은 문장)
+  var UNSURE = '?';
+  var ORIGIN_UNKNOWN = '이 프로모션의 편집 창은 ERP 가 할인 단 줄이 어느 저장된 단에서 왔는지 모르는 상태라(앞선 저장이 거절된 뒤 다시 그려진 창), 저장하면 화면에 안 보이는 설정이 다른 단에 붙거나 빠질 수 있어 도우미가 저장하지 않습니다 — ERP 에서 그 프로모션의 편집 창을 닫았다가 다시 열어 주시면 다시 해 보겠습니다';
   var COMMON = { id: '0', name: '전 오퍼 공통' };
 
   /* ───────────── 1. 벽의 표 ───────────── */
@@ -295,6 +301,8 @@
         fail('창의 프로모션 이름이 고른 프로모션(「' + clip(p.title, 40) + '」)이 아닙니다 — 아무것도 치지 않았습니다', { refused: true });
       }
       if (win.root.getAttribute(KEEPS) !== '1') fail(GATE + ' — 아무것도 치지 않았고 누르지 않았습니다', { refused: true, gate: true });
+      var unsure = all('input[name="tiers_origin"]', win.root).some(function (el) { return C(el.value) === UNSURE; });
+      if (unsure) fail(ORIGIN_UNKNOWN + ' — 아무것도 치지 않았고 누르지 않았습니다', { refused: true });
       var seen = marksOf(win.root).map(function (names) { return names.join(' '); });
       if (seen.join('\n') !== marks.join('\n')) {
         fail('창의 단 표식(화면에 없는 설정)이 읽은 것과 다릅니다 — 아무것도 치지 않았고 누르지 않았습니다', { refused: true, differ: ['marks'] });

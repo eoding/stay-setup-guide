@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from promotion_model import (
-    BASES, COMMON, GATE, ITEM_KIND, TRIGGERS, UNITS, Listing, Promotion, Snapshot, off_words, part_of_key, promotion_of_key,
+    BASES, COMMON, GATE, ITEM_KIND, ORIGIN_UNKNOWN, TRIGGERS, UNITS, Listing, Promotion, Snapshot, off_words, part_of_key, promotion_of_key,
 )
 from promotion_plan import CHOICE_LABELS, RULES, Plan, TierChange, counts, form_refusal, typed
 from change_core.chrome import (
@@ -209,6 +209,9 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
     if plan.unmarked:
         body.append(f'<div class="banner red"><b>{esc(GATE)}.</b> 계산은 보여 드리지만 저장하지 않습니다: '
                     f'{esc(" · ".join(promotion.label for promotion in plan.unmarked))}</div>')
+    if plan.unsure:
+        body.append(f'<div class="banner red"><b>{esc(ORIGIN_UNKNOWN)}.</b> 계산은 보여 드리지만 저장하지 않습니다: '
+                    f'{esc(" · ".join(promotion.label for promotion in plan.unsure))}</div>')
     if found["red"]:
         body.append(f'<div class="banner red"><b>먼저 골라 주세요 — 빨간 줄 {found["red"]}단.</b> 단마다 "이대로 바꿈" 또는 '
                     "\"그 단은 안 바꿈\"을 말씀해 주시면 다시 계산합니다.</div>")
@@ -239,8 +242,8 @@ def render_preview(plan: Plan, change_id: int | None, steps: Sequence | None, na
         body.append(notes(said))
     if steps is None:
         body.append('<div class="banner red">아직 적용할 수 없습니다. 먼저 빨간 줄을 골라 주세요.</div>')
-    elif not steps and plan.unmarked:
-        body.append(f'<div class="banner red"><b>저장하지 않습니다.</b> {esc(GATE)}.</div>')
+    elif not steps and (plan.unmarked or plan.unsure):
+        body.append(f'<div class="banner red"><b>저장하지 않습니다.</b> {esc(GATE if plan.unmarked else ORIGIN_UNKNOWN)}.</div>')
     elif not steps:
         body.append('<div class="banner blue"><b>저장할 것이 없습니다.</b> 바뀌는 단이 없어 적용할 것이 없습니다.</div>')
     else:
@@ -353,7 +356,8 @@ def render_window(snapshot: Snapshot) -> str:
         tiers = "".join(f'<tr><td class="text">{esc(promotion.threshold_words(tier))} 단</td>'
                         f'<td class="text">{esc(shown(promotion.value(tier), promotion.basis, currency))}</td>'
                         f'<td class="text">{esc(off_words(tier.off)) or "없음"}</td></tr>' for tier in promotion.tiers())
-        mark = ("이 ERP 는 화면에 없는 설정을 저장 때 지킵니다 — 도우미가 저장할 수 있습니다." if promotion.keeps else f"{GATE}.")
+        mark = (f"{GATE}." if not promotion.keeps else f"{ORIGIN_UNKNOWN}." if not promotion.origin_known
+                else "이 ERP 는 화면에 없는 설정을 저장 때 지킵니다 — 도우미가 저장할 수 있습니다.")
         body += [f"<h2>{esc(promotion.label)} <small class=\"sub\">프로모션 {esc(promotion.id)}번</small></h2>",
                  f'<p class="sub">{esc(mark)}</p>', _settings_table(promotion),
                  f'<div class="scroll"><table><tr><th>단</th><th>{esc(promotion.field_label)}</th><th>화면 밖 설정</th></tr>{tiers}</table></div>']
@@ -362,18 +366,37 @@ def render_window(snapshot: Snapshot) -> str:
     return page(title, "\n".join(body), MAKER)
 
 
-def render_prices(listing: Listing) -> str:
-    """지금 프로모션 — 호텔의 카드마다(오퍼 · 전 오퍼 공통) 프로모션 전부, 목록이 보인 그대로. 아무것도 바꾸지 않았다."""
+def save_line(promotion: Promotion | None) -> str:
+    """「지금 프로모션」의 프로모션 하나 — 화면 밖 설정이 붙은 단과, 이 ERP 가 그것을 지키는 표식이 있는지(도우미가 거기서 저장할 수
+    있는지) 한 줄. 편집 창을 읽지 않았으면 모른다고."""
+    if promotion is None:
+        return "화면 밖 설정 · 표식: 편집 창을 읽지 않아 모릅니다"
+    if not promotion.keeps:   # 표식 없는 ERP 는 화면 밖 설정의 이름도 보이지 않는다 — 「없음」이라고 하지 않는다
+        return "화면 밖 설정: 이 ERP 는 보여 주지 않습니다 · 표식 없음 — 이 ERP 에서는 도우미가 저장하지 않습니다"
+    off = [f"{promotion.threshold_words(tier)} 단에 {off_words(tier.off)}" for tier in promotion.tiers() if tier.off]
+    hidden = f"화면 밖 설정: {' · '.join(off)}" if off else "화면 밖 설정: 없음"
+    if not promotion.origin_known:
+        return f"{hidden} · 표식 있음, 그러나 편집 창의 단 줄 출처를 ERP 가 모르는 상태 — 창을 닫았다가 다시 열어야 도우미가 저장합니다"
+    return f"{hidden} · 표식 있음 — 도우미가 저장할 수 있습니다(그 설정은 그대로 둡니다)"
+
+
+def render_prices(listing: Listing, snapshot: Snapshot | None = None) -> str:
+    """지금 프로모션 — 호텔의 카드마다(오퍼 · 전 오퍼 공통) 프로모션 전부, 목록이 보인 그대로. 아무것도 바꾸지 않았다. `snapshot`
+    (read-calls --all 로 읽은 편집 창들)을 주면 프로모션마다 화면 밖 설정과 표식을 한 줄로 단다(save_line — 시운전 13: 그냥 보기에는
+    도우미가 거기서 저장할 수 있는지가 없었다)."""
     title = f"지금 프로모션 · {listing.hotel}"
     body = [f"<h1>{esc(title)}</h1>",
             f'<p class="sub">{esc(fmt_time(listing.read_at))} 에 ERP 에서 읽었습니다. 아무것도 바꾸지 않았습니다. 할인은 손님이 그 '
             "프로모션을 고를 때만, 객실 요금에만 붙습니다.</p>",
+            (f'<p class="sub">프로모션마다 화면에 안 보이는 설정이 붙은 단과, 이 ERP 가 저장할 때 그 설정을 지키는 표식이 있는지 한 줄로 '
+             f"보입니다({esc(fmt_time(snapshot.read_at))} 에 편집 창을 열어 읽고 닫았습니다).</p>" if snapshot else ""),
             stats([(len(listing.offers), "카드"), (len(listing.promotions), "프로모션")])]
     lines = (lambda items: "<br>".join(esc(line) for line in items))
     for offer_id, offer_name in listing.offers:
         mine = [item for item in listing.promotions if item.offer == offer_id]
+        read = (lambda item: f'<small class="more">{esc(save_line(snapshot.promotions.get(item.id)))}</small>' if snapshot else "")
         rows = "".join(f'<tr><td class="text">{esc(item.title)}{f"<br><small>{esc(item.code)}</small>" if item.code else ""}'
-                       f'<small class="more">프로모션 {esc(item.id)}번</small></td><td class="text">{esc(item.trigger)}</td>'
+                       f'<small class="more">프로모션 {esc(item.id)}번</small>{read(item)}</td><td class="text">{esc(item.trigger)}</td>'
                        f'<td class="text">{lines(item.benefit)}</td><td class="text">{lines(item.combo)}</td>'
                        f'<td class="text">{lines(item.limits)}</td></tr>' for item in mine)
         head = f"오퍼 {esc(offer_id)}번" if offer_id != COMMON else "모든 오퍼에 붙음"

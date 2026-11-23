@@ -181,8 +181,11 @@ class Erp:
         if promotion is None:
             return reply("readPromotion", asked, None, missing=True, doneAt=self.tick(),
                          note="목록에 그 카드의 그 프로모션이 없습니다 — 아무것도 열지 않았습니다")
-        keep = {"hotel": HOTEL, "offer": offer_of(card), "promotion": row_of(card, promotion),
-                "window": window_of(card, promotion, self.keeps)}
+        window = window_of(card, promotion, self.keeps)
+        if self.data.get("unsure"):   # 손으로 지은 줄 — 숨은 칸 없이 보낸 요청이 거절된 뒤 다시 그린 창처럼 첫 단 줄의 tiers_origin 이 「?」
+            first = next(index for index, (name, _value) in enumerate(window["form"]) if name == "tiers_origin")
+            window["form"][first] = ["tiers_origin", "?"]
+        keep = {"hotel": HOTEL, "offer": offer_of(card), "promotion": row_of(card, promotion), "window": window}
         return reply("readPromotion", asked, keep, pieces=3, body_id=f"b{self.reads}",
                      what=f"{offer_of(card)['name']} · {promotion['title']}", doneAt=self.tick())
 

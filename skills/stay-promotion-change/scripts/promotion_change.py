@@ -36,7 +36,7 @@ import argparse
 import sys
 
 from promotion_model import (
-    GATE, ITEM_KIND, OFFERLESS, ModelError, Snapshot, decode_hotel, decode_listing, decode_request, decode_snapshot, encode_hotel,
+    GATE, ITEM_KIND, OFFERLESS, ORIGIN_UNKNOWN, ModelError, Snapshot, decode_hotel, decode_listing, decode_request, decode_snapshot, encode_hotel,
     encode_listing, encode_request, encode_snapshot, hotel_label, known_promotions, listing_of, name_notes_of, part_of_key,
     promotion_of, promotion_of_key, snapshot_items,
 )
@@ -129,11 +129,12 @@ def listed_refs(listing, promotions) -> list:
 
 
 def cmd_read_calls(args):
-    if args.promotion:
+    if args.promotion or args.all:
         if not args.look:
-            raise ValueError("--promotion 으로 고를 때는 --look(이 일의 look.json)을 같이 줍니다 — 프로모션의 카드를 목록에서 찾습니다")
+            raise ValueError("--promotion · --all 로 고를 때는 --look(이 일의 look.json)을 같이 줍니다 — 프로모션의 카드를 목록에서 찾습니다")
         listing = decode_listing(load(args.look))
-        return read_calls(listing.hotel, listing.hotel_id, listed_refs(listing, args.promotion))
+        chosen = [item.id for item in listing.promotions] if args.all else args.promotion
+        return read_calls(listing.hotel, listing.hotel_id, listed_refs(listing, chosen))
     if args.record:
         then = recorded_snapshot(open_ledger(), args.record)
         return read_calls(then.hotel, then.hotel_id, then.asked)
@@ -185,7 +186,8 @@ def cmd_plan(args):
     names = name_notes_of(snapshot, ((change.key, change.before) for change in plan.changes if change.writes))
     return dict(change_id=change_id, replaces=args.replaces, counts=counts(plan), plan=encode_plan(plan, encode_request),
                 red=red_lines(plan), chosen=chosen_tiers(plan), blocked=blocked_tiers(plan),
-                gate=[dict(promotion=promotion.id, name=promotion.label, said=GATE) for promotion in plan.unmarked],
+                gate=[dict(promotion=promotion.id, name=promotion.label, said=GATE) for promotion in plan.unmarked]
+                + [dict(promotion=promotion.id, name=promotion.label, said=ORIGIN_UNKNOWN) for promotion in plan.unsure],
                 off=[line for promotion in plan.promotions for line in off_notes(promotion)], guest=guest_effect(plan),
                 names=[note.sentence for note in names],
                 scope_card=any(name.startswith("scope_") for promotion in plan.promotions for name, _text in promotion.form),
@@ -224,7 +226,7 @@ def cmd_render(args):
         html, hotel = render_rollback(plan, decode_snapshot(data["reading"]), data.get("scope") or ""), plan.hotel
     elif args.kind == "prices":
         listing = decode_listing(load(args.look))
-        html, hotel = render_prices(listing), listing.hotel
+        html, hotel = render_prices(listing, decode_snapshot(load(args.snapshot)) if args.snapshot else None), listing.hotel
     elif args.kind == "window":
         snapshot = decode_snapshot(load(args.snapshot))
         html, hotel = render_window(snapshot), snapshot.hotel
@@ -251,11 +253,15 @@ def same_hotel_or_refuse(change_id: int, then: Snapshot, now: Snapshot) -> None:
 
 
 def marked_or_refuse(steps, now: Snapshot) -> None:
-    """적용 직전에 읽은 창마다 화면 밖 설정을 지키는 표식이 있는지 — 없으면 아무것도 시작하지 않는다(장부에도 적지 않는다)."""
-    bare = [now.promotions[step.promotion].label for step in steps
-            if step.promotion in now.promotions and not now.promotions[step.promotion].keeps]
+    """적용 직전에 읽은 창마다 화면 밖 설정을 지키는 표식이 있는지, 단 줄마다 ERP 가 어느 저장된 단에서 왔는지 아는지(숨은 칸
+    tiers_origin 에 `?` 가 없는지) — 아니면 아무것도 시작하지 않는다(장부에도 적지 않는다)."""
+    read = [now.promotions[step.promotion] for step in steps if step.promotion in now.promotions]
+    bare = [promotion.label for promotion in read if not promotion.keeps]
     if bare:
         raise PlanError(f"{GATE}: {', '.join(bare)}")
+    unsure = [promotion.label for promotion in read if not promotion.origin_known]
+    if unsure:
+        raise PlanError(f"{ORIGIN_UNKNOWN}: {', '.join(unsure)}")
 
 
 def cmd_begin(args):
@@ -480,6 +486,8 @@ def parser() -> argparse.ArgumentParser:
     scope.add_argument("--request", help="바꾸기 요청 파일(kind promotion_change)")
     scope.add_argument("--record", type=int, help="장부 번호 — 그 번호의 계산이 바탕으로 삼은 프로모션을 다시 읽는다")
     scope.add_argument("--promotion", action="append", help="프로모션 번호(여러 번) — 바꾸지 않고 설정만 볼 때. --look 과 같이 준다")
+    scope.add_argument("--all", action="store_true", help="목록의 프로모션 전부 — 「지금 프로모션 보여줘」(화면 밖 설정 · 표식을 보려고). "
+                       "--look 과 같이 준다")
     sub.add_argument("--look", help="look 명령이 낸 파일 — 요청의 오퍼 · 프로모션 번호가 목록에 있는지 본다")
     sub = command("read", cmd_read, "readPromotion 답 → 지금 값")
     sub.add_argument("--calls", required=True, help="read-calls 가 낸 파일")
@@ -496,7 +504,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--plan", help="preview 는 plan-<k>.json, rollback 은 rollback-<k>.json")
     sub.add_argument("--look", help="prices 의 look 파일")
     sub.add_argument("--change", type=int, help="result 의 장부 번호")
-    sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값, window — 읽은 값")
+    sub.add_argument("--snapshot", help="result — 적용 뒤에 읽은 값, window — 읽은 값, prices — read-calls --all 로 읽은 값(프로모션마다 "
+                     "화면 밖 설정 · 표식 한 줄)")
     sub.add_argument("--text", action="store_true", help="페이지를 만들지 않고 페이지에 보이는 글만 답의 text 로 낸다(--out 과 같이 주지 않는다)")
     sub = command("begin", cmd_begin, "적용 시작")
     sub.add_argument("--change", type=int, required=True)

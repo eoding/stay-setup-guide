@@ -19,7 +19,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable, Iterable, Mapping, Sequence
 
 from promotion_model import (
-    BASES, GATE, ITEM_KIND, PRESENT, TRIGGERS, TYPED, VALUE, ChangeRequest, ModelError, Promotion, PromotionRef, Snapshot,
+    BASES, GATE, ITEM_KIND, ORIGIN_UNKNOWN, PRESENT, TRIGGERS, TYPED, UNSURE_ORIGIN, VALUE, ChangeRequest, ModelError, Promotion,
+    PromotionRef, Snapshot,
     decode_promotion, encode_hotel, encode_promotion, hotel_label, part_of_key, promotion_of_key, snapshot_items, threshold_key,
     tier_key,
 )
@@ -40,6 +41,7 @@ class Facts:
     keeps: bool
     basis: str
     refused: str | None
+    origin_known: bool
     free_stay: bool
     inverts: bool
 
@@ -51,6 +53,7 @@ def _whole(value: Decimal | None) -> bool:
 # 판정 함수는 Facts 하나를 받는다. 위에서부터 처음 맞는 한 줄이 그 단의 판정이다.
 RULES = RuleTable(
     Rule("NO_MARK", GATE, BLOCKED, (), lambda f: not f.keeps),
+    Rule("ORIGIN_UNKNOWN", ORIGIN_UNKNOWN, BLOCKED, (), lambda f: not f.origin_known),
     Rule("EMPTY", "값이 비어 있는 단은 채우지 않습니다", BLOCKED, (), lambda f: f.before is None),
     Rule("NEGATIVE", "0 아래가 됩니다", BLOCKED, (), lambda f: f.after is not None and f.after < 0),
     Rule("PCT_RANGE", "할인율이 100% 를 넘습니다", BLOCKED, (), lambda f: f.basis == "PCT" and f.after is not None and f.after > HUNDRED),
@@ -229,6 +232,11 @@ class Plan:
         """편집 창에 화면 밖 설정을 지키는 표식이 없는 프로모션 — 이 ERP 에서는 저장하지 않는다."""
         return tuple(promotion for promotion in self.promotions if not promotion.keeps)
 
+    @property
+    def unsure(self) -> tuple[Promotion, ...]:
+        """표식은 있는데 편집 창의 단 줄 가운데 ERP 가 어느 저장된 단에서 왔는지 모르는 줄(`?`)이 있는 프로모션 — 저장하지 않는다."""
+        return tuple(promotion for promotion in self.promotions if promotion.keeps and not promotion.origin_known)
+
 
 def _after(before: Decimal | None, request: ChangeRequest, rounding: Callable[[Decimal], Decimal]) -> Decimal | None:
     if request.how == "value":
@@ -279,7 +287,8 @@ def _verdict(promotion: Promotion, at: str, before, after, then: Mapping, planne
         return None
     refused = form_refusal(promotion, {at: after}) if after is not None else None
     inverts = _inverted(promotion, at, planned) and not _inverted(promotion, at, then)
-    return RULES.verdict(Facts(before, after, promotion.keeps, promotion.basis, refused, free_stay(promotion, at, after), inverts))
+    return RULES.verdict(Facts(before, after, promotion.keeps, promotion.basis, refused, promotion.origin_known,
+                               free_stay(promotion, at, after), inverts))
 
 
 def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
@@ -350,6 +359,8 @@ class PromotionStep:
     def __post_init__(self):
         if not self.keeps:
             raise PlanError(f"{GATE}: {self.label}")
+        if any(value.strip() == UNSURE_ORIGIN for value in form_values(self.form, "tiers_origin")):
+            raise PlanError(f"{ORIGIN_UNKNOWN}: {self.label}")
         if not self.edits:
             raise PlanError(f"바꾸는 단이 없는 저장입니다: {self.label}")
         values = form_values(self.form, VALUE)

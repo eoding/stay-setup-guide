@@ -38,17 +38,18 @@
 |---|---|
 | `await stayPromotion.look()` | 이 탭이 어디인지 — 로그인 화면이면 `login: true`. 아니면 호텔(`{id, name}`)과 카드마다 프로모션 줄 전부(조각 `body`). 표의 머리가 「프로모션 / 발동 조건 / 혜택 / 중복 / 한정 / 액션」이 아니면 읽지 않는다 |
 | `await stayPromotion.readPromotion({hotel, offer, promotion})` | 그 줄의 [편집] 을 눌러 창을 열고, 창이 그 프로모션의 것인지(저장 주소) · 단 줄이 다 그려졌는지 본 뒤 저장 단추가 보낼 칸(`form`) · 고르기의 글자(`labels`) · 뿌리의 표식(`keeps`) · 단 줄마다 화면 밖 설정의 이름(`marks`) · 오류를 읽고 닫는다. 목록에 없으면 `missing: true` |
-| `await stayPromotion.applyPromotion({no, hotel, offer, promotion, title, form, marks, set})` | 명령의 `calls` 가 준 `payload` 그대로. 창을 열고 이름 · 표식 · 단 표식이 읽은 것과 같은지 본 뒤, 창이 보낼 칸이 `form` 과 꼭 같을 때만 `set`(단의 값 칸 `tiers_value` 만)을 치고 저장을 한 번 누른다 |
+| `await stayPromotion.applyPromotion({no, hotel, offer, promotion, title, form, marks, set})` | 명령의 `calls` 가 준 `payload` 그대로. 창을 열고 이름 · 표식 · 단 줄의 숨은 칸 `tiers_origin`(`?` 가 없어야 한다) · 단 표식이 읽은 것과 같은지 본 뒤, 창이 보낼 칸이 `form` 과 꼭 같을 때만 `set`(단의 값 칸 `tiers_value` 만)을 치고 저장을 한 번 누른다. `tiers_origin` 은 `form` 에 읽은 그대로 있고 치지 않는다(commands.md 「단」) |
 | `stayPromotion.take(id, at, size)` · `last()` · `idle()` | 조각의 한 쪽 · 마지막 작업의 답 · 쉬는 벽 — 읽기만 한다 |
 
 ## 답의 모양
 
-모든 답은 JSON 으로 800자 안이다. `op` · `ok` · `ask`(물은 값의 지문) · `clicks`(지난 클릭) · `blocked` · `ms` · `doneAt`(끝난 시각). 읽기는 조각 `body`(id · 글자 수 · 바이트 수 · CRC-32 · FNV-1a)를 싣고 `take` 로 받는다. `readPromotion` 은 `keeps` 도 싣는다. 저장 작업의 답에는 언제나 `saved`(true · false · "unknown") 와 `pressed` 가 있다 — 누르기 전에 멈추면 `refused: true`, 표식이 없어 멈추면 `gate: true` 도. 시작하지 않은 작업은 `started: false` 와 `wait`(초)다.
+모든 답은 JSON 으로 800자 안이다. `op` · `ok` · `ask`(물은 값의 지문) · `clicks`(지난 클릭) · `blocked` · `ms` · `doneAt`(끝난 시각). `what`(읽거나 저장한 프로모션) · `note`(저장했으면 「저장했습니다」 같은 한 마디) · `rest`(답할 때 화면 — 드로어 · 요청 — 이 정리됐는지. 아니면 다음 작업이 `started: false` 로 기다린다)도 온다. 읽기는 조각 `body`(id · 글자 수 · 바이트 수 · CRC-32 · FNV-1a)를 싣고 `take` 로 받는다. `readPromotion` 은 `keeps` 도 싣는다. 저장 작업의 답에는 언제나 `saved`(true · false · "unknown") 와 `pressed` 가 있다 — 누르기 전에 멈추면 `refused: true`, 표식이 없어 멈추면 `gate: true` 도. 시작하지 않은 작업은 `started: false` 와 `wait`(초)다.
 
 ## 오류와 할 일
 
 | 오류 (앞부분) | 뜻 · 할 일 |
 |---|---|
+| `이 프로모션의 편집 창은 ERP 가 할인 단 줄이 어느 저장된 단에서 왔는지 모르는 상태라…` (`refused: true`) | 그 창의 단 줄 가운데 숨은 칸 `tiers_origin` 이 `?` 인 줄이 있다. 아무것도 치지 않았고 누르지 않았다. 그 문장을 그대로 말하고 끝낸다 |
 | `이 ERP 는 아직 프로모션을 화면으로 저장하면 …` (`gate: true`) | 그 창에 표식이 없다. 아무것도 치지 않았고 누르지 않았다. 그 문장을 그대로 말하고 끝낸다 |
 | `창의 단 표식(화면에 없는 설정)이 읽은 것과 다릅니다` · `창의 값이 읽은 값과 다릅니다` | 미리보기 뒤에 ERP 에서 그 프로모션이 바뀌었다. 아무것도 넣지 않았다 — 기록하고(`record-result`) stopped.md |
 | `단 줄 …의 화면 밖 설정 표식이 창에 실린 단 목록과 다릅니다` | 화면이 다 그려지지 않았다. 몇 초 뒤 같은 값으로 다시 부른다 |

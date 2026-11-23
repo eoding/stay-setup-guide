@@ -8,7 +8,7 @@ import unittest
 from decimal import Decimal
 
 import promotion_scene as scene
-from promotion_model import GATE, ModelError, Snapshot, decode_request, promotion_of, snapshot_items, tier_key
+from promotion_model import GATE, ORIGIN_UNKNOWN, ModelError, Snapshot, decode_request, promotion_of, snapshot_items, tier_key
 from promotion_plan import PlanError, PromotionStep, Edit, plan_change, plan_steps, resolve, step_call
 from change_core.answers import attach_bodies
 from change_core.rules import Resolution
@@ -128,6 +128,11 @@ class StepTest(unittest.TestCase):
                       [Edit(key, 1, "8")], [Edit(tier_key("9003", "0"), 0, "8")], [Edit(tier_key("9002"), 0, "8")]):
             with self.assertRaises(PlanError, msg=str(edits)):
                 build(edits)
+        first = next(index for index, (name, _value) in enumerate(promotion.form) if name == "tiers_origin")
+        unsure = tuple(("tiers_origin", "?") if index == first else pair for index, pair in enumerate(promotion.form))
+        with self.assertRaises(PlanError) as caught:   # W4 — 단 줄 출처를 ERP 가 모르는 창(`?`)의 저장 단계는 만들지 않는다
+            PromotionStep("601", "9002", promotion.name, promotion.label, unsure, promotion.marks, True, (Edit(key, 0, "8"),))
+        self.assertIn(ORIGIN_UNKNOWN, str(caught.exception))
 
 
 class KeysAndRequestTest(unittest.TestCase):

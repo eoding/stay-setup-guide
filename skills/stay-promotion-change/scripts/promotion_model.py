@@ -11,7 +11,13 @@
                                              다니며 창이 보인 그대로 다시 보낸다
     {"promotion": "9001", "tier": "21"}      할인 단 하나(기준값 21) — 필드 value(할인율 · 할인 금액 · 무료 숙박 박수)
 
-단의 이름이 기준값인 것은 ERP 와 같다(저장된 단의 정체성 `tier_origin` 이 기준값 글자다). 도우미는 기준값을 바꾸지 않으므로 그 사이
+단의 줄마다 창이 보내는 숨은 칸 `tiers_origin` 은 그 줄이 저장된 어느 단에서 왔는지다 — 저장된 단의 기준값 글자, 「단 추가」로 더한
+줄은 빈 값. ERP 는 저장할 때 이 값으로 줄과 저장된 단을 짝지어 그 단의 화면 밖 설정을 잇는다. 도우미는 읽은 그대로 보내고 치지 않는다
+(`form` 에 그대로 있고, 저장 단계가 치는 칸은 `tiers_value` 뿐이다). `?`(UNSURE_ORIGIN)는 ERP 가 그 줄이 어느 단에서 왔는지 모른다는
+뜻이다 — 숨은 칸 없이 보낸 요청이 거절된 뒤 다시 그린 창에만 나온다. 그런 창은 저장하지 않는다(ORIGIN_UNKNOWN — 명령의 계산 · begin
+· 페이지가 모두 거절한다). 도우미는 읽을 때마다 창을 새로 열므로 보통은 나오지 않는다.
+
+단의 이름이 기준값인 것은 ERP 와 같다(저장된 단의 정체성 `tiers_origin` 이 기준값 글자다). 도우미는 기준값을 바꾸지 않으므로 그 사이
 다른 사람이 기준값을 바꾸지 않는 한 같은 단을 가리킨다. 바꿨으면 그 키의 단이 없어진 것이다 — 적용 직전 견주기가 멈추고, 되돌리기는
 그 단을 「도우미 밖」으로 그대로 둔다.
 
@@ -44,6 +50,10 @@ VALUE = "tiers_value"    # 도우미가 치는 단 하나의 칸 — 이 밖의 
 TYPED = re.compile(r"^\d+(\.\d+)?$")
 GATE = ("이 ERP 는 아직 프로모션을 화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어, 도우미가 저장하지 않습니다 — ERP 가 "
         "고쳐진 뒤에 됩니다")
+UNSURE_ORIGIN = "?"      # 숨은 칸 tiers_origin 의 이 값 — ERP 가 그 줄이 어느 저장된 단에서 왔는지 모른다(거절된 요청 뒤 다시 그린 창)
+ORIGIN_UNKNOWN = ("이 프로모션의 편집 창은 ERP 가 할인 단 줄이 어느 저장된 단에서 왔는지 모르는 상태라(앞선 저장이 거절된 뒤 다시 그려진 "
+                  "창), 저장하면 화면에 안 보이는 설정이 다른 단에 붙거나 빠질 수 있어 도우미가 저장하지 않습니다 — ERP 에서 그 프로모션의 "
+                  "편집 창을 닫았다가 다시 열어 주시면 다시 해 보겠습니다")
 TRIGGERS = {"ALWAYS": "상시", "LOS": "연박", "LEAD_TIME": "얼리버드", "ROOM_COUNT": "객실 수"}
 BASES = {"PCT": "할인율(%)", "FLAT": "할인 금액", "FREE_NIGHT": "무료 숙박(박)"}
 UNITS = {"0": "박당", "1": "체류당 1회"}
@@ -243,6 +253,11 @@ class Promotion:
     @property
     def field_label(self) -> str:
         return BASES.get(self.basis, "값")
+
+    @property
+    def origin_known(self) -> bool:
+        """단 줄마다 ERP 가 그 줄이 어느 저장된 단에서 왔는지 안다 — 숨은 칸 tiers_origin 에 `?` 가 하나도 없다."""
+        return all(value.strip() != UNSURE_ORIGIN for value in form_values(self.form, "tiers_origin"))
 
     def tiers(self) -> tuple[Tier, ...]:
         thresholds, values = form_values(self.form, "tiers_threshold"), form_values(self.form, VALUE)

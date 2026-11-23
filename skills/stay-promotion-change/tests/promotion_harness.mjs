@@ -25,6 +25,7 @@ export const SKILL = join(HERE, '..');
 export const PROMOTION = readFileSync(join(SKILL, 'scripts', 'page', 'stay_promotion.js'), 'utf8');
 export const CHARGE = readFileSync(join(SKILL, '..', 'stay-charge-change', 'scripts', 'page', 'stay_charge.js'), 'utf8');
 export const DB = Object.freeze(JSON.parse(readFileSync(join(HERE, 'fixtures', 'erp', 'promotions.json'), 'utf8')));
+export const ORIGIN_UNKNOWN = '이 프로모션의 편집 창은 ERP 가 할인 단 줄이 어느 저장된 단에서 왔는지 모르는 상태라(앞선 저장이 거절된 뒤 다시 그려진 창), 저장하면 화면에 안 보이는 설정이 다른 단에 붙거나 빠질 수 있어 도우미가 저장하지 않습니다 — ERP 에서 그 프로모션의 편집 창을 닫았다가 다시 열어 주시면 다시 해 보겠습니다';
 export const GATE = '이 ERP 는 아직 프로모션을 화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어, 도우미가 저장하지 않습니다 — ERP 가 고쳐진 뒤에 됩니다';
 const copy = (value) => JSON.parse(JSON.stringify(value));
 
@@ -169,7 +170,14 @@ ${o.promotions === 'stub' ? stub(hotelId) : panel(db, hotelId)}
     if (el.localName === 'select' && el.multiple) return [...el.selectedOptions].map((op) => [el.name, op.value]);
     return [[el.name, el.value]];
   });
-  const windowOf = (promotionId, extra = {}) => promotionWindow(db, hotelId, promotionId, Object.assign({ morph: morph(), keeps: keeps() }, extra));
+  const windowOf = (promotionId, extra = {}) => {
+    if (o.origin !== undefined && !extra.values) {   // 손으로 지은 줄 — 거절된 요청 뒤 다시 그린 창처럼 첫 단 줄의 tiers_origin 이 o.origin(「?」)
+      const values = windowValues(promotionOf(db, promotionId).promotion);
+      values.tiers = values.tiers.map((tier, i) => (i === 0 ? Object.assign({}, tier, { origin: o.origin }) : tier));
+      extra = Object.assign({}, extra, { values });
+    }
+    return promotionWindow(db, hotelId, promotionId, Object.assign({ morph: morph(), keeps: keeps() }, extra));
+  };
   const savePromotion = (save) => {
     const path = save.getAttribute('hx-post');
     const pairs = collect(save);
@@ -239,6 +247,7 @@ ${o.promotions === 'stub' ? stub(hotelId) : panel(db, hotelId)}
     drawerOpen: () => drawer.classList.contains('is-open'),
     answerSavesWith: (mode) => { o.onSave = mode; },
     setKeeps: (value) => { o.keeps = value; },
+    setOrigin: (value) => { o.origin = value; },
     promotion: (id) => promotionOf(db, id).promotion,
     showPromotion: (promotionId) => { open(windowOf(promotionId), promotionTitle(db, promotionId)); wire(body); return body.querySelector('[data-stay-screen="promotion"]'); }
   };

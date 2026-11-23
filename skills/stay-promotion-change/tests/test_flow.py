@@ -27,6 +27,9 @@ FREE = {"offer": "601", "promotion": "9004", "tier": "4"}
 EARLY_NRF = {"offer": "601", "promotion": "9005", "tier": "46"}
 COMMON = {"offer": "0", "promotion": "9006", "tier": "0"}
 GATE = "이 ERP 는 아직 프로모션을 화면으로 저장하면 화면에 안 보이는 설정이 지워질 수 있어, 도우미가 저장하지 않습니다 — ERP 가 고쳐진 뒤에 됩니다"
+ORIGIN_UNKNOWN = ("이 프로모션의 편집 창은 ERP 가 할인 단 줄이 어느 저장된 단에서 왔는지 모르는 상태라(앞선 저장이 거절된 뒤 다시 "
+                  "그려진 창), 저장하면 화면에 안 보이는 설정이 다른 단에 붙거나 빠질 수 있어 도우미가 저장하지 않습니다 — ERP 에서 그 "
+                  "프로모션의 편집 창을 닫았다가 다시 열어 주시면 다시 해 보겠습니다")
 
 
 class Flow(unittest.TestCase):
@@ -64,7 +67,8 @@ class Flow(unittest.TestCase):
         self.readings += 1
         folder = self.work / f"읽기-{self.readings}"
         folder.mkdir()
-        flags = ["--record", scope["record"]] if "record" in scope else ["--request", scope["request"]]
+        flags = (["--record", scope["record"]] if "record" in scope else ["--all", "--look", self.look()] if scope.get("all")
+                 else ["--request", scope["request"]])
         self.cli("read-calls", *flags, "--out", folder / "calls.json")
         calls = json.loads((folder / "calls.json").read_text(encoding="utf-8"))["promotions"]
         scene.write_answers(folder, "promotion", [self.erp.read_promotion(call) for call in calls])
@@ -259,6 +263,50 @@ class GateTest(Flow):
         refused = self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change), code=2)
         self.assertIn("저장할 것이 없는 미리보기", refused["error"])
         self.assertEqual(self.erp.posts, [])
+
+    def test_w4_a_window_whose_row_origin_is_unknown_is_not_saved_and_begin_refuses_it(self):
+        """W4 (시운전 13) — 단 줄의 숨은 칸 tiers_origin 이 「?」(ERP 가 그 줄이 어느 저장된 단에서 왔는지 모름 — 숨은 칸 없이 보낸 요청이
+        거절된 뒤 다시 그린 창)이면 저장하지 않는다: 미리보기는 계산만 보이고(`gate` 에 그 문장), 적용 직전에 읽은 창이 그러면 begin 이
+        아무것도 시작하지 않는다. 문장은 ERP 에서 편집 창을 닫았다가 다시 열라고 한다."""
+        self.erp.data["unsure"] = True
+        change, plan, short = self.preview(self.request(EARLY_NRF, value="16", sentence="얼리버드 46일 16% 로"))
+        self.assertEqual((short["saves"], short["counts"]["ORIGIN_UNKNOWN"], short["counts"]["will_change"]), (0, 1, 0))
+        self.assertEqual(short["gate"][0]["said"], ORIGIN_UNKNOWN)
+        self.assertFalse(short["scope_card"])
+        text = self.cli("render", "preview", "--plan", plan, "--text")["text"]
+        self.assertIn(ORIGIN_UNKNOWN, text)
+        self.assertIn("저장하지 않습니다", text)
+        self.erp.data["unsure"] = False
+        change, plan, short = self.preview(self.request(EARLY_NRF, value="16", sentence="얼리버드 46일 16% 로"), "plan-2.json")
+        self.assertEqual(short["saves"], 1)
+        self.erp.data["unsure"] = True
+        refused = self.cli("begin", "--change", change, "--plan", plan, "--snapshot", self.read(record=change), code=2)
+        self.assertIn(ORIGIN_UNKNOWN, refused["error"])
+        self.assertIn("편집 창을 닫았다가 다시 열어", refused["error"])
+        self.assertEqual((self.erp.posts, self.listed()[change]["status"]), ([], "previewed"))
+
+    def test_w4_the_plain_view_says_per_promotion_what_hidden_settings_its_tiers_carry_and_whether_this_erp_can_save(self):
+        """W4 (시운전 13) — 「지금 프로모션 보여줘」만으로 프로모션마다 한 줄: 화면 밖 설정이 붙은 단, 이 ERP 에 표식이 있는지(도우미가 거기서
+        저장할 수 있는지). 목록의 프로모션을 모두 읽어(read-calls --all) prices 페이지에 단다."""
+        snapshot = self.read(all=True)
+        calls = json.loads((snapshot.parent / "calls.json").read_text(encoding="utf-8"))["promotions"]
+        self.assertEqual(len(calls), json.loads(self.look().read_text(encoding="utf-8"))["promotions"].__len__(), "목록의 프로모션 전부")
+        text = self.cli("render", "prices", "--look", self.look(), "--snapshot", snapshot, "--text")["text"]
+        self.assertIn("화면 밖 설정: 체크인 46일 전 단에 취소 조건 · 체크인 31일 전 단에 취소 조건 · 표식 있음 — 도우미가 저장할 수 있습니다"
+                      "(그 설정은 그대로 둡니다)", text)
+        self.assertIn("화면 밖 설정: 없음 · 표식 있음 — 도우미가 저장할 수 있습니다", text)
+        self.assertIn("편집 창을 열어 읽고 닫았습니다", text)
+        self.assertNotIn("화면 밖 설정", self.cli("render", "prices", "--look", self.look(), "--text")["text"],
+                         "읽지 않고 그리면 그 줄이 없다")
+        self.erp.data["keeps"] = False
+        bare = self.cli("render", "prices", "--look", self.look(), "--snapshot", self.read(all=True), "--text")["text"]
+        self.assertIn("화면 밖 설정: 이 ERP 는 보여 주지 않습니다 · 표식 없음 — 이 ERP 에서는 도우미가 저장하지 않습니다", bare)
+        self.assertNotIn("화면 밖 설정: 없음", bare, "표식 없는 ERP 에서는 설정이 없다고 하지 않는다(보이지 않을 뿐)")
+        self.erp.data.update(keeps=True, unsure=True)
+        unsure = self.cli("render", "prices", "--look", self.look(), "--snapshot", self.read(all=True), "--text")["text"]
+        self.assertIn("창을 닫았다가 다시 열어야 도우미가 저장합니다", unsure)
+        window = self.cli("render", "window", "--snapshot", self.read(all=True), "--text")["text"]
+        self.assertIn(ORIGIN_UNKNOWN, window, "설정 전부 페이지도 그 창에서는 저장하지 않는다고 한다")
 
     def test_a_mark_that_disappears_before_applying_stops_the_start(self):
         change, plan, short = self.preview(self.request(LONG_STAY, value="8"))

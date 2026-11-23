@@ -50,7 +50,7 @@ metadata:
    2. 거절하면 답의 `want` 에 든 파일만(넷은 page.md 「올리기」) 파일 올리기 도구로 접근성 이름이 **`stay price file bridge`** 인 파일 칸에 올리고 `await stayPriceLoader.load('promotion')`. 막히면 page.md 「올리기」.
 3. **작업 폴더.** `python3 scripts/promotion_change.py work` 의 `work` 가 이 일의 `<작업>` 이다. 읽기마다 그 안의 `읽기-1`, `읽기-2` …(`<R>` — 폴더는 명령이 만든다)를 쓴다. 경로에 빈칸이 있으니 명령에 넘기는 경로는 언제나 큰따옴표로 감싼다.
 4. **어디인지 보기.** `await stayPromotion.look()` 의 답을 `<작업>/look/look-1.json` 에 저장하고(도구가 답을 버렸으면 다시 부른다 — 읽기만 한다) `python3 scripts/promotion_change.py look --answers "<작업>/look" --out "<작업>/look.json"`. 종료 2 의 `refetch` 가 받을 조각이다 — 「읽기」 4 처럼 받아 `<작업>/look/` 에 두고 이 명령을 다시 한다. `login: true` 면 멈추고 "크롬의 ERP 탭에서 직접 로그인해 주시고, ○○ 호텔 화면이 뜨면 알려 주세요". 호텔 번호를 못 찾거나 짧은 답의 `hotel` 이 말한 호텔이 아니면 "○○ 호텔의 Stay 화면을 열어 주세요".
-5. **장부 보기.** `python3 scripts/promotion_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 네 도우미 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?"(지금 다루는 그 변경이면 하지 않는다) `empty` 는 저장할 것이 없던 미리보기다.
+5. **장부 보기.** `python3 scripts/promotion_change.py list --look "<작업>/look.json"` — 이 호텔의 기록이 네 도우미 것 모두 나온다(다른 호텔 것은 담당자가 청할 때만 `--all`). 다른 도우미의 줄(`helper`)은 읽어 주기만 하고, 그 번호를 되돌리거나 이어서 하라면 "장부 <`id`>번은 <`helper`>의 기록입니다"라고 하고 그 도우미로 한다. `status: stopped` 인 변경이 있으면 다른 일보다 먼저 알리기만 한다: "장부 <`id`>번 변경이 중간에 멈춰 있습니다 — <`scope`>. 그것부터 볼까요?"(지금 다루는 그 변경이면 하지 않는다)
 
 ## 읽기 — 바꾸기 · 되돌리기 · 적용이 모두 이것으로 읽는다
 
@@ -63,9 +63,9 @@ metadata:
 
 ## 1. 지금 프로모션 보기
 
-「준비」 다음 `python3 scripts/promotion_change.py render prices --look "<작업>/look.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 프로모션입니다. 아무것도 바꾸지 않았습니다."
+「준비」 다음 「읽기」를 `read-calls --all --look "<작업>/look.json" --out "<R>/calls.json"` 으로 하고(프로모션마다 편집 창을 열고 닫는다) `render prices --look "<작업>/look.json" --snapshot "<R>/snapshot.json"` → `page` 를 연다. "○시 ○분에 ERP 에서 읽은 프로모션입니다. 아무것도 바꾸지 않았습니다." `read` 의 `unmarked` 가 비었으면 "이 ERP 에서는 도우미가 할인 값을 바꿀 수 있습니다(화면에 안 보이는 설정을 지킵니다)", 아니면 "이 ERP 에는 표식이 없어 도우미가 저장하지 않습니다".
 
-"이 프로모션 설정 다 보여줘"면(맞는 프로모션이 여럿이면 「<카드> · <프로모션> (프로모션 <번호>번)」으로 늘어놓고 먼저 묻는다 — "모두"면 `--promotion` 을 여러 번) 「읽기」를 `read-calls --promotion <번호> --look "<작업>/look.json" --out "<R>/calls.json"` 으로 하고 `python3 scripts/promotion_change.py render window --snapshot "<R>/snapshot.json"` → `page` 를 열고 말한다: "○시 ○분에 ERP 에서 읽은 <카드> · <프로모션> 설정 전부입니다. 바꾸지 않았고 장부에도 적지 않았습니다."
+"이 프로모션 설정 다 보여줘"면(맞는 것이 여럿이면 카드 · 이름 · 번호로 묻는다 — "모두"면 `--promotion` 을 여러 번) 「읽기」를 `read-calls --promotion <번호> --look "<작업>/look.json"` 으로 하고 `render window --snapshot "<R>/snapshot.json"` → `page`: "○시 ○분에 ERP 에서 읽은 <카드> · <프로모션> 설정 전부입니다. 바꾸지 않았고 장부에도 적지 않았습니다."
 
 ## 2. 할인 값 바꾸기
 
@@ -83,7 +83,7 @@ metadata:
 1. `<작업>/request.json` 을 쓴다(commands.md 「요청 파일」 · 「단」). 「읽기」 → `<R>/snapshot.json`.
 2. `python3 scripts/promotion_change.py plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --record --out "<작업>/plan-1.json"` → 짧은 답의 `change_id` 가 N, `saves` 가 저장 횟수(빨간 줄이 남았으면 null). 다시 계산하면 `plan-2.json` 처럼 새 이름에 쓰고 `--replaces <앞 번호>` 를 붙인다.
 3. `python3 scripts/promotion_change.py render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다.
-4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." **표식이 없으면**(`gate` 가 비어 있지 않음) 그 `said` 만 그대로 말하고 끝낸다 — 수 · 저장하면 생기는 것 · "적용"을 말하지 않는다. ERP 가 고쳐진 뒤에 다시 하면 된다. 그 밖에는 `counts` 로 바뀌는 단 · 그대로인 단(`unchanged` 와 짚지 않아 그대로 보내는 `sent`) · 바꿀 수 없는 단(`blocked` 의 단마다 `name` 과 `label` · `why`)을 말하고, `guest` 를 그대로 말한다. `off` 가 있으면 그 문장마다 그대로 말한다(화면에 안 보이는 설정은 그대로 둔다는 알림이다). `names` 가 있으면 그 문장을 그대로 말한다. `scope_card` 가 true 면(저장할 것이 있을 때만 true) "저장할 때 적용 범위 기록이 하나 생길 수 있고(가격 영향 없음) 되돌려도 없어지지 않습니다."
+4. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." **표식이 없거나 단 줄 출처를 모르면**(`gate` 가 비어 있지 않음) 그 `said` 만 그대로 말하고 끝낸다 — 수 · 저장하면 생기는 것 · "적용"을 말하지 않는다. 그 밖에는 `counts` 로 바뀌는 단 · 그대로인 단(`unchanged` 와 짚지 않아 그대로 보내는 `sent`) · 바꿀 수 없는 단(`blocked` 의 단마다 `name` 과 `label` · `why`)을 말하고, `guest` 를 그대로 말한다. `off` 가 있으면 그 문장마다 그대로 말한다(화면에 안 보이는 설정은 그대로 둔다는 알림이다). `names` 가 있으면 그 문장을 그대로 말한다. `scope_card` 가 true 면(저장할 것이 있을 때만 true) "저장할 때 적용 범위 기록이 하나 생길 수 있고(가격 영향 없음) 되돌려도 없어지지 않습니다."
    - **빨간 줄이 남아 있으면**(`counts.red` > 0) `red` 의 규칙마다 단과 바뀌는 값(`examples` 의 `moves`)을 말하고 "이대로 바꿈 · 그 단은 안 바꿈" 가운데 고르게 한다(commands.md 「판정」). 빨간 줄이 남았는데 "적용"이라고만 하면 저장하지 않는다. 고르면 `--resolutions` 로 다시 계산한다(고름마다 담당자의 말을 `said` 에 그대로).
    - **저장할 것이 없으면**(`saves` 가 0) "바뀌는 단이 없어 저장할 것이 없습니다"라고 하고 "적용"을 묻지 않는다.
    - **그 밖에는** 저장 횟수(`saves`)를 말하고 "맞으면 '적용'이라고 해 주세요." 분명한 "적용" 없이는 「적용하기」로 가지 않는다.
