@@ -2,8 +2,10 @@
 `change_core` 의 공통 모양((종류, 키, 필드) → 값)으로 바꿔 넘긴다. 돈은 전부 `Decimal` 이다.
 
     CellKey      칸 하나의 자리 — 객실 · 요금제 · 날짜 · 인원 조합 · 박수 층
-    CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / missing)
-    Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜). 호텔은 페이지가 알아본 번호(hotel_id)와 이름
+    CellValue    그 칸의 값 — 판매가(sell) · 정가(list) · 공급 원가(supply) · 상태(open / closed / mixed / missing). 화면은 판매
+                 상태를 (객실, 요금제, 날)마다 하나로 보여 칸의 상태가 섞인 날의 칸은 모두 mixed 다(어느 칸이 마감인지 모른다 — as_read)
+    Snapshot     ERP 에서 한 번 읽은 값 전부 + 예약 있는 (객실, 날짜) + 지속 마감인 (객실, 요금제, 날). 호텔은 페이지가 알아본
+                 번호(hotel_id)와 이름
     Skipped      건너뛰는 칸과 까닭(가격 없음 · 바꿀 값 없음 · 이미 그 값)
     ReadRange    읽을 범위 — 호텔 · 오퍼 · (객실, 요금제) 쌍 · 날짜. 바꾸는 방법 없이 읽기만 할 때의 요청(kind range)
     ChangeRequest  담당자의 요청 — 범위 · 바꾸는 값 하나 · 바꾸는 방법 · 원래 문장
@@ -34,7 +36,7 @@ from change_core.rules import BLOCKED, RED, Rule, RuleTable, moved_far
 ITEM_KIND = "price_cell"
 FIELDS = ("sell", "list", "supply")
 FIELD_LABELS = {"sell": "판매가", "list": "정가", "supply": "공급 원가"}
-STATES = ("open", "closed", "missing")
+STATES = ("open", "closed", "mixed", "missing")
 OPERATIONS = ("amount", "percent", "set", "clear")
 RESERVED, CLOSED, NEW = "reserved", "closed", "new"
 WEEKDAYS = "월화수목금토일"
@@ -155,6 +157,8 @@ class Snapshot:
     `no_sale` 은 (객실, 날짜) — 판매일이 없어 칸이 없는 날(「판매일 없음」, 「가격 없음」과 다르다). 읽은 날로 친다.
     `dates` 는 읽은 날 전부 — `pairs` 와 함께 읽은 범위다(`range`). 주지 않으면 칸과 판매일 없는 날에서 모은다.
     `row_labels` 는 인원 조합 키 → 가격 수정 드로어가 그 줄을 부르는 이름(`A2C1_CHD · 소아 1`) — 담당자에게 줄을 고르게 할 때 쓴다.
+    `closures` 는 (객실, 요금제, 날) — 그날 상태가 「요금제 마감」 · 「객실 전체 마감」(지속 마감)인 것. ERP 는 그날 새로 만드는 칸도
+    마감으로 만든다. 셀 창에서 칸마다 마감한 날(「기존 가격 …」)은 여기 없다 — ERP 가 그날 새로 만드는 칸은 판매 가능이다.
     """
     hotel: str
     offer: str
@@ -168,6 +172,7 @@ class Snapshot:
     hotel_id: str = ""
     dates: tuple[str, ...] = ()
     row_labels: Mapping[str, str] = field(default_factory=dict)
+    closures: frozenset[tuple[str, str, str]] = frozenset()
 
     def __post_init__(self):
         stray = sorted({(key.room, key.rate_plan) for key in self.cells} - set(self.pairs))
@@ -656,6 +661,19 @@ def value_of(state: ItemState) -> CellValue:
     return CellValue(*(state.fields.get(name) for name in FIELDS), state.state)
 
 
+def as_read(cells: Mapping[CellKey, CellValue]) -> dict[CellKey, CellValue]:
+    """칸들 → ERP 의 [선택 날짜 가격 수정] 화면이 보일 모양. 화면은 판매 상태를 칸마다가 아니라 (객실, 요금제, 날)마다 하나로 보인다 —
+    가격 있는 칸의 상태가 하나가 아니면(또는 이미 섞였으면) 그날 그 요금제의 칸은 모두 「인원·박수별 상태 다름」(mixed)으로 읽힌다.
+    저장 뒤에 무엇을 읽을지 예상할 때 쓴다(지속 마감인 날은 칸이 모두 마감이라 섞이지 않는다)."""
+    states: dict[tuple[str, str, str], set[str]] = {}
+    for key, value in cells.items():
+        if value.state != "missing":
+            states.setdefault((key.room, key.rate_plan, key.date), set()).add(value.state)
+    mixed = {day for day, found in states.items() if len(found) > 1 or "mixed" in found}
+    return {key: CellValue(value.sell, value.list, value.supply, "mixed")
+            if value.state != "missing" and (key.room, key.rate_plan, key.date) in mixed else value for key, value in cells.items()}
+
+
 def snapshot_reading(snapshot: Snapshot) -> Reading:
     return {(ITEM_KIND, cell_item_key(key)): cell_state(key, value) for key, value in snapshot.cells.items()}
 
@@ -687,6 +705,7 @@ def encode_snapshot(snapshot: Snapshot) -> dict:
         no_sale=[dict(room=room, date=day) for room, day in sorted(snapshot.no_sale)],
         dates=list(snapshot.dates),
         row_labels=[dict(occupancy=key, label=label) for key, label in sorted(snapshot.row_labels.items())],
+        closures=[dict(room=room, rate_plan=plan, date=day) for room, plan, day in sorted(snapshot.closures)],
     )
 
 
@@ -704,7 +723,8 @@ def decode_snapshot(data: Mapping) -> Snapshot:
                     {str(item["room"]): str(item["drawer"]) for item in data.get("room_names") or []},
                     frozenset((str(item["room"]), iso_day(item["date"])) for item in data.get("no_sale") or []), hotel_id,
                     tuple(iso_day(day) for day in data.get("dates") or ()),
-                    {str(item["occupancy"]): str(item["label"]) for item in data.get("row_labels") or []})
+                    {str(item["occupancy"]): str(item["label"]) for item in data.get("row_labels") or []},
+                    frozenset((str(item["room"]), str(item["rate_plan"]), iso_day(item["date"])) for item in data.get("closures") or []))
 
 
 def encode_request(request: ChangeRequest | TargetTable) -> dict:

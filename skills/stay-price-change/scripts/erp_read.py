@@ -30,8 +30,12 @@ NO_PRICE = "가격 없음"
 RESERVED_REASON = "예약이 있는 날"
 ANY_PARTY = "인원 무관 단일가"
 NOT_OPENED = " · 판매일 미개설"
+# 날짜의 가격 · 마감 상태(ERP calendar_edit.day_status_rows — 그 객실 · 요금제의 그날 칸을 하나로 말한다). 「요금제 마감」 · 「객실 전체
+# 마감」은 지속 마감(SalesClosure)이라 ERP 가 그날 새로 만드는 칸도 마감으로 만든다(CLOSURES — Snapshot.closures). 「기존 가격 …」은
+# 칸마다 셀 창에서 마감한 것이고, 칸의 상태가 하나가 아니면 「인원·박수별 상태 다름」이다 — 칸마다 어느 쪽인지는 화면에 없다(mixed).
 DAY_STATES = {"가격 없음": "missing", "가격 판매 가능": "open", "판매가 확인 필요": "open",
-              "요금제 마감": "closed", "객실 전체 마감": "closed"}
+              "요금제 마감": "closed", "객실 전체 마감": "closed", "인원·박수별 상태 다름": "mixed"}
+CLOSURES = frozenset({"요금제 마감", "객실 전체 마감"})
 CLOSED_PREFIX = "기존 가격 "
 DAY_LABEL = re.compile(r"^(\d{4}-\d{2}-\d{2})(?: ~ (\d{4}-\d{2}-\d{2}) \((\d+)일\))?$")
 
@@ -135,13 +139,22 @@ def _header(table: Node) -> list[str]:
     return [cell.text() for head in table.kids("thead") for row in head.kids("tr") for cell in row.kids("th")]
 
 
+def _plain(label: str) -> str:
+    return label[:-len(NOT_OPENED)] if label.endswith(NOT_OPENED) else label
+
+
 def day_state(label: str) -> str:
-    text = label[:-len(NOT_OPENED)] if label.endswith(NOT_OPENED) else label
+    text = _plain(label)
     if text in DAY_STATES:
         return DAY_STATES[text]
     if text.startswith(CLOSED_PREFIX):
         return "closed"
     raise ParseError(f"날짜의 가격·마감 상태를 모릅니다: {label!r}")
+
+
+def is_closure(label: str) -> bool:
+    """지속 마감(요금제 마감 · 객실 전체 마감)인 날 — ERP 가 그날 새로 만드는 칸도 마감이다."""
+    return _plain(label) in CLOSURES
 
 
 @dataclass(frozen=True)
@@ -315,7 +328,7 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if len(currencies) != 1 or not re.fullmatch(r"[A-Z]{3}", next(iter(currencies))):
         raise ParseError(f"통화를 하나로 정하지 못했습니다: {' · '.join(sorted(currencies))}")
     offer = offers.pop()
-    cells, pairs, names, no_sale, dates, labels = {}, set(), {}, set(), set(), {}
+    cells, pairs, names, no_sale, dates, labels, closures = {}, set(), {}, set(), set(), {}, set()
     for read in reads:
         page, room = read.page, read.room
         pairs.add((room, read.rate_plan))
@@ -326,6 +339,7 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
             continue
         if names.setdefault(room, page.room) != page.room:
             raise ParseError(f"캘린더의 객실 {room} 이 드로어에서 두 이름으로 보입니다: {names[room]} · {page.room}")
+        closures.update((room, page.rate_plan, day) for day, label in page.days.items() if is_closure(label))
         for row in page.rows:
             if row.label:
                 labels.setdefault(row.occupancy, row_name(row.label))
@@ -364,4 +378,4 @@ def build_snapshot(hotel: str, read_at: str, reads: Iterable[PairRead],
     if unknown:
         raise ParseError(f"가감 화면의 객실 이름이 가격 수정 화면과 맞지 않습니다: {' · '.join(sorted(unknown))}")
     return Snapshot(hotel, offer, currencies.pop(), read_at, cells, frozenset(reserved), frozenset(pairs), names,
-                    frozenset(no_sale), hotel_id, tuple(sorted(dates)), labels)
+                    frozenset(no_sale), hotel_id, tuple(sorted(dates)), labels, frozenset(closures))

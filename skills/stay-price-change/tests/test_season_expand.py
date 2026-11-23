@@ -90,7 +90,8 @@ class FillCasesTest(unittest.TestCase):
     def planned(self, case_id):
         case = scene.case(case_id)
         window = scene.window(bands=case.get("bands"), combos=case.get("combos"))
-        plan = plan_season(scene.snapshot(case["before"], pairs=case["fill"]["pairs"]), window, scene.fill_of(scene.save_of(case["fill"])))
+        plan = plan_season(scene.snapshot(case["before"], pairs=case["fill"]["pairs"], closures=scene.case_closures(case)), window,
+                           scene.fill_of(scene.save_of(case["fill"])))
         return case, window, plan.saves[0]
 
     def test_j_to_r_every_expected_cell_and_count(self):

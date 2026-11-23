@@ -45,7 +45,7 @@ class SeasonLedgerTest(unittest.TestCase):
 
     def record(self, snapshot, plan, replaces=None):
         return self.ledger.record_preview(hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=snapshot.offer, currency="USD",
-                                          sentence="시즌 다시 채우기", read_at=snapshot.read_at, rows=season_rows(plan),
+                                          sentence="시즌 다시 채우기", read_at=snapshot.read_at, rows=season_rows(plan, snapshot),
                                           request=recorded_request(plan), reading=encode_snapshot(snapshot), replaces=replaces)
 
     def apply(self, snapshot, plan, change_id, note):

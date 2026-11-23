@@ -304,7 +304,9 @@ class SheetSeasonTest(FlowBase):
                 state = "closed" if (room, plan, day) == ("디럭스", "조식 포함", "2026-12-04") else "open"
                 for occupancy, nights, value in (("A2", 1, base), ("A3", 1, base + 50), ("A2C1_CHD", 1, base + 20), ("A2", 3, base - 20)):
                     cells[CellKey(room, plan, day, occupancy, nights)] = CellValue(value, None, None, state)
-        return replace(season_scene.snapshot((), pairs=self.PAIRS, reserved={("디럭스", "2026-12-02")}), cells=cells)
+        # 12/4 디럭스 · 조식 포함은 요금제 마감(지속 마감) — 칸은 값만 바뀌고 그날 새로 생기는 칸도 마감이다
+        return replace(season_scene.snapshot((), pairs=self.PAIRS, reserved={("디럭스", "2026-12-02")},
+                                             closures=[("디럭스", "조식 포함", "2026-12-04")]), cells=cells)
 
     def sheet(self):
         line = lambda no, room, plan, base, special=None: {   # noqa: E731

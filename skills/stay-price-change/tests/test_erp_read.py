@@ -130,6 +130,8 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(snapshot.pairs, {("디럭스", "조식 포함")})
         self.assertEqual(snapshot.row_labels, {"A2": "A2 · 성인 2", "A2C1_CHD": "A2C1_CHD · 소아 1"},
                          "줄을 고르게 할 때 쓰는 ERP 의 이름 — 줄 머리에서 박수 층을 뺀 것")
+        self.assertEqual(snapshot.closures, {("디럭스", "조식 포함", "2026-12-26")},
+                         "「요금제 마감」은 지속 마감 — ERP 가 그날 새로 만드는 칸도 마감이다(검토 2 의 0)")
 
     def test_hidden_rows_unknown_rooms_mixed_offers_and_placeholder_currency_are_refused(self):
         price = parse_price_page(fixture("price-runs-closed-absent-list.html"))
@@ -149,11 +151,23 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaises(ParseError):
             build_snapshot("H", "t", [PairRead.of("디럭스", parse_price_page(fixture("calendar-bulk--price-step2.html")))])
 
+    def test_a_day_whose_cells_differ_in_state_reads_as_mixed_and_a_hand_closed_day_is_not_a_closure(self):
+        """검토 2 의 0 — 셀 창에서 칸마다 마감해 상태가 섞인 날(「인원·박수별 상태 다름」)은 칸마다 어느 쪽인지 화면에 없다 — 그날의 칸은
+        모두 mixed 로 읽는다(시즌 다시 채우기가 그런 날을 만든 뒤에도 확인 · 되돌리기가 된다). 「기존 가격 마감」은 지속 마감이 아니다."""
+        page = fixture("price-runs-closed-absent-list.html")
+        mixed = build_snapshot("H", "t", [PairRead.of("디럭스", parse_price_page(page.replace(
+            "<td>2026-12-26</td><td>요금제 마감</td>", "<td>2026-12-26</td><td>인원·박수별 상태 다름</td>")))])
+        key = lambda occ, nights=1: CellKey("디럭스", "조식 포함", "2026-12-26", occ, nights)  # noqa: E731
+        self.assertEqual((mixed.cells[key("A2")].state, mixed.cells[key("A2C1_CHD", 3)].state, mixed.closures), ("mixed", "mixed", frozenset()))
+        hand = build_snapshot("H", "t", [PairRead.of("디럭스", parse_price_page(page.replace(
+            "<td>2026-12-26</td><td>요금제 마감</td>", "<td>2026-12-26</td><td>기존 가격 마감</td>")))])
+        self.assertEqual((hand.cells[key("A2")].state, hand.closures), ("closed", frozenset()))
+
     def test_a_day_state_the_helper_does_not_know_is_refused(self):
-        mixed = parse_price_page(fixture("price-runs-closed-absent-list.html").replace(
-            "<td>2026-12-26</td><td>요금제 마감</td>", "<td>2026-12-26</td><td>인원·박수별 상태 다름</td>"))
+        unknown = parse_price_page(fixture("price-runs-closed-absent-list.html").replace(
+            "<td>2026-12-26</td><td>요금제 마감</td>", "<td>2026-12-26</td><td>새로운 상태</td>"))
         with self.assertRaises(ParseError):
-            build_snapshot("H", "t", [PairRead.of("디럭스", mixed)])
+            build_snapshot("H", "t", [PairRead.of("디럭스", unknown)])
 
     def test_real_capture_with_a_currency_code(self):
         page = parse_price_page(fixture("calendar-bulk--price-link-step2.html").replace("(공급 통화)", "(KRW)"))

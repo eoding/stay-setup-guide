@@ -203,5 +203,66 @@ class SmallParityTest(unittest.TestCase):
         self.assertIn("대문자로 고친 뒤 다시 읽습니다", str(refused.exception))
 
 
+class SaleStateTest(SeasonCase):
+    """검토 2 의 0 — 미리보기는 ERP 가 쓸 판매 상태를 말한다. ERP 시즌 창은 새 칸을 판매 가능으로 만들고 지속 마감(요금제 마감 · 객실
+    전체 마감)이 덮는 날에만 마감으로 둔다. 셀 창에서 칸마다 마감한 날에 판매 가능한 새 칸이 생기면 빨간 줄이고, 그 뒤 그날은
+    「인원·박수별 상태 다름」으로 읽혀 확인 · 되돌리기가 된다."""
+
+    WINDOW = dict(bands=[{"code": "CHD", "basis": "flat", "value": "30"}], dates=[DAY], rooms=["디럭스"])
+    SAVE = [{"pairs": [{"room": BB[0], "rate_plan": BB[1]}], "price": "180", "occupancy_keys": "A2", "child_extra": {"CHD": ""},
+             "overwrite": True}]
+
+    def test_s1_new_cells_on_a_day_closed_cell_by_cell_go_on_sale_and_that_is_a_red_line(self):
+        window = season_scene.window(**self.WINDOW)
+        before = {key("A2"): CellValue(D("170"), None, None, "closed")}            # 셀 창에서 마감(「기존 가격 마감」 — 지속 마감 아님)
+        snapshot = replace(season_scene.snapshot((), pairs=[BB], dates=[DAY]), cells=before)
+        short, plan, first_file = self.plan(window, snapshot, self.SAVE)
+        new = next(change for change in plan.saves[0].changes if change.before.state == "missing")
+        self.assertEqual((new.key.occupancy, str(new.after.sell), new.after.state), ("A2C1_CHD", "210.00", "open"),
+                         "ERP 는 새 칸을 판매 가능으로 만든다 — 그날 다른 칸이 셀 창에서 마감이어도")
+        [rule] = [rule for rule in short["per_save"][0]["rules"] if rule["rule"] == "OPENS_ON_CLOSED_DAY"]
+        self.assertEqual((rule["cells"], rule["choices"], short["saves"]), (1, ["include", "exclude_dates"], None))
+        self.assertIn("손님이 그 칸으로 예약할 수 있습니다", rule["said"])
+        page = self.cli("render", "preview", "--plan", first_file, "--text")["text"]
+        self.assertIn(rule["said"], page, "미리보기의 빨간 띠가 도우미의 말과 같다")
+
+        chosen, plan, plan_file = self.plan(window, snapshot, self.SAVE, choices=[
+            {"save": 1, "rule": "OPENS_ON_CLOSED_DAY", "choice": "include", "said": "그래도 채워"},
+            {"save": 1, "rule": "NEW_ROW", "choice": "include", "said": "그래도 채워"}])
+        self.assertEqual(chosen["saves"], 1, chosen)
+        change = chosen["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.write("r1.json", self.saved_answer(call, plan.saves[0])), now=60)
+        # 저장 뒤 그날은 마감 칸(A2)과 판매 가능 칸(A2C1_CHD)이 섞여 화면이 「인원·박수별 상태 다름」 — 읽은 값은 그날 칸을 모두 mixed 로
+        after = replace(snapshot, cells={key("A2"): CellValue(D("180"), None, None, "mixed"),
+                                         key("A2C1_CHD"): CellValue(D("210"), None, None, "mixed")})
+        verified = self.cli("verify", "--change", change, "--snapshot", self.snap(after, at(70)), now=75)
+        self.assertEqual((verified["same"], verified["state_only"]), (True, []), verified)
+        rollback = self.cli("rollback", "--change", change, "--snapshot", self.snap(after, at(80)), "--record",
+                            "--out", self.dir / "rollback-1.json", now=85)
+        self.assertEqual((rollback["restored"], rollback["unremovable"]), (1, 1), "A2 는 되돌리고 새 A2C1_CHD 는 지울 수 없다")
+
+    def test_s1_a_new_cell_on_a_sales_closure_day_is_closed_even_where_the_pair_had_no_cell(self):
+        window = season_scene.window(**self.WINDOW)
+        snapshot = replace(season_scene.snapshot((), pairs=[BB], dates=[DAY], closures=[(BB[0], BB[1], DAY)]), cells={})
+        short, plan, plan_file = self.plan(window, snapshot, self.SAVE, choices=[
+            {"save": 1, "rule": "NEW_ROW", "choice": "include", "said": "그래도 채워"}])
+        self.assertEqual({change.key.occupancy: change.after.state for change in plan.saves[0].changes},
+                         {"A2": "closed", "A2C1_CHD": "closed"}, "요금제 마감인 날 — ERP 가 새 칸을 마감으로 만든다")
+        self.assertEqual((short["counts"]["closed_new"], short["saves"]), (2, 1))
+        self.assertNotIn("OPENS_ON_CLOSED_DAY", {rule["rule"] for rule in short["per_save"][0]["rules"]})
+        self.assertIn("판매 마감 날에 새로 생기는 칸", self.cli("render", "preview", "--plan", plan_file, "--text")["text"])
+        change = short["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.write("r1.json", self.saved_answer(call, plan.saves[0])), now=60)
+        closed = applied(snapshot, plan)
+        self.assertTrue(self.cli("verify", "--change", change, "--snapshot", self.snap(closed, at(70)), now=75)["same"])
+        opened = replace(closed, cells={cell: replace(value, state="open") for cell, value in closed.cells.items()})
+        told = self.cli("verify", "--change", change, "--snapshot", self.snap(opened, at(80)), now=85, code=1)
+        self.assertEqual([(item["want"], item["seen"]) for item in told["state_only"]], [("closed", "open")] * 2)
+
+
 if __name__ == "__main__":
     unittest.main()

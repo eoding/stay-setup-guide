@@ -71,8 +71,9 @@ def window(bands=(), combos=None, dates=None, rooms=None, overwrite=True, others
         tuple(OtherSeason(*item) for item in others))
 
 
-def snapshot(before=(), pairs=(), dates=None, read_at="2026-11-21T10:00:00+09:00", reserved=(), currency=None) -> Snapshot:
-    """읽은 값 — 경우의 before 칸(나머지는 칸 없음), 읽은 쌍 · 날, 호텔의 판매일 없는 날, 예약 있는 (객실, 날)."""
+def snapshot(before=(), pairs=(), dates=None, read_at="2026-11-21T10:00:00+09:00", reserved=(), currency=None, closures=()) -> Snapshot:
+    """읽은 값 — 경우의 before 칸(나머지는 칸 없음), 읽은 쌍 · 날, 호텔의 판매일 없는 날, 예약 있는 (객실, 날), 지속 마감인
+    (객실, 요금제, 날)(경우표의 `closures` 는 [객실, 날, 요금제] — case_closures)."""
     hotel = CASES["hotel"]
     dates = tuple(dates or hotel["season"])
     cells = {}
@@ -84,7 +85,12 @@ def snapshot(before=(), pairs=(), dates=None, read_at="2026-11-21T10:00:00+09:00
     rooms = {room for room, _plan in pairs}
     no_sale = frozenset((room, day) for room, day in hotel["no_sale"] if room in rooms and day in dates)
     return Snapshot(HOTEL, OFFER, currency or hotel["currency"], read_at, cells, frozenset(reserved), pairs, no_sale=no_sale,
-                    hotel_id=HOTEL_ID, dates=dates)
+                    hotel_id=HOTEL_ID, dates=dates, closures=frozenset(tuple(item) for item in closures))
+
+
+def case_closures(case: dict) -> list[tuple[str, str, str]]:
+    """경우표의 지속 마감([객실, 날, 요금제]) → 읽은 값의 (객실, 요금제, 날)."""
+    return [(room, rate_plan, day) for room, day, rate_plan in case.get("closures") or ()]
 
 
 def save_of(fill: dict, **over) -> SeasonSave:

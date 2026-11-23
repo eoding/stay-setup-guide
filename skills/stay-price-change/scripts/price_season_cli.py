@@ -22,8 +22,8 @@ from change_core.ledger import Ledger, clock
 from change_core.money import money_text
 from change_core.rollback import holds
 from price_model import (
-    FIELDS, MISSING, CellKey, CellValue, Snapshot, cell_state, decode_hotel, encode_key, encode_snapshot, encode_value, key_of_item,
-    same_hotel,
+    FIELDS, MISSING, CellKey, CellValue, Snapshot, as_read, cell_state, decode_hotel, encode_key, encode_snapshot, encode_value,
+    key_of_item, same_hotel,
 )
 from price_season import (
     KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, day_items, decode_choices,
@@ -36,7 +36,18 @@ from price_sheet import decode_check
 from season_sheet import targets_of
 
 SEASON_PREFIXES = ("season-", "take-")
-OPENS_CLOSED = "opens_closed"   # 새 칸을 판매 마감으로 만든다고 짐작한 칸의 표시(장부의 marks) — 확인이 판매 상태를 견준다
+OPENS_CLOSED = "opens_closed"   # 새 칸을 ERP 가 마감으로 만드는 칸(지속 마감인 날)의 표시(장부의 marks) — 확인이 판매 상태를 견준다
+READS_MIXED = "reads_mixed"     # 새 칸이 생긴 뒤 그날 그 요금제의 칸 상태가 섞여 화면이 「인원·박수별 상태 다름」으로 보일 칸의 표시
+
+
+def expected_state(marks, before_state: str) -> str:
+    """장부의 줄(그 칸의 표시 · 전 상태)로 — 저장 뒤 다시 읽으면 그 칸이 보일 판매 상태. 있던 칸은 그대로(ERP 의 덮기는 상태를 쓰지
+    않는다), 새 칸은 지속 마감인 날만 마감 · 그 밖은 판매 가능, 그날 상태가 섞이면 mixed(price_model.as_read)."""
+    if READS_MIXED in marks:
+        return "mixed"
+    if before_state != "missing":
+        return before_state
+    return "closed" if OPENS_CLOSED in marks else "open"
 
 
 # ─── season ───
@@ -100,14 +111,19 @@ def helper_edits(ledger: Ledger, snapshot: Snapshot) -> dict[CellKey, int]:
     return found
 
 
-def season_rows(plan):
-    """장부 줄 — 새 칸을 마감으로 만든다고 짐작한 칸에는 표시를 하나 더 단다(확인이 판매 상태를 견준다)."""
-    closed = {change.key for change in plan.changes if change.before.state == "missing" and change.after.state == "closed"}
+def season_rows(plan, snapshot: Snapshot):
+    """장부 줄 — 새 칸 가운데 ERP 가 마감으로 만드는 칸(지속 마감인 날)과, 저장 뒤 그날 칸 상태가 섞여 화면이 「인원·박수별 상태
+    다름」으로 보일 칸(새 칸이 생겨 섞이는 날의 바뀌는 칸)에 표시를 단다(확인이 판매 상태를 그 표시대로 견준다 — expected_state)."""
+    after = as_read({**snapshot.cells, **{change.key: change.after for change in plan.changes}})
+    marked: dict[CellKey, tuple[str, ...]] = {}
+    for change in plan.changes:
+        opens_closed = change.before.state == "missing" and change.after.state == "closed"
+        mixed = after[change.key].state == "mixed" and change.before.state != "mixed"
+        marked[change.key] = ((OPENS_CLOSED,) if opens_closed else ()) + ((READS_MIXED,) if mixed else ())
     rows = []
     for row in preview_rows(plan):
-        if key_of_item(row.item_key) in closed and OPENS_CLOSED not in row.marks:
-            row = type(row)(**{**row.__dict__, "marks": row.marks + (OPENS_CLOSED,)})
-        rows.append(row)
+        extra = tuple(mark for mark in marked.get(key_of_item(row.item_key), ()) if mark not in row.marks)
+        rows.append(type(row)(**{**row.__dict__, "marks": row.marks + extra}) if extra else row)
     return rows
 
 
@@ -122,7 +138,7 @@ def plan_command(snapshot: Snapshot, data: Mapping, window, resolutions, ledger:
     if record:
         change_id = ledger.record_preview(
             hotel=snapshot.hotel, hotel_id=snapshot.hotel_id, offer=window.offer, currency=snapshot.currency, sentence=fill.sentence,
-            read_at=snapshot.read_at, rows=season_rows(plan), request=recorded_request(plan), reading=encode_snapshot(snapshot),
+            read_at=snapshot.read_at, rows=season_rows(plan, snapshot), request=recorded_request(plan), reading=encode_snapshot(snapshot),
             replaces=replaces, empty=steps is not None and not has_writes(plan),
             unused=[dict(rule=choice.rule, choice=choice.choice, said=choice.said, why="none", words="이번 계산에는 그 빨간 줄에 걸린 칸이 "
                          "없습니다", cells=[]) for choice in plan.unused])
@@ -180,7 +196,7 @@ def begin_steps(data: Mapping) -> tuple[list, dict]:
 
 
 def saved_values(record) -> dict[CellKey, CellValue]:
-    """장부가 저장됐다고 적은 단계들이 넣은 칸의 값(예상) — 전 값 위에 넣은 필드를 얹고, 없던 칸은 판매 가능(마감 짐작이면 마감)."""
+    """장부가 저장됐다고 적은 단계들이 넣은 칸의 값(예상) — 전 값 위에 넣은 필드를 얹고, 판매 상태는 다시 읽으면 보일 것(expected_state)."""
     cells: dict[CellKey, dict] = {}
     for row in record.rows:
         if not row.written or row.rolled_back_by:
@@ -191,12 +207,8 @@ def saved_values(record) -> dict[CellKey, CellValue]:
     out = {}
     for key, entry in cells.items():
         values = {name: entry["values"].get(name, (None, None))[1] for name in FIELDS}
-        if entry["state"] == "missing":
-            state = "closed" if OPENS_CLOSED in entry["marks"] else "open"
-        else:
-            state = entry["state"]
         if values["sell"] is not None:
-            out[key] = CellValue(values["sell"], values["list"], values["supply"], state)
+            out[key] = CellValue(values["sell"], values["list"], values["supply"], expected_state(entry["marks"], entry["state"]))
     return out
 
 
@@ -281,7 +293,7 @@ def verify_season(ledger: Ledger, change_id: int, now: Snapshot, mismatches) -> 
             continue
         key = key_of_item(row.item_key)
         value = now.cells.get(key, MISSING)
-        want = "closed" if OPENS_CLOSED in row.marks else "open"
+        want = expected_state(row.marks, row.state)
         if value.state not in ("missing", want) and value.sell == row.after:
             state_only.append(dict(key=encode_key(key), want=want, seen=value.state))
     counted = []

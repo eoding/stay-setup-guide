@@ -27,7 +27,7 @@ from price_season import (
     CHOICE_WORDS, INPUT_LABELS, RULES, SeasonPlan, banner_counts, counts, counts_agree, date_runs,
     decode_counts, recorded_request, rule_label, rule_said, verdict, window_remembers,
 )
-from price_season_cli import OPENS_CLOSED, may_skip
+from price_season_cli import expected_state, may_skip
 
 # 되돌려도 돌아오지 않는 것(설계 5) — 미리보기 · 되돌리기 미리보기가 그대로 말한다
 UNDO_CREATED = "새로 생기는 칸 {n}칸은 되돌려도 지울 수 없습니다(ERP 에 칸을 지우는 길이 없습니다)."
@@ -36,7 +36,9 @@ UNDO_WHAT = ("되돌리기는 가격 캘린더에서 날짜별로 전 값을 다
 UNDO_EMPTY = "정가·공급 원가가 비어 있던 칸 {n}칸에 값을 넣습니다. 되돌릴 때는 그 칸마다 한 번씩 {n}번 저장해야 해서 오래 걸립니다."
 UNDO_REFILL = "되돌린 뒤 누가 이 시즌을 '덮기'로 다시 채우면 이번 값이 다시 들어갑니다."
 NO_DELETE = "도우미는 시즌 창의 '이번에 고르지 않은 인원·요금제 가격 지우기'를 켜지 않습니다 — 이번 채우기에 없는 예전 칸은 예전 값으로 남습니다."
-GUESS = "「날짜별로 따로 넣은 것으로 보이는 칸」 · 객실 조합으로 빠질 수 있는 칸 · 새 칸의 판매 마감은 도우미의 짐작입니다(ERP 가 그 표시를 보이지 않습니다)."
+GUESS = "「날짜별로 따로 넣은 것으로 보이는 칸」 · 객실 조합으로 빠질 수 있는 칸은 도우미의 짐작입니다(ERP 가 그 표시를 보이지 않습니다)."
+CLOSED_NEW = ("요금제 마감 · 객실 전체 마감인 날의 새 칸은 ERP 가 마감으로 만듭니다(팔리지 않습니다 — 마감을 풀면 이 값으로 팔립니다). "
+              "셀 창에서 칸마다 마감한 날의 새 칸은 판매 가능으로 생깁니다.")
 BUCKETS = (   # 미리보기 바구니 — (코드, 머리, 덧말). 차례가 보이는 차례다
     ("helper_edited", "장부가 날짜별로 바꿔 둔 칸", "이 장부의 날짜별 변경이 넣은 값을 시즌 값으로 덮습니다."),
     ("looks_edited", "날짜별로 따로 넣은 것으로 보이는 칸", "같은 줄의 다른 날과 값이 달라 따로 넣은 것으로 보입니다(짐작) — 시즌 값으로 덮습니다."),
@@ -143,6 +145,10 @@ def _bucket_sections(plan: SeasonPlan, save) -> str:
             days.setdefault(room, []).append(day)
         out.append(f"<h3>판매일 없는 날 · {save.counts.skipped:,}칸</h3><p class=\"sub\">아무것도 넣지 않습니다(판매일 탭에서 먼저 열어야 "
                    "합니다): " + esc(" / ".join(f"{room} {_days(sorted(set(items)))}" for room, items in days.items())) + "</p>")
+    closed_new = [change.key for change in save.changes if change.before.state == "missing" and change.after.state == "closed"]
+    if closed_new:
+        out.append(f"<h3>판매 마감 날에 새로 생기는 칸 · {len(closed_new):,}칸</h3><p class=\"sub\">{esc(CLOSED_NEW)}</p>"
+                   + _cell_table(closed_new, lambda key: f"<td>{_move(by_key[key].before, by_key[key].after, currency)}</td>"))
     if save.same:
         out.append(f'<p class="sub">값은 같고 이 시즌 칸이 되는 칸 {save.same:,}칸 — 표에 없습니다.</p>')
     if save.untouched:
@@ -206,6 +212,7 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
                       + ([(tally["no_sale"], "판매일 없는 날의 칸")] if tally["no_sale"] else [])
                       + ([(tally["same"], "값은 같고 시즌 칸이 되는 칸")] if tally["same"] else [])
                       + ([(tally["combo_unknown"], "조합으로 빠질 수 있는 칸")] if tally["combo_unknown"] else [])
+                      + ([(tally["closed_new"], "판매 마감 날에 새로 생기는 칸")] if tally["closed_new"] else [])
                       + ([(tally["misses"], "요금표와 다르게 채워지는 칸")] if tally["misses"] else [])))
     body.append(_misses_section(plan))
     for save in plan.saves:
@@ -262,7 +269,7 @@ def season_check(record: ChangeRecord) -> dict:
     """장부만으로 — 넣은 칸 가운데 다시 읽은 값이 넣은 값이 아닌 칸(ERP 가 넣지 않을 수 있는 칸이 전 값 그대로면 받아들임 — check ·
     확인과 같은 뜻, change_core.ledger.left_out), 새 칸의 판매 상태가 짐작과 다른 칸, 저장마다 ERP 가 띠로 말한 수와 예상."""
     views = cell_views(record)
-    opens_closed = {key_of_item(row.item_key) for row in record.rows if OPENS_CLOSED in row.marks}
+    want = {key_of_item(row.item_key): expected_state(row.marks, row.state) for row in record.rows if row.field == "sell"}
     seen_state = {key_of_item(row.item_key): row.seen_state for row in record.rows if row.field == "sell"}
     missed: dict[CellKey, list[bool]] = {}
     for row in record.rows:
@@ -278,7 +285,7 @@ def season_check(record: ChangeRecord) -> dict:
                 skipped.append(key)
             else:
                 wrong.append(key)
-        elif view.before.state == "missing" and seen_state.get(key) not in (None, "closed" if key in opens_closed else "open"):
+        elif view.before.state == "missing" and seen_state.get(key) not in (None, want.get(key)):
             state_only.append(key)
     steps = []
     for step in record.steps:

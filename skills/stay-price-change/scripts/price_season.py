@@ -371,6 +371,7 @@ RULES = {   # 시즌 다시 채우기의 규칙 → (이름, 무게). 차례가 
     "NOT_POSITIVE": (CELL_RULES.by_code["NOT_POSITIVE"].label, BLOCKED),
     "NEGATIVE_SUPPLY": (CELL_RULES.by_code["NEGATIVE_SUPPLY"].label, BLOCKED),
     "WHOLE_UNIT_FRACTION": ("소수가 없는 통화에서 소수가 생깁니다", BLOCKED),
+    "OPENS_ON_CLOSED_DAY": ("셀 창에서 판매 마감한 칸이 있는 날에 판매 가능한 새 칸이 생깁니다", RED),
     "NEW_ROW": ("이 객실 · 요금제에 없던 인원 조합 · 박수 줄이 생깁니다", RED),
     "ABOVE_LIST": (CELL_RULES.by_code["ABOVE_LIST"].label, RED),
     "ABOVE_ONE_NIGHT": (CELL_RULES.by_code["ABOVE_ONE_NIGHT"].label, RED),
@@ -384,6 +385,9 @@ KEEPS = {   # 빨간 줄은 아니지만 담당자가 지키자고 하면 「그
 }
 CHOICE_WORDS = {"include": "이대로 채움", "exclude_dates": "그 날은 빼고 채움"}
 FRACTION_SENTENCE = "원화처럼 소수가 없는 통화에서 퍼센트 조정이 소수를 만듭니다 — 요금표의 금액 차이로 적어 주세요."
+CLOSED_DAY_SENTENCE = ("그날 이 객실 · 요금제에는 셀 창에서 판매 마감한 칸이 있지만(요금제 마감 · 객실 전체 마감은 아닙니다), ERP 시즌 창은 "
+                       "새 칸을 판매 가능으로 만듭니다 — 손님이 그 칸으로 예약할 수 있습니다. 되돌려도 새 칸은 지울 수 없어 판매 가능으로 "
+                       "남습니다(셀 창에서 사람이 마감해야 합니다).")
 
 
 def rule_label(save: "SavePlan", code: str) -> str:
@@ -412,7 +416,7 @@ def rule_said(save: "SavePlan", code: str, currency: str) -> str:
     whole = len(days) >= len(save.dates)
     offered = [f"「{CHOICE_WORDS[choice]}」" + ("(남는 날이 없어 이 저장을 통째로 뺌)" if choice == "exclude_dates" and whole else "")
                for choice in rule_choices(code)] + ["「요청을 고침」"]
-    fraction = f" {FRACTION_SENTENCE}" if code == "WHOLE_UNIT_FRACTION" else ""
+    fraction = {"WHOLE_UNIT_FRACTION": f" {FRACTION_SENTENCE}", "OPENS_ON_CLOSED_DAY": f" {CLOSED_DAY_SENTENCE}"}.get(code, "")
     return (f"{save.index}번째 저장의 {len(keys):,}칸({len(days):,}일) — {rule_label(save, code)}.{example}{fraction} 창은 칸 하나를 뺄 수 "
             f"없어 이 저장에서 고를 것은 {' · '.join(offered)}입니다. 어떻게 할까요?")
 
@@ -605,8 +609,9 @@ def expand_save(snapshot: Snapshot, window: SeasonWindow, save: SeasonSave, inde
                             continue
                         before = snapshot.cells.get(key, MISSING)
                         if before.state == "missing":
-                            closed = any(value.state == "closed" for other, value in snapshot.cells.items()
-                                         if (other.room, other.rate_plan, other.date) == (key.room, key.rate_plan, key.date))
+                            # ERP 는 새 칸을 판매 가능으로 만들고, 지속 마감(요금제 마감 · 객실 전체 마감)이 덮는 날에만 마감으로 둔다 —
+                            # 셀 창에서 칸마다 마감한 날은 덮지 않는다(검토 2 의 0, ERP season.fill_season_price · sales_closure)
+                            closed = (key.room, key.rate_plan, key.date) in snapshot.closures
                             after = CellValue(sell, listed, _supply(net, currency), "closed" if closed else "open")
                             created += 1
                             maybe_created += bool(maybe)
@@ -687,6 +692,9 @@ def _hits(snapshot: Snapshot, plan: SavePlan) -> dict[str, tuple[CellKey, ...]]:
     currency = snapshot.currency
     whole = scale_of(currency) == 0
     hits: dict[str, list[CellKey]] = {code: [] for code in list(RULES) + list(KEEPS)}
+    # 셀 창에서 칸마다 마감한 칸이 있는 날(지속 마감이 아닌 날의 마감 · 섞인 칸) — ERP 는 그날 새 칸을 판매 가능으로 만든다
+    hand_closed = {(key.room, key.rate_plan, key.date) for key, value in snapshot.cells.items()
+                   if value.state in ("closed", "mixed")} - set(snapshot.closures)
     after = {key: value for key, value in snapshot.cells.items() if value.state != "missing"}
     after.update({change.key: change.after for change in plan.changes})
     written = {change.key for change in plan.changes}
@@ -698,6 +706,8 @@ def _hits(snapshot: Snapshot, plan: SavePlan) -> dict[str, tuple[CellKey, ...]]:
             hits["NEGATIVE_SUPPLY"].append(key)
         if whole and any(amount is not None and amount != amount.to_integral_value() for amount in (value.sell, value.list)):
             hits["WHOLE_UNIT_FRACTION"].append(key)
+        if before.state == "missing" and value.state == "open" and (key.room, key.rate_plan, key.date) in hand_closed:
+            hits["OPENS_ON_CLOSED_DAY"].append(key)
         if "new_row" in change.marks:
             hits["NEW_ROW"].append(key)
         if value.list is not None and value.sell > value.list:
@@ -1192,13 +1202,14 @@ def counts(plan: SeasonPlan) -> dict:
     live = plan.live
     tally = dict(changes=0, new=0, same=sum(save.same for save in live), untouched=sum(save.untouched for save in live),
                  left_old=sum(len(save.left_old) for save in live), no_sale=sum(save.counts.skipped for save in live),
-                 combo_unknown=0, combo_skipped=sum(len(save.combo_skipped) for save in live), red=0, blocked=0,
+                 combo_unknown=0, closed_new=0, combo_skipped=sum(len(save.combo_skipped) for save in live), red=0, blocked=0,
                  saves=len(plan.pressed), dropped=len(plan.saves) - len(live), unpressed=len(live) - len(plan.pressed),
                  misses=len(plan.misses))
     for save in live:
         for change in save.changes:
             tally["new" if change.before.state == "missing" else "changes"] += 1
             tally["combo_unknown"] += "combo_unknown" in change.marks
+            tally["closed_new"] += change.before.state == "missing" and change.after.state == "closed"   # 지속 마감인 날의 새 칸
         for code in KEEPS:
             if code != "left_old":
                 tally[code] = tally.get(code, 0) + len(save.hits.get(code, ()))
