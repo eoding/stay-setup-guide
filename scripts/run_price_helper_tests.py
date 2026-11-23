@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""run_price_helper_tests.py — 가격 변경 도우미 셋(stay-price-change · stay-addon-price-change · stay-charge-change)의 시험을 모두 돈다.
+"""run_price_helper_tests.py — 가격 변경 도우미 넷(stay-price-change · stay-addon-price-change · stay-charge-change ·
+stay-promotion-change)의 시험을 모두 돈다.
 
 이 저장소에는 CI 가 없다. 도우미마다 시험이 둘이다 — 파이썬 시험(`tests/test_*.py`, unittest)과 페이지 시험(`tests/test_page_*.mjs`,
-node --test 와 jsdom). 여섯을 차례로 돌려 무엇을 돌렸는지 찍고, 하나라도 실패하거나 건너뛴 시험이 있거나 돌지 못하면 0 이 아닌 종료
+node --test 와 jsdom). 여덟을 차례로 돌려 무엇을 돌렸는지 찍고, 하나라도 실패하거나 건너뛴 시험이 있거나 돌지 못하면 0 이 아닌 종료
 코드로 끝난다.
 
     NODE_PATH=<jsdom 이 든 node_modules> python3 scripts/run_price_helper_tests.py
@@ -17,7 +18,8 @@ node --test 와 jsdom). 여섯을 차례로 돌려 무엇을 돌렸는지 찍고
 - __pycache__ 를 만들지 않는다(-B · PYTHONDONTWRITEBYTECODE — 페이지 시험은 `python3 -I` 로 불러 환경 변수가 듣지 않으므로 위의
   `python3` 가 -B 를 붙인다).
 
-다섯 페이지 파일(러너의 stay_helper.js · stay_boot.js, stay_price.js · stay_addon_price.js · stay_charge.js)을 고치면 먼저
+여섯 페이지 파일(러너의 stay_helper.js · stay_boot.js, stay_price.js · stay_addon_price.js · stay_charge.js · stay_promotion.js)을
+고치면 먼저
 `python3 skills/stay-price-change/scripts/loader_identity.py` 로 올리개의 알아볼 값을 다시 적는다 — 가격 캘린더 도우미의 파이썬 시험
 (test_loader_identity)이 견준다.
 """
@@ -35,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = (("stay-price-change", "가격 캘린더 도우미"), ("stay-addon-price-change", "부가옵션 가격 도우미"),
-          ("stay-charge-change", "부과금 도우미"))
+          ("stay-charge-change", "부과금 도우미"), ("stay-promotion-change", "프로모션 할인 도우미"))
 NODE_MIN = 18
 JSDOM_HINT = ("jsdom 을 찾지 못했습니다 — 페이지 시험을 돌리지 않았습니다. 이 저장소는 jsdom 을 담지 않습니다. jsdom(22 로 맞춤)이 든 "
               "node_modules 를 NODE_PATH 로 주고 다시 부릅니다: NODE_PATH=/path/to/node_modules python3 scripts/run_price_helper_tests.py "
