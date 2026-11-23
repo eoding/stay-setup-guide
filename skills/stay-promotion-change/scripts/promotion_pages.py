@@ -13,7 +13,7 @@ from typing import Sequence
 from promotion_model import (
     BASES, COMMON, GATE, ITEM_KIND, ORIGIN_UNKNOWN, TRIGGERS, UNITS, Listing, Promotion, Snapshot, off_words, part_of_key, promotion_of_key,
 )
-from promotion_plan import CHOICE_LABELS, RULES, Plan, TierChange, counts, form_refusal, typed
+from promotion_plan import CHOICE_LABELS, INVERTS, RULES, Plan, TierChange, counts, form_refusal, saved_ladder, typed
 from change_core.chrome import (
     MOVED_TAG, chosen_groups, chosen_table, esc, fmt_money, fmt_time, kept_table, moved_sentence, names_banner,
     nothing_left, notes, page, reread, result_banner, result_word, rollback_ask, rollback_head, stats, steps_list, stop_view,
@@ -128,7 +128,8 @@ def guest_effect(plan: Plan) -> str:
 
 
 def red_lines(plan: Plan) -> list[dict]:
-    """고를 빨간 줄 — 규칙마다 단 수와 고를 수 있는 것, 단마다 무엇이 어떻게 되는지."""
+    """고를 빨간 줄 — 규칙마다 단 수와 고를 수 있는 것, 단마다 무엇이 어떻게 되는지. 단이 뒤집히는 빨간 줄(INVERTS)은 저장되면 그
+    프로모션의 단마다 값(`ladder`)도 싣는다 — 다른 단을 「안 바꿈」으로 고른 뒤에 생긴 빨간 줄이면 바뀌는 값만으로는 왜인지 모른다."""
     out = []
     for rule in RULES.rules:
         waiting = [change for change in plan.changes if change.verdict == rule.code and change.waiting]
@@ -136,8 +137,19 @@ def red_lines(plan: Plan) -> list[dict]:
             continue
         out.append(dict(rule=rule.code, label=rule.label, tiers=len(waiting),
                         choices={choice: CHOICE_LABELS[choice] for choice in rule.choices},
-                        examples=[dict(tier=change.id, name=change.label, moves=_moves(plan, change)) for change in waiting]))
+                        examples=[dict(tier=change.id, name=change.label, moves=_moves(plan, change),
+                                       **({"ladder": ladder_text(plan, change)} if rule.code == INVERTS else {}))
+                                  for change in waiting]))
     return out
+
+
+def ladder_text(plan: Plan, change: TierChange) -> str:
+    """「저장되면 2박 이상 12% · 3박 이상 10%」 — 그 단의 프로모션이 저장되면 단마다 값(promotion_plan.saved_ladder)."""
+    promotion = plan.promotion(change.promotion)
+    currency = promotion.currency or plan.currency
+    ladder = saved_ladder(plan, promotion)
+    return "저장되면 " + " · ".join(f"{promotion.threshold_words(tier)} {shown(ladder[tier.at], promotion.basis, currency)}"
+                                for tier in promotion.tiers())
 
 
 def _moves(plan: Plan, change: TierChange) -> str:
@@ -155,6 +167,8 @@ def chosen_tiers(plan: Plan) -> list[dict]:
 def _why(plan: Plan, change: TierChange) -> str:
     if change.verdict == "FORM_REFUSES":
         return form_refusal(plan.promotion(change.promotion), {change.tier: change.after}) or ""
+    if change.verdict == INVERTS:
+        return ladder_text(plan, change)
     return ""
 
 
@@ -169,12 +183,12 @@ def _verdict_cell(change: TierChange | None, why: str) -> str:
     rule = RULES.by_code.get(change.verdict)
     if rule is None:
         return f'<td class="text">{"바뀜" if change.writes else "그대로"}</td>'
+    more = f"<small class=more>{esc(why)}</small>" if why else ""
     if change.choice:
-        return f'<td class="text">{esc(rule.label)} <span class="tag chosen">{esc(CHOICE_LABELS[change.choice])}</span></td>'
+        return f'<td class="text">{esc(rule.label)} <span class="tag chosen">{esc(CHOICE_LABELS[change.choice])}</span>{more}</td>'
     if rule.severity == RED:
-        return f'<td class="text"><span class="tag red">빨간 줄</span> {esc(rule.label)}</td>'
-    return (f'<td class="text"><span class="tag blocked">바꿀 수 없음</span> {esc(rule.label)}'
-            f'{f"<small class=more>{esc(why)}</small>" if why else ""}</td>')
+        return f'<td class="text"><span class="tag red">빨간 줄</span> {esc(rule.label)}{more}</td>'
+    return f'<td class="text"><span class="tag blocked">바꿀 수 없음</span> {esc(rule.label)}{more}</td>'
 
 
 def _tier_table(plan: Plan, promotion: Promotion) -> str:

@@ -9,7 +9,7 @@ import unittest
 from decimal import Decimal
 
 import promotion_scene as scene
-from promotion_model import GATE, ORIGIN_UNKNOWN, ModelError, Snapshot, decode_request, promotion_of, snapshot_items, tier_key
+from promotion_model import GATE, ORIGIN_UNKNOWN, ModelError, Refused, Snapshot, decode_request, promotion_of, snapshot_items, tier_key
 from promotion_plan import PlanError, PromotionStep, Edit, plan_change, plan_steps, resolve, step_call
 from change_core.answers import BrowserError, attach_bodies
 from change_core.rules import Resolution
@@ -186,3 +186,70 @@ class NameTest(unittest.TestCase):
         with self.assertRaises(BrowserError) as caught:
             promotion_of(answer)
         self.assertIn("목록의 이름(롱스테이 2박 7% / 3박 10%)과 다릅니다", str(caught.exception))
+
+
+def both(*tiers):
+    return tuple(("601", "9002", tier) for tier in tiers)
+
+
+class LadderTest(unittest.TestCase):
+    """P4 (리뷰 2 · 파이썬 4) — 빨간 줄은 저장될 값으로 판정한다. 한 단은 「안 바꿈」, 다른 단은 「이대로 바꿈」으로 고르면 단 사다리가
+    뒤집힐 수 있다(더 오래 묵는 손님이 덜 할인받음) — 그것은 고를 새 빨간 줄(INVERTS)이 되고, 고를 때까지 저장 단계가 없다. 새 빨간 줄의
+    고름이 또 다른 단을 뒤집으면 그것도 빨간 줄이 될 때까지 되풀이한다. 0 · 무료 · 30% 는 단 하나의 값으로만 정해져 고름이 바꾸지 않는다 —
+    그 고름 뒤에 생기는 뒤집힘도 같은 새 빨간 줄이다."""
+
+    def test_keeping_one_tier_and_including_another_raises_the_inverted_ladder_as_a_red_line_to_choose_on(self):
+        plan = plan_change(snapshot("9002"), request(*both("2", "3"), amount="5"))
+        self.assertEqual([(c.verdict, c.after) for c in plan.changes], [("OVER_30", Decimal("12")), ("OVER_30", Decimal("15"))],
+                         "고르기 전: 12 < 15 라 뒤집힘이 없다(리뷰의 재현)")
+        said = [Resolution("OVER_30", "include", ("9002 2",), "2박은 올려"), Resolution("OVER_30", "keep", ("9002 3",), "3박은 둬")]
+        for chosen in (resolve(plan, said), resolve(plan, [Resolution("OVER_30", "include", None, "올려"), said[1]])):
+            two, three = chosen.changes
+            self.assertEqual((two.verdict, two.choice, two.after, two.waiting), ("INVERTS", None, Decimal("12"), True))
+            self.assertEqual((three.verdict, three.choice, three.after), ("OVER_30", "keep", Decimal("10")))
+            self.assertIsNone(plan_steps(chosen), "새 빨간 줄을 고를 때까지 저장하지 않는다")
+        taken = resolve(plan, said + [Resolution("INVERTS", "include", ("9002 2",), "그래도 2박은 올려")])
+        step, = plan_steps(taken)
+        self.assertEqual([(edit.key, edit.value) for edit in step.edits], [(tier_key("9002", "2"), "12")])
+        self.assertEqual((taken.changes[0].verdict, taken.changes[0].choice, taken.changes[0].said), ("INVERTS", "include", "그래도 2박은 올려"))
+        self.assertEqual(plan_steps(resolve(plan, said + [Resolution("INVERTS", "keep", ("9002 2",), "그럼 둘 다 둬")])), ())
+
+    def test_the_same_holds_after_a_choice_on_zero_or_room_free(self):
+        snap = snapshot("9002")
+        zero = plan_change(snap, request(*both("2", "3"), value="0"))
+        self.assertEqual([c.verdict for c in zero.changes], ["ZERO", "ZERO"])
+        chosen = resolve(zero, [Resolution("ZERO", "keep", ("9002 2",), "2박은 둬"), Resolution("ZERO", "include", ("9002 3",), "3박은 없애")])
+        self.assertEqual([(c.verdict, c.choice) for c in chosen.changes], [("ZERO", "keep"), ("INVERTS", None)],
+                         "3박 단 0% 가 2박 단 7% 보다 작아진다")
+        free = plan_change(snap, request(*both("2", "3"), value="100"))
+        self.assertEqual([c.verdict for c in free.changes], ["ROOM_FREE", "ROOM_FREE"])
+        chosen = resolve(free, [Resolution("ROOM_FREE", "include", ("9002 2",), "2박은 무료"), Resolution("ROOM_FREE", "keep", ("9002 3",), "3박은 둬")])
+        self.assertEqual([(c.verdict, c.choice) for c in chosen.changes], [("INVERTS", None), ("ROOM_FREE", "keep")])
+
+    def test_a_tier_that_cannot_be_changed_counts_at_its_current_value(self):
+        plan = resolve(plan_change(snapshot("9002"), request(*both("2", "3"), amount="-8")), [])
+        self.assertEqual([(c.verdict, c.after) for c in plan.changes], [("NEGATIVE", Decimal("-1")), ("INVERTS", Decimal("2"))],
+                         "2박 단은 바꿀 수 없어 7% 로 남고, 3박 단 2% 가 그보다 작아진다(고르기 전 판정은 -1 과 견줘 30% 였다)")
+        self.assertIsNone(plan_steps(plan))
+
+    def test_a_choice_on_a_new_red_line_is_judged_again_until_no_new_one_appears(self):
+        def three(erp):
+            erp.promotion("9002")["trigger"]["tiers"] = [{"threshold": 2, "pct": "10"}, {"threshold": 3, "pct": "30"}, {"threshold": 4, "pct": "40"}]
+        plan = plan_change(snapshot("9002", change=three), request(*both("2", "3", "4"), percent="-70"))
+        self.assertEqual([(c.verdict, c.after) for c in plan.changes], [("OVER_30", Decimal("3")), ("OVER_30", Decimal("9")), ("OVER_30", Decimal("12"))])
+        said = [Resolution("OVER_30", "keep", ("9002 2",), "2박은 둬"), Resolution("OVER_30", "include", None, "나머지는 내려")]
+        self.assertEqual([(c.verdict, c.choice) for c in resolve(plan, said).changes],
+                         [("OVER_30", "keep"), ("INVERTS", None), ("OVER_30", "include")], "3박 9% < 2박 10%")
+        said.append(Resolution("INVERTS", "keep", ("9002 3",), "3박도 둬"))
+        self.assertEqual([(c.verdict, c.choice) for c in resolve(plan, said).changes],
+                         [("OVER_30", "keep"), ("INVERTS", "keep"), ("INVERTS", None)], "3박을 30% 로 두면 4박 12% 가 그보다 작아진다")
+        said.append(Resolution("INVERTS", "include", ("9002 4",), "4박은 그래도 내려"))
+        done = resolve(plan, said)
+        step, = plan_steps(done)
+        self.assertEqual([(edit.key, edit.value) for edit in step.edits], [(tier_key("9002", "4"), "12")])
+
+    def test_a_choice_naming_a_tier_that_never_meets_the_rule_is_refused(self):
+        plan = plan_change(snapshot("9002"), request(*both("2", "3"), amount="5"))
+        with self.assertRaises(Refused) as caught:
+            resolve(plan, [Resolution("INVERTS", "include", ("9002 2",), "올려")])
+        self.assertIn("항목이 아닙니다: 단 9002 2", str(caught.exception))

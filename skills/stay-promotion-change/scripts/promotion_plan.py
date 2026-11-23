@@ -1,7 +1,8 @@
 """promotion_plan.py — 프로모션 할인 계산: 미리보기, 빨간 줄 고르기, 저장 단계, 장부 줄, 되돌리기.
 
     plan_change(snapshot, request)   → Plan            짚은 단마다 전 → 후, 판정. 셈은 여기서만 한다(도우미는 셈하지 않는다)
-    resolve(plan, resolutions)       → Plan            빨간 줄 고름(이대로 바꿈 · 그 단은 안 바꿈)을 단에 단다
+    resolve(plan, resolutions)       → Plan            빨간 줄 고름(이대로 바꿈 · 그 단은 안 바꿈)을 단에 달고, 고른 뒤 저장될 단 사다리를
+                                                       다시 본다(새로 뒤집히는 단은 새 빨간 줄 — 더 생기지 않을 때까지)
     plan_steps(plan)                 → 저장 단계들      프로모션마다 한 번 — 창이 보인 칸 전부 + 바꾸는 단의 값만 새 값. 빨간 줄이 남았으면 None
     preview_rows · rollback_rows     → 장부 줄         고른 프로모션의 단 전부(바꾸지 않는 단도 — 적용 뒤 견주기가 본다)
     plan_promotion_rollback(…)       → RollbackPlan    (change_core.rollback.plan_rollback) — 지금 값을 읽은 프로모션인지 본다
@@ -24,6 +25,7 @@ from promotion_model import (
     decode_promotion, encode_hotel, encode_promotion, hotel_label, part_of_key, promotion_of_key, snapshot_items, threshold_key,
     tier_key,
 )
+from change_core.items import Refused
 from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import money, money_text, round_money
 from change_core.rollback import LaterWrite, RecordedChange, RollbackPlan, plan_rollback
@@ -66,6 +68,7 @@ RULES = RuleTable(
     Rule("OVER_30", "30% 넘게 바뀝니다", RED, ("include", "keep"), lambda f: moved_far(f.before, f.after)),
 )
 CHOICE_LABELS = {"include": "이대로 바꿈", "keep": "그 단은 안 바꿈"}
+INVERTS = "INVERTS"     # 고른 뒤 저장될 사다리로 다시 보는 규칙(resolve)
 
 
 class PlanError(ModelError):
@@ -292,15 +295,69 @@ def _verdict(promotion: Promotion, at: str, before, after, then: Mapping, planne
 
 
 def resolve(plan: Plan, resolutions: Iterable[Resolution]) -> Plan:
-    """빨간 줄 고름을 단에 단다. 고름의 `items` 는 단의 짧은 글자(「9001 21」)다 — 그 규칙의 단이 아니면 거절한다."""
+    """빨간 줄 고름을 단에 단다. 고름의 `items` 는 단의 짧은 글자(「9001 21」)다 — 그 규칙의 단이 아니면 거절한다. 받는 것은 계산이 막 낸
+    미리보기(plan_change — 아직 고른 것이 없다)다.
+
+    빨간 줄은 저장될 값으로 판정한다. 처음 판정(plan_change)은 짚은 단을 모두 셈한 값으로 본다. 고른 뒤에는 저장될 사다리 — 「그 단은 안
+    바꿈」 · 바꿀 수 없는 단은 지금 값, 넣는 단과 아직 고르기를 기다리는 단은 셈한 값 — 로 다시 본다(saved_ladder). 넣는(또는 기다리는)
+    단이 그 사다리에서 다른 단과 뒤집히는데(기준값이 큰 단보다 할인이 크거나 작은 단보다 작음) 처음 판정의 사다리와 지금 값으로는 뒤집히지
+    않으면, 그 단은 새 빨간 줄 INVERTS 다 — 앞서 다른 빨간 줄(30% · 0 · 무료)에 「이대로 바꿈」을 골랐어도 그 고름은 뒤집힘을 고른 것이
+    아니라 다시 고를 때까지 저장하지 않는다(INVERTS 를 짚은 고름이 있으면 그것을 단다). 「안 바꿈」 고름이 사다리를 바꿔 또 다른 단을
+    뒤집을 수 있으니 새 빨간 줄이 더 생기지 않을 때까지 되풀이한다. 빨간 줄은 더해지기만 한다 — 처음 판정의 빨간 줄은 그대로다. 단을 짚은
+    고름은 어느 차례에서든 그 규칙에 걸린 단이면 받는다(다른 단을 「안 바꿈」으로 고른 뒤에야 뒤집히는 단이 있다).
+    """
     by_id = {change.id: change.key for change in plan.changes}
     keyed = [Resolution(item.rule, item.choice, None if item.items is None else tuple(by_id.get(str(name), str(name))
                                                                                     for name in item.items), item.said)
              for item in resolutions]
-    flagged = {change.key: change.verdict for change in plan.changes if change.verdict}
     shown = {change.key: change.id for change in plan.changes}
-    chosen, _waiting = decide(RULES, flagged, keyed, lambda key: f"단 {shown.get(key, key)}")
-    return replace(plan, changes=tuple(_choose(change, chosen.get(change.key)) for change in plan.changes))
+    describe = (lambda key: f"단 {shown.get(key, key)}")
+    decide(RULES, {}, [replace(item, items=None) for item in keyed], describe)    # 규칙과 고를 것이 맞는지 — 짚은 단은 아래에서 본다
+    verdicts = {change.key: change.verdict for change in plan.changes}
+    seen = {key: {code} for key, code in verdicts.items() if code}                # 어느 차례에서든 단이 걸린 규칙
+    for _round in range(len(plan.changes) + 1):
+        flagged = {key: code for key, code in verdicts.items() if code}
+        usable = [replace(item, items=tuple(key for key in item.items if flagged.get(key) == item.rule)) if item.items is not None else item
+                  for item in keyed]
+        chosen, _waiting = decide(RULES, flagged, [item for item in usable if item.items is None or item.items], describe)
+        changes = tuple(_choose(replace(change, verdict=verdicts[change.key]), chosen.get(change.key)) for change in plan.changes)
+        turned = _turned(plan, changes)
+        if not turned:
+            break
+        for key in turned:
+            verdicts[key] = INVERTS
+            seen.setdefault(key, set()).add(INVERTS)
+    else:
+        raise PlanError("빨간 줄을 다시 보는 차례가 끝나지 않았습니다 — 계산의 결함입니다")
+    for item in keyed:
+        for key in item.items or ():
+            if item.rule not in seen.get(key, ()):
+                raise Refused(f"「{RULES.by_code[item.rule].label}」 항목이 아닙니다: {describe(key)}")
+    return replace(plan, changes=changes)
+
+
+def saved_ladder(plan: Plan, promotion: Promotion, changes: Iterable[TierChange] | None = None) -> dict[str, Decimal | None]:
+    """저장되면 그 프로모션의 단마다 값 — 넣는 단과 아직 고르기를 기다리는 단은 셈한 값, 그 밖(바꿀 수 없는 단 · 「안 바꿈」 · 짚지 않은
+    단)은 지금 값."""
+    ladder = {tier.at: promotion.value(tier) for tier in promotion.tiers()}
+    ladder.update({change.tier: change.after for change in (plan.changes if changes is None else changes)
+                   if change.promotion == promotion.id and (change.writes or change.waiting)})
+    return ladder
+
+
+def _turned(plan: Plan, changes: Sequence[TierChange]) -> set[str]:
+    """고른 뒤 저장될 사다리에서 새로 뒤집히는 단의 키 — 넣는(또는 기다리는) 단 가운데 판정이 아직 INVERTS 가 아니고, 저장될 사다리로는
+    뒤집히는데 처음 판정의 사다리(짚은 단 모두 셈한 값 — plan_change 의 그것)와 지금 값으로는 뒤집히지 않는 단."""
+    turned = set()
+    for promotion in plan.promotions:
+        now = {tier.at: promotion.value(tier) for tier in promotion.tiers()}
+        first = dict(now)
+        first.update({change.tier: change.after for change in plan.changes if change.promotion == promotion.id and change.after is not None})
+        saved = saved_ladder(plan, promotion, changes)
+        turned |= {change.key for change in changes if change.promotion == promotion.id and (change.writes or change.waiting)
+                   and change.verdict != INVERTS and _inverted(promotion, change.tier, saved)
+                   and not _inverted(promotion, change.tier, first) and not _inverted(promotion, change.tier, now)}
+    return turned
 
 
 def _choose(change: TierChange, resolution: Resolution | None) -> TierChange:

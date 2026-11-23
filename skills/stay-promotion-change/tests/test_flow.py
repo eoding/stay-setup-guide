@@ -246,6 +246,40 @@ class FiveShapesTest(Flow):
         self.assertNotIn("새 할인으로 바뀝니다", undone)
 
 
+class LadderFlowTest(Flow):
+    """P4 (리뷰 2 · 파이썬 4) — 2박 7% · 3박 10% 를 둘 다 5% 포인트 올리면(12 · 15) 둘 다 30% 빨간 줄이고 뒤집힘은 없다. 2박은 「이대로
+    바꿈」, 3박은 「안 바꿈」을 고르면 2박 12% · 3박 10% 가 되어 3박 손님이 덜 할인받는다 — 다시 계산하면 그것이 2박 단의 새 빨간 줄
+    (INVERTS)이고, 저장되면 단마다 값(`ladder`)을 싣는다. 고를 때까지 저장 단계가 없고, 「이대로 바꿈」을 고르면 2박 단만 저장한다."""
+
+    def test_keeping_one_tier_and_including_another_is_asked_again_as_an_inverted_ladder(self):
+        request = self.request(LONG_STAY, dict(LONG_STAY, tier="3"), amount="5", sentence="롱스테이 둘 다 5% 포인트 올려")
+        change, _plan, short = self.preview(request)
+        self.assertEqual([(line["rule"], line["tiers"]) for line in short["red"]], [("OVER_30", 2)])
+        snapshot = self.work / "읽기-1" / "snapshot.json"
+        said = [{"rule": "OVER_30", "choice": "include", "tiers": ["9002 2"], "said": "2박은 올려"},
+                {"rule": "OVER_30", "choice": "keep", "tiers": ["9002 3"], "said": "3박은 그대로 둬"}]
+        again = self.cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", self.file("choices-2.json", said),
+                         "--record", "--replaces", change, "--out", self.work / "plan-2.json")
+        self.assertEqual((again["saves"], again["counts"]["red"], again["counts"]["INVERTS"]), (None, 1, 1))
+        self.assertEqual(again["red"], [{
+            "rule": "INVERTS", "label": "기준값이 더 큰 단보다 할인이 커집니다(작으면 작아집니다)", "tiers": 1,
+            "choices": {"include": "이대로 바꿈", "keep": "그 단은 안 바꿈"},
+            "examples": [{"tier": "9002 2", "name": "데모 오퍼 2027 · 롱스테이 2박 7% / 3박 10% · 2박 이상 단", "moves": "7% → 12%",
+                          "ladder": "저장되면 2박 이상 12% · 3박 이상 10%"}]}])
+        self.assertEqual([(line["tier"], line["rule"], line["choice"]) for line in again["chosen"]], [("9002 3", "OVER_30", "keep")],
+                         "2박의 30% 고름은 뒤집힘을 고른 것이 아니라 남지 않는다")
+        text = self.cli("render", "preview", "--plan", self.work / "plan-2.json", "--text")["text"]
+        self.assertIn("2박 이상 단 · 할인율(%) | 7% → 12% | 빨간 줄 기준값이 더 큰 단보다 할인이 커집니다(작으면 작아집니다) 저장되면 2박 이상 12% · "
+                      "3박 이상 10%", text)
+        self.assertIn("먼저 골라 주세요 — 빨간 줄 1단.", text)
+        said.append({"rule": "INVERTS", "choice": "include", "tiers": ["9002 2"], "said": "3박이 덜 받아도 2박은 올려"})
+        third = self.cli("plan", "--snapshot", snapshot, "--request", request, "--resolutions", self.file("choices-3.json", said),
+                         "--record", "--replaces", again["change_id"], "--out", self.work / "plan-3.json")
+        self.assertEqual((third["saves"], third["counts"]["will_change"]), (1, 1))
+        self.apply(third["change_id"], self.work / "plan-3.json")
+        self.assertEqual(self.erp.promotion("9002")["trigger"]["tiers"], [{"threshold": 2, "pct": "12"}, {"threshold": 3, "pct": "10"}])
+
+
 class GateTest(Flow):
     def test_an_erp_without_the_mark_reads_and_previews_but_never_saves(self):
         self.erp = scene.Erp(keeps=False)
