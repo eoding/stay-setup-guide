@@ -66,7 +66,7 @@ from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
 from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
 from change_core.money import money_text
-from change_core.rollback import decode_rollback, encode_rollback, holds
+from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution, said_in
 from erp_read import PairRead, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
@@ -74,7 +74,7 @@ from price_browser import (
 )
 from change_core.rules import BLOCKED
 from price_model import (
-    CELL_RULES, FIELDS, ITEM_KIND, CellKey, ReadRange, Snapshot, TargetTable, cell_state, decode_hotel, decode_plan, decode_request,
+    CELL_RULES, FIELDS, ITEM_KIND, CellKey, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request,
     decode_resolution_items, decode_snapshot, decode_step, encode_change, encode_hotel, encode_key, encode_plan, encode_request,
     encode_snapshot, encode_step, encode_unused, hotel_label, iso_day, key_of_item, line_label, request_range, same_hotel,
     snapshot_reading,
@@ -512,20 +512,10 @@ def cmd_restore(args):
     return rollback_answer(change_id, args, rollback_scope(ledger, change_id, "change", request, None, plan), plan, snapshot)
 
 
-def edited_cells(ledger: Ledger, saved_id: int, saved: Snapshot) -> dict[CellKey, int]:
-    """저장해 둔 때 이 장부의 앞선 변경(같은 호텔 · 오퍼)이 날짜별로 넣은 값을 그대로 갖고 있던 칸 → 그 값을 넣은 장부 번호(가장
-    나중 것). 되돌린 값은 넣은 값으로 치지 않는다(그 되돌리기가 넣은 값이 된다)."""
-    found: dict[CellKey, int] = {}
-    for entry in sorted(ledger.list_changes(), key=lambda item: item["id"]):
-        if (entry["id"] >= saved_id or entry["kind"] == "snapshot" or not entry["written"] or entry["offer"] != saved.offer
-                or not same_hotel(entry["hotel"], entry["hotel_id"], saved.hotel, saved.hotel_id)):
-            continue
-        for item in ledger.recorded_change(entry["id"]).items:
-            key = key_of_item(item.key)
-            value = saved.cells.get(key)
-            if value is not None and holds(cell_state(key, value), item.written):
-                found[key] = entry["id"]
-    return found
+def edited_cells(ledger: Ledger, saved_id: int) -> dict[CellKey, int]:
+    """저장해 둔 때 이 장부의 앞선 기록(같은 호텔 · 오퍼)이 날짜별로 넣은 값을 그대로 갖고 있던 칸 → 그 값을 넣은 장부 번호(가장
+    나중 것 — Ledger.held_at, 장부의 차례에서 셈한다). 되돌린 값은 그 되돌리기가 넣은 값이다."""
+    return {key_of_item(key): number for (kind, key), number in ledger.held_at(saved_id).items() if kind == ITEM_KIND}
 
 
 def record_kind(ledger: Ledger, change_id: int) -> str:
@@ -545,7 +535,7 @@ def cmd_compare(args):
     later = {key_of_item(key): writes for (kind, key), writes in ledger.later_writes(args.saved).items() if kind == ITEM_KIND}
     writers = {write.change_id for writes in later.values() for write in writes}
     comparison = compare_saved(args.saved, record.sentence, saved, decode_snapshot(load(args.snapshot)),
-                               edited_cells(ledger, args.saved, saved), later,
+                               edited_cells(ledger, args.saved), later,
                                {number: record_kind(ledger, number) for number in writers})
     return dict(encode_comparison(comparison), scope=listed(ledger, args.saved)[0]["scope"], counts=compare_counts(comparison))
 

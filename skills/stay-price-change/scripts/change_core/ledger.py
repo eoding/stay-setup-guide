@@ -18,8 +18,7 @@
                  읽은 값의 시각)
     item_values  항목 하나의 필드 하나에 한 줄 — 항목 종류(`price_cell` …), 굳은 키, 이름, 필드, 그때 상태, 전 값, 후 값,
                  넣는 방법(set / clear, 넣지 않으면 비어 있음 — 미리보기 때 정해지고 begin 은 저장 단계가 이것과 같은지 본다),
-                 판정 · 표시 · 빨간 줄에 고른 것과 그렇게 고르며 담당자가 한 말, 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값,
-                 되돌린 되돌리기 번호(되돌리기, 또는 그 값을 저장해 둔 상태로 되돌린 저장 상태로 되돌리기)
+                 판정 · 표시 · 빨간 줄에 고른 것과 그렇게 고르며 담당자가 한 말, 몇 번째 저장인지, 다시 읽어 맞았는지와 읽은 값
     steps        저장 한 번에 한 줄 — 단계 종류와 내용(JSON), 끝날 때마다 바로 적는다. `unknown` 은 저장 단추는 눌렸고
                  저장됐는지 모르는 단계(다시 읽어 가릴 때까지 failed 로 둔다)
     checks       check 한 번에 한 줄 — 그 읽은 값의 시각, 이어서 해도 되는지와 안 되는 까닭, 멈춘 까닭, 남은 저장의 항목
@@ -29,9 +28,9 @@
     unused_choices  미리보기 하나에 한 줄(있을 때만) — 담당자가 고른 빨간 줄 고름 가운데 어느 항목도 쓰지 않은 것(JSON, 고르며 한
                  말과 그 까닭). 항목 줄에는 남지 않아, 결과 페이지의 「고르신 빨간 줄」이 미리보기처럼 이것으로 댄다
 
-되돌리기와 저장 상태로 되돌리기는 다시 되돌리지 않는다(`_undoable`). 되돌리기를 되돌리면 그 되돌리기가 단 표지(`rolled_back_by`)를
-풀어야 하고, 그것을 또 되돌리면 다시 달아야 한다 — 장부가 ERP 에 살아 있는 값을 말하지 못하게 된다(ERP 의 [되돌리기]도 한 번만
-된다). 되돌린 값으로 다시 바꾸는 길은 같은 요청의 새 변경이다.
+어느 기록의 값이 ERP 에 살아 있는지(되돌렸는지 · 되돌렸다가 다시 살렸는지)는 장부에 적어 두지 않고 저장된 값들의 차례에서 그때마다
+셈한다(`_chain` — change_core.alive). 목록 · 되돌리기 · 결과 페이지 · 견주기가 같은 셈을 읽는다. 되돌리기와 저장 상태로 되돌리기는
+아직 다시 되돌리지 않는다(`_undoable`).
 
 snapshot 은 읽어서 적어 두기만 하므로 적는 순간 상태가 saved 다(적용한 것이 아니다 — 목록에서 적용된 변경과 갈린다).
 바뀌는 항목이 없거나 빨간 줄을 모두 안 바꾸기로 고른 미리보기는 적는 순간 상태가 empty 다 — 적용할 것이 없어 begin 이 받지 않고,
@@ -63,6 +62,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
+from .alive import Alive, Saved, Status, Write, walk
 from .items import Difference, ItemState, Reading, decode_state, encode_state, stale_items
 from .money import money, money_text
 from .rollback import LaterWrite, RecordedChange, RecordedItem
@@ -114,7 +114,6 @@ CREATE TABLE IF NOT EXISTS item_values (
   verified INTEGER NOT NULL DEFAULT 0,
   seen TEXT,
   seen_state TEXT,
-  rolled_back_by INTEGER REFERENCES changes(id),
   verdict TEXT,
   marks TEXT NOT NULL DEFAULT '',
   choice TEXT,
@@ -277,6 +276,9 @@ class StepRecord:
 
 @dataclass(frozen=True)
 class RowRecord:
+    """장부의 한 줄. 저장한 줄이면 장부의 차례에서 셈한 지금이 붙는다(change_core.alive) — `live` 그 값이 아직 이 번호의 것이다 ·
+    `rolled_back_by` 그 값을 되돌린 기록(되돌려져 있지 않으면 None) · `redone` 되돌렸다가 다시 살렸으면 (되돌린 기록, 다시 살린 기록).
+    살아 있지도 되돌려져 있지도 않으면 뒤 기록이나 도우미 밖이 덮었다."""
     item_kind: str
     item_key: str
     label: str
@@ -295,6 +297,8 @@ class RowRecord:
     marks: tuple[str, ...]
     choice: str | None = None
     said: str | None = None
+    redone: tuple[int, int] | None = None
+    live: bool = False
 
 
 @dataclass(frozen=True)
@@ -382,6 +386,34 @@ def _kind_of(db, change_id: int | None) -> str | None:
             return OFFER_KIND
         change_id = header["reverses"]
     return None
+
+
+def _saved_state(change_id: int) -> str:
+    return f"{change_id}번은 저장해 둔 상태입니다. 그 상태로 돌리려면 '저장해 둔 상태로 되돌리기'를 씁니다"
+
+
+def _restored(kind: str, request: str | None) -> int | None:
+    """저장 상태로 되돌리기면 그 저장 번호 — 장부의 종류는 change 라 요청(`restore_snapshot`)으로 가른다."""
+    data = json.loads(request) if kind == "change" and request else None
+    return int(data["snapshot"]) if data and data.get("kind") == "restore_snapshot" else None
+
+
+def _tally(items: Mapping[tuple[str, str], Mapping[str, Status]]) -> dict:
+    """기록 하나가 저장한 항목들(Alive.of)의 수 — `written` 저장한 항목, `rolled_back` 그 가운데 되돌린 필드가 있는 항목과 `undone_by`
+    그 기록들, `redone` 되돌린 필드는 없고 되돌렸다가 다시 살린 필드가 있는 항목과 `redone_by` 그 기록들(되돌린 · 다시 살린),
+    `live` 넣은 필드가 모두 살아 있는 항목."""
+    undone, redone = [], []
+    for fields in items.values():
+        if any(status.undone_by for status in fields.values()):
+            undone.append(fields)
+        elif any(status.redone for status in fields.values()):
+            redone.append(fields)
+    return dict(written=len(items), rolled_back=len(undone),
+                undone_by=sorted({status.undone_by for fields in undone for status in fields.values() if status.undone_by}),
+                redone=len(redone),
+                redone_by=sorted({number for fields in redone for status in fields.values() if status.redone
+                                  for number in status.redone}),
+                live=sum(all(status.live for status in fields.values()) for fields in items.values()))
 
 
 def _absent(item) -> bool:
@@ -562,43 +594,10 @@ class Ledger:
         return unknown if any(step["unknown"] for step in failed) else missed
 
     @staticmethod
-    def _mark_saved(db, header, index: int, note: str | None, stamp: str) -> None:
-        """단계 하나를 저장됨으로 적는다. 되돌리기의 저장이면 되돌린 변경의 그 값들에 이 번호를 단다. 저장 상태로 되돌리기의 저장이면
-        그 저장 상태 뒤에 이 장부가 넣은 값 가운데 이 저장이 덮어 되돌린 것에 이 번호를 단다(_settle_restored)."""
+    def _mark_saved(db, change_id: int, index: int, note: str | None, stamp: str) -> None:
+        """단계 하나를 저장됨으로 적는다. 그 값이 누구의 것이 됐는지는 적지 않는다 — 장부의 차례에서 셈한다(_chain)."""
         db.execute("UPDATE steps SET status = 'saved', finished_at = ?, note = ?, unknown = 0 WHERE change_id = ? AND idx = ?",
-                   (stamp, note, header["id"], index))
-        request = None if header["request"] is None else json.loads(header["request"])
-        if header["kind"] == "change" and request and request.get("kind") == "restore_snapshot":
-            Ledger._settle_restored(db, header, int(request["snapshot"]), index)
-        if header["kind"] == "rollback":
-            for row in db.execute("SELECT item_kind, item_key, field FROM item_values WHERE change_id = ? AND step = ?",
-                                  (header["id"], index)).fetchall():
-                db.execute(f"UPDATE item_values SET rolled_back_by = ? WHERE change_id = ? AND {ROW}"
-                           " AND action IS NOT NULL AND rolled_back_by IS NULL",
-                           (header["id"], header["reverses"], row["item_kind"], row["item_key"], row["field"]))
-
-    @staticmethod
-    def _settle_restored(db, header, saved: int, index: int) -> None:
-        """저장 상태로 되돌리기의 저장 한 번이 넣은 필드마다 — 그 저장 상태(`saved`) 뒤 · 이 번호 앞에 같은 호텔 · 오퍼에 이 장부가 넣은
-        값 가운데 그 필드에 마지막으로 넣었고 아직 되돌리지 않은 것이, 이 저장이 덮은 값(이 줄의 전 값)과 같으면 그 값은 이 저장이 되돌린
-        것이다 — 되돌리기와 같이 그 줄에 이 번호를 단다. 그래서 목록의 상태 · 되돌린 칸 수 · 되돌린 번호가 되돌리기 때와 같고, 그
-        변경을 다시 되돌리자고 하면 되돌릴 것이 없다(일부만 덮었으면 나머지만). 그 값이 이미 다른 값으로 덮여 있었으면(이 저장이 덮은
-        것은 그 변경의 값이 아니다) 달지 않는다."""
-        for row in db.execute("SELECT item_kind, item_key, field, before FROM item_values WHERE change_id = ? AND step = ?"
-                              " AND action IS NOT NULL", (header["id"], index)).fetchall():
-            last = db.execute(
-                "SELECT item_values.change_id, item_values.after FROM item_values"
-                " JOIN changes ON changes.id = item_values.change_id"
-                " JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step AND steps.status = 'saved'"
-                " WHERE item_values.item_kind = ? AND item_values.item_key = ? AND item_values.field = ?"
-                " AND item_values.action IS NOT NULL AND item_values.rolled_back_by IS NULL"
-                " AND changes.id > ? AND changes.id < ? AND changes.kind != 'snapshot' AND changes.hotel_id = ? AND changes.offer = ?"
-                " ORDER BY steps.finished_at DESC, item_values.change_id DESC LIMIT 1",
-                (row["item_kind"], row["item_key"], row["field"], saved, header["id"], header["hotel_id"],
-                 header["offer"])).fetchone()
-            if last is not None and money(last["after"]) == money(row["before"]):
-                db.execute(f"UPDATE item_values SET rolled_back_by = ? WHERE change_id = ? AND {ROW}",
-                           (header["id"], last["change_id"], row["item_kind"], row["item_key"], row["field"]))
+                   (stamp, note, change_id, index))
 
     def begin(self, change_id: int, steps: Sequence[StepPlan], request: Mapping | None = None, *, read_at: str) -> None:
         """적용 시작 — 저장 단계를 적고 단계가 쓰는 필드마다 단계 번호를 단다.
@@ -695,7 +694,7 @@ class Ledger:
             stamp, alive = self._stamp(), self._status(header) == "applying"
             db.execute("UPDATE checks SET spent = 1 WHERE change_id = ? AND spent = 0", (change_id,))   # 그 check 는 이 저장을 모른다
             if saved:
-                self._mark_saved(db, header, index, note, stamp)
+                self._mark_saved(db, change_id, index, note, stamp)
             else:
                 db.execute("UPDATE steps SET status = 'failed', finished_at = ?, note = ?, unknown = ? WHERE change_id = ? AND idx = ?",
                            (stamp, note, int(unknown), change_id, index))
@@ -708,19 +707,54 @@ class Ledger:
             return self._status(self._header(db, change_id))
 
     @staticmethod
-    def _written(db, change_id, still_ours=False):
+    def _written(db, change_id):
         return db.execute(
             "SELECT item_values.* FROM item_values JOIN steps ON steps.change_id = item_values.change_id"
-            " AND steps.idx = item_values.step WHERE item_values.change_id = ? AND steps.status = 'saved'"
-            + (" AND item_values.rolled_back_by IS NULL" if still_ours else "") + " ORDER BY item_values.rowid",
+            " AND steps.idx = item_values.step WHERE item_values.change_id = ? AND steps.status = 'saved' ORDER BY item_values.rowid",
             (change_id,)).fetchall()
+
+    def _ours(self, db, header) -> list:
+        """이 번호가 저장한 줄 가운데 지금 되돌려져 있지 않은 것(장부의 차례에서 셈한다 — _chain). 뒤 기록이나 도우미 밖이 덮었을
+        뿐인 줄은 남는다(되돌리기가 지금 값으로 가려 그대로 두는 칸과 그 까닭으로 보인다)."""
+        statuses = self._chain(db, header["hotel_id"], header["offer"]).of(header["id"])
+        return [row for row in self._written(db, header["id"])
+                if statuses[(row["item_kind"], row["item_key"])][row["field"]].undone_by is None]
+
+    def _chain(self, db, hotel_id: str | None = None, offer: str | None = None, saved: Iterable[int] = ()) -> Alive:
+        """장부의 저장된 값들을 차례로 따라 셈한 살아 있는 값(change_core.alive.walk) — `hotel_id` · `offer` 를 주면 그 호텔 · 오퍼만.
+        지금 상태 저장은 저장 상태로 되돌리기가 가리키는 것과 `saved` 로 준 것만 싣는다(그 밖의 저장은 셈을 바꾸지 않는다)."""
+        where, params = ("", ()) if hotel_id is None else (" AND changes.hotel_id = ? AND changes.offer = ?", (hotel_id, offer))
+        rows = db.execute(
+            "SELECT item_values.change_id, item_values.item_kind, item_values.item_key, item_values.field, item_values.state,"
+            " item_values.before, item_values.after, steps.idx, steps.finished_at, changes.kind, changes.reverses,"
+            " changes.request, changes.hotel_id, changes.offer FROM item_values"
+            " JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step AND steps.status = 'saved'"
+            " JOIN changes ON changes.id = item_values.change_id WHERE item_values.action IS NOT NULL" + where
+            + " ORDER BY item_values.rowid", params).fetchall()
+        restores: dict[int, int | None] = {}
+        writes = []
+        for row in rows:
+            if row["change_id"] not in restores:
+                restores[row["change_id"]] = _restored(row["kind"], row["request"])
+            writes.append(Write((_moment(row["finished_at"]), row["change_id"], row["idx"]), row["change_id"],
+                                (row["hotel_id"], row["offer"], row["item_kind"], row["item_key"], row["field"]),
+                                money(row["before"]), row["state"] == "missing", money(row["after"]),
+                                row["reverses"] if row["kind"] == "rollback" else None, restores[row["change_id"]]))
+        wanted = sorted({*saved, *(number for number in restores.values() if number is not None)})
+        snapshots = db.execute(
+            "SELECT item_values.change_id, item_values.item_kind, item_values.item_key, item_values.field, item_values.state,"
+            " item_values.before, changes.created_at, changes.hotel_id, changes.offer FROM item_values"
+            " JOIN changes ON changes.id = item_values.change_id WHERE changes.kind = 'snapshot'"
+            f" AND changes.id IN ({', '.join('?' * len(wanted))})", wanted).fetchall() if wanted else []
+        return walk(writes, [Saved((_moment(row["created_at"]), row["change_id"], 0), row["change_id"],
+                                   (row["hotel_id"], row["offer"], row["item_kind"], row["item_key"], row["field"]),
+                                   money(row["before"]), row["state"] == "missing") for row in snapshots])
 
     def verify(self, change_id: int, reading: Reading) -> list[Mismatch]:
         """저장된 값을 방금 읽은 값과 견준다. 맞는 값은 확인됨으로 적고, 다른 값을 돌려준다. 되돌린 값은 보지 않는다."""
         mismatches = []
         with self._db() as db:
-            self._header(db, change_id)
-            for row in self._written(db, change_id, still_ours=True):
+            for row in self._ours(db, self._header(db, change_id)):
                 item = reading.get((row["item_kind"], row["item_key"]))
                 seen = None if item is None else item.fields.get(row["field"])
                 after = money(row["after"])
@@ -831,7 +865,7 @@ class Ledger:
         with self._db() as db:
             for index, settled in settle:
                 if settled == "saved":
-                    self._mark_saved(db, header, index, "다시 읽어 저장된 것을 확인했습니다", stamp)
+                    self._mark_saved(db, change_id, index, "다시 읽어 저장된 것을 확인했습니다", stamp)
                 else:
                     db.execute("UPDATE steps SET unknown = 0, note = ? WHERE change_id = ? AND idx = ?",
                                ("다시 읽어 저장되지 않은 것을 확인했습니다", change_id, index))
@@ -851,7 +885,7 @@ class Ledger:
         """되돌릴 수 있는 번호의 머리 — 지금 상태 저장 · 되돌리기 · 저장 상태로 되돌리기는 거절한다(모듈 머리글)."""
         header = self._header(db, change_id)
         if header["kind"] == "snapshot":
-            raise LedgerError(f"{change_id}번은 저장해 둔 상태입니다. 그 상태로 돌리려면 '저장해 둔 상태로 되돌리기'를 씁니다")
+            raise LedgerError(_saved_state(change_id))
         request = None if header["request"] is None else json.loads(header["request"])
         if header["kind"] == "rollback" or (request or {}).get("kind") == "restore_snapshot":
             acts = self._acts(header["kind"], header["reverses"], request)
@@ -866,13 +900,14 @@ class Ledger:
         return self.recorded_change(change_id)
 
     def recorded_change(self, change_id: int) -> RecordedChange:
-        """실제로 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만 — 되돌리기 계산(undoable) · 견주기가 누가 넣은 값인지 볼 때."""
+        """되돌리기 계산 · 견주기의 재료 — 저장이 끝났고 아직 되돌리지 않은 값이 있는 항목만(_ours, 장부의 차례에서 셈한다).
+        견주기는 되돌리기 · 저장 상태로 되돌리기의 재료도 읽는다."""
         with self._db() as db:
             header = self._header(db, change_id)
             if header["kind"] == "snapshot":
-                raise LedgerError(f"{change_id}번은 저장해 둔 상태입니다. 그 상태로 돌리려면 '저장해 둔 상태로 되돌리기'를 씁니다")
+                raise LedgerError(_saved_state(change_id))
             ours: dict[tuple[str, str], dict] = {}
-            for row in self._written(db, change_id, still_ours=True):
+            for row in self._ours(db, header):
                 ours.setdefault((row["item_kind"], row["item_key"]), {})[row["field"]] = money(row["after"])
             items = []
             for (kind, key), written in ours.items():
@@ -899,7 +934,8 @@ class Ledger:
                               header["sentence"], header["read_at"], header["applied_at"], items, header["hotel_id"])
 
     def later_writes(self, change_id: int) -> dict[tuple[str, str], list[LaterWrite]]:
-        """이 변경 뒤에 같은 호텔·오퍼에 이 장부가 저장한 값 — 항목마다, 변경마다 하나씩, 오래된 것부터."""
+        """이 변경 뒤에 같은 호텔·오퍼에 이 장부가 저장한 값 — 항목마다, 변경마다 하나씩, 저장한 차례대로(_chain 과 같은 차례 —
+        저장한 시각, 같은 초면 번호, 단계)."""
         grouped: dict[tuple[str, str, int], dict] = {}
         with self._db() as db:
             header = self._header(db, change_id)
@@ -908,9 +944,9 @@ class Ledger:
                 " JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 " JOIN changes ON changes.id = item_values.change_id"
                 " WHERE item_values.change_id > ? AND steps.status = 'saved' AND changes.kind != 'snapshot'"
-                " AND changes.hotel_id = ? AND changes.offer = ? ORDER BY item_values.change_id, steps.idx",
+                " AND changes.hotel_id = ? AND changes.offer = ? ORDER BY item_values.rowid",
                 (change_id, header["hotel_id"], header["offer"])).fetchall()
-        for row in rows:
+        for row in sorted(rows, key=lambda row: (_moment(row["finished_at"]), row["change_id"], row["step"])):
             entry = grouped.setdefault((row["item_kind"], row["item_key"], row["change_id"]),
                                        dict(at=row["finished_at"], sentence=row["sentence"], written={}))
             entry["at"] = max(entry["at"], row["finished_at"])
@@ -927,12 +963,15 @@ class Ledger:
                                      row["finished_at"], row["note"], bool(row["unknown"]))
                           for row in db.execute("SELECT * FROM steps WHERE change_id = ? ORDER BY idx", (change_id,)))
             saved = {step.index for step in steps if step.status == "saved"}
+            now = self._chain(db, header["hotel_id"], header["offer"]).of(change_id)
             rows = tuple(
                 RowRecord(row["item_kind"], row["item_key"], row["label"], row["field"], row["state"], money(row["before"]),
                           money(row["after"]), row["action"], row["step"], row["step"] in saved, bool(row["verified"]),
-                          money(row["seen"]), row["seen_state"], row["rolled_back_by"], row["verdict"],
-                          tuple(mark for mark in row["marks"].split(",") if mark), row["choice"], row["said"])
-                for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,)))
+                          money(row["seen"]), row["seen_state"], getattr(status, "undone_by", None), row["verdict"],
+                          tuple(mark for mark in row["marks"].split(",") if mark), row["choice"], row["said"],
+                          getattr(status, "redone", None), getattr(status, "live", False))
+                for row in db.execute("SELECT * FROM item_values WHERE change_id = ? ORDER BY rowid", (change_id,))
+                for status in [now.get((row["item_kind"], row["item_key"]), {}).get(row["field"])])
             last = db.execute("SELECT * FROM checks WHERE change_id = ? AND spent = 0 ORDER BY rowid DESC LIMIT 1",
                               (change_id,)).fetchone()
             unused = db.execute("SELECT choices FROM unused_choices WHERE change_id = ?", (change_id,)).fetchone()
@@ -959,8 +998,10 @@ class Ledger:
     def list_changes(self, change_id: int | None = None) -> list[dict]:
         """장부의 번호마다 한 줄(새것부터, `change_id` 를 주면 그 번호만, 종류로 열었으면 그 종류의 번호와 종류 없는 번호만).
         `item_kind` 는 그 번호의 종류(`_kind_of`). 저장한 항목이 뒤의 되돌리기로 모두 되돌아갔으면 상태는 `rolled_back`, 일부면
-        `partly_rolled_back` 이다(`written` · `rolled_back` 이 그 수, `undone_by` 가 되돌린 번호들) — 되돌린 변경이 살아 있는
-        것처럼 보이지 않는다. `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None),
+        `partly_rolled_back` 이다 — 되돌린 변경이 살아 있는 것처럼 보이지 않는다. 수는 장부의 차례에서 셈한다(_chain, _tally):
+        `written` 저장한 항목 · `rolled_back` 그 가운데 되돌린 항목과 `undone_by` 되돌린 번호들 · `redone` 되돌렸다가 다시 살린 항목과
+        `redone_by` 그 번호들(되돌린 · 다시 살린) · `live` 넣은 값이 모두 살아 있는 항목(나머지는 뒤 기록이 덮었다).
+        `steps` · `saved_steps` 는 저장 단계 수와 그중 저장된 수, `request` 는 적어 둔 요청(없으면 None),
         `begun_at` 은 적용을 시작한 때(`begins` — 시작하지 않았거나 그 표를 두기 전에 시작한 번호는 None).
         `planned` 는 적힌 항목 가운데 저장이 값을 넣는(넣을) 항목 수다 — 안 바꾸기로 고른 항목 · 적용할 수 없는 항목은 들지 않는다."""
         item = "item_values.item_kind || '|' || item_values.item_key"
@@ -972,32 +1013,33 @@ class Ledger:
             rows = db.execute(
                 f"SELECT changes.*, MIN(item_values.item_kind) AS item_kind, COUNT(DISTINCT {item}) AS items,"
                 f" COUNT(DISTINCT CASE WHEN item_values.action IS NOT NULL THEN {item} END) AS planned,"
-                f" COUNT(DISTINCT CASE WHEN steps.status = 'saved' THEN {item} END) AS written,"
-                f" COUNT(DISTINCT CASE WHEN item_values.rolled_back_by IS NOT NULL THEN {item} END) AS rolled_back,"
-                " GROUP_CONCAT(DISTINCT item_values.rolled_back_by) AS undone_by,"
                 " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id) AS step_count,"
                 " (SELECT COUNT(*) FROM steps AS s WHERE s.change_id = changes.id AND s.status = 'saved') AS saved_steps,"
                 " (SELECT begun_at FROM begins WHERE begins.change_id = changes.id) AS begun_at"
                 " FROM changes LEFT JOIN item_values ON item_values.change_id = changes.id"
-                " LEFT JOIN steps ON steps.change_id = item_values.change_id AND steps.idx = item_values.step"
                 + (" WHERE " + " AND ".join(where) if where else "") + " GROUP BY changes.id ORDER BY changes.id DESC",
                 params).fetchall()
             kinds = {row["id"]: row["item_kind"] or _kind_of(db, row["id"]) for row in rows}
-        return [dict(id=row["id"], kind=row["kind"], item_kind=kinds[row["id"]], status=self._listed_status(row), hotel=row["hotel"],
-                     hotel_id=row["hotel_id"], offer=row["offer"], currency=row["currency"],
-                     sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"], begun_at=row["begun_at"],
-                     applied_at=row["applied_at"], verified_at=row["verified_at"], reverses=row["reverses"],
-                     replaces=row["replaces"], items=row["items"], planned=row["planned"], written=row["written"],
-                     rolled_back=row["rolled_back"],
-                     undone_by=sorted(int(number) for number in (row["undone_by"] or "").split(",") if number),
-                     steps=row["step_count"], saved_steps=row["saved_steps"],
-                     request=None if row["request"] is None else json.loads(row["request"]))
-                for row in rows if self.kind is None or kinds[row["id"]] in (self.kind, None)]
+            header = rows[0] if change_id is not None and rows else None
+            now = self._chain(db, *((header["hotel_id"], header["offer"]) if header is not None else ()))
+        out = []
+        for row in rows:
+            if self.kind is not None and kinds[row["id"]] not in (self.kind, None):
+                continue
+            tally = _tally(now.of(row["id"]))
+            out.append(dict(id=row["id"], kind=row["kind"], item_kind=kinds[row["id"]], status=self._listed_status(row, tally),
+                            hotel=row["hotel"], hotel_id=row["hotel_id"], offer=row["offer"], currency=row["currency"],
+                            sentence=row["sentence"], read_at=row["read_at"], created_at=row["created_at"],
+                            begun_at=row["begun_at"], applied_at=row["applied_at"], verified_at=row["verified_at"],
+                            reverses=row["reverses"], replaces=row["replaces"], items=row["items"], planned=row["planned"],
+                            **tally, steps=row["step_count"], saved_steps=row["saved_steps"],
+                            request=None if row["request"] is None else json.loads(row["request"])))
+        return out
 
-    def _listed_status(self, row) -> str:
+    def _listed_status(self, row, tally: Mapping) -> str:
         """목록의 상태 — 저장한 항목이 모두 되돌아갔으면 rolled_back, 일부면 partly_rolled_back, 아니면 장부의 상태."""
-        if row["written"] and row["rolled_back"]:
-            return "rolled_back" if row["rolled_back"] >= row["written"] else "partly_rolled_back"
+        if tally["written"] and tally["rolled_back"]:
+            return "rolled_back" if tally["rolled_back"] >= tally["written"] else "partly_rolled_back"
         return self._status(row)
 
     def item_keys(self, item_kind: str, change_id: int | None = None) -> dict[int, list[str]]:
@@ -1011,15 +1053,32 @@ class Ledger:
         return found
 
     def undone(self, change_id: int) -> list[dict]:
-        """이 변경의 저장한 값을 이미 되돌린 되돌리기마다 — 번호 · 요청 문장 · 적용 시각 · 되돌린 항목들(종류, 키)."""
+        """이 변경의 저장한 값을 되돌린 기록마다(지금 되돌려져 있는 것만 — 장부의 차례에서 셈한다) — 번호 · 요청 문장 · 적용 시각 ·
+        되돌린 항목들(종류, 키)."""
         grouped: dict[int, dict] = {}
         with self._db() as db:
-            self._header(db, change_id)
-            for row in db.execute(
-                    "SELECT item_values.rolled_back_by AS by, item_values.item_kind, item_values.item_key, changes.sentence,"
-                    " changes.applied_at FROM item_values JOIN changes ON changes.id = item_values.rolled_back_by"
-                    " WHERE item_values.change_id = ? ORDER BY item_values.rolled_back_by, item_values.rowid", (change_id,)):
-                entry = grouped.setdefault(row["by"], dict(change_id=row["by"], sentence=row["sentence"], applied_at=row["applied_at"],
-                                                           items={}))
-                entry["items"][(row["item_kind"], row["item_key"])] = None
-        return [dict(entry, items=list(entry["items"])) for entry in grouped.values()]
+            header = self._header(db, change_id)
+            now = self._chain(db, header["hotel_id"], header["offer"]).of(change_id)
+            for row in self._written(db, change_id):
+                by = now[(row["item_kind"], row["item_key"])][row["field"]].undone_by
+                if by is None:
+                    continue
+                if by not in grouped:
+                    undoer = db.execute("SELECT sentence, applied_at FROM changes WHERE id = ?", (by,)).fetchone()
+                    grouped[by] = dict(change_id=by, sentence=undoer["sentence"], applied_at=undoer["applied_at"], items={})
+                grouped[by]["items"][(row["item_kind"], row["item_key"])] = None
+        return [dict(entry, items=list(entry["items"])) for _by, entry in sorted(grouped.items())]
+
+    def held_at(self, snapshot_id: int) -> dict[tuple[str, str], int]:
+        """지금 상태 저장을 적을 때 그 항목에 이 장부가 넣은 값이 살아 있었으면 그 값을 넣은 기록(필드마다 마지막으로 넣은 기록 가운데
+        가장 나중 번호) — 견주기의 「날짜별로 바꿔 둔 칸」. 저장 값이 장부가 아는 값과 다르면(도우미 밖에서 바뀜) 싣지 않는다."""
+        with self._db() as db:
+            header = self._header(db, snapshot_id)
+            if header["kind"] != "snapshot":
+                raise LedgerError(f"{snapshot_id}번은 저장해 둔 상태가 아닙니다(지금 상태 저장으로 적은 것만 됩니다)")
+            now = self._chain(db, header["hotel_id"], header["offer"], saved=(snapshot_id,))
+        found: dict[tuple[str, str], int] = {}
+        for (record, cell), writer in now.held.items():
+            if record == snapshot_id:
+                found[(cell[2], cell[3])] = max(found.get((cell[2], cell[3]), writer), writer)
+        return found

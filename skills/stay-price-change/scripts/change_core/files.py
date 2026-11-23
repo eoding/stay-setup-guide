@@ -199,22 +199,31 @@ def confirm_line(entry: dict) -> str:
 def record_progress(entry: dict, unit: str) -> str:
     """장부 목록의 한 줄(`Ledger.list_changes`)이 어디까지 갔는지 — 세 도우미의 범위 한 줄(`scope`, 그래서 `line` 도)이 끝에 같은 말로
     단다(`unit` 은 그 도우미가 세는 것 — 칸 · 줄). 멈췄거나 적용 중이면 저장 몇 번 중 몇 번, 되돌렸으면 「모두 되돌림 a/b칸 (장부 N번)」
-    · 「일부 되돌림 a/b칸 (장부 N번) · 나머지 c칸은 넣은 값 그대로」 — 읽어 주어도 넣은 값이 살아 있는 것처럼 들리지 않는다. 저장할
-    것이 없는 미리보기면 그렇다고. 그 밖(미리보기 · 다 적용 · 저장해 둔 상태)은 상태(`status`)가 말한다 — 빈 글자."""
+    · 「일부 되돌림 a/b칸 (장부 N번) · 나머지 c칸은 넣은 값 그대로」 — 읽어 주어도 넣은 값이 살아 있는 것처럼 들리지 않는다(나머지
+    가운데 뒤 기록이 덮은 것이 있으면 넣은 값 그대로인 수만 댄다). 되돌린 것을 다시 살렸으면 「되돌렸다가 다시 살림 (장부 2번 · 3번)」
+    (일부면 그 수도) — 되돌린 기록과 다시 살린 기록이다. 저장할 것이 없는 미리보기면 그렇다고. 그 밖(미리보기 · 다 적용 · 저장해 둔
+    상태)은 상태(`status`)가 말한다 — 빈 글자."""
     status, steps, saved = entry["status"], entry["steps"], entry["saved_steps"]
     by = ", ".join(f"{number}번" for number in entry["undone_by"])
-    done, back = entry["written"], entry["rolled_back"]
+    done, back, again, live = entry["written"], entry["rolled_back"], entry["redone"], entry["live"]
+    redone = ""
+    if again:
+        count = "" if again == done else f" {again:,}/{done:,}{unit}"
+        redone = f"되돌렸다가 다시 살림{count} (장부 {' · '.join(f'{number}번' for number in entry['redone_by'])})"
     if status == "stopped":
-        return f"저장 {steps}번 중 {saved}번 하고 멈춤"
+        return " · ".join(part for part in (f"저장 {steps}번 중 {saved}번 하고 멈춤", redone) if part)
     if status == "applying":
-        return f"저장 {steps}번 중 {saved}번 함 · 적용 중"
+        return " · ".join(part for part in (f"저장 {steps}번 중 {saved}번 함 · 적용 중", redone) if part)
     if status == "rolled_back":
         return f"모두 되돌림 {back:,}/{done:,}{unit} (장부 {by})"
     if status == "partly_rolled_back":
-        return f"일부 되돌림 {back:,}/{done:,}{unit} (장부 {by}) · 나머지 {done - back:,}{unit}은 넣은 값 그대로"
+        rest = done - back
+        kept = (f"나머지 {rest:,}{unit}은 넣은 값 그대로" if live >= rest
+                else f"나머지 {rest:,}{unit} 가운데 {live:,}{unit}은 넣은 값 그대로")
+        return " · ".join(part for part in (f"일부 되돌림 {back:,}/{done:,}{unit} (장부 {by})", redone, kept) if part)
     if status == "empty":
         return "저장할 것 없음"
-    return ""
+    return redone
 
 
 Describe = Callable[[Ledger, dict], dict]   # 장부 목록의 한 줄(list_changes) → 범위 한 줄(`scope`)을 단 줄 — 도우미마다 하나
