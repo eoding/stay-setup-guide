@@ -331,6 +331,14 @@ class TrialEightDocsTest(unittest.TestCase):
             self.assertIn("먼저 \"되돌리기 미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다.\"",
                           self.read(skill, "references/rollback.md"), f"W3 — {skill}: 되돌리기 미리보기도 여는 말이 있다")
 
+    def test_w5_a_lost_answer_of_a_read_only_call_is_called_again_in_every_helper(self):
+        """W5 (시운전 11) — 도구가 look() 의 답을 버렸을 때 할 일이 그 순간 읽는 자리(준비 4)에 있다 — 다시 부른다, 읽기만 한다."""
+        for skill in ("stay-price-change", "stay-addon-price-change", "stay-charge-change", "stay-promotion-change"):
+            skill_md = self.read(skill, "SKILL.md")
+            look = skill_md[skill_md.index("4. **어디인지 보기.**"):skill_md.index("5. **장부 보기.**")]
+            self.assertIn("도구가 답을 버렸으면 다시 부른다 — 읽기만 한다", look, skill)
+        self.assertIn("도구가 답을 버렸으면 같은 값으로 다시 부른다", self.read("stay-price-change", "references/season-fill.md"))
+
     def test_u1_the_value_a_check_read_is_told_with_its_time_never_as_now(self):
         stopped = self.read("stay-price-change", "references/stopped.md")
         step = stopped[stopped.index("## 2."):stopped.index("## 3.")]

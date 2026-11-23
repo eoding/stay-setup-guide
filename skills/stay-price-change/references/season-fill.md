@@ -9,7 +9,7 @@ SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가
 ## 1. 준비 · 창 읽기
 
 1. SKILL.md 「준비」 1 ~ 5. 2 의 올리기는 시즌 창 묶음이다 — 올리개 뒤에 `stayPriceLoader.again('season')` 한 줄을 붙여 실행하고, 거절하면 답의 `want` 파일(러너의 둘, `scripts/page/stay_price.js`, `scripts/page/stay_price_season.js`)을 「stay price file bridge」 칸에 올려 `await stayPriceLoader.load('season')`.
-2. 시즌 이름을 묻는다(오퍼는 `look` 의 답에서). `await stayPriceSeason.readSeason({hotel: <look 의 hotel>, offer: "<오퍼>", season: {name: "<시즌 이름>"}})` 의 답을 `<작업>/look/season-1.json` 에 저장한다(look 답과 같은 폴더 — `work` 가 만들어 두었다). 이름이 같은 시즌이 둘이면 답이 시즌 번호를 대며 거절한다 — `season: {id: "<번호>"}` 로 다시 부른다.
+2. 시즌 이름을 묻는다(오퍼는 `look` 의 답에서). `await stayPriceSeason.readSeason({hotel: <look 의 hotel>, offer: "<오퍼>", season: {name: "<시즌 이름>"}})` 의 답을 `<작업>/look/season-1.json` 에 저장한다(look 답과 같은 폴더 — `work` 가 만들어 두었다). 도구가 답을 버렸으면 같은 값으로 다시 부른다 — 창을 열어 읽기만 하고 아무것도 저장하지 않는다. 이름이 같은 시즌이 둘이면 답이 시즌 번호를 대며 거절한다 — `season: {id: "<번호>"}` 로 다시 부른다.
 3. `python3 scripts/price_change.py season --answers "<작업>/look" --out "<작업>/season.json"`.
    - 종료 2 의 `ask` 는 같은 오퍼의 다른 시즌이다(그 날에도 드는 칸을 미리보기가 말한다) — 값마다 `stayPriceSeason.readSeason(<값 그대로>)` 의 답을 같은 폴더의 `season-2.json`, `season-3.json` … 에 저장하고 다시 한다. `refetch` 는 SKILL.md 「읽기」 5 처럼 받되 `stayPriceSeason.take` 로 받는다.
    - 짧은 답의 `pairs` 가 창이 고를 수 있는 객실 · 요금제(캘린더 이름, `base` 는 기준 요금제), `child` 가 아동 칸(`amount` 고칠 수 있음 · `percent` 비율로 셈 · `none` 깔리지 않음), `last_fill_note` 가 창에 남은 마지막 입력값이다.
