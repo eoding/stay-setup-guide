@@ -25,7 +25,7 @@ from price_model import (
     FIELDS, MISSING, CellKey, CellValue, Snapshot, cell_state, encode_key, encode_snapshot, encode_value, key_of_item, same_hotel,
 )
 from price_season import (
-    KEEPS, KIND, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, decode_choices, decode_counts, decode_fill,
+    KEEPS, KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, decode_choices, decode_counts, decode_fill,
     decode_plan, decode_window, encode_plan, encode_window, expected_cells, fresh_problem, followup_targets, has_writes, missing_seasons,
     plan_season, preview_rows, range_differences, recorded_request, rule_choices, season_range, season_steps, step_call, step_range,
     window_of,
@@ -198,6 +198,10 @@ def next_call(ledger: Ledger, record, now: Snapshot | None, then: Snapshot) -> d
     if not left:
         return dict(change_id=record.id, status=record.status, calls=[])
     step = left[0]
+    warned = next((other for other in record.steps if other.status == "saved" and NO_SUPPLY in (other.note or "")), None)
+    if warned is not None:
+        raise SeasonError(f"{warned.index}번째 저장 뒤 ERP 가 공급 통화가 없어 가격 원장을 기록하지 못했다고 했습니다 — 칸은 써졌지만 팔리지 "
+                          "않습니다. 다음 저장을 내지 않습니다. 담당자에게 그 띠의 글을 그대로 전하고, 기본정보에서 통화를 지정한 뒤 다시 합니다")
     window = decode_window(record.request["window"])
     pairs, days = step_range(window, step.body)
     if now is None:

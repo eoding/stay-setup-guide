@@ -18,7 +18,8 @@ import season_scene  # noqa: E402
 from change_core.ledger import LEDGER_ENV, Ledger, LedgerError  # noqa: E402
 from price_model import CellKey, CellValue, encode_snapshot, snapshot_reading  # noqa: E402
 from price_season import SeasonChoice, plan_season, recorded_request, season_steps, season_what  # noqa: E402
-from price_season_cli import season_rows, verify_season  # noqa: E402
+from price_season import SeasonError  # noqa: E402
+from price_season_cli import next_call, season_rows, verify_season  # noqa: E402
 
 DELUXE = ("디럭스", "조식 포함")
 
@@ -101,6 +102,22 @@ class SeasonLedgerTest(unittest.TestCase):
         self.assertEqual(told["mismatches"], [])
         self.assertEqual([(item["want"], item["seen"]) for item in told["state_only"]], [("open", "closed")], "판매 상태만 다름")
         self.assertFalse(told["same"])
+
+
+    def test_after_the_no_supply_currency_banner_no_further_save_is_given_out(self):
+        two = [list(DELUXE)], [["디럭스", "룸온리"]]
+        snapshot = replace(season_scene.snapshot((), pairs=[DELUXE, ("디럭스", "룸온리")]), cells={})
+        fill = season_scene.fill_of(*(season_scene.save_of(dict(pairs=pairs, price="180", occupancy_keys="A2", dates=["2026-12-01"]))
+                                      for pairs in two))
+        plan = plan_season(snapshot, season_scene.window(), fill, [SeasonChoice(1, "NEW_ROW", "include", "응"),
+                                                                    SeasonChoice(2, "NEW_ROW", "include", "응")])
+        change = self.record(snapshot, plan)
+        self.ledger.begin(change, season_steps(plan), recorded_request(plan), read_at=scene.read_after(snapshot.read_at))
+        self.ledger.record_step(change, 1, True, "가격을 넣었습니다 — 새로 1칸 · 덮어쓴 0칸 (룸 1개 × 1일). · 공급 통화가 없어 가격 원장을 기록하지 "
+                                                   "못했습니다.")
+        with self.assertRaises(SeasonError) as caught:
+            next_call(self.ledger, self.ledger.change(change), snapshot, snapshot)
+        self.assertIn("다음 저장을 내지 않습니다", str(caught.exception))
 
 
 if __name__ == "__main__":
