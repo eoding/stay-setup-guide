@@ -308,6 +308,13 @@ class SheetSeasonTest(FlowBase):
                          ([], "stopped", ["2026-12-05"]), "A2 — 그 저장의 칸이 미리보기 뒤에 바뀌었으면 아무것도 내지 않고 멈춘다")
         listed = self.cli("list", "--all", now=50)
         self.assertIn("적용하다 멈춤", next(item["line"] for item in listed["changes"] if item["id"] == change))
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(moved, at(60)), now=70)
+        self.assertFalse(checked["can_continue"])
+        page = Path(self.cli("render", "result", "--change", change, now=80)["page"]).read_text(encoding="utf-8")
+        self.assertTrue(any("미리보기 때 읽은 값과 다릅니다" in why for why in checked["why"]),
+                        "같은 값으로 덮을 칸이 바뀐 것도 check 가 본다 — 저장 하나는 그 쌍의 칸을 모두 다시 쓴다")
+        for words in ("적용하다 멈춤", "ERP 가 말한 칸 수", "1번째 저장에서 멈췄습니다", "칸 1개가 미리보기 때 읽은 값과 다릅니다"):
+            self.assertIn(words, page, "멈춘 시즌 변경의 페이지는 마지막 check 대로 말하고 시즌 줄을 단다")
 
 
 if __name__ == "__main__":

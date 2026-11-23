@@ -510,7 +510,9 @@ def same_record_hotel(ledger: Ledger, change_id: int, now) -> None:
 def cmd_check(args):
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     same_record_hotel(ledger, args.change, now)
-    report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at)
+    unit = season_cli.pair_unit if season_cli.is_season(ledger.change(args.change)) else None
+    report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at,
+                          unit=unit)
     step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
     return dict(change_id=report.change_id, scope=listed(ledger, args.change)[0]["scope"], status=report.status, cause=report.cause,
                 note=report.note,

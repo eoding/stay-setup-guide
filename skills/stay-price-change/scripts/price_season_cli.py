@@ -226,6 +226,13 @@ def next_call(ledger: Ledger, record, now: Snapshot | None, then: Snapshot) -> d
                 fresh=dict(read_at=now.read_at, seconds=age))
 
 
+def pair_unit(item_key: str) -> str:
+    """시즌 창 저장 하나가 다시 쓰는 단위 — 객실 · 요금제(그 저장은 그 쌍의 칸을 같은 값으로도 덮는다). check 가 남은 저장을 볼 때 장부의
+    줄(값이 바뀌는 칸)만이 아니라 그 쌍의 칸을 모두 미리보기 때와 견주게 한다."""
+    fields = key_fields(item_key)
+    return f"{fields['room']}\u0000{fields['rate_plan']}"
+
+
 def step_calls(record) -> list[dict]:
     """장부의 시즌 단계 전부의 부를 값(record-result 가 답을 그 단계에 맞춘다)."""
     return [step_call(step.index, step.body) for step in record.steps]
