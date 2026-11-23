@@ -35,7 +35,7 @@ from change_core.rules import BLOCKED, RED
 from change_core.words import josa
 
 from price_model import (
-    BLOCKED_WORDS, CELL_RULES, CHOICE_LABELS, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
+    BLOCKED_WORDS, CELL_RULES, CHOICE_LABELS, below_cost_label, CLOSED, FIELD_LABELS, FIELDS, GAP_KINDS, HELD, NEW, RESERVED, SKIP_LABELS, TargetTable, CellChange, CellKey,
     CellValue, ChangeRequest, Gap, ITEM_KIND, Plan, Snapshot, cell_item_key, cell_name, day_label, decode_request, decode_unused, key_of_item,
     blocked_said, line_label, nights_label, occupancy_label, encode_key, occupancy_order, split_occupancy, value_of,
 )
@@ -151,7 +151,7 @@ def _flag(verdict: str, after: CellValue, currency: str, key: CellKey) -> str:
     if verdict == "ABOVE_ONE_NIGHT":
         return f"{nights_label(1)}보다 비쌈" if key.nights > 1 else "박수 층보다 쌈"
     if verdict == "BELOW_COST":
-        return f"원가 {fmt_money(after.supply, currency)} 아래"
+        return f"원가 {fmt_money(after.supply, currency)} 아래"   # 칸 하나의 표 — 바꾸기 전부터 아래였는지는 띠의 이름이 말한다
     if verdict == "OVER_30":
         return "30% 넘음"
     return "적용할 수 없음"
@@ -516,7 +516,8 @@ def red_lines(plan: Plan) -> list[dict]:
             if choice == "raise_list":
                 item["example"] = f"{cell_name(waiting[0].key)} — 정가 {follow_move(waiting[0], plan.currency)}"
             choices.append(item)
-        out.append(dict(rule=rule.code, label=rule.label, cells=len(waiting), choices=choices,
+        label = below_cost_label((change.before, change.after) for change in waiting) if rule.code == "BELOW_COST" else rule.label
+        out.append(dict(rule=rule.code, label=label, cells=len(waiting), choices=choices,
                         examples=[encode_key(change.key) for change in waiting[:EXAMPLES]]))
     return out
 
@@ -573,6 +574,8 @@ def _preview_banners(plan: Plan, tally: Mapping) -> str:
     }
     for line in red_lines(plan):
         headline, detail = messages[line["rule"]]
+        if line["rule"] == "BELOW_COST":
+            headline = f"{line['label']}."
         offered = " / ".join(item["words"] + (f" (예: {item['example']})" if "example" in item else "") for item in line["choices"])
         out.append(f'<div class="banner red"><b>빨간 줄 · {line["cells"]:,}칸이 {esc(headline)}</b> {esc(detail + offered)}.</div>')
     by_rule: dict[str, list[dict]] = {}
@@ -754,11 +757,13 @@ def _waiting_intro(record: ChangeRecord, waiting: int, moved: int) -> str:
     return text + " 「그대로」인 칸은 이 변경이 바꾸지 않는 칸입니다."
 
 
-def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False) -> str:
+def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date: bool = False,
+                  reserved_days: Iterable[tuple[str, str]] = ()) -> str:
     """장부의 변경 하나의 결과. 칸마다 — 저장한 칸은 `전 → 넣은 값`, 아직 저장하지 않은 칸은 `미리보기 때 값 → 이어서 하면 넣을
     값`과 「아직 저장 안 함 · N번째 저장」, 이 변경이 일부러 손대지 않는 칸만 「그대로」. 멈춘 뒤 다시 읽어(check) 미리보기 때와 달라진
     칸은 미리보기 때 값과 그 check 가 읽은 값(그 시각과 함께), 「그 사이 ERP 에서 바뀜 · 넣지 않음」. 멈춘 변경을 이어서 할지 고르는
-    담당자가 보는 페이지다."""
+    담당자가 보는 페이지다. `reserved_days` 는 그 번호의 읽은 값의 예약 있는 (객실, 날) — 되돌리기의 줄은 그 표시를 갖지 않아
+    따로 받는다(되돌리기 미리보기가 보인 「예약 있는 날」 표시를 결과 표도 보인다 — 시운전 12)."""
     currency = record.currency
     views = cell_views(record)
     stop = stop_view(record)
@@ -784,7 +789,8 @@ def render_result(record: ChangeRecord, ledger_path: str | None = None, by_date:
         body.append(f'<div class="banner amber">{esc(SEASON_REFILL_NOTE)}</div>')
     body += [steps_list(record.steps, _step_sizes(record)), stopped_choices(record, len(waiting)), _chosen_table(record)]
     closed = {key for key, view in views.items() if view.before.state == "closed"}
-    reserved = {(key.room, key.date) for key, view in views.items() if view.reserved}
+    reserved = {(key.room, key.date) for key, view in views.items() if view.reserved} | {
+        (room, day) for room, day in reserved_days if any((key.room, key.date) == (room, day) for key in views)}
 
     def cell(key: CellKey) -> tuple[str, str]:
         view = views[key]
@@ -1109,5 +1115,6 @@ def render_sheet(check: SheetCheck) -> str:
                     + _rounding_note(currency),
                     "나머지 숫자는 요금표에 적힌 그대로 옮겼습니다.",
                     "요금표와 다른 곳이 있으면 몇 번째 줄인지 말씀해 주세요."]),
-             '<div class="banner blue">맞으면 대화창에서 "맞아"라고 해 주세요. 그때 ERP 에서 지금 가격을 읽어 미리보기를 만듭니다.</div>']
+             '<div class="banner blue">맞으면 대화창에서 "맞아"라고 해 주세요. 그다음에 미리보기를 만듭니다 — 날짜별로 맞추는 길이면 ERP 에서 '
+             '지금 가격을 읽고, 시즌 원판을 바꾸는 길이면 시즌 창에 칠 값을 먼저 셈한 뒤 읽습니다.</div>']
     return page(title, "\n".join(body), MAKER)

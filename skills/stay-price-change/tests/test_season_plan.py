@@ -14,8 +14,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import season_scene as scene  # noqa: E402
 from price_model import CellKey, CellValue  # noqa: E402
+from season_expand import NO_COMBOS  # noqa: E402
+from season_pages import rollback_notes  # noqa: E402
 from price_season import (  # noqa: E402
-    SeasonChoice, SeasonError, counts, opened_form, plan_season, preview_rows, season_steps, want_form,
+    SeasonChoice, SeasonError, counts, opened_form, plan_season, preview_rows, rule_label, rule_said, season_steps, want_form,
+    window_of,
 )
 
 DAYS = scene.CASES["hotel"]["season"]
@@ -87,6 +90,37 @@ class BucketsTest(unittest.TestCase):
         marked = {change.key.occupancy: "combo_unknown" in change.marks for change in done.changes}
         self.assertEqual(marked, {"A2": False, "A2C1_CHD": True})
         self.assertEqual((done.counts.created, done.counts.maybe_created), (2, 1))
+
+
+class SeasonWordsTest(unittest.TestCase):
+    """W7 (시운전 12) — 시즌 빨간 줄은 도우미가 그대로 하는 말(`rule_said`)이 있고, 채우기 전부터 공급 원가보다 쌌던 칸은 「싸집니다」가
+    아니라 그렇게 부른다. 창의 객실 타입이 모두 「조합 제한 없음」이면 객실 이름을 못 맞춰도 조합으로 빠질 칸이 없다(짐작이 아니다)."""
+
+    def test_a_season_red_line_on_cells_already_below_cost_has_a_true_label_and_a_sentence_to_say(self):
+        below = {CellKey("디럭스", "조식 포함", day, "A2", 1): cell("50", supply="52") for day in ("2026-12-01", "2026-12-02")}
+        done = plan(below, price="51", dates=["2026-12-01", "2026-12-02"]).saves[0]
+        self.assertEqual(rule_label(done, "BELOW_COST"), "이미 공급 원가보다 쌉니다 — 이번에도 그대로")
+        self.assertEqual(rule_said(done, "BELOW_COST", "USD"),
+                         "1번째 저장의 2칸(2일) — 이미 공급 원가보다 쌉니다 — 이번에도 그대로. 예: 12/1 화 · 디럭스 · 조식 포함 · 성인 2 · "
+                         "1박 이상 — 판매가 50 → 51(공급 원가 52). 창은 칸 하나를 뺄 수 없어 이 저장에서 고를 것은 「이대로 채움」 · "
+                         "「그 날은 빼고 채움」(남는 날이 없어 이 저장을 통째로 뺌) · 「요청을 고침」입니다. 어떻게 할까요?")
+        fresh = plan({key: cell("60", supply="52") for key in below}, price="51", dates=["2026-12-01", "2026-12-02"]).saves[0]
+        self.assertEqual(rule_label(fresh, "BELOW_COST"), "공급 원가보다 싸집니다")
+
+    def test_a_window_whose_room_types_all_have_no_limit_leaves_nothing_out_even_when_names_differ(self):
+        window = scene.window(bands=[{"code": "CHD", "basis": "flat", "value": "20"}])
+        body = dict(scene.answer_body(window, room_types=[{"name": "Deluxe", "combos": NO_COMBOS}]), hotel={"id": scene.HOTEL_ID, "name": scene.HOTEL})
+        unlimited = window_of(body, {})
+        self.assertEqual(set(unlimited.combos.values()), {NO_COMBOS})
+        done = plan({}, window=unlimited, dates=["2026-12-01"]).saves[0]
+        self.assertFalse(any("combo_unknown" in change.marks for change in done.changes))
+        limited = window_of(dict(body, roomTypes=[{"name": "Deluxe", "combos": "A2"}]), {})
+        self.assertEqual(set(limited.combos.values()), {None}, "제한이 있는 타입이 있으면 이름을 못 맞춘 객실은 모른다(짐작)")
+
+    def test_the_undo_preview_names_the_child_field_in_plain_words(self):
+        page = rollback_notes({"season": "Peak", "form": [["price", ""], ["child_extra_CHD", "8.46"]]})
+        self.assertIn("<dt>아동 추가 금액 CHD</dt><dd>8.46</dd>", page)
+        self.assertNotIn("child_extra_CHD", page)
 
 
 class RulesTest(unittest.TestCase):

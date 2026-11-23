@@ -67,10 +67,10 @@ from pathlib import Path
 
 from change_core import cli, files
 from change_core.answers import BrowserError, answers_for, attach_bodies, step_outcome, unanswered
-from change_core.chrome import esc, nothing_to_save, page_text
+from change_core.chrome import esc, nothing_to_save, page_text, undoes
 from change_core.files import load, page_path
 from change_core.items import encode_state, key_fields
-from change_core.ledger import Ledger, LedgerError, ledger_dir, now_text
+from change_core.ledger import DB_NAME, Ledger, LedgerError, ledger_dir, now_text
 from change_core.money import money_text
 from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution, said_in
@@ -147,7 +147,10 @@ def newest_look(looks: list) -> dict:
 
 def cmd_season(args):
     """readSeason 답들 → season.json. 받지 못했거나 잘린 조각은 refetch(stayPriceSeason.take), 다른 시즌 날은 ask 로 낸다."""
-    return season_cli.window_command(files.load_results(args.answers, season_cli.SEASON_PREFIXES), [])
+    window = season_cli.window_command(files.load_results(args.answers, season_cli.SEASON_PREFIXES), [])
+    # 시즌 목록의 띠가 이 장부의 어느 저장의 것인지(짧은 답이 이 시즌의 것만 싣는다) — 장부가 아직 없으면 볼 것이 없다
+    owner = season_cli.banner_owner(open_ledger(), window) if (ledger_dir() / DB_NAME).exists() else None
+    return dict(window, banner_owner=owner)
 
 
 def cmd_look(args):
@@ -201,6 +204,14 @@ def cmd_read(args):
 def recorded_reading(ledger: Ledger, change_id: int):
     """장부 번호의 계산이 바탕으로 삼은 읽은 값(Snapshot) — 읽은 범위와 그때 값이 들어 있다."""
     return decode_snapshot(ledger.reading(change_id))
+
+
+def reserved_of(ledger: Ledger, change_id: int) -> frozenset:
+    """그 번호의 읽은 값의 예약 있는 (객실, 날) — 읽은 값을 적어 두지 않은 번호면 비어 있다(결과 페이지의 표시일 뿐이다)."""
+    try:
+        return recorded_reading(ledger, change_id).reserved
+    except LedgerError:
+        return frozenset()
 
 
 def request_scope(data: dict, season: str | None = None) -> ReadRange:
@@ -404,7 +415,8 @@ def cmd_render(args):
         if season_cli.is_season(record):
             html, hotel, name = season_pages.render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
         else:
-            html, hotel, name = render_result(record, str(ledger.path), args.by_date), record.hotel, result_name(record)
+            reserved = reserved_of(ledger, record.id) if undoes(record) else ()
+            html, hotel, name = render_result(record, str(ledger.path), args.by_date, reserved), record.hotel, result_name(record)
             undone = season_cli.rollback_inputs(ledger, record.reverses) if record.kind == "rollback" else None
             if undone and undone.get("remembers"):   # 날짜 일부를 채운 시즌을 되돌렸다 — 시즌 창의 기억은 그대로다
                 html = html.replace("<h2>저장 단계</h2>", f'<div class="banner amber"><b>시즌 창의 기억.</b> {esc(undone["remembers"])} '

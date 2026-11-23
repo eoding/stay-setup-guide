@@ -22,12 +22,13 @@ from change_core.ledger import Ledger, clock
 from change_core.money import money_text
 from change_core.rollback import holds
 from price_model import (
-    FIELDS, MISSING, CellKey, CellValue, Snapshot, cell_state, encode_key, encode_snapshot, encode_value, key_of_item, same_hotel,
+    FIELDS, MISSING, CellKey, CellValue, Snapshot, cell_state, decode_hotel, encode_key, encode_snapshot, encode_value, key_of_item,
+    same_hotel,
 )
 from price_season import (
-    KEEPS, KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, decode_choices, decode_counts, decode_fill,
+    KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, decode_choices, decode_counts, decode_fill,
     decode_plan, decode_window, encode_plan, encode_window, expected_cells, fresh_problem, followup_targets, has_writes, missing_seasons,
-    plan_season, preview_rows, range_differences, recorded_request, rule_choices, season_range, season_steps, step_call, step_range,
+    plan_season, preview_rows, range_differences, recorded_request, rule_choices, rule_label, rule_said, season_range, season_steps, step_call, step_range,
     window_of, window_remembers,
 )
 from price_sheet import decode_check
@@ -146,9 +147,13 @@ def short_plan(result: Mapping) -> dict:
     plan = decode_plan(result["plan"])
     saves = []
     for save in plan.saves:
-        rules = [dict(rule=code, label=RULES[code][0] if code in RULES else KEEPS[code], cells=len(keys), dates=len(save.hit_dates(code)),
-                      choices=list(rule_choices(code)), chosen=None if code not in save.choices else save.choices[code].choice)
-                 for code, keys in save.hits.items()]
+        rules = []
+        for code, keys in save.hits.items():
+            rule = dict(rule=code, label=rule_label(save, code), cells=len(keys), dates=len(save.hit_dates(code)),
+                        choices=list(rule_choices(code)), chosen=None if code not in save.choices else save.choices[code].choice)
+            if code in RULES and code not in save.choices:   # 고를 것이 남은 빨간 줄 · 막힘 — 도우미가 그대로 하는 말
+                rule["said"] = rule_said(save, code, plan.currency)
+            rules.append(rule)
         saves.append(dict(save=save.index, dropped=save.dropped, excluded=list(save.excluded), refused=save.refused,
                           waiting=save.waiting(), rules=rules, predicted=dict(created=save.counts.created, updated=save.counts.updated,
                                                                                 skipped=save.counts.skipped)))
@@ -303,6 +308,30 @@ def rollback_inputs(ledger: Ledger, change_id: int) -> dict | None:
                 remembers=window_remembers(request))
 
 
+BANNER_HEAD = 30   # 띠 글이 장부의 저장 메모와 이만큼 앞이 같아야 그 저장의 띠로 친다(둘 다 「…」로 잘릴 수 있다)
+
+
+def banner_owner(ledger: Ledger, window: Mapping) -> dict | None:
+    """창의 답에 실린 시즌 목록의 띠(마지막 저장의 띠 — 다른 시즌의 저장일 수 있다)가 이 장부의 어느 시즌 채우기 저장의 것인지 —
+    `{change_id, step, season_id, season}`, 모르면 None. 같은 호텔 · 오퍼의 시즌 채우기 가운데 저장된 단계의 메모(ERP 의 띠 글)와 앞이
+    같은 것, 새것부터."""
+    banner = str(window.get("banner") or "").split("…")[0].strip()
+    if len(banner) < BANNER_HEAD:
+        return None
+    _name, hotel_id = decode_hotel(window["hotel"])
+    for entry in ledger.list_changes():
+        request = entry.get("request") or {}
+        if request.get("kind") != KIND or str(entry["hotel_id"]) != str(hotel_id) or entry["offer"] != window.get("offer"):
+            continue
+        for step in ledger.change(entry["id"]).steps:
+            note = str(step.note or "").split("…")[0].strip()
+            size = min(len(note), len(banner))
+            if step.status == "saved" and size >= BANNER_HEAD and note[:size] == banner[:size]:
+                season = request.get("season") or {}
+                return dict(change_id=entry["id"], step=step.index, season_id=str(season.get("id")), season=season.get("name"))
+    return None
+
+
 def short_window(result: Mapping) -> dict:
     """창을 말하는 데 필요한 것 — 시즌 날, 마지막 입력값이 채워져 열렸는지, 객실 · 요금제(캘린더 이름), 아동 칸, 다른 시즌, 허용 조합을
     모르는 객실. 칸 목록(form)은 싣지 않는다."""
@@ -315,7 +344,16 @@ def short_window(result: Mapping) -> dict:
                 child=[dict(code=item.code, kind=item.kind, percent=None if item.percent is None else str(item.percent),
                             default=item.blank or None) for item in window.child],
                 other_seasons=[dict(name=item.name, days=len(item.dates)) for item in window.seasons],
-                combos_unknown=[room for room, text in window.combos.items() if text is None], banner=window.banner)
+                combos_unknown=[room for room, text in window.combos.items() if text is None],
+                banner=_own_banner(window, result.get("banner_owner")))
+
+
+def _own_banner(window, owner: Mapping | None) -> str | None:
+    """짧은 답의 `banner` — 시즌 목록의 띠가 이 시즌의 저장의 것일 때만, 어느 저장인지 붙여서(시운전 12 — Normal 을 읽었는데 Peak
+    저장의 띠가 실렸다). 다른 시즌의 것이거나 어느 저장의 것인지 모르면 싣지 않는다(None)."""
+    if not window.banner or not owner or owner.get("season_id") != window.season_id:
+        return None
+    return f"장부 {owner['change_id']}번 {owner['step']}번째 저장의 띠: {window.banner}"
 
 
 def short_request(result: Mapping) -> dict:

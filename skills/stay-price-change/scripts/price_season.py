@@ -27,12 +27,13 @@ from change_core.ledger import FieldWrite, StepPlan, ValueRow
 from change_core.money import money, money_text, round_money, scale_of
 from change_core.rules import BLOCKED, RED, moved_far
 from price_model import (
-    CELL_RULES, CLOSED, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, CellChange, CellKey, CellValue, Snapshot, cell_item_key,
+    CELL_RULES, CLOSED, FIELDS, ITEM_KIND, MISSING, NEW, RESERVED, CellChange, CellKey, CellValue, Snapshot, below_cost_label,
+    cell_item_key,
     cell_name, day_label, decode_change, decode_hotel, decode_key, encode_change, encode_hotel, encode_key, iso_day,
     same_hotel,
 )
 from season_expand import (
-    ChildRate, SeasonRefused, key_allowed, los_matrix, parse_combos, parse_inputs, parse_key,
+    NO_COMBOS, ChildRate, SeasonRefused, key_allowed, los_matrix, parse_combos, parse_inputs, parse_key,
 )
 
 KIND = "season_fill"
@@ -187,7 +188,12 @@ def window_of(main: Mapping, dated: Mapping[str, tuple[str, ...]]) -> SeasonWind
     types: dict[str, list[str]] = {}
     for item in main.get("roomTypes") or ():
         types.setdefault(str(item["name"]), []).append(str(item.get("combos") or ""))
-    combos = {room.room: (types[room.room][0] if len(types.get(room.room, ())) == 1 else None) for room in rooms if room.room}
+    # 객실 타입의 「허용 인원 조합」 — 객실 이름으로 그 타입을 찾는다. 이름이 달라 못 찾아도, 창의 객실 타입이 모두 「조합 제한 없음」이면
+    # 어느 객실도 조합으로 빠지는 칸이 없다(짐작이 아니다 — 시운전 12, 칩 이름 「디럭스」 · 타입 이름 「Deluxe」).
+    texts = [text for found in types.values() for text in found]
+    unlimited = bool(texts) and all(parse_combos(text) == () for text in texts)
+    combos = {room.room: (types[room.room][0] if len(types.get(room.room, ())) == 1 else NO_COMBOS if unlimited else None)
+              for room in rooms if room.room}
     season = main["season"]
     others = []
     for item in main.get("seasons") or ():
@@ -377,6 +383,36 @@ KEEPS = {   # 빨간 줄은 아니지만 담당자가 지키자고 하면 「그
 }
 CHOICE_WORDS = {"include": "이대로 채움", "exclude_dates": "그 날은 빼고 채움"}
 FRACTION_SENTENCE = "원화처럼 소수가 없는 통화에서 퍼센트 조정이 소수를 만듭니다 — 요금표의 금액 차이로 적어 주세요."
+
+
+def rule_label(save: "SavePlan", code: str) -> str:
+    """저장 하나의 규칙 · 바구니 이름 — 공급 원가는 채우기 전부터 공급 원가보다 쌌던 칸이면 그렇게(below_cost_label)."""
+    if code == "BELOW_COST":
+        hit = set(save.hits.get(code, ()))
+        return below_cost_label((change.before, change.after) for change in save.changes if change.key in hit)
+    return RULES[code][0] if code in RULES else KEEPS[code]
+
+
+def rule_said(save: "SavePlan", code: str, currency: str) -> str:
+    """아직 고르지 않은 규칙(빨간 줄 · 막힘) 하나를 담당자에게 하는 말 — 몇 칸 · 며칠, 이름, 칸의 예, 고를 것(시운전 12 — 시즌의 빨간
+    줄에는 할 말이 없어 도우미가 지어 말했다). 미리보기 페이지의 띠와 plan 의 답(`per_save[].rules[].said`)이 같은 말을 쓴다."""
+    keys, days = save.hits.get(code, ()), save.hit_dates(code)
+    if code == "ERP_REFUSES":
+        return f"{save.index}번째 저장은 ERP 창이 거절할 입력입니다 — “{save.refused}”. 요청을 고쳐야 합니다."
+    change = next((change for change in save.changes if change.key in set(keys)), None)
+    example = ""
+    if change is not None:
+        before, after = change.before, change.after
+        was = "새로" if before.sell is None else money_text(before.sell)
+        extra = (f"(공급 원가 {money_text(after.supply)})" if code == "BELOW_COST" and after.supply is not None
+                 else f"(정가 {money_text(after.list)})" if code == "ABOVE_LIST" and after.list is not None else "")
+        example = f" 예: {cell_name(change.key)} — 판매가 {was} → {money_text(after.sell)}{extra}."
+    whole = len(days) >= len(save.dates)
+    offered = [f"「{CHOICE_WORDS[choice]}」" + ("(남는 날이 없어 이 저장을 통째로 뺌)" if choice == "exclude_dates" and whole else "")
+               for choice in rule_choices(code)] + ["「요청을 고침」"]
+    fraction = f" {FRACTION_SENTENCE}" if code == "WHOLE_UNIT_FRACTION" else ""
+    return (f"{save.index}번째 저장의 {len(keys):,}칸({len(days):,}일) — {rule_label(save, code)}.{example}{fraction} 창은 칸 하나를 뺄 수 "
+            f"없어 이 저장에서 고를 것은 {' · '.join(offered)}입니다. 어떻게 할까요?")
 
 
 def rule_choices(code: str) -> tuple[str, ...]:

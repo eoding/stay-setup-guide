@@ -19,11 +19,11 @@ from typing import Iterable, Mapping, Sequence
 from change_core.chrome import esc, fmt_money, fmt_time, notes, page, result_word, stats, stop_view, stopped_choices, steps_list, times_word
 from change_core.ledger import ChangeRecord
 from change_core.money import scale_of
-from price_model import CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellValue, cell_name, key_of_item
+from price_model import CLOSED, FIELD_LABELS, FIELDS, RESERVED, CellKey, CellValue, below_cost_label, cell_name, key_of_item
 from price_pages import MAKER, cell_views, grid, render_result as render_cells_result
 from price_season import (
-    CHOICE_WORDS, FRACTION_SENTENCE, INPUT_LABELS, KEEPS, RULES, SeasonPlan, banner_counts, counts, counts_agree, date_runs,
-    decode_counts, recorded_request, rule_choices, verdict, window_remembers,
+    CHOICE_WORDS, INPUT_LABELS, RULES, SeasonPlan, banner_counts, counts, counts_agree, date_runs,
+    decode_counts, recorded_request, rule_label, rule_said, verdict, window_remembers,
 )
 from price_season_cli import OPENS_CLOSED
 
@@ -91,10 +91,6 @@ def _inputs(plan: SeasonPlan, save) -> str:
     return '<dl class="kv">' + "".join(f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in rows) + "</dl>"
 
 
-def _rule_label(code: str) -> str:
-    return RULES[code][0] if code in RULES else KEEPS[code]
-
-
 def _rule_banner(plan: SeasonPlan, save) -> str:
     """저장 하나의 막힘 · 빨간 줄 — 무엇이 몇 칸 · 며칠에 걸렸고, 고를 수 있는 것. 칸 하나만 그대로 두는 것은 없다."""
     out = []
@@ -107,18 +103,11 @@ def _rule_banner(plan: SeasonPlan, save) -> str:
             continue
         days = save.hit_dates(code)
         chosen = save.choices.get(code)
-        choices = " · ".join(f"「{CHOICE_WORDS[choice]}」" for choice in rule_choices(code))
-        offered = choices if len(days) < len(save.dates) or "include" in rule_choices(code) else "「요청을 고침」"
         if chosen:
-            text = f"고르신 것: {CHOICE_WORDS[chosen.choice]} (“{esc(chosen.said)}”)"
-            color = "amber"
-        else:
-            color = "red"
-            text = (f"고를 것: {offered} · 「요청을 고침」. 창은 칸 하나를 뺄 수 없어 칸마다 고르지 않습니다."
-                    + (" 그 날을 빼면 남는 날이 없어 「그 날은 빼고 채움」은 이 저장을 통째로 빼는 것입니다." if len(days) >= len(save.dates) else ""))
-        extra = f" {FRACTION_SENTENCE}" if code == "WHOLE_UNIT_FRACTION" else ""
-        out.append(f'<div class="banner {color}"><b>{save.index}번째 저장 · {esc(_rule_label(code))} — {len(keys):,}칸 · {len(days):,}일</b>'
-                   f"{esc(extra)}<br>{text}</div>")
+            out.append(f'<div class="banner amber"><b>{save.index}번째 저장 · {esc(rule_label(save, code))} — {len(keys):,}칸 · '
+                       f'{len(days):,}일</b><br>고르신 것: {CHOICE_WORDS[chosen.choice]} (“{esc(chosen.said)}”)</div>')
+        else:   # plan 의 답 `said` 와 같은 말 — 도우미가 그대로 묻는다
+            out.append(f'<div class="banner red">{esc(rule_said(save, code, plan.currency))}</div>')
     return "".join(out)
 
 
@@ -230,9 +219,10 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
             code = verdict(save, key)
             moved = _move(change.before, change.after, currency)
             if code and RULES[code][1] == "blocked":
-                return "blocked", moved + f'<span class="tag blocked">{esc(_rule_label(code))}</span>'
+                return "blocked", moved + f'<span class="tag blocked">{esc(RULES[code][0])}</span>'
             if code and code not in save.choices:
-                return "red", moved + f'<span class="tag red">{esc(_rule_label(code))}</span>'
+                label = below_cost_label([(change.before, change.after)]) if code == "BELOW_COST" else RULES[code][0]
+                return "red", moved + f'<span class="tag red">{esc(label)}</span>'
             if change.before.state == "missing":
                 return "new", moved + '<span class="tag new">새 칸</span>'
             return "", moved
@@ -383,7 +373,10 @@ def rollback_notes(season: Mapping) -> str:
     """시즌 다시 채우기를 되돌릴 때 — 되돌려도 돌아오지 않는 것과, 채우기 전에 창에 있던 입력값(손으로 다시 칠 수 있게. 도우미는 다시 치지
     않는다 — 그것도 시즌 창 저장이라 칸을 또 쓴다)."""
     shown = [(name, value) for name, value in season.get("form") or () if name in INPUT_LABELS or name.startswith("child_extra_")]
-    rows = "".join(f"<dt>{esc(INPUT_LABELS.get(name, name))}</dt><dd>{esc(value) if value else '비움'}</dd>" for name, value in shown)
+    def label(name: str) -> str:   # 창의 칸 이름을 쉬운 말로 — 아동 칸은 미리보기와 같은 「아동 추가 금액 CHD」
+        return f"아동 추가 금액 {name[len('child_extra_'):]}" if name.startswith("child_extra_") else INPUT_LABELS.get(name, name)
+
+    rows = "".join(f"<dt>{esc(label(name))}</dt><dd>{esc(value) if value else '비움'}</dd>" for name, value in shown)
     remembers = season.get("remembers")
     return (f'<div class="banner amber"><b>시즌 「{esc(season.get("season") or "")}」 다시 채우기를 되돌립니다.</b> {esc(UNDO_WHAT)} '
             f"{esc(UNDO_REFILL)}</div>"

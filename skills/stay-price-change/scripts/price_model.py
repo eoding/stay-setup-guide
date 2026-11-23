@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from functools import cached_property
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from change_core.items import ItemState, Reading, item_key, key_fields
 from change_core.money import money, money_text
@@ -420,6 +420,22 @@ BLOCKED_WORDS = {
                       "그 줄은 ERP 에서 사람이 만듭니다 — 그날 가격 수정 창의 「추가할 인원 조합」이나 시즌의 [가격 입력] 창에서요. "
                       "박수 층이면 그 시즌을 다시 채우라고 하실 때 도우미가 만들 수 있습니다."),
 }
+
+
+ALREADY_BELOW = "이미 공급 원가보다 쌉니다 — 이번에도 그대로"
+
+
+def below_cost_label(pairs: Iterable[tuple[CellValue, CellValue]]) -> str:
+    """공급 원가 빨간 줄의 이름 — `(전 값, 후 값)` 칸들 가운데 바꾸기 전부터 판매가가 공급 원가보다 쌌던 칸이 있으면 그렇게 말한다.
+    모두 그랬으면 「이미 공급 원가보다 쌉니다 — 이번에도 그대로」(시운전 9 · 12 — 50.00 < 52.00 이던 칸이 51.00 이 되는데 「싸집니다」라고
+    했다), 일부면 그 수를 덧붙인다. 가격 캘린더(날짜별)와 시즌 다시 채우기가 같은 말을 쓴다."""
+    pairs = list(pairs)
+    already = sum(1 for before, _after in pairs
+                  if before.sell is not None and before.supply is not None and before.sell < before.supply)
+    if pairs and already == len(pairs):
+        return ALREADY_BELOW
+    label = CELL_RULES.by_code["BELOW_COST"].label
+    return f"{label}(그 가운데 {already:,}칸은 {ALREADY_BELOW})" if already else label
 
 
 def blocked_said(code: str, cells: int, example: str) -> str:

@@ -62,10 +62,10 @@ class FlowBase(unittest.TestCase):
         self.files += 1
         return self.write(f"snap-{self.files}.json", encode_snapshot(replace(snapshot, read_at=read_at)))
 
-    def window_answers(self, window, folder: str, others=()) -> str:
-        """readSeason 의 답(창 하나)과, 같은 오퍼의 다른 시즌마다 datesOnly 답 — 폴더에 둔다."""
+    def window_answers(self, window, folder: str, others=(), banner=None) -> str:
+        """readSeason 의 답(창 하나)과, 같은 오퍼의 다른 시즌마다 datesOnly 답 — 폴더에 둔다. `banner` 는 시즌 목록에 남은 띠."""
         asked = {"hotel": HOTEL, "offer": window.offer, "season": {"id": window.season_id}}
-        for index, item in enumerate(reply("readSeason", asked, keep=season_scene.answer_body(window), doneAt=done_at(T0))):
+        for index, item in enumerate(reply("readSeason", asked, keep=season_scene.answer_body(window, banner=banner), doneAt=done_at(T0))):
             self.write(f"{folder}/{'season-1' if index == 0 else f'take-w{index}'}.json", item)
         for number, other in enumerate(others, 2):
             asked = {"hotel": HOTEL, "offer": window.offer, "season": {"id": other.id, "name": other.name}, "datesOnly": True}
@@ -211,7 +211,8 @@ class SomeDatesSeasonTest(FlowBase):
         folder = self.window_answers(window, "작업/시즌")
         self.cli("season", "--answers", folder, "--out", self.dir / "season.json")
         before = {CellKey("디럭스", "조식 포함", day, "A2", 1): CellValue(D("180"), None, None, "open") for day in window.dates}
-        snapshot = replace(season_scene.snapshot((), pairs=[("디럭스", "조식 포함")], dates=list(window.dates)), cells=before)
+        snapshot = replace(season_scene.snapshot((), pairs=[("디럭스", "조식 포함")], dates=list(window.dates),
+                                                 reserved=[("디럭스", "2026-12-31")]), cells=before)
         request = self.write("request.json", {"kind": "season_fill", "hotel": HOTEL, "offer": window.offer,
                                               "season": {"id": window.season_id, "name": window.season_name}, "currency": "USD",
                                               "sentence": "31일만 디럭스 181 로",
@@ -235,14 +236,22 @@ class SomeDatesSeasonTest(FlowBase):
         self.assertTrue(self.cli("verify", "--change", change, "--snapshot", self.snap(after, at(80)), now=90)["same"])
         self.assertIn(said, self.cli("render", "result", "--change", change, "--text", now=95)["text"])
 
+        # W7 — 시즌 목록에 남은 띠는 이 시즌의 저장이면 어느 저장인지 붙여, 다른 시즌의 것이면 싣지 않는다
+        banner = self.saved_answer(call, plan.saves[0])["banner"]
+        for season_id, shown in ((window.season_id, f"장부 {change}번 1번째 저장의 띠: {banner}"), ("8899", None)):
+            folder = self.window_answers(replace(window, season_id=season_id), f"작업/다시-{season_id}", banner=banner)
+            self.assertEqual(self.cli("season", "--answers", folder, "--out", self.dir / f"season-{season_id}.json", now=96)["banner"], shown)
+
         rollback = self.cli("rollback", "--change", change, "--snapshot", self.snap(after, at(100)), "--record", "--out",
                             self.dir / "rollback.json", now=110)
         self.assertEqual(rollback["remembers"], said)
         page = self.cli("render", "rollback", "--plan", self.dir / "rollback.json", "--text", now=111)["text"]
         self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.", page)
+        self.assertIn("예약 있는 날", page)
         self.apply_all(rollback["change_id"], self.dir / "rollback.json", after, snapshot, 120)
-        self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.",
-                      self.cli("render", "result", "--change", rollback["change_id"], "--text", now=140)["text"])
+        undone = self.cli("render", "result", "--change", rollback["change_id"], "--text", now=140)["text"]
+        self.assertIn(said + " 되돌려도 창의 기억은 그대로입니다.", undone)
+        self.assertIn("예약 있는 날", undone, "W7 — 되돌리기 결과 표도 되돌리기 미리보기처럼 예약 있는 날을 표시한다")
 
 
 class SheetSeasonTest(FlowBase):

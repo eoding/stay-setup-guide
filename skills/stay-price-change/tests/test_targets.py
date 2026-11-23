@@ -18,9 +18,9 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 import scene  # noqa: E402
 from change_core.items import Refused  # noqa: E402
 from price_model import (  # noqa: E402
-    CellKey, Target, TargetTable, decode_request, encode_key, encode_request, encode_snapshot,
+    CellKey, CellValue, Target, TargetTable, decode_request, encode_key, encode_request, encode_snapshot,
 )
-from price_pages import render_preview  # noqa: E402
+from price_pages import red_lines, render_preview  # noqa: E402
 from price_plan import counts, plan_steps, plan_targets, unresolved  # noqa: E402
 from test_pages import visible  # noqa: E402
 
@@ -218,6 +218,25 @@ class RowNotThereTest(unittest.TestCase):
             line, = [entry["line"] for entry in json.loads(listed.stdout)["changes"]]
             self.assertTrue(line.endswith("· 목표 값 0칸 · 저장할 것 없음"), line)
 
+
+class AlreadyBelowCostTest(unittest.TestCase):
+    """W7 (시운전 9) — 바꾸기 전부터 공급 원가보다 쌌던 칸의 빨간 줄은 「싸집니다」가 아니라 「이미 공급 원가보다 쌉니다 — 이번에도
+    그대로」다(날짜별 길 — 시즌 다시 채우기와 같은 이름). 섞였으면 그 수를 댄다."""
+
+    def test_the_red_line_names_cells_that_were_below_cost_before_the_change(self):
+        days = ("2026-12-25", "2026-12-26")
+        now = {(1, "50.00"), (3, "45.00")}            # 1박 이상 · 3박 이상 모두 공급 원가 52.00 아래
+        wanted = {1: "51.00", 3: "46.00"}             # 3박 이상이 1박 이상보다 싸게 남아 박수 층 규칙에 걸리지 않는다
+        below = scene.with_cells(scene.snapshot(), {key(day, nights=n, room="스위트"): CellValue(D(sell), None, D("52.00"), "open")
+                                                   for day in days for n, sell in now})
+        targets = [(key(day, nights=n, room="스위트"), {"sell": wanted[n]}) for day in days for n in wanted]
+        plan = plan_targets(below, table(*targets))
+        line, = red_lines(plan)
+        self.assertEqual((line["rule"], line["label"], line["cells"]), ("BELOW_COST", "이미 공급 원가보다 쌉니다 — 이번에도 그대로", 4))
+        self.assertIn("빨간 줄 · 4칸이 이미 공급 원가보다 쌉니다 — 이번에도 그대로.", visible(render_preview(plan)))
+        mixed = scene.with_cells(below, {key(days[1], room="스위트"): CellValue(D("60.00"), None, D("52.00"), "open")})
+        line, = red_lines(plan_targets(mixed, table(*targets)))
+        self.assertEqual(line["label"], "공급 원가보다 싸집니다(그 가운데 3칸은 이미 공급 원가보다 쌉니다 — 이번에도 그대로)")
 
 if __name__ == "__main__":
     unittest.main()
