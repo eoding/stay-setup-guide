@@ -33,7 +33,7 @@ from price_model import (
     same_hotel,
 )
 from season_expand import (
-    NO_COMBOS, ChildRate, SeasonRefused, key_allowed, los_matrix, parse_combos, parse_inputs, parse_key,
+    NO_COMBOS, ChildRate, SeasonRefused, key_allowed, los_matrix, parse_combos, parse_inputs, parse_key, parse_money, stored,
 )
 
 KIND = "season_fill"
@@ -185,13 +185,14 @@ def window_of(main: Mapping, dated: Mapping[str, tuple[str, ...]]) -> SeasonWind
                                 "" if row is None else str(row["room"]), "" if row is None else str(row["plan"]),
                                 bool(row and row.get("base")), sort))
     rooms = tuple(WindowRoom(str(item["id"]), str(item["label"]), room_names.get(str(item["id"]), "")) for item in main["rooms"])
-    types: dict[str, list[str]] = {}
+    types: dict[str, list[str | None]] = {}
     for item in main.get("roomTypes") or ():
-        types.setdefault(str(item["name"]), []).append(str(item.get("combos") or ""))
+        # 표에 「허용 인원 조합」 칸이 없으면(페이지가 null) 모른다 — 제한 없음이 아니다(검토 2 의 9)
+        types.setdefault(str(item["name"]), []).append(None if item.get("combos") is None else str(item["combos"]))
     # 객실 타입의 「허용 인원 조합」 — 객실 이름으로 그 타입을 찾는다. 이름이 달라 못 찾아도, 창의 객실 타입이 모두 「조합 제한 없음」이면
     # 어느 객실도 조합으로 빠지는 칸이 없다(짐작이 아니다 — 시운전 12, 칩 이름 「디럭스」 · 타입 이름 「Deluxe」).
     texts = [text for found in types.values() for text in found]
-    unlimited = bool(texts) and all(parse_combos(text) == () for text in texts)
+    unlimited = bool(texts) and all(text is not None and parse_combos(text) == () for text in texts)
     combos = {room.room: (types[room.room][0] if len(types.get(room.room, ())) == 1 else NO_COMBOS if unlimited else None)
               for room in rooms if room.room}
     season = main["season"]
@@ -454,6 +455,7 @@ class SaveCounts:
     days: int = 0
     maybe_created: int = 0
     maybe_updated: int = 0
+    maybe_skipped: int = 0
 
 
 @dataclass(frozen=True)
@@ -525,7 +527,8 @@ class SeasonPlan:
 
 def child_rates(window: SeasonWindow, save: SeasonSave) -> list[ChildRate]:
     """창의 아동 칸 + 요청의 금액 → 쓸 수 있는 구간. 금액 칸은 친 값, ""는 [비우기] 한 창의 값(구간 기본값), 그것도 비면 쓰지 않음.
-    비율 칸은 읽기 전용 글의 비율. 그 밖의 칸 · 칸이 없는 무료 구간은 쓰지 않는다."""
+    비율 칸은 읽기 전용 글의 비율. 그 밖의 칸 · 칸이 없는 무료 구간은 쓰지 않는다. 금액은 창의 다른 금액 칸과 같은 규칙이다(ERP 폼 —
+    0 이상, 쉼표 없이, 소수 둘째 자리까지): 어긋나면 창이 거절할 입력(SeasonRefused — 그 저장이 막힌다)."""
     typed = save.child()
     out = []
     for item in window.child:
@@ -534,10 +537,7 @@ def child_rates(window: SeasonWindow, save: SeasonSave) -> list[ChildRate]:
         elif item.kind == "amount":
             text = typed.get(item.code, "") or item.blank.strip()
             if text:
-                try:
-                    out.append(ChildRate(item.code, amount=Decimal(text.replace(",", ""))))
-                except ArithmeticError:
-                    raise SeasonError(f"아동 추가 금액({item.code})을 읽지 못했습니다: {text!r}") from None
+                out.append(ChildRate(item.code, amount=parse_money(text, f"아동 추가 금액 {item.code}")))
     return out
 
 
@@ -569,11 +569,12 @@ def expand_save(snapshot: Snapshot, window: SeasonWindow, save: SeasonSave, inde
     plans = [window.plan_of(*pair) for pair in save.pairs]
     room_ids = list(dict.fromkeys(plan.room_id for plan in plans))
     keys = list(matrices[1][0])
+    _refuse_odd_keys(snapshot, save, keys)
     typed = set(inputs.keys)
     shown = {(key.room, key.rate_plan, key.occupancy, key.nights) for key, value in snapshot.cells.items() if value.state != "missing"}
     other_days = {day: item for item in window.seasons for day in item.dates}
     changes, left_old, no_sale, combo_skipped = [], [], [], []
-    same = untouched = created = updated = skipped = maybe_created = maybe_updated = 0
+    same = untouched = created = updated = skipped = maybe_created = maybe_updated = maybe_skipped = 0
     for room_id in room_ids:
         room = window.room(room_id)
         text = window.combos.get(room.room)
@@ -593,11 +594,13 @@ def expand_save(snapshot: Snapshot, window: SeasonWindow, save: SeasonSave, inde
                 table = tier_base if is_base else tier_plan
                 for occupancy in room_keys:
                     sell, listed, net = table[occupancy]
+                    sell, listed = stored(sell), stored(listed)   # ERP 가 칸에 넣는 값(소수 둘째 자리 — 박수별 단가만 더 길 수 있다)
                     maybe = combos is None and occupancy not in typed and parse_key(occupancy).children
                     for day in dates:
                         key = CellKey(plan.room, plan.rate_plan, day, occupancy, nights)
                         if (plan.room, day) in snapshot.no_sale:
                             skipped += 1
+                            maybe_skipped += bool(maybe)   # 허용 조합을 몰라 ERP 가 그 줄을 빼면 건너뛴 칸으로도 세지 않는다
                             no_sale.append((plan.room, day))
                             continue
                         before = snapshot.cells.get(key, MISSING)
@@ -637,10 +640,25 @@ def expand_save(snapshot: Snapshot, window: SeasonWindow, save: SeasonSave, inde
                     and (key.room, key.rate_plan, key.occupancy, key.nights) not in written):
                 left_old.append(key)
     changes = _looks_edited(snapshot, changes, dates)
-    counts = SaveCounts(created, updated, skipped, len(room_ids), len(dates), maybe_created, maybe_updated)
+    counts = SaveCounts(created, updated, skipped, len(room_ids), len(dates), maybe_created, maybe_updated, maybe_skipped)
     plan = SavePlan(index, save, tuple(dates), (), None, tuple(changes), same, untouched, tuple(sorted(left_old)),
                     tuple(sorted(set(no_sale))), tuple(dict.fromkeys(combo_skipped)), counts)
     return replace(plan, hits=_hits(snapshot, plan))
+
+
+def _refuse_odd_keys(snapshot: Snapshot, save: SeasonSave, keys: Sequence[str]) -> None:
+    """저장의 쌍에 대문자가 아닌 예전 인원 조합 키(`a2`)의 칸이 있고 이 저장이 그 키(`A2`)를 쓰면 계산하지 않는다 — ERP 시즌 창은
+    대소문자를 가리지 않고 그 칸을 덮는데(MySQL 기본 대조), 읽은 값과 도우미는 그 칸을 다른 칸으로 보아 미리보기가 새 칸을 말하고
+    확인이 맞지 않는다. 도우미는 키를 맞춰 읽지 않는다(드문 예전 칸이다) — 사람이 그 칸의 키를 고친 뒤 다시 읽는다."""
+    pairs, wanted = set(save.pairs), set(keys)
+    odd = sorted({(key.room, key.rate_plan, key.occupancy) for key in snapshot.cells if (key.room, key.rate_plan) in pairs
+                  and key.occupancy != key.occupancy.strip().upper() and key.occupancy.strip().upper() in wanted})
+    if odd:
+        room, rate_plan, occupancy = odd[0]
+        raise SeasonError(f"{room} · {rate_plan} 에 인원 조합 키가 소문자인 예전 칸(`{occupancy}`)이 있습니다 — ERP 시즌 창은 대소문자를 가리지 "
+                          f"않고 그 칸을 `{occupancy.strip().upper()}` 로 덮는데, 도우미는 그 칸을 다른 칸으로 읽어 미리보기가 ERP 와 달라집니다. "
+                          "이 시즌 다시 채우기는 계산하지 않습니다 — 그 칸의 인원 조합을 ERP 셀 창에서 사람이 대문자로 고친 뒤 다시 읽습니다"
+                          f"{f'(그런 칸 {len(odd)}줄)' if len(odd) > 1 else ''}")
 
 
 def _looks_edited(snapshot: Snapshot, changes: list[CellChange], dates: Sequence[str]) -> list[CellChange]:
@@ -973,12 +991,12 @@ def season_steps(plan: SeasonPlan) -> list[StepPlan] | None:
 
 def encode_counts(counts: SaveCounts) -> dict:
     return dict(created=counts.created, updated=counts.updated, skipped=counts.skipped, rooms=counts.rooms, days=counts.days,
-                maybe_created=counts.maybe_created, maybe_updated=counts.maybe_updated)
+                maybe_created=counts.maybe_created, maybe_updated=counts.maybe_updated, maybe_skipped=counts.maybe_skipped)
 
 
 def decode_counts(data: Mapping) -> SaveCounts:
     return SaveCounts(*(int(data.get(name) or 0) for name in ("created", "updated", "skipped", "rooms", "days", "maybe_created",
-                                                              "maybe_updated")))
+                                                              "maybe_updated", "maybe_skipped")))
 
 
 def step_call(step_no: int, body: Mapping) -> dict:
@@ -1085,10 +1103,12 @@ def banner_counts(text: str | None) -> SaveCounts | None:
 
 
 def counts_agree(predicted: SaveCounts, told: SaveCounts) -> bool:
-    """ERP 가 말한 수가 예상과 맞는지 — 허용 인원 조합을 몰라 ERP 가 뺄 수 있는 칸만큼은 적어도 맞다."""
+    """ERP 가 말한 수가 예상과 맞는지 — 허용 인원 조합을 몰라 ERP 가 뺄 수 있는 칸(새로 · 덮어쓴 · 판매일이 없어 건너뛴)만큼은 적어도
+    맞다(그만큼은 도우미의 짐작이다)."""
     return (predicted.created - predicted.maybe_created <= told.created <= predicted.created
             and predicted.updated - predicted.maybe_updated <= told.updated <= predicted.updated
-            and told.skipped == predicted.skipped and (told.rooms, told.days) == (predicted.rooms, predicted.days))
+            and predicted.skipped - predicted.maybe_skipped <= told.skipped <= predicted.skipped
+            and (told.rooms, told.days) == (predicted.rooms, predicted.days))
 
 
 def step_note(result: Mapping) -> str:

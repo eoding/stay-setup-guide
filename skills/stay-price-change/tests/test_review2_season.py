@@ -17,7 +17,7 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 import season_scene  # noqa: E402
 from change_core.answers import ask_sum  # noqa: E402
 from price_model import CellKey, CellValue  # noqa: E402
-from price_season import decode_plan, encode_window  # noqa: E402
+from price_season import SeasonError, counts_agree, decode_plan, encode_window, plan_season, window_of  # noqa: E402
 from test_season_flow import HOTEL, FlowBase, applied, at  # noqa: E402
 
 DAY = "2026-12-01"
@@ -150,6 +150,57 @@ class DayFactsTest(SeasonCase):
         stopped = self.cli("calls", "--change", change, "--snapshot", self.snap(booked, at(40)), now=50)
         self.assertEqual((stopped["calls"], stopped["status"], [item["key"] for item in stopped["differences"]]),
                          ([], "stopped", [{"room": "디럭스", "date": "2026-12-02", "what": "reserved"}]))
+
+
+class SmallParityTest(unittest.TestCase):
+    """검토 2 의 9 — 아동 금액은 창의 금액 규칙대로(어긋나면 그 저장이 막힌다), 박수별 단가는 ERP 가 칸에 넣는 자릿수로, 허용 조합을 몰라
+    빠질 수 있는 줄의 건너뛴 칸은 짐작으로, 「허용 인원 조합」 칸이 없으면 모름, 소문자 예전 키는 거절."""
+
+    def plan(self, window=None, cells=None, **save):
+        fields = dict(pairs=[list(BB)], price="180", occupancy_keys="A2", overwrite=True, dates=[DAY])
+        fields.update(save)
+        snapshot = replace(season_scene.snapshot((), pairs=[BB], dates=[DAY]), cells=cells or {key("A2"): CellValue(D("170"), None, None, "open")})
+        return plan_season(snapshot, window or season_scene.window(dates=[DAY], rooms=["디럭스"]),
+                           season_scene.fill_of(season_scene.save_of(fields)))
+
+    def test_s9_a_child_amount_the_window_refuses_blocks_the_save_with_a_sentence(self):
+        window = season_scene.window(bands=[{"code": "CHD", "basis": "flat", "value": "20"}], dates=[DAY], rooms=["디럭스"])
+        for typed in ("1,000", "23.185", "-5"):
+            save = self.plan(window, child_extra={"CHD": typed}).saves[0]
+            self.assertEqual((save.refused, save.changes, save.waiting()),
+                             (f"아동 추가 금액 CHD는 0 이상 숫자로, 쉼표 없이 소수 둘째 자리까지 적습니다(예: 180 · 23.18): {typed!r}", (),
+                              ["ERP_REFUSES"]), typed)
+        self.assertIsNone(self.plan(window, child_extra={"CHD": "23.18"}).saves[0].refused)
+
+    def test_s9_a_nights_tier_price_is_predicted_as_the_erp_stores_it(self):
+        save = self.plan(los_prices="3:160.545").saves[0]
+        three = next(change.after for change in save.changes if change.key.nights == 3)
+        self.assertEqual(str(three.sell), "160.55", "가격 칸은 소수 둘째 자리 — 넣을 때 반올림된다")
+        self.assertEqual(str(next(change.after for change in save.changes if change.key.nights == 1).sell), "180", "짧은 값은 그대로")
+        self.assertIn("정수 부분 10자리까지", self.plan(los_prices="3:12345678901").saves[0].refused)
+
+    def test_s9_skipped_cells_of_rows_the_erp_may_leave_out_are_a_guess_in_the_count_comparison(self):
+        window = replace(season_scene.window(bands=[{"code": "CHD", "basis": "flat", "value": "20"}], rooms=["디럭스"]),
+                         combos={"디럭스": None})
+        days = season_scene.CASES["hotel"]["season"]
+        cells = {key("A2", day=day): CellValue(D("170"), None, None, "open") for day in days if day != "2026-12-03"}
+        snapshot = replace(season_scene.snapshot((), pairs=[BB]), cells=cells)
+        fill = season_scene.fill_of(season_scene.save_of(dict(pairs=[list(BB)], price="180", occupancy_keys="A2", child_extra={"CHD": ""})))
+        counted = plan_season(snapshot, window, fill).saves[0].counts
+        self.assertEqual((counted.skipped, counted.maybe_skipped), (2, 1), "12/3 의 A2 와 A2C1_CHD — 아동 줄은 ERP 가 뺄 수 있다")
+        told = replace(counted, created=counted.created - counted.maybe_created, skipped=1, maybe_created=0, maybe_updated=0, maybe_skipped=0)
+        self.assertTrue(counts_agree(counted, told), "ERP 가 아동 줄을 빼고 건너뛴 칸도 1개로 말해도 예상과 맞다")
+
+    def test_s9_a_room_type_table_without_the_allowed_combinations_column_means_unknown(self):
+        window = season_scene.window(rooms=["디럭스"])
+        body = dict(season_scene.answer_body(window, room_types=[{"name": "디럭스", "combos": None}]), hotel=HOTEL)
+        self.assertEqual(window_of(body, {}).combos, {"디럭스": None}, "칸이 없으면 모른다 — 제한 없음이 아니다")
+
+    def test_s9_a_legacy_lowercase_key_the_save_would_overwrite_is_refused_with_a_sentence(self):
+        with self.assertRaises(SeasonError) as refused:
+            self.plan(cells={key("a2"): CellValue(D("170"), None, None, "open")})
+        self.assertIn("인원 조합 키가 소문자인 예전 칸(`a2`)", str(refused.exception))
+        self.assertIn("대문자로 고친 뒤 다시 읽습니다", str(refused.exception))
 
 
 if __name__ == "__main__":

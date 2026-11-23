@@ -153,6 +153,18 @@ class Adjust:
         return moved.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
+STORED_LIMIT = Decimal(10) ** 10   # ERP 가격 칸(DECIMAL(12,2))에 드는 값의 위 — 정수 부분 10자리
+
+
+def stored(amount: Decimal | None) -> Decimal | None:
+    """ERP 가 칸에 저장하는 값 — 가격 칸은 소수 둘째 자리(DECIMAL(12,2))라 그보다 긴 값은 MySQL 이 넣을 때 반올림한다(반은 0 에서
+    먼 쪽, 금액은 0 이상이라 ROUND_HALF_UP). 박수별 단가(`3:160.545`)만 그런 값이 될 수 있다. 자리가 둘 이하인 값은 그대로(친 글자의
+    자릿수)."""
+    if amount is None or amount.as_tuple().exponent >= -2:
+        return amount
+    return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+
+
 def parse_money(text: str, label: str, required: bool = False) -> Decimal | None:
     value = (text or "").strip()
     if not value:
@@ -258,6 +270,8 @@ def parse_los(text: str) -> dict[int, Decimal]:
         if nights in tiers:
             raise SeasonRefused(f"{nights}박 단가가 두 번 적혀 있습니다 — 어느 쪽을 쓸지 정해지지 않습니다")
         tiers[nights] = Decimal(found.group(2))
+        if stored(tiers[nights]) >= STORED_LIMIT:   # ERP 폼은 받지만 가격 칸(DECIMAL(12,2))에 들지 않아 저장이 통째로 실패한다
+            raise SeasonRefused(f"{nights}박 단가가 너무 큽니다 — 정수 부분 10자리까지입니다(읽지 못한 값: {entry})")
     if len(tiers) > MAX_LOS_TIERS:
         raise SeasonRefused(f"박수 층이 너무 많습니다({MAX_LOS_TIERS}개까지) — 층 하나가 셀 수를 통째로 곱합니다")
     return dict(sorted(tiers.items()))
