@@ -154,9 +154,9 @@ def short_plan(result: Mapping) -> dict:
             if code in RULES and code not in save.choices:   # 고를 것이 남은 빨간 줄 · 막힘 — 도우미가 그대로 하는 말
                 rule["said"] = rule_said(save, code, plan.currency)
             rules.append(rule)
-        saves.append(dict(save=save.index, dropped=save.dropped, excluded=list(save.excluded), refused=save.refused,
-                          waiting=save.waiting(), rules=rules, predicted=dict(created=save.counts.created, updated=save.counts.updated,
-                                                                                skipped=save.counts.skipped)))
+        saves.append(dict(save=save.index, dropped=save.dropped, pressed=not save.dropped and bool(save.changes), excluded=list(save.excluded),
+                          refused=save.refused, waiting=save.waiting(), rules=rules,
+                          predicted=dict(created=save.counts.created, updated=save.counts.updated, skipped=save.counts.skipped)))
     short = dict(kind="season_plan", change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
                  saves=None if result["steps"] is None else len(result["steps"]), per_save=saves,
                  misses=len(plan.misses), followup=len((result.get("followup") or {}).get("targets") or ()),

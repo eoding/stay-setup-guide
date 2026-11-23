@@ -228,10 +228,11 @@ def render_preview(plan: SeasonPlan, change_id: int | None = None, steps: Sequen
             if change.before.state == "missing":
                 return "new", moved + '<span class="tag new">새 칸</span>'
             return "", moved
-        body += [f"<h2>{save.index}번째 저장 — 창에 칠 값</h2>", _inputs(plan, save),
+        body += [f"<h2>{save.index}번째 저장 — {'창에 칠 값' if save.changes else '누르지 않음(바뀌는 칸이 없음)'}</h2>", _inputs(plan, save),
                  f'<p class="sub">ERP 가 저장 뒤 말할 수(예상): 새로 {save.counts.created:,}칸 · 덮어쓴 {save.counts.updated:,}칸 '
                  f'(룸 {save.counts.rooms}개 × {save.counts.days}일){f" · 판매일이 없어 건너뛴 칸 {save.counts.skipped:,}개" if save.counts.skipped else ""}.</p>',
-                 grid(list(by_key), cell, reserved, closed, by_date) if by_key else '<p class="sub">값이 바뀌는 칸이 없습니다.</p>',
+                 grid(list(by_key), cell, reserved, closed, by_date) if by_key else
+                 f'<p class="sub">값이 바뀌는 칸이 없어 {save.index}번째 저장은 누르지 않습니다.</p>',
                  _bucket_sections(plan, save)]
     live = plan.live
     if steps:

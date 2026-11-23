@@ -22,7 +22,7 @@ SKILL.md 「5. 새 요금표로 맞추기」에서 [sheet.md](sheet.md) 의 (가
 ## 3. 읽고 미리보기
 
 1. `read-calls --request "<작업>/request.json" --season "<작업>/season.json"` 으로 SKILL.md 「읽기」 → `<R>/snapshot.json`. 읽기 한 번에 들지 않으면 저장을 객실끼리 나눠 요청을 둘 이상 쓰고 하나씩 한다(저마다 변경 하나).
-2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --season "<작업>/season.json" --record --out "<작업>/plan-1.json"` → `change_id` 가 N, `saves` 는 창을 누를 횟수(고를 것이 남았으면 null), `per_save` 는 저장마다 걸린 규칙 · 바구니(`rules`)와 거절한 입력(`refused`).
+2. `plan --snapshot "<R>/snapshot.json" --request "<작업>/request.json" --season "<작업>/season.json" --record --out "<작업>/plan-1.json"` → `change_id` 가 N, `saves` 는 창을 누를 횟수(고를 것이 남았으면 null), `per_save` 는 저장마다 걸린 규칙 · 바구니(`rules`)와 거절한 입력(`refused`). `pressed: false` 인 저장은 바뀌는 칸이 없어 누르지 않는다 — 말할 때 "<save>번째 저장은 이미 그 값이라 누르지 않습니다"를 붙인다.
 3. `render preview --plan "<작업>/plan-<k>.json"` → `page` 를 연다. "미리보기를 열었습니다. 아직 아무것도 바뀌지 않았습니다." 그리고 `counts` 로 바뀌는 칸 · 새로 생기는 칸 · 날짜별로 바꿔 둔 칸 · 예약 있는 날의 칸 · 다른 시즌 날의 칸 · 판매 마감인 칸 · 이번 채우기에 없는 예전 칸 · 판매일 없는 날의 칸 · 요금표와 다르게 채워지는 칸 · 객실 조합으로 빠질 수 있는 칸(`combo_unknown` — 도우미의 짐작, 어느 칸인지는 페이지에 있다) 수를 말한다(0 인 것은 뺀다).
 4. "적용"을 청하기 전에 해당되는 것을 꼭 말한다.
    - "새로 생기는 칸 ○칸은 되돌려도 지울 수 없습니다(ERP 에 칸을 지우는 길이 없습니다)."

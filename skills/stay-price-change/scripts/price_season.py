@@ -509,6 +509,12 @@ class SeasonPlan:
         return tuple(save for save in self.saves if not save.dropped)
 
     @property
+    def pressed(self) -> tuple[SavePlan, ...]:
+        """창을 누를 저장 — 빠지지 않았고 값이 바뀌는 칸이 있는 것. 바뀌는 칸이 없는 저장은 누르지 않는다(검토 2 의 8 — 누르면 같은
+        값으로 덮을 뿐이고, 장부의 단계가 되면 check 가 그 단계를 가릴 칸이 없다)."""
+        return tuple(save for save in self.live if save.changes)
+
+    @property
     def ready(self) -> bool:
         return all(not save.waiting() for save in self.live)
 
@@ -949,12 +955,13 @@ def step_payload(plan: SeasonPlan, save: SavePlan, no: int, previous: SeasonSave
 
 
 def season_steps(plan: SeasonPlan) -> list[StepPlan] | None:
-    """저장 단계 — 남은 저장마다 하나(창 한 번 누름). 고를 것이 남은 저장이 있으면 None. 단계가 쓰는 값은 그 저장의 바뀌는 칸의 필드다
-    (같은 값으로 덮는 칸은 장부에 적지 않는다). 다음 단계의 창 모양은 앞 단계가 남긴 마지막 입력값으로 정한다."""
+    """저장 단계 — 누를 저장마다 하나(창 한 번 누름, `plan.pressed` — 바뀌는 칸이 없는 저장은 단계가 아니다). 고를 것이 남은 저장이
+    있으면 None. 단계가 쓰는 값은 그 저장의 바뀌는 칸의 필드다(같은 값으로 덮는 칸은 장부에 적지 않는다). 다음 단계의 창 모양은 앞
+    단계가 남긴 마지막 입력값으로 정한다."""
     if not plan.ready:
         return None
     steps, previous, has_prices = [], None, any(name == "overwrite" for name, _value in plan.window.form)
-    for no, save in enumerate(plan.live, 1):
+    for no, save in enumerate(plan.pressed, 1):
         writes = tuple(FieldWrite(ITEM_KIND, cell_item_key(change.key), name, getattr(change.after, name))
                        for change in save.changes for name in FIELDS
                        if getattr(change.after, name) != getattr(change.before, name) and getattr(change.after, name) is not None)
@@ -1137,11 +1144,11 @@ def decode_plan(data: Mapping) -> SeasonPlan:
 
 
 def recorded_request(plan: SeasonPlan) -> dict:
-    """장부에 적는 요청 — 누를 저장들(고른 대로 날을 뺀 것, 빠진 저장은 없음) + 창(띠는 빼고). 되돌리기 페이지가 창의 이전 입력값을
-    여기서 보인다."""
+    """장부에 적는 요청 — 누를 저장들(고른 대로 날을 뺀 것, 빠진 저장 · 바뀌는 칸이 없어 누르지 않는 저장은 없음) + 창(띠는 빼고).
+    되돌리기 페이지가 창의 이전 입력값을 여기서 보인다."""
     window = encode_window(plan.window)
     window.pop("banner", None)
-    return dict(encode_fill(replace(plan.fill, saves=tuple(save.save for save in plan.live))), window=window)
+    return dict(encode_fill(replace(plan.fill, saves=tuple(save.save for save in plan.pressed))), window=window)
 
 
 def counts(plan: SeasonPlan) -> dict:
@@ -1150,7 +1157,8 @@ def counts(plan: SeasonPlan) -> dict:
     tally = dict(changes=0, new=0, same=sum(save.same for save in live), untouched=sum(save.untouched for save in live),
                  left_old=sum(len(save.left_old) for save in live), no_sale=sum(save.counts.skipped for save in live),
                  combo_unknown=0, combo_skipped=sum(len(save.combo_skipped) for save in live), red=0, blocked=0,
-                 saves=len(live), dropped=len(plan.saves) - len(live), misses=len(plan.misses))
+                 saves=len(plan.pressed), dropped=len(plan.saves) - len(live), unpressed=len(live) - len(plan.pressed),
+                 misses=len(plan.misses))
     for save in live:
         for change in save.changes:
             tally["new" if change.before.state == "missing" else "changes"] += 1

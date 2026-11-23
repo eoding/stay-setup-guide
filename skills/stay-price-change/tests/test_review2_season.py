@@ -94,5 +94,32 @@ class LandedOneWayTest(SeasonCase):
                          "칸이 모두 ERP 가 뺄 수 있는 칸이고 전 값 그대로면 저장 안 됨 — 다시 눌러도 그 칸은 그대로다")
 
 
+class NoChangeSaveTest(SeasonCase):
+    """검토 2 의 8 — 바뀌는 칸이 없는 저장은 장부의 단계가 아니다(누르지 않는다). 앞 저장이 거절돼도 check 가 거짓 까닭으로 막지 않는다."""
+
+    def test_s8_a_save_that_changes_no_cell_is_not_pressed_and_check_reads_the_change_truthfully(self):
+        window = season_scene.window(dates=[DAY], rooms=["디럭스"])
+        ro = ("디럭스", "룸온리")
+        before = {key("A2"): CellValue(D("180"), None, None, "open"), key("A2", pair=ro): CellValue(D("172"), None, None, "open")}
+        snapshot = replace(season_scene.snapshot((), pairs=[BB, ro], dates=[DAY]), cells=before)
+        saves = [{"pairs": [{"room": BB[0], "rate_plan": BB[1]}], "price": "190", "occupancy_keys": "A2", "overwrite": True},
+                 {"pairs": [{"room": ro[0], "rate_plan": ro[1]}], "price": "172", "occupancy_keys": "A2", "overwrite": True}]
+        short, plan, plan_file = self.plan(window, snapshot, saves)
+        self.assertEqual((short["saves"], [save["pressed"] for save in short["per_save"]]), (1, [True, False]),
+                         "룸온리는 이미 172 라 그 저장은 누르지 않는다")
+        self.assertIn("2번째 저장은 누르지 않습니다", self.cli("render", "preview", "--plan", plan_file, "--text")["text"])
+        change = short["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        refused = self.answer(call, ok=False, saved=False, pressed=False, refused=True, differ=["price"],
+                              error="시즌 창이 미리보기 때와 다릅니다(price) — 아무것도 치지 않았고 누르지 않았습니다")
+        self.cli("record-result", "--change", change, "--result", refused, now=60)
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(snapshot, at(70)), now=75)
+        self.assertEqual(([step["seen"] for step in checked["steps"]], checked["why"], checked["can_continue"]),
+                         (["not_saved"], [], True), "누르지 않는 저장이 없어 「넣으려던 값도 그 전 값도 아닙니다」라는 거짓 까닭이 없다")
+        listed = next(item for item in self.cli("list", "--all", now=80)["changes"] if item["id"] == change)
+        self.assertIn("저장 1번", listed["line"], "장부의 한 일도 누르는 저장만 센다")
+
+
 if __name__ == "__main__":
     unittest.main()
