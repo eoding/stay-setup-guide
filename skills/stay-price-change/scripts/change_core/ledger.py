@@ -530,12 +530,14 @@ class Ledger:
 
     @staticmethod
     def _acts(kind: str, reverses: int | None, request: Mapping | None) -> str:
-        """미리보기가 하는 일 — 다시 계산한 미리보기는 같은 일을 하는 앞 미리보기만 바꾼다. 저장 상태로 되돌리기는 장부의 종류가
-        change 라 요청(`restore_snapshot`)으로 가른다."""
+        """미리보기가 하는 일 — 다시 계산한 미리보기는 같은 일을 하는 앞 미리보기만 바꾼다. 저장 상태로 되돌리기 · 시즌 다시 채우기는
+        장부의 종류가 change 라 요청(`restore_snapshot` · `season_fill` — 같은 시즌끼리)으로 가른다."""
         if kind == "rollback":
             return f"{reverses}번 되돌리기"
         if request and request.get("kind") == "restore_snapshot":
             return f"{request.get('snapshot')}번 저장 상태로 되돌리기"
+        if request and request.get("kind") == "season_fill":
+            return f"시즌 {(request.get('season') or {}).get('id')} 다시 채우기"
         return "가격 바꾸기"
 
     def _replace(self, db, change_id: int, acts: str, hotel_id: str, offer: str) -> None:
