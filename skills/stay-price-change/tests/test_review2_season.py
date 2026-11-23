@@ -46,6 +46,10 @@ class SeasonCase(FlowBase):
         data = json.loads(Path(out).read_text(encoding="utf-8"))
         return short, decode_plan(data["plan"]), out
 
+    def season_after(self, window, seconds: int, supply_warn=None) -> str:
+        """그 저장 뒤에 readSeason 으로 다시 읽은 창(season 이 낸 season.json) — 읽은 때 · 「공급 통화 없음」 띠."""
+        return self.write(f"season-after-{seconds}.json", encode_window(replace(window, read_at=at(seconds), supply_warn=supply_warn)))
+
     def answer(self, call, **fields) -> str:
         body = {"op": call["op"], "no": call["no"], "ask": ask_sum(call["payload"]), "pressed": True, **fields}
         return self.write(f"answer-{call['no']}-{self.files}.json", body)
@@ -70,7 +74,8 @@ class LandedOneWayTest(SeasonCase):
                                                                                         error="시간(40초) 안에 끝나지 않아 멈췄습니다"), now=60)
         self.assertEqual(recorded["status"], "stopped")
         landed = replace(snapshot, cells={**before, key("A2"): CellValue(D("190"), None, None, "open")})   # ERP 가 A2C1_CHD 는 뺐다
-        checked = self.cli("check", "--change", change, "--snapshot", self.snap(landed, at(70)), now=75)
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(landed, at(70)), "--season", self.season_after(window, 65),
+                           now=75)
         self.assertEqual((checked["status"], checked["steps"][0]["settled"], checked["why"]), ("applied", "saved", []), checked)
         verified = self.cli("verify", "--change", change, "--snapshot", self.snap(landed, at(80)), now=85, code=1)
         self.assertEqual((verified["mismatches"], [item["key"]["occupancy"] for item in verified["left_out"]]), ([], ["A2C1_CHD"]),
@@ -90,7 +95,8 @@ class LandedOneWayTest(SeasonCase):
         self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
         [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
         self.cli("record-result", "--change", change, "--result", self.answer(call, ok=False, saved="unknown", error="모름"), now=60)
-        checked = self.cli("check", "--change", change, "--snapshot", self.snap(snapshot, at(70)), now=75)
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(snapshot, at(70)), "--season", self.season_after(window, 65),
+                           now=75)
         self.assertEqual((checked["steps"][0]["settled"], checked["can_continue"]), ("not_saved", True),
                          "칸이 모두 ERP 가 뺄 수 있는 칸이고 전 값 그대로면 저장 안 됨 — 다시 눌러도 그 칸은 그대로다")
 
@@ -319,6 +325,77 @@ class PressOnFreshReadingTest(SeasonCase):
         self.assertEqual((checked["status"], checked["steps"][0]["ledger"], checked["steps"][0]["settled"]), ("applied", "pending", "saved"))
         self.assertEqual(self.cli("rollback", "--change", change, "--snapshot", self.snap(landed, at(110)), "--record",
                                   "--out", self.dir / "rollback-1.json", now=115)["restored"], 2, "저장된 것으로 적혀 되돌릴 수 있다")
+
+
+class UnknownSaveTest(SeasonCase):
+    """검토 2 의 page 2 · 4 · 7 — 「모름」으로 끝난 시즌 저장 뒤: 그 저장이 「공급 통화 없음」 띠와 함께 끝났으면 다시 읽은 시즌 창(check
+    --season)으로 변경이 멈춘다, ERP 가 늦게 거절한 그 창은 그 저장의 답(lateSave)으로 적힌다, 시즌 목록의 띠는 그 뒤에 누른 저장이
+    있으면 누구의 띠인지 말하지 않는다."""
+
+    def two_saves(self):
+        window = season_scene.window(dates=[DAY], rooms=["디럭스"])
+        ro = ("디럭스", "룸온리")
+        before = {key("A2"): CellValue(D("180"), None, None, "open"), key("A2", pair=ro): CellValue(D("172"), None, None, "open")}
+        snapshot = replace(season_scene.snapshot((), pairs=[BB, ro], dates=[DAY]), cells=before)
+        saves = [{"pairs": [{"room": pair[0], "rate_plan": pair[1]}], "price": price, "occupancy_keys": "A2", "overwrite": True}
+                 for pair, price in ((BB, "190"), (ro, "175"))]
+        short, plan, plan_file = self.plan(window, snapshot, saves)
+        change = short["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        self.cli("record-result", "--change", change, "--result", self.answer(call, ok=False, saved="unknown", error="모름"), now=60)
+        return window, snapshot, plan, change, call
+
+    def test_page2_an_unknown_save_that_ended_with_the_no_supply_banner_stops_the_change_at_check(self):
+        window, snapshot, plan, change, _call = self.two_saves()
+        landed = applied(snapshot, plan, saves={1})
+        warn = "공급 통화가 없어 가격 원장을 기록하지 못했습니다. 이대로는 팔리지 않으니 기본정보에서 통화를 지정한 뒤 다시 적용해주세요."
+        early = self.cli("check", "--change", change, "--snapshot", self.snap(landed, at(70)), "--season", self.season_after(window, 55, warn),
+                         now=75, code=2)
+        self.assertIn("앞에 읽은 것", early["error"], "「모름」 앞에 읽은 시즌 창은 그 저장의 띠를 모른다")
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(landed, at(70)), "--season", self.season_after(window, 65, warn),
+                           now=75)
+        self.assertEqual((checked["status"], checked["cause"], checked["can_continue"], checked["note"]), ("stopped", "halted", False, warn))
+        self.assertEqual(checked["steps"][0]["settled"], "saved")
+        self.assertIn(f"{change}번 변경은 멈춰 있습니다",
+                      self.cli("calls", "--change", change, "--snapshot", self.snap(landed, at(80)), now=85, code=2)["error"])
+
+    def test_page4_a_late_refusal_of_an_unknown_save_is_recorded_as_that_save_with_the_erp_text(self):
+        _window, _snapshot, _plan, change, call = self.two_saves()
+        late = self.answer(call, ok=False, saved=False, refused=True, late=True, error="시즌 창이 저장을 거절했습니다 — 조정 값은 부호를 붙여 주세요",
+                           errors=["조정 값은 부호를 붙여 주세요"])
+        recorded = self.cli("record-result", "--change", change, "--result", late, now=70)
+        self.assertEqual((recorded["saved"], recorded["status"]), (False, "stopped"))
+        line = next(item for item in self.cli("list", "--all", now=71)["changes"] if item["id"] == change)
+        self.assertEqual(line["status"], "stopped")
+        step = self.cli("check", "--change", change, "--snapshot", self.snap(_snapshot, at(80)), now=85)
+        self.assertEqual((step["cause"], step["note"]), ("failed", "시즌 창이 저장을 거절했습니다 — 조정 값은 부호를 붙여 주세요"),
+                         "「모름」이 아니라 ERP 의 거절 문장으로 멈춘 저장이다(그래서 --season 없이 가린다)")
+
+    def test_page7_the_season_list_banner_is_not_named_as_a_save_when_a_later_press_did_not_settle(self):
+        window = season_scene.window(dates=[DAY], rooms=["디럭스"])
+        ro = ("디럭스", "룸온리")
+        before = {key("A2"): CellValue(D("180"), None, None, "open"), key("A2", pair=ro): CellValue(D("172"), None, None, "open")}
+        snapshot = replace(season_scene.snapshot((), pairs=[BB, ro], dates=[DAY]), cells=before)
+        saves = [{"pairs": [{"room": pair[0], "rate_plan": pair[1]}], "price": price, "occupancy_keys": "A2", "overwrite": True}
+                 for pair, price in ((BB, "190"), (ro, "175"))]
+        short, plan, plan_file = self.plan(window, snapshot, saves)
+        change = short["change_id"]
+        self.cli("begin", "--change", change, "--plan", plan_file, "--snapshot", self.snap(snapshot, at(20)), now=30)
+        [call1] = self.cli("calls", "--change", change, "--snapshot", self.snap(snapshot, at(40)), now=50)["calls"]
+        first = self.saved_answer(call1, plan.saves[0])
+        self.cli("record-result", "--change", change, "--result", self.write("r1.json", first), now=60)
+        folder = self.window_answers(window, "작업/띠-1", banner=first["banner"], done=62)
+        self.assertEqual(self.cli("season", "--answers", folder, "--out", self.dir / "s-1.json", now=63)["banner"],
+                         f"장부 {change}번 1번째 저장의 띠: {first['banner']}", "가장 늦게 누른 저장의 띠 — 그 저장의 수다")
+        [call2] = self.cli("calls", "--change", change, "--snapshot", self.snap(applied(snapshot, plan, saves={1}), at(70)), now=75)["calls"]
+        folder = self.window_answers(window, "작업/띠-2", banner=first["banner"], done=80)
+        self.assertIsNone(self.cli("season", "--answers", folder, "--out", self.dir / "s-2.json", now=81)["banner"],
+                          "2번째 저장의 부를 값을 낸 뒤라 띠가 그 저장의 것일 수 있다 — 누구의 띠인지 말하지 않는다")
+        self.cli("record-result", "--change", change, "--result", self.answer(call2, ok=False, saved="unknown", error="모름"), now=85)
+        folder = self.window_answers(window, "작업/띠-3", banner=first["banner"], done=90)
+        self.assertIsNone(self.cli("season", "--answers", folder, "--out", self.dir / "s-3.json", now=91)["banner"],
+                          "「모름」인 2번째 저장 뒤의 띠는 1번째 저장의 수로 읽어 주지 않는다")
 
 
 if __name__ == "__main__":

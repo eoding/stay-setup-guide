@@ -62,10 +62,12 @@ class FlowBase(unittest.TestCase):
         self.files += 1
         return self.write(f"snap-{self.files}.json", encode_snapshot(replace(snapshot, read_at=read_at)))
 
-    def window_answers(self, window, folder: str, others=(), banner=None) -> str:
-        """readSeason 의 답(창 하나)과, 같은 오퍼의 다른 시즌마다 datesOnly 답 — 폴더에 둔다. `banner` 는 시즌 목록에 남은 띠."""
+    def window_answers(self, window, folder: str, others=(), banner=None, done=0, supply_warn=None) -> str:
+        """readSeason 의 답(창 하나)과, 같은 오퍼의 다른 시즌마다 datesOnly 답 — 폴더에 둔다. `banner` 는 시즌 목록에 남은 띠,
+        `supply_warn` 은 「공급 통화 없음」 띠, `done` 은 읽은 때(T0 에서 초)."""
         asked = {"hotel": HOTEL, "offer": window.offer, "season": {"id": window.season_id}}
-        for index, item in enumerate(reply("readSeason", asked, keep=season_scene.answer_body(window, banner=banner), doneAt=done_at(T0))):
+        keep = dict(season_scene.answer_body(window, banner=banner), supplyWarn=supply_warn)
+        for index, item in enumerate(reply("readSeason", asked, keep=keep, doneAt=done_at(T0 + timedelta(seconds=done)))):
             self.write(f"{folder}/{'season-1' if index == 0 else f'take-w{index}'}.json", item)
         for number, other in enumerate(others, 2):
             asked = {"hotel": HOTEL, "offer": window.offer, "season": {"id": other.id, "name": other.name}, "datesOnly": True}
@@ -391,7 +393,12 @@ class SheetSeasonTest(FlowBase):
                       self.cli("calls", "--change", change, "--snapshot", self.snap(after1, at(85)), now=86, code=2)["error"],
                       "「모름」 뒤에는 다시 누르지 않는다 — 다시 읽어 check 가 가릴 때까지")
         after2 = applied(snapshot, plan)
-        checked = self.cli("check", "--change", change, "--snapshot", self.snap(after2, at(90)), now=95)
+        missing = self.cli("check", "--change", change, "--snapshot", self.snap(after2, at(90)), now=95, code=2)
+        self.assertIn("--season", missing["error"], "검토 2 의 page 2 — 「모름」인 시즌 저장은 그 뒤에 읽은 시즌 창(공급 통화 없음 띠)과 함께 가린다")
+        after_window = self.window_answers(window, "작업/모름-뒤", done=88)
+        self.cli("season", "--answers", after_window, "--out", self.dir / "season-after.json", now=89)
+        checked = self.cli("check", "--change", change, "--snapshot", self.snap(after2, at(90)), "--season", self.dir / "season-after.json",
+                           now=95)
         self.assertEqual((checked["status"], checked["steps"][1]["settled"]), ("applied", "saved"), checked)
         verified = self.cli("verify", "--change", change, "--snapshot", self.snap(after2, at(100)), now=110, code=1)
         self.assertFalse(verified["mismatches"], verified)

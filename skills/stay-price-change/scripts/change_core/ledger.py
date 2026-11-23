@@ -773,12 +773,13 @@ class Ledger:
                        (change_id, index, read_at, until_ms, self._stamp()))
             return True
 
-    def issued(self, change_id: int, index: int | None = None) -> list[tuple[int, str, int]]:
-        """낸 부를 값들 — (단계, 읽은 값의 시각, 누를 수 있는 마지막 때), 낸 차례대로."""
+    def issued(self, change_id: int, index: int | None = None) -> list[tuple[int, str, int, str]]:
+        """낸 부를 값들 — (단계, 읽은 값의 시각, 누를 수 있는 마지막 때, 낸 때), 낸 차례대로."""
         with self._db() as db:
-            rows = db.execute("SELECT idx, read_at, until_ms FROM issues WHERE change_id = ?" + ("" if index is None else " AND idx = ?")
-                              + " ORDER BY rowid", (change_id,) if index is None else (change_id, index)).fetchall()
-        return [(row["idx"], row["read_at"], row["until_ms"]) for row in rows]
+            rows = db.execute("SELECT idx, read_at, until_ms, issued_at FROM issues WHERE change_id = ?"
+                              + ("" if index is None else " AND idx = ?") + " ORDER BY rowid",
+                              (change_id,) if index is None else (change_id, index)).fetchall()
+        return [(row["idx"], row["read_at"], row["until_ms"], row["issued_at"]) for row in rows]
 
     @staticmethod
     def _written(db, change_id):
@@ -867,7 +868,8 @@ class Ledger:
         return moved
 
     def check(self, change_id: int, now: Reading, then: Reading, read_at: str,
-              unit: Callable[[str], str] | None = None, skippable: Callable[[tuple[str, ...]], bool] | None = None) -> CheckReport:
+              unit: Callable[[str], str] | None = None, skippable: Callable[[tuple[str, ...]], bool] | None = None,
+              warn: str | None = None) -> CheckReport:
         """이 변경에 무슨 일이 있었는지 — 저장마다 방금 읽은 값(`now`, 읽은 시각 `read_at`)이 말하는 것과, 남은 저장을 계획대로
         해도 되는지, 어디까지 됐고 왜 멈췄는지.
 
@@ -879,7 +881,9 @@ class Ledger:
         수 있는 줄(`skippable` — left_out)은 확인과 같은 뜻으로 가린다. 남은 저장을 해도 되는 것은 — 저장된 단계가 모두 그대로이고, 남은 단계가 모두 저장 안 됨이며, 남은 단계의 칸이 그 계산이
         바탕으로 삼은 읽은 값(`then`)과 모두 같고, 읽은 값이 IDLE 안의 것일 때뿐이다. 그러면 변경을 적용 중으로 두고 그 읽은
         값의 시각을 활동으로 적는다(IDLE 안이면 calls 가 남은 단계를 낸다). 아니면 멈춘 변경으로 둔다. `unit` 은 untouched 와 같다 —
-        남은 저장의 칸은 그 저장이 다시 쓰는 단위 전부를 본다.
+        남은 저장의 칸은 그 저장이 다시 쓰는 단위 전부를 본다. `warn` 은 다시 읽어 안, ERP 가 다음 저장을 하지 말라고 하는 까닭이다(시즌
+        목록의 「공급 통화 없음」 띠 — 「모름」이던 저장이 뒤에 그 띠와 함께 끝났다): 저장된 마지막 단계에 그 까닭을 적어(halts) 이어 가지
+        않는다(record-result 가 저장 답의 경고로 멈추는 것과 같다).
         """
         unit = unit or (lambda key: key)
         with self._db() as db:
@@ -922,6 +926,12 @@ class Ledger:
             differ = [] if done else sorted(item for item in items if not _same_item(then.get(item), now.get(item)))
             moved_items.update((item, now.get(item)) for item in differ)
             seen_steps.append(StepSeen(step["idx"], step["label"], state, seen, settled, len(differ)))
+        new_halt = None
+        if warn and halt is None:   # 다시 읽어 안 「공급 통화 없음」 — 저장된 마지막 단계 뒤에 멈춘 것으로 적는다
+            done_steps = [step for step in seen_steps if step.ledger == "saved" or step.settled == "saved"]
+            if done_steps:
+                new_halt = halt = {"idx": done_steps[-1].index, "note": warn}
+                cause, note = "halted", warn
         why, remaining = [], []
         for step in seen_steps:
             name = f"{step.index}번째 저장({step.label})"
@@ -940,12 +950,17 @@ class Ledger:
                 why.append(f"{name}의 칸 {step.moved}개가 미리보기 때 읽은 값과 다릅니다")
         if halt is not None and remaining:   # ERP 가 다음 저장을 하지 말라고 했다 — 다시 읽어도 이어 가지 않는다
             why.append(f"{halt['idx']}번째 저장 뒤 ERP 가 다음 저장을 하지 말라고 했습니다({halt['note']}) — 이어서 하지 않습니다")
+        elif warn and remaining:
+            why.append(f"ERP 가 이 호텔에는 다음 저장을 하지 말라고 합니다({warn}) — 이어서 하지 않습니다")
         if remaining and self._age(read_at) > IDLE:
             why.append(f"읽은 값이 {_minutes(self._age(read_at))}분 전 것입니다 — {_minutes(IDLE)}분 안에 읽은 값으로만 이어 가니 "
                        "다시 읽습니다")
         can_continue = bool(remaining) and not why
         stamp = self._stamp()
         with self._db() as db:
+            if new_halt is not None:
+                db.execute("INSERT INTO halts (change_id, idx, note) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+                           (change_id, new_halt["idx"], new_halt["note"]))
             for index, settled in settle:
                 if settled == "saved":
                     self._mark_saved(db, change_id, index, "다시 읽어 저장된 것을 확인했습니다", stamp)

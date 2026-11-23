@@ -535,9 +535,11 @@ def same_record_hotel(ledger: Ledger, change_id: int, now) -> None:
 def cmd_check(args):
     ledger, now = open_ledger(), decode_snapshot(load(args.snapshot))
     same_record_hotel(ledger, args.change, now)
-    season = season_cli.is_season(ledger.change(args.change))
+    record = ledger.change(args.change)
+    season = season_cli.is_season(record)
+    warn = season_cli.check_warn(record, season_cli.load_window(args.season, load) if args.season else None) if season else None
     report = ledger.check(args.change, snapshot_reading(now), snapshot_reading(recorded_reading(ledger, args.change)), now.read_at,
-                          unit=season_cli.pair_unit if season else None, skippable=season_cli.may_skip if season else None)
+                          unit=season_cli.pair_unit if season else None, skippable=season_cli.may_skip if season else None, warn=warn)
     step_ref = (lambda step: None if step is None else dict(no=step.index, label=step.label))
     return dict(change_id=report.change_id, scope=listed(ledger, args.change)[0]["scope"], status=report.status, cause=report.cause,
                 note=report.note,
@@ -859,6 +861,8 @@ def parser() -> argparse.ArgumentParser:
     sub = command("check", cmd_check, "변경에 무슨 일이 있었는지 — 저장마다, 그리고 남은 저장을 해도 되는지")
     sub.add_argument("--change", type=int, required=True)
     sub.add_argument("--snapshot", required=True, help="방금 같은 범위로 읽은 값(read-calls --record N 으로 읽는다)")
+    sub.add_argument("--season", help="시즌 다시 채우기에 「모름」인 저장이 있으면 — 그 뒤에 readSeason 으로 읽어 season 이 낸 season.json "
+                                      "(시즌 목록의 「공급 통화 없음」 띠를 본다)")
 
     sub = command("verify", cmd_verify, "적용 뒤 다시 읽은 값과 견주기")
     sub.add_argument("--change", type=int, required=True)

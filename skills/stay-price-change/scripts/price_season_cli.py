@@ -29,7 +29,7 @@ from price_season import (
     KIND, NO_SUPPLY, RULES, AskSeasons, SeasonError, banner_counts, counts as plan_counts, counts_agree, covers, day_items, decode_choices,
     decode_counts, decode_fill,
     decode_plan, decode_window, encode_plan, encode_window, expected_cells, fresh_problem, followup_targets, has_writes, missing_seasons,
-    FRESH_SECONDS, fresh_until, plan_season, preview_rows, range_differences, recorded_request, rule_choices, rule_label, rule_said, season_range,
+    FRESH_SECONDS, _moment, fresh_until, plan_season, preview_rows, range_differences, recorded_request, rule_choices, rule_label, rule_said, season_range,
     season_steps, step_call, step_range,
     window_of, window_remembers,
 )
@@ -283,6 +283,25 @@ def _clock_text(moment) -> str:
     return datetime.fromisoformat(str(moment).replace("Z", "+00:00")).astimezone().strftime("%H:%M:%S")
 
 
+def check_warn(record, window) -> str | None:
+    """check 에 넘길 「공급 통화 없음」 띠 — 「모름」인 저장이 있는 시즌 다시 채우기는 그 뒤에 읽은 시즌 창(`window`, readSeason → season)을
+    받아야 한다: 그 저장이 뒤에 끝났으면 ERP 가 시즌 목록에 그 띠를 달았을 수 있다(저장 답에는 없었다 — 검토 2 의 page 2). 그 창이 그
+    저장 뒤에 읽은 것이 아니면 거절한다. 「모름」이 없으면 창은 없어도 된다(주면 그 띠를 본다)."""
+    unknown = [step for step in record.steps if step.status == "failed" and step.unknown]
+    if window is None:
+        if unknown:
+            raise SeasonError(f"{unknown[0].index}번째 저장이 「모름」입니다 — 그 저장이 뒤에 끝났으면 ERP 가 시즌 목록에 「공급 통화 없음」 띠를 "
+                              "달았을 수 있어, 다시 읽기 전에 stayPriceSeason.readSeason(그 시즌)의 답을 season 으로 묶어 check 에 --season 으로 "
+                              "줍니다(stopped.md 「시즌 다시 채우기가 멈췄을 때」)")
+        return None
+    if not same_hotel(window.hotel, window.hotel_id, record.hotel, record.hotel_id) or window.offer != record.offer:
+        raise SeasonError(f"--season 의 창은 호텔 {window.hotel_id} · {window.offer} 것이고, {record.id}번은 호텔 {record.hotel_id} · {record.offer} 입니다")
+    finished = [step.finished_at for step in unknown if step.finished_at]
+    if finished and (not window.read_at or _moment(window.read_at).replace(microsecond=0) < _moment(max(finished))):
+        raise SeasonError("--season 의 창은 「모름」인 저장 앞에 읽은 것입니다 — readSeason 을 다시 부르고 season 으로 묶어 줍니다")
+    return window.supply_warn or None
+
+
 def pair_unit(item_key: str) -> str:
     """시즌 창 저장 하나가 다시 쓰는 단위 — 객실 · 요금제(그 저장은 그 쌍의 칸을 같은 값으로도 덮는다). check 가 남은 저장을 볼 때 장부의
     줄(값이 바뀌는 칸)만이 아니라 그 쌍의 칸을 모두 미리보기 때와 견주게 한다."""
@@ -293,7 +312,7 @@ def pair_unit(item_key: str) -> str:
 def answer_call(ledger: Ledger, record, step, result: Mapping) -> dict:
     """저장 답 하나가 그 단계의 어느 부를 값의 것인지 — calls 가 그 단계에 낸 부를 값(기한을 얹은 것) 가운데 답의 지문(`ask`)이 같은
     것. 누른 답은 언제 적어도 받는다(기한은 누르기를 막을 뿐, 된 저장을 잃게 하지 않는다). calls 가 낸 부를 값의 답이 아니면 거절한다."""
-    calls = [step_call(step.index, step.body, until) for _index, _read_at, until in ledger.issued(record.id, step.index)]
+    calls = [step_call(step.index, step.body, until) for _index, _read_at, until, _at in ledger.issued(record.id, step.index)]
     found = next((call for call in calls if ask_sum(call["payload"]) == result.get("ask")), None)
     if found is None:
         raise BrowserError(f"{step.index}번째 저장의 답이 calls 가 낸 부를 값의 답이 아닙니다 — 시즌 창 저장은 calls 가 그 범위를 다시 읽은 "
@@ -361,24 +380,36 @@ BANNER_HEAD = 30   # 띠 글이 장부의 저장 메모와 이만큼 앞이 같�
 
 
 def banner_owner(ledger: Ledger, window: Mapping) -> dict | None:
-    """창의 답에 실린 시즌 목록의 띠(마지막 저장의 띠 — 다른 시즌의 저장일 수 있다)가 이 장부의 어느 시즌 채우기 저장의 것인지 —
-    `{change_id, step, season_id, season}`, 모르면 None. 같은 호텔 · 오퍼의 시즌 채우기 가운데 저장된 단계의 메모(ERP 의 띠 글)와 앞이
-    같은 것, 새것부터."""
+    """창의 답에 실린 시즌 목록의 띠(그 탭의 마지막 시즌 채우기의 띠 — 다른 시즌 · 다른 오퍼의 저장일 수 있다)가 이 장부의 어느 시즌
+    채우기 저장의 것인지 — `{change_id, step, season_id, season}`, 모르면 None. 띠에는 어느 저장의 것인지 표지가 없어, 이 호텔에서
+    가장 늦게 누른(누른 것으로 보이는) 시즌 창 저장이 저장됨이고 그 메모(ERP 의 띠 글)와 앞이 같을 때만 그 저장의 것이다 — 그 뒤에
+    「모름」으로 끝난 저장이나 부를 값을 내고 답을 적지 않은 저장이 있으면 띠는 그 저장의 것일 수 있어 누구의 것인지 말하지 않는다
+    (검토 2 의 page 7)."""
     banner = str(window.get("banner") or "").split("…")[0].strip()
     if len(banner) < BANNER_HEAD:
         return None
     _name, hotel_id = decode_hotel(window["hotel"])
+    pressed = []   # (누른 때, 장부 번호, 단계, 저장됨인지, 메모, 시즌)
     for entry in ledger.list_changes():
         request = entry.get("request") or {}
-        if request.get("kind") != KIND or str(entry["hotel_id"]) != str(hotel_id) or entry["offer"] != window.get("offer"):
+        if request.get("kind") != KIND or str(entry["hotel_id"]) != str(hotel_id):
             continue
+        issued = {}
+        for index, _read_at, _until, at in ledger.issued(entry["id"]):
+            issued[index] = max(issued.get(index, at), at)
         for step in ledger.change(entry["id"]).steps:
-            note = str(step.note or "").split("…")[0].strip()
-            size = min(len(note), len(banner))
-            if step.status == "saved" and size >= BANNER_HEAD and note[:size] == banner[:size]:
-                season = request.get("season") or {}
-                return dict(change_id=entry["id"], step=step.index, season_id=str(season.get("id")), season=season.get("name"))
-    return None
+            if step.status == "saved" or (step.status == "failed" and step.unknown):
+                pressed.append((_moment(step.finished_at), entry["id"], step.index, step.status == "saved", step.note, request.get("season") or {}))
+            elif step.index in issued:
+                pressed.append((_moment(issued[step.index]), entry["id"], step.index, False, None, request.get("season") or {}))
+    if not pressed:
+        return None
+    _at, change_id, index, saved, note, season = max(pressed, key=lambda item: item[:3])
+    note = str(note or "").split("…")[0].strip()
+    size = min(len(note), len(banner))
+    if not saved or size < BANNER_HEAD or note[:size] != banner[:size]:
+        return None
+    return dict(change_id=change_id, step=index, season_id=str(season.get("id")), season=season.get("name"))
 
 
 def short_window(result: Mapping) -> dict:
@@ -394,7 +425,7 @@ def short_window(result: Mapping) -> dict:
                             default=item.blank or None) for item in window.child],
                 other_seasons=[dict(name=item.name, days=len(item.dates)) for item in window.seasons],
                 combos_unknown=[room for room, text in window.combos.items() if text is None],
-                banner=_own_banner(window, result.get("banner_owner")))
+                banner=_own_banner(window, result.get("banner_owner")), supply_warn=window.supply_warn)
 
 
 def _own_banner(window, owner: Mapping | None) -> str | None:

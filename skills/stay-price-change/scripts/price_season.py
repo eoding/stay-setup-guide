@@ -126,6 +126,8 @@ class SeasonWindow:
     combos: Mapping[str, str | None] = field(default_factory=dict)
     seasons: tuple[OtherSeason, ...] = ()
     banner: str | None = None
+    supply_warn: str | None = None    # 시즌 목록의 「공급 통화 없음」 띠(readSeason 의 supplyWarn) — 그 호텔의 시즌 채우기 칸이 팔리지 않는다
+    read_at: str = ""                 # 그 창을 읽은 때(readSeason 의 doneAt) — check 가 「모름」인 저장 뒤에 읽은 것인지 본다
 
     def plan_of(self, room: str, rate_plan: str) -> WindowPlan:
         found = [plan for plan in self.plans if plan.room == room and plan.rate_plan == rate_plan]
@@ -205,7 +207,8 @@ def window_of(main: Mapping, dated: Mapping[str, tuple[str, ...]]) -> SeasonWind
                         tuple(sorted(iso_day(day) for day in main["dates"])), _pairs(main["form"]),
                         tuple(dict.fromkeys(str(name) for name in main["order"])), rooms, tuple(plans),
                         tuple(_child(item, blank_children) for item in main.get("child") or ()), blank_form,
-                        str(main.get("note") or ""), combos, tuple(others), main.get("banner"))
+                        str(main.get("note") or ""), combos, tuple(others), main.get("banner"), main.get("supplyWarn") or None,
+                        str(main.get("doneAt") or ""))
 
 
 def missing_seasons(main: Mapping, dated: Mapping[str, tuple[str, ...]]) -> list[dict]:
@@ -226,7 +229,8 @@ def encode_window(window: SeasonWindow) -> dict:
                 child=[dict(code=item.code, field=item.field, kind=item.kind, percent=money_text(item.percent), text=item.text,
                             blank=item.blank) for item in window.child],
                 combos=[dict(room=room, text=text) for room, text in sorted(window.combos.items())],
-                seasons=[dict(id=item.id, name=item.name, dates=list(item.dates)) for item in window.seasons], banner=window.banner)
+                seasons=[dict(id=item.id, name=item.name, dates=list(item.dates)) for item in window.seasons], banner=window.banner,
+                supply_warn=window.supply_warn, read_at=window.read_at)
 
 
 def decode_window(data: Mapping) -> SeasonWindow:
@@ -244,7 +248,7 @@ def decode_window(data: Mapping) -> SeasonWindow:
         None if data.get("blank") is None else _pairs(data["blank"]), str(data.get("last_fill_note") or ""),
         {str(item["room"]): item.get("text") for item in data.get("combos") or ()},
         tuple(OtherSeason(str(item["id"]), str(item["name"]), tuple(iso_day(day) for day in item.get("dates") or ()))
-              for item in data.get("seasons") or ()), data.get("banner"))
+              for item in data.get("seasons") or ()), data.get("banner"), data.get("supply_warn") or None, str(data.get("read_at") or ""))
 
 
 # ─── 요청 ───
@@ -1200,7 +1204,8 @@ def recorded_request(plan: SeasonPlan) -> dict:
     """장부에 적는 요청 — 누를 저장들(고른 대로 날을 뺀 것, 빠진 저장 · 바뀌는 칸이 없어 누르지 않는 저장은 없음) + 창(띠는 빼고).
     되돌리기 페이지가 창의 이전 입력값을 여기서 보인다."""
     window = encode_window(plan.window)
-    window.pop("banner", None)
+    for name in ("banner", "supply_warn", "read_at"):   # 그때 시즌 목록의 띠 · 읽은 때 — 창의 모양이 아니다
+        window.pop(name, None)
     return dict(encode_fill(replace(plan.fill, saves=tuple(save.save for save in plan.pressed))), window=window)
 
 
