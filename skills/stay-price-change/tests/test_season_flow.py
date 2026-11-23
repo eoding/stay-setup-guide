@@ -251,7 +251,9 @@ class SheetSeasonTest(FlowBase):
                         "판매 마감인 칸은 값만 바뀐다")
         self.assertEqual(plan.saves[0].counts.skipped, 2 * 2 * 4,
                          "판매일 없는 12/3 은 요금제 2 × 박수 층 2 × 인원 4(A2 · A3 · 아동 둘)칸을 건너뛴다")
-        self.assertTrue(data["followup"], "A1 — 다르게 채워지는 칸을 날짜별로 맞출 목표 값이 계산 파일에 있다")
+        self.assertEqual(data["followup"]["kind"], "targets", "A1 — 다르게 채워지는 칸을 날짜별로 맞출 목표 값 표가 계산 파일에 있다")
+        self.assertEqual({item["key"]["date"] for item in data["followup"]["targets"]}, {"2026-12-05"},
+                         "12/5 특가의 칸만 — 빼라고 한 예약 있는 날(12/2)의 칸은 내놓지 않는다")
         step2_form = data["steps"][1]["body"]["payload"]["form"]
         self.assertIn(["price", "200"], step2_form, "둘째 저장의 창은 첫 저장이 친 값으로 채워져 열린다")
         self.assertIn(["date_selection_0", "2026-12-01 ~ 2026-12-05"], step2_form)
@@ -281,6 +283,9 @@ class SheetSeasonTest(FlowBase):
         page = Path(self.cli("render", "result", "--change", change, now=120)["page"]).read_text(encoding="utf-8")
         self.assertIn("ERP 가 말한 칸 수", page)
         self.assertNotIn("다시 읽어 확인했습니다.", page)
+        follow = self.cli("plan", "--snapshot", self.snap(after2, at(130)), "--request", self.dir / "plan-2.json", "--record",
+                          "--out", self.dir / "plan-3.json", now=140)
+        self.assertGreater(follow["counts"]["will_change"], 0, "A1 — 채운 뒤 다르게 채워진 칸을 날짜별 변경으로 맞추는 미리보기")
 
     def test_a_cell_changed_since_the_preview_stops_the_change_before_its_save(self):
         window = season_scene.window()

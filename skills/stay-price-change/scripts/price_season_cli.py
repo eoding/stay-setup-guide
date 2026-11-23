@@ -127,7 +127,17 @@ def plan_command(snapshot: Snapshot, data: Mapping, window, resolutions, ledger:
     return dict(kind="season_plan", change_id=change_id, replaces=replaces, plan=encode_plan(plan), counts=plan_counts(plan),
                 steps=None if steps is None else [dict(kind=step.kind, label=step.label, body=step.body) for step in steps],
                 waiting=[dict(save=save.index, rules=save.waiting()) for save in plan.live if save.waiting()],
-                followup=followup_targets(plan))
+                followup=followup_request(plan))
+
+
+def followup_request(plan) -> dict | None:
+    """요금표와 다르게 채워지는 칸을 채운 뒤 날짜별로 맞출 목표 값 표(kind targets) — 그런 칸이 없으면 None. `plan` · `read-calls` 에
+    이 계산 파일을 요청으로 주면 이 표로 한다(그때 다시 읽은 값과 견주니 채운 뒤의 값에서 다른 칸만 바뀐다)."""
+    targets = followup_targets(plan)
+    if not targets:
+        return None
+    return dict(kind="targets", hotel=dict(id=plan.window.hotel_id, name=plan.window.hotel), offer=plan.window.offer, from_sheet=True,
+                sentence=f"{plan.fill.sentence or '새 요금표'} — 시즌 창으로 맞추지 못한 칸 날짜별로 맞추기", targets=targets)
 
 
 def short_plan(result: Mapping) -> dict:
@@ -144,7 +154,7 @@ def short_plan(result: Mapping) -> dict:
                                                                                 skipped=save.counts.skipped)))
     return dict(kind="season_plan", change_id=result["change_id"], replaces=result["replaces"], counts=result["counts"],
                 saves=None if result["steps"] is None else len(result["steps"]), per_save=saves,
-                misses=len(plan.misses), followup=len(result.get("followup") or ()),
+                misses=len(plan.misses), followup=len((result.get("followup") or {}).get("targets") or ()),
                 unused=[dict(save=choice.save, rule=choice.rule, said=choice.said) for choice in plan.unused])
 
 

@@ -782,8 +782,10 @@ def _misses(saves: Sequence[SavePlan], targets, snapshot: Snapshot, window: Seas
 
 
 def followup_targets(plan: SeasonPlan) -> list[dict]:
-    """요금표와 다르게 채워지는 칸을 날짜별로 맞출 목표 값 표의 줄(kind targets 의 targets) — 결과 뒤에 도우미가 내놓는 변경."""
-    return [dict(key=encode_key(miss.key), values={name: money_text(value) for name, value in miss.sheet.items()}) for miss in plan.misses]
+    """요금표와 다르게 채워지는 칸을 날짜별로 맞출 목표 값 표의 줄(kind targets 의 targets) — 결과 뒤에 도우미가 내놓는 변경. 채우는 날의
+    칸만이다 — 담당자가 빼라고 한 날(「그 날은 빼고 채움」)의 칸은 그대로 두라는 말이라 내놓지 않는다."""
+    return [dict(key=encode_key(miss.key), values={name: money_text(value) for name, value in miss.sheet.items()})
+            for miss in plan.misses if miss.save is not None]
 
 
 # ─── 장부 · 저장 단계 ───

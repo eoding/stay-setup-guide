@@ -41,7 +41,8 @@
                   --all 이면 다른 호텔 것도 그 뒤에
 
 결과는 표준 출력에 JSON 으로 쓰고, `--out` 을 주면 그 파일에도 쓴다(기록 폴더 안이면 없는 폴더를 만들며 — 읽기 폴더 `읽기-2` 를
-미리 만들지 않아도 된다). 파일에 쓰는 명령 여덟(rooms · read-calls · read · sheet · plan · rollback · restore · compare)은 `--out` 을 주면
+미리 만들지 않아도 된다). 파일에 쓰는 명령 열(season · season-request · rooms · read-calls · read · sheet · plan · rollback · restore ·
+compare)은 `--out` 을 주면
 표준 출력에는 짧은 답만 낸다 — 다음에 무엇을 할지 정하는 데 필요한 번호 · 수 · 빨간 줄 · 파일 자리이고, 칸 목록은 싣지 않는다(SHORT).
 종료 코드: 0 됨 · 1 다른 값이 있음(stale·verify) · 2 입력이나 순서가 맞지 않음(표준 오류에 {"error": "…"} 한 줄 — 예상하지 못한
 오류도 이 한 줄이다, change_core.cli). 장부 자리는 `STAY_PRICE_LEDGER_DIR` 로 바꿀 수 있다.
@@ -207,7 +208,17 @@ def request_scope(data: dict, season: str | None = None) -> ReadRange:
     if data.get("kind") == SEASON_KIND:
         fill, pairs, days = season_cli.request_range(data, season_cli.load_window(season, load))
         return ReadRange(fill.hotel, fill.hotel_id, fill.offer, pairs, days)
+    data = season_followup(data)
     return decode_check(data).fitting_range() if data.get("kind") == "sheet_check" else request_range(data)
+
+
+def season_followup(data: dict) -> dict:
+    """요청 파일이 시즌 다시 채우기의 계산 파일이면 그 `followup`(요금표와 다르게 채워지는 칸의 목표 값 표) — 채운 뒤 날짜별로 맞출 때."""
+    if data.get("kind") != "season_plan":
+        return data
+    if not data.get("followup"):
+        raise PlanError("이 시즌 다시 채우기에는 요금표와 다르게 채워지는 칸이 없습니다 — 날짜별로 맞출 것이 없습니다")
+    return data["followup"]
 
 
 def step_scope(ledger: Ledger, change_id: int, step_no: int) -> ReadRange:
@@ -320,7 +331,7 @@ def fresh_record(args, name: str) -> None:
 
 def cmd_plan(args):
     fresh_record(args, "plan")
-    snapshot, data = decode_snapshot(load(args.snapshot)), load(args.request)
+    snapshot, data = decode_snapshot(load(args.snapshot)), season_followup(load(args.request))
     if data.get("kind") == SEASON_KIND:
         return season_cli.plan_command(snapshot, data, season_cli.load_window(args.season, load),
                                        load(args.resolutions) if args.resolutions else [], open_ledger(), args.replaces, args.record)
