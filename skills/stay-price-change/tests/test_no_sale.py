@@ -4,12 +4,16 @@
     python3 -m unittest discover -s tests
 """
 
+import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from decimal import Decimal as D
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+SCRIPT = HERE.parent / "scripts" / "price_change.py"
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
 import scene  # noqa: E402
@@ -83,6 +87,54 @@ class NoSaleTest(unittest.TestCase):
         plan = plan_targets(snapshot(), targets)
         self.assertEqual(plan.no_sale, (("디럭스", "조식 포함", "2027-01-01"),))
         self.assertEqual([change.key.date for change in plan.changes], ["2026-12-24"])
+
+
+class NoSaleOnlyTest(unittest.TestCase):
+    """W2 (시운전 9) — 고른 날이 모두 판매일 없음이면 readPair 의 첫 답(`days.withCell` 0)에서 멈춘다: 다음 명령(`reserved`, 건너뛰었으면
+    `read`)이 예약 있는 날 · 조각을 더 읽으라고 하지 않고 거절하며, 거절의 `say` 가 담당자에게 그대로 하는 말이다. 판매일 있는
+    날이 하루라도 있으면 그대로 읽는다(판매일 없는 날은 미리보기가 따로 댄다)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.env = scene.env(str(self.dir / "기록"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_cli(self, *args, code=0):
+        done = subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True, env=self.env)
+        self.assertEqual(done.returncode, code, done.stderr or done.stdout)
+        return json.loads(done.stdout) if code != 2 else json.loads(done.stderr)
+
+    def answer(self, folder: Path, name: str, asked: dict, days: dict, keep: dict):
+        for index, item in enumerate(reply("readPair", asked, keep, days=days)):
+            (folder / f"{name}{'' if index == 0 else '-' + str(index)}.json").write_text(json.dumps(item, ensure_ascii=False),
+                                                                                       encoding="utf-8")
+
+    def test_every_chosen_day_without_a_sale_day_stops_at_the_first_answer_with_a_sentence_to_say(self):
+        closed = dict(ASKED, **{"from": "2027-01-01", "to": "2027-01-02"})
+        probe = {"hotel": scene.HOTEL_REF, "offer": "샘플 오퍼", "rooms": ["디럭스"], "ratePlans": ["조식 포함"], "from": "2027-01-01",
+                 "to": "2027-01-02", "weekdays": list("월화수목금토일"), "occupancy": "*", "nights": "all"}
+        folder = self.dir / "읽기-1"
+        folder.mkdir()
+        calls = folder / "calls.json"
+        calls.write_text(json.dumps({"pairs": [closed], "reserved": [probe]}, ensure_ascii=False), encoding="utf-8")
+        self.answer(folder, "pair-1", closed, {"asked": 2, "noSale": 2, "withCell": 0}, {"fragment": None, "noSale": list(CLOSED_DAYS)})
+        said = ("1/1 금 ~ 1/2 토 (2일, 2027년)은 샘플 오퍼 오퍼의 디럭스(조식 포함)에 판매일이 열려 있지 않습니다 — 그날은 가격을 "
+                "읽을 수도 넣을 수도 없습니다. 판매일은 ERP 의 판매일 탭에서 사람이 엽니다. 아무것도 바꾸지 않았고 장부에도 적지 않았습니다.")
+        for command in (("reserved", "--calls", calls, "--answers", folder),
+                        ("read", "--calls", calls, "--answers", folder, "--out", folder / "snapshot.json")):
+            refused = self.run_cli(*command, code=2)
+            self.assertEqual(refused["say"], said)
+            self.assertIn("더 읽지 않습니다", refused["error"])
+            self.assertNotIn("refetch", refused, "조각을 받으라고 하지 않는다")
+        self.assertFalse((folder / "snapshot.json").exists())
+
+        open_day = dict(ASKED, **{"from": "2026-12-24", "to": "2026-12-24"})
+        calls.write_text(json.dumps({"pairs": [closed, open_day], "reserved": [probe]}, ensure_ascii=False), encoding="utf-8")
+        self.answer(folder, "pair-2", open_day, {"asked": 1, "noSale": 0, "withCell": 1}, {"fragment": PRICE})
+        self.assertFalse(self.run_cli("reserved", "--calls", calls, "--answers", folder)["done"], "판매일 있는 날이 있으면 그대로 읽는다")
 
 
 if __name__ == "__main__":

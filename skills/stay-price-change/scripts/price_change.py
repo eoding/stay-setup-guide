@@ -76,7 +76,8 @@ from change_core.rollback import decode_rollback, encode_rollback
 from change_core.rules import Resolution, said_in
 from erp_read import PairRead, build_snapshot, parse_adjust_page, parse_price_page
 from price_browser import (
-    page_hotel, pair_reads, read_calls, reading_size, reading_time, reserved_probes, reserved_round, step_calls, too_big,
+    page_hotel, pair_reads, read_calls, reading_size, reading_time, refuse_no_sale_days, reserved_probes, reserved_round, step_calls,
+    too_big,
 )
 from price_model import (
     FIELDS, ITEM_KIND, CellKey, ReadRange, TargetTable, decode_hotel, decode_plan, decode_request,
@@ -178,6 +179,7 @@ def cmd_read(args):
             raise BrowserError(f"readPair 답이 없는 부를 값이 {len(missing)}개 있습니다 — 처음 것: {missing[0]['room']} · "
                                f"{missing[0]['ratePlan']} · {missing[0]['from']} ~ {missing[0]['to']}. 그 값으로 readPair 를 부릅니다"
                                " (불렀는데 답이 끊겼거나 잘렸으면 stayPrice.last() 의 답을 새 파일로 저장해도 됩니다)")
+        refuse_no_sale_days(calls["pairs"], results)
         read_at = reading_time(results)
         results = attach_bodies(results, lent_answers(args, calls))
         pair_answers, reserved_answers = answers_for(results, "readPair"), answers_for(results, "readReserved")
@@ -250,7 +252,9 @@ def cmd_read_calls(args):
 
 def cmd_reserved(args):
     calls = load_calls(args.calls)
-    asked = answers_for(load_results(args.answers), "readReserved")
+    results = load_results(args.answers)
+    refuse_no_sale_days(calls["pairs"], results)   # 고른 날이 모두 판매일 없음이면 예약 있는 날을 읽지 않고 멈춘다
+    asked = answers_for(results, "readReserved")
     done = reserved_round(calls["reserved"], attach_bodies(asked, lent_answers(args, calls)))
     return dict(done=done.done, ask=done.ask, answered=len(done.pages), failed=done.failed)
 

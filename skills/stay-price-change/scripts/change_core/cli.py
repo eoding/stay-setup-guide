@@ -27,7 +27,8 @@ from typing import Callable, Mapping
 
 from . import files
 
-EXTRAS = ("refetch", "choose", "ask")   # 거절에 딸려 가는 것 — 받을 조각 · 고를 줄(아동 밴드가 여럿) · 물을 것(아동이 든 값의 퍼센트)
+EXTRAS = ("refetch", "choose", "ask", "say")   # 거절에 딸려 가는 것 — 받을 조각 · 고를 줄(아동 밴드가 여럿) · 물을 것(아동이 든 값의
+# 퍼센트) · 담당자에게 그대로 할 말(판매일이 없는 날)
 BUG = ("여기서 멈추고, 이 글을 고치지 말고 그대로 담당자에게 전해 주세요(도우미를 만든 사람에게 보낼 글입니다). 다른 길로 돌아가 같은 "
        "일을 하지 않습니다.")
 FILE_WHY = {FileNotFoundError: "없습니다", IsADirectoryError: "파일이 아니라 폴더입니다(파일 이름까지 줍니다)",

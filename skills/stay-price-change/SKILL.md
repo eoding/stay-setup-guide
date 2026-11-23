@@ -69,7 +69,7 @@ metadata:
 4. **지금 값으로 묶기.** `price_change.py read --calls "<R>/calls.json" --answers "<R>" --out "<R>/snapshot.json"`. 답의 `read_at` 이 ERP 에서 읽은 시각이다(페이지 작업이 끝난 시각 가운데 가장 이른 것 — 15분 창도 여기서 잰다).
 5. **조각 받기.** 3·4 의 명령이 종료 2 에 `refetch` 를 내면 그 `{id, at, size, until, save}` 마다 `stayPrice.take("<id>", <at>, <size>)` → `<R>/<save><at>.json`, 답의 `next` 가 `until` 보다 작으면 `stayPrice.take("<id>", <next>)` → `<R>/<save><next>.json` 으로 이어 받고, 그 명령을 다시 한다. `save` 는 명령이 고른 새 이름이고, `bad` 는 다시 받는 쪽과 까닭이다(failures.md). 잘렸어도 그대로 저장한다.
 
-답이 `started: false` 면 아무것도 하지 않았다 — `wait` 초 뒤 같은 값으로 다시 부른다. 읽기 작업의 답을 잃었거나(끊김 · 잘림 — `stayPrice.last()`) 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
+답이 `started: false` 면 아무것도 하지 않았다 — `wait` 초 뒤 같은 값으로 다시 부른다. 명령의 거절에 `say` 가 있으면 그 문장만 그대로 말하고 멈춘다(고른 날이 모두 판매일 없음 — 더 읽지 않는다). 읽기 작업의 답을 잃었거나(끊김 · 잘림 — `stayPrice.last()`) 그 밖에 막히면(범위가 커서 거절 · `그 조각이 페이지에 없습니다` · `failed`) [references/failures.md](references/failures.md) 「읽기」.
 
 ## 1. 지금 가격 보기
 

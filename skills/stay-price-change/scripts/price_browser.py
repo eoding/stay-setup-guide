@@ -28,6 +28,8 @@ from typing import Iterable, Mapping
 from change_core import answers as shared
 from change_core.answers import BrowserError, ask_sum, attach_bodies
 from change_core.money import money_text
+from change_core.words import josa
+from price_plan import days_summary
 from erp_read import AdjustPage, PairRead, parse_adjust_page, parse_price_page
 from price_model import (ERP_MAX_DAYS, FIELDS, MISSING, WEEKDAYS, CellKey, CellValue, RowWrite, Snapshot, day_windows, decode_step,
                          iso_day)
@@ -189,6 +191,35 @@ def reserved_round(probes: Iterable[Mapping], results: Iterable[Mapping]) -> Rou
         else:
             pages.append(page)
     return Round(ask, pages, [{"asked": probe, "error": failures[probe_key(probe)]} for probe in ask if probe_key(probe) in failures])
+
+
+class NoSaleDays(BrowserError):
+    """고른 날이 모두 판매일 없음 — 더 읽지 않는다. `say` 는 도우미가 담당자에게 그대로 하는 말이다(거절과 함께 나간다 — change_core.cli)."""
+
+    def __init__(self, message: str, say: str):
+        super().__init__(message)
+        self.say = say
+
+
+def refuse_no_sale_days(pairs: list[Mapping], results: Iterable) -> None:
+    """readPair 부를 값마다 답이 와 있고 어느 답에도 판매일 있는 날이 없으면(`days.withCell` 이 모두 0) 거절한다 — 판매일이 없는
+    날에는 넣을 칸도 읽을 가격도 없다. readPair 의 첫 답이 이미 그렇게 말하므로 예약 있는 날 · 조각을 더 읽지 않는다(시운전 9 —
+    readPair 가 「고른 날이 모두 판매일 없음」이라 했는데 읽기 셋을 더 하고서야 멈췄다). 하나라도 답이 없거나 판매일 있는 날이
+    있으면 아무것도 하지 않는다(판매일 없는 날만 미리보기가 따로 댄다)."""
+    results = list(results)
+    if not pairs or shared.unanswered(pairs, results, "readPair"):
+        return
+    small = {str(result.get("ask")): result for result in shared.answers(shared.answers_for(results, "readPair"))[0]
+             if result.get("op") == "readPair"}
+    found = [small.get(ask_sum(call)) for call in pairs]
+    if any(answer is None or not answer.get("ok") or (answer.get("days") or {}).get("withCell", 1) != 0 for answer in found):
+        return
+    days = sorted({day for call in pairs for day in selected(call["from"], call["to"], call["weekdays"])})
+    rooms = ", ".join(dict.fromkeys(f"{call['room']}({call['ratePlan']})" for call in pairs))
+    say = (f"{josa(days_summary(days), '은는')} {pairs[0]['offer']} 오퍼의 {rooms}에 판매일이 열려 있지 않습니다 — 그날은 가격을 읽을 "
+           "수도 넣을 수도 없습니다. 판매일은 ERP 의 판매일 탭에서 사람이 엽니다. 아무것도 바꾸지 않았고 장부에도 적지 않았습니다.")
+    raise NoSaleDays("고른 날이 모두 판매일 없음입니다(readPair 의 답 `days.withCell` 이 모두 0) — 더 읽지 않습니다. 거절의 `say` 를 "
+                     "담당자에게 그대로 말하고 멈춥니다(미리보기 · 장부 없음)", say)
 
 
 def pair_reads(results: Iterable[Mapping]) -> list[PairRead]:
