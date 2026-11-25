@@ -49,6 +49,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
 - `룸 만들기` 의 `룸 이름` 에 한글이 있는지(경고 — 룸 이름은 계약서 원어, 한글은 `오퍼별 표시명`)
 - 엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 인지(경고 — 계약서가 필수라고 하면 `기준 성인 초과 시 의무`)
+- `기준 성인 초과 시 의무` 부가옵션이 있는 오퍼에서 `시즌 가격 채우기` 가 (기준+1)명 칸을 기준 칸보다 비싸게 채우는지(경고 — 추가 인원 값을 두 번 받는다)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 - `취소정책 만들기` 단계가 `→ [추가]` 로 끝나는지(새 정책은 [추가], [저장] 은 이미 있는 정책을 고칠 때다)
@@ -3176,6 +3177,56 @@ def find_extra_bed_optional_rules(steps):
     return problems
 
 
+def _fill_adjustments(step):
+    """`인원 조합별 조정(선택)` → {키: (부호, 수)}. 못 읽는 조각은 뺀다(꼴은 `find_occupancy_key_forms` 가 본다)."""
+    raw = next((step["fields"].get(name) for name in OCCUPANCY_ADJUST_FIELDS if step["fields"].get(name)), "") or ""
+    out = {}
+    for part in raw.split(","):
+        key, _, value = part.partition(":")
+        m = ADJUST_VALUE_RE.match(value.strip())
+        if key.strip() and m:
+            out[key.strip()] = (m.group(1), float(m.group(2)))
+    return out
+
+
+def find_extra_bed_double_charge(steps):
+    """기준 성인 초과 의무 엑스트라베드와 (기준+1)명 칸의 웃돈이 한 오퍼에 같이 있으면 경고 — 추가 인원 값을 두 번 받는다.
+
+    ERP 는 성인이 객실 `기준 성인` 을 넘으면 그 부가옵션을 견적에 스스로 붙인다(넘은 수만큼). 같은 객실의 `시즌 가격 채우기` 가
+    `인원 조합별 조정(선택)` 으로 (기준+1)명 칸을 기준 칸보다 비싸게 깔면 세 번째 성인은 칸 값과 옵션 값을 둘 다 낸다 — ERP
+    부가옵션 패널도 같은 경고를 낸다. 계약서가 정말 둘 다 받으라고 할 수도 있어 경고로만 알린다. 옵션의 적용 객실(연결 룸 ·
+    적용 범위)은 보지 않는다 — 오퍼 단위로 넓게 본다.
+    """
+    bases = {}
+    for step in steps:
+        if step["title"].startswith(ROOM_CREATE_TITLE):
+            name = (step["fields"].get(ROOM_NAME_FIELD) or "").strip()
+            base = (step["fields"].get("기준 성인") or "").strip()
+            if name and base.isdigit() and int(base) > 0:
+                bases[name] = int(base)
+    fills = _season_fill_steps(steps)
+    problems = []
+    for step in steps:
+        rule = strip_select(step["fields"].get(ADDON_RULE_FIELD) or "")
+        if not step["title"].startswith(ADDON_CREATE_TITLE) or not rule.startswith(ADDON_RULE_OVER_ADULT):
+            continue
+        offer = strip_select(step["fields"].get("오퍼") or "")
+        name = (step["fields"].get("이름") or "").strip()
+        for fill in _fills_of_offer(fills, offer):
+            adjust = _fill_adjustments(fill)
+            # `체크: Deluxe Garden` · `<오퍼> · <룸>` 둘 다 — 룸 이름은 끝 조각이다
+            rooms = {re.sub(r"^체크\s*[:：]\s*", "", room).split("\u00b7")[-1].strip() for room in target_rooms(fill)}
+            raised = [f"{room} A{bases[room] + 1}" for room in sorted(rooms) if room in bases
+                      and adjust.get(f"A{bases[room] + 1}", ("", 0))[0] == "+" and adjust[f"A{bases[room] + 1}"][1] > 0]
+            if raised:
+                problems.append(
+                    f"{step['num']}단계 부가옵션 `{name}` 은 성인이 객실 기준을 넘으면 견적에 저절로 붙는데, {fill['num']}단계가 "
+                    f"{', '.join(raised)} 칸을 기준 칸보다 비싸게 채운다 — 추가 인원 값을 두 번 받는다. 계약서의 추가 성인 값은 "
+                    f"(기준+1)명 칸이나 의무 엑스트라베드 중 한 곳에만 둔다"
+                )
+    return problems
+
+
 def find_child_policy_without_age_band(steps):
     """아이가 보이는데 `연령 구간 만들기` 단계가 하나도 없으면 경고. 두 가지를 함께 본다.
 
@@ -4793,6 +4844,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     room_combo_gaps = find_room_combo_gaps(parsed)
     fill_keys_outside_combos = find_fill_keys_outside_room_combos(parsed)
     extra_bed_rules = find_extra_bed_optional_rules(parsed)
+    extra_bed_double_charges = find_extra_bed_double_charge(parsed)
     child_policy_gaps = find_child_policy_without_age_band(parsed)
     gala_addons = find_gala_addons(parsed)
     gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
@@ -4932,6 +4984,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "hangul_room_names": hangul_room_names,
         "room_bed_description_gaps": room_bed_description_gaps,
         "extra_bed_rules": extra_bed_rules,
+        "extra_bed_double_charges": extra_bed_double_charges,
         "child_policy_gaps": child_policy_gaps,
         "gala_addons": gala_addons,
         "gala_surcharge_gaps": gala_surcharge_gaps,
@@ -5065,7 +5118,7 @@ def main(argv=None):
         warnings.append(w)
     for w in r["hangul_room_names"]:
         warnings.append(w)
-    for w in r["extra_bed_rules"]:
+    for w in r["extra_bed_rules"] + r["extra_bed_double_charges"]:
         warnings.append(w)
     for w in r["scope_target_overlaps"]:
         warnings.append(w)
