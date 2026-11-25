@@ -453,9 +453,10 @@ class SheetDocsTest(unittest.TestCase):
         spoken = flow[flow.index("4. \"적용\"을 청하기 전에"):flow.index("## 4. 고르기")]
         self.assertNotIn("몇 초", spoken)
         readme = (SKILL.parent.parent / "README.md").read_text(encoding="utf-8")
-        self.assertIn("시즌 다시 채우기", readme)
-        self.assertIn("reads each save's range\nagain just before that save; a change someone else makes in the seconds after that "
-                      "reading is overwritten, as on any ERP\nscreen.", readme)
+        readme_text = " ".join(readme.split())
+        self.assertIn("Refill a season", readme_text)
+        self.assertIn("rereads each save range immediately before saving", readme_text)
+        self.assertIn("can overwrite edits made after that read", readme_text)
         pages = [path for path in (SKILL / "scripts").rglob("*") if path.suffix in (".py", ".js")]
         for path in [*DOCS, SKILL.parent.parent / "README.md", *pages]:
             text = path.read_text(encoding="utf-8")
