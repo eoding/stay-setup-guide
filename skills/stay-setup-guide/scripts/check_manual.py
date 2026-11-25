@@ -355,6 +355,9 @@ ADDON_MIN_STAY_FIELD = "숙박 N박 이상일 때만"
 ADDON_APPLY_FIELD = "적용 방식"
 ADDON_PER_DATE = "일자선택"
 ADDON_ALL_NIGHTS_RULE = "전 숙박일 의무"
+MIN_STAY_FIELDS = (ADDON_MIN_STAY_FIELD, "`mandatory_min_stay_nights`")
+APPLY_TYPE_FIELDS = (ADDON_APPLY_FIELD, "`date_apply_type`")
+MANDATORY_KIND_FIELDS = (ADDON_RULE_FIELD, "`mandatory_kind`")
 
 # 연령 구간 — 계약서에 아동 정책이 있을 때만 넣는 선택 단계.
 # 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표와
@@ -3191,7 +3194,7 @@ def find_extra_bed_optional_rules(steps):
         name = (step["fields"].get("이름") or "").strip()
         if not EXTRA_BED_NAME_RE.search(name):
             continue
-        rule = strip_select(step["fields"].get(ADDON_RULE_FIELD) or "")
+        rule = strip_select(_labeled_value(step, MANDATORY_KIND_FIELDS) or "")
         if rule.startswith(ADDON_RULE_OPTIONAL):
             problems.append(
                 f"{step['num']}단계: 엑스트라베드 의무 규칙이 `{ADDON_RULE_OPTIONAL}` — "
@@ -3201,14 +3204,14 @@ def find_extra_bed_optional_rules(steps):
 
 
 def _fill_adjustments(step):
-    """`인원 조합별 조정(선택)` → {키: (부호, 수)}. 못 읽는 조각은 뺀다(꼴은 `find_occupancy_key_forms` 가 본다)."""
+    """`인원 조합별 조정(선택)` → {키: (부호, 수, 퍼센트 여부)}. 못 읽는 조각은 뺀다(꼴은 `find_occupancy_key_forms` 가 본다)."""
     raw = next((step["fields"].get(name) for name in OCCUPANCY_ADJUST_FIELDS if step["fields"].get(name)), "") or ""
     out = {}
     for part in raw.split(","):
         key, _, value = part.partition(":")
         m = ADJUST_VALUE_RE.match(value.strip())
         if key.strip() and m:
-            out[key.strip()] = (m.group(1), float(m.group(2)))
+            out[_normalized_occupancy_key(key)] = m.groups()
     return out
 
 
@@ -3230,7 +3233,7 @@ def find_extra_bed_double_charge(steps):
     fills = _season_fill_steps(steps)
     problems = []
     for step in steps:
-        rule = strip_select(step["fields"].get(ADDON_RULE_FIELD) or "")
+        rule = strip_select(_labeled_value(step, MANDATORY_KIND_FIELDS) or "")
         if not step["title"].startswith(ADDON_CREATE_TITLE) or not rule.startswith(ADDON_RULE_OVER_ADULT):
             continue
         offer = strip_select(step["fields"].get("오퍼") or "")
@@ -3239,8 +3242,22 @@ def find_extra_bed_double_charge(steps):
             adjust = _fill_adjustments(fill)
             # `체크: Deluxe Garden` · `<오퍼> · <룸>` 둘 다 — 룸 이름은 끝 조각이다
             rooms = {re.sub(r"^체크\s*[:：]\s*", "", room).split("\u00b7")[-1].strip() for room in target_rooms(fill)}
+            # 판매 단가와 박수별 판매 단가에만 비교한다. 인원 조정은 요금제 조정 뒤에 붙으며,
+            # 정액과 정률이 섞이면 실제 단가에 적용해야 두 인원 칸의 차이를 알 수 있다.
+            sales = [value for label, value in _adjust_bases(fill) if label == "판매 단가" or "박 층" in label]
+            plan = _plan_adjust_of(fill)
+            if plan:
+                sales += [_adjusted(base, *plan).quantize(decimal.Decimal(".01"), rounding=decimal.ROUND_HALF_UP)
+                          for base in sales]
+
+            def cell_amount(base, occupancy):
+                change = adjust.get(f"A{occupancy}")
+                return (_adjusted(base, *change).quantize(decimal.Decimal(".01"), rounding=decimal.ROUND_HALF_UP)
+                        if change else base)
+
             raised = [f"{room} A{bases[room] + 1}" for room in sorted(rooms) if room in bases
-                      and adjust.get(f"A{bases[room] + 1}", ("", 0))[0] == "+" and adjust[f"A{bases[room] + 1}"][1] > 0]
+                      and any(cell_amount(price, bases[room] + 1) > cell_amount(price, bases[room])
+                              for price in sales)]
             if raised:
                 problems.append(
                     f"{step['num']}단계 부가옵션 `{name}` 은 성인이 객실 기준을 넘으면 견적에 저절로 붙는데, {fill['num']}단계가 "
@@ -3303,7 +3320,7 @@ def find_gala_addons(steps):
         name = (step["fields"].get("이름") or "").strip()
         if GALA_OPTIONAL_MARK in name or GALA_OPTIONAL_MARK in step["title"]:
             continue
-        if not _blank(step["fields"].get(ADDON_MIN_STAY_FIELD)):
+        if not _blank(_labeled_value(step, MIN_STAY_FIELDS)):
             continue
         problems.append(
             f"{step['num']}단계: 갈라디너는 의무 부과금(인당·정액·적용 날짜·연령별 단가)로 넣는다 — "
@@ -3321,15 +3338,15 @@ def find_min_stay_rule_gaps(steps):
     """
     problems = []
     for step in steps:
-        value = (step["fields"].get(ADDON_MIN_STAY_FIELD) or "").strip()
+        value = (_labeled_value(step, MIN_STAY_FIELDS) or "").strip()
         if not step["title"].startswith(ADDON_CREATE_TITLE) or _blank(value):
             continue
         where = f"{step['num']}단계: `{ADDON_MIN_STAY_FIELD}`"
         if not re.fullmatch(r"0*(?:[2-9]|[1-9][0-9])", value):
             problems.append(f"{where} 에는 2~99 사이의 정수를 넣는다(입력값 {value})")
-        if not strip_select(step["fields"].get(ADDON_APPLY_FIELD) or "").startswith(ADDON_PER_DATE):
+        if not strip_select(_labeled_value(step, APPLY_TYPE_FIELDS) or "").startswith(ADDON_PER_DATE):
             problems.append(f"{where} 은 `{ADDON_APPLY_FIELD}` 이 `일자선택 (원하는 날만 — 조식)` 인 부가옵션에만 쓴다 — 화면이 거절한다")
-        if strip_select(step["fields"].get(ADDON_RULE_FIELD) or "") != ADDON_ALL_NIGHTS_RULE:
+        if strip_select(_labeled_value(step, MANDATORY_KIND_FIELDS) or "") != ADDON_ALL_NIGHTS_RULE:
             problems.append(f"{where} 칸은 `{ADDON_RULE_FIELD}` 이 `전 숙박일 의무`일 때만 화면에 보인다")
     return problems
 

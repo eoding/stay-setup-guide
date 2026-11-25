@@ -2266,6 +2266,15 @@ class MinStayDinnerAddonTest(unittest.TestCase):
             self.assertEqual(len(problems), 1, (nights, problems))
             self.assertIn("2~99", problems[0])
 
+    def test_min_stay_screen_keys_are_checked_like_the_labels(self):
+        for nights, count in (("2", 0), ("100", 1)):
+            md = min_stay_dinner_step(4, nights=nights, name="컴펄서리 디너")
+            for label, key in (("의무 규칙", "mandatory_kind"), ("적용 방식", "date_apply_type"),
+                               ("숙박 N박 이상일 때만", "mandatory_min_stay_nights")):
+                md = md.replace(f"| {label} |", f"| `{key}` |")
+            self.assertEqual(len(self.problems(HEAD + md)), count)
+            self.assertEqual(cm.find_gala_addons(steps_of(HEAD + md)), [])
+
     def test_only_a_pick_a_date_addon_takes_it(self):
         problems = self.problems(HEAD + min_stay_dinner_step(4, apply="선택: 날짜연동 (박수 따라감 — 엑스트라베드)"))
         self.assertEqual(len(problems), 1, problems)
@@ -2648,6 +2657,13 @@ class ExtraBedDoubleChargeTest(unittest.TestCase):
     def test_same_price_extra_adult_cell_passes(self):
         """(기준+1)명 칸을 기준 칸과 같은 값으로 깔고 추가 값은 의무 엑스트라베드로만 받는 모양 — 맞게 쓴 지시서다."""
         self.assertEqual(self.problems(self.manual(adjust="비움")), [])
+
+    def test_base_and_extra_adjustments_are_compared_at_the_selling_price(self):
+        for adjust, raised in [("A2:+40,A3:+30", False), ("A2:+30,A3:+30", False),
+                               ("A2:-5", True), ("A2:-10%,A3:-5", True),
+                               ("A2:+10,A3:+10%", False)]:
+            with self.subTest(adjust=adjust):
+                self.assertEqual(bool(self.problems(self.manual(adjust=adjust))), raised)
 
     def test_optional_extra_bed_is_not_charged_twice(self):
         self.assertEqual(self.problems(self.manual(rule="선택: 의무 아님 (고객이 원할 때만 선택)")), [])
