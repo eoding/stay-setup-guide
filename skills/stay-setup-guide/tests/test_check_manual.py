@@ -5,7 +5,9 @@
     python3 -m unittest discover -s skills/stay-setup-guide/tests -v
     (또는 pytest skills/stay-setup-guide/tests)
 """
+import contextlib
 import datetime
+import io
 import json
 import os
 import re
@@ -2216,6 +2218,90 @@ class GalaDinnerAddonTest(unittest.TestCase):
             self.assertEqual(cm.main([path]), 1)
 
 
+def min_stay_dinner_step(num, name="석식 (3박 이상 1회 필수)", nights="3",
+                         apply="선택: 일자선택 (원하는 날만 — 조식)", rule="선택: 전 숙박일 의무"):
+    """계약서 "3박 이상 숙박 시 석식 1회 필수(날짜는 고객 선택)" — 일자선택 부가옵션 + 날짜 의무 + `숙박 N박 이상일 때만`."""
+    return f"""
+## {num}. 부가옵션 만들기 (1개, {name})
+탭: `부가옵션`
+버튼: [부가옵션 추가]
+
+| 칸 | 값 |
+|---|---|
+| 오퍼 | 선택: 2026 시즌 요금 |
+| 이름 | {name} |
+| 적용 방식 | {apply} |
+| 화면 섹션 | 선택: 식사 |
+| 의무 규칙 | {rule} |
+| 숙박 N박 이상일 때만 | {nights} |
+
+→ [추가]
+"""
+
+
+class MinStayDinnerAddonTest(unittest.TestCase):
+    """`숙박 N박 이상일 때만` — 2~99 · 일자선택 부가옵션 · 전 숙박일 의무 규칙이어야 화면이 받는다."""
+
+    def problems(self, md):
+        return cm.find_min_stay_rule_gaps(steps_of(md))
+
+    def test_contract_shape_passes_and_the_label_is_in_the_dictionary(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + offer_step(4) + min_stay_dinner_step(5))
+            r = cm.check(path, dictionary_path=DICTIONARY)
+        self.assertEqual(r["min_stay_rule_gaps"], [])
+        self.assertNotIn("숙박 N박 이상일 때만", r["unknown_fields"])
+
+    def test_blank_row_is_untouched(self):
+        self.assertEqual(self.problems(HEAD + min_stay_dinner_step(4, nights="비움", apply="선택: 1회 적용 (박수·날짜와 무관)",
+                                                                   rule="선택: 의무 아님 (고객이 원할 때만 선택)")), [])
+
+    def test_only_whole_nights_in_range_are_accepted(self):
+        for nights in ("2", "99"):
+            self.assertEqual(self.problems(HEAD + min_stay_dinner_step(4, nights=nights)), [])
+        for nights in ("1", "3박", "0", "100", "9.5", "²"):
+            problems = self.problems(HEAD + min_stay_dinner_step(4, nights=nights))
+            self.assertEqual(len(problems), 1, (nights, problems))
+            self.assertIn("2~99", problems[0])
+
+    def test_min_stay_screen_keys_are_checked_like_the_labels(self):
+        for nights, count in (("2", 0), ("100", 1)):
+            md = min_stay_dinner_step(4, nights=nights, name="컴펄서리 디너")
+            for label, key in (("의무 규칙", "mandatory_kind"), ("적용 방식", "date_apply_type"),
+                               ("숙박 N박 이상일 때만", "mandatory_min_stay_nights")):
+                md = md.replace(f"| {label} |", f"| `{key}` |")
+            self.assertEqual(len(self.problems(HEAD + md)), count)
+            self.assertEqual(cm.find_gala_addons(steps_of(HEAD + md)), [])
+
+    def test_only_a_pick_a_date_addon_takes_it(self):
+        problems = self.problems(HEAD + min_stay_dinner_step(4, apply="선택: 날짜연동 (박수 따라감 — 엑스트라베드)"))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("일자선택", problems[0])
+
+    def test_the_row_requires_all_nights(self):
+        for rule in ("선택: 의무 아님 (고객이 원할 때만 선택)", "선택: 총 인원 N명 이상일 때 의무",
+                     "선택: 첫 숙박일 의무", "선택: 마지막 숙박일 의무", "선택: 지정 날짜 의무 (갈라 디너 등)"):
+            problems = self.problems(HEAD + min_stay_dinner_step(4, rule=rule))
+            self.assertEqual(len(problems), 1, (rule, problems))
+            self.assertIn("전 숙박일 의무", problems[0])
+
+    def test_a_compulsory_dinner_name_with_the_condition_is_not_sent_to_surcharges(self):
+        """고객이 날을 고르는 N박 조건 디너는 부과금으로 담을 수 없다 — 이름이 컴펄서리여도 부가옵션이 맞다."""
+        self.assertEqual(cm.find_gala_addons(steps_of(HEAD + min_stay_dinner_step(4, name="컴펄서리 디너 (3박 이상 1회)"))), [])
+        blank = min_stay_dinner_step(4, name="컴펄서리 디너 (12/31)", nights="비움")
+        self.assertEqual(len(cm.find_gala_addons(steps_of(HEAD + blank))), 1)
+
+    def test_it_is_an_error_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(HEAD + offer_step(4) + min_stay_dinner_step(5, nights="1"))
+            self.assertEqual(len(cm.check(path)["min_stay_rule_gaps"]), 1)
+            self.assertEqual(cm.main([path]), 1)
+
+
 class GalaDinnerSurchargeTest(unittest.TestCase):
     """갈라디너 부과금은 `인당` 이고, 오퍼에 연령 구간이 있으면 `연령별 단가` 줄을 지닌다."""
 
@@ -2546,6 +2632,65 @@ def extra_bed_step(num, name="엑스트라베드 (1대)",
 
 → [추가]
 """
+
+
+class ExtraBedDoubleChargeTest(unittest.TestCase):
+    """생성된 (기준+1)명 칸의 웃돈과 의무 엑스트라베드를 계약서와 대조하도록 경고한다."""
+
+    def manual(self, adjust="A3:+30", rule="선택: 기준 성인 초과 시 의무 (엑스트라베드)", base="2", keys="A2,A3"):
+        room = room_step(5, "Deluxe Garden").replace("| 룸 설명 | 비움 |", f"| 룸 설명 | 비움 |\n| 기준 성인 | {base} |")
+        season = season_step(6, "Low", "2026 시즌 요금", [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-12-01"),
+                                                          ("기간 종료", "2026-12-20")])
+        fill = price_fill_step(7, "Low", "Deluxe Garden", [("인원 조합(선택)", keys), ("인원 조합별 조정(선택)", adjust)])
+        return HEAD + offer_step(4) + room + season + fill + extra_bed_step(8, rule=rule)
+
+    def problems(self, md):
+        return cm.find_extra_bed_double_charge(steps_of(md))
+
+    def test_raised_extra_adult_cell_with_mandatory_extra_bed_is_warning(self):
+        problems = self.problems(self.manual())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertTrue(problems[0].startswith("8단계"), problems)
+        self.assertIn("7단계가 Deluxe Garden A3", problems[0])
+        self.assertIn("두 번", problems[0])
+        self.assertIn("별도 요금은 각 청구 단위", problems[0])
+
+    def test_same_price_extra_adult_cell_passes(self):
+        """(기준+1)명 칸을 기준 칸과 같은 값으로 깔고 추가 값은 의무 엑스트라베드로만 받는 모양 — 맞게 쓴 지시서다."""
+        self.assertEqual(self.problems(self.manual(adjust="비움")), [])
+
+    def test_base_and_extra_adjustments_are_compared_at_the_selling_price(self):
+        for adjust, raised in [("A2:+40,A3:+30", False), ("A2:+30,A3:+30", False),
+                               ("A2:-5", True), ("A2:-10%,A3:-5", True),
+                               ("A2:+10,A3:+10%", False)]:
+            with self.subTest(adjust=adjust):
+                self.assertEqual(bool(self.problems(self.manual(adjust=adjust))), raised)
+
+    def test_compares_only_adult_combinations_created_in_the_fill(self):
+        for keys, adjust in [("A2", "A2:-5"), ("A3", "A3:+30")]:
+            with self.subTest(keys=keys):
+                self.assertEqual(self.problems(self.manual(keys=keys, adjust=adjust)), [])
+        self.assertEqual(len(self.problems(self.manual(keys="A02,A03"))), 1)
+
+    def test_optional_extra_bed_is_not_charged_twice(self):
+        self.assertEqual(self.problems(self.manual(rule="선택: 의무 아님 (고객이 원할 때만 선택)")), [])
+
+    def test_raise_above_base_plus_one_only_counts_for_that_room(self):
+        """기준 성인이 3인 룸이면 A3 는 기준 칸이다 — 웃돈이 있어도 두 번 받지 않는다."""
+        self.assertEqual(self.problems(self.manual(base="3")), [])
+
+    def test_it_is_a_warning_not_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(self.manual())
+            r = cm.check(path)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                cm.main([path])
+        self.assertEqual(len(r["extra_bed_double_charges"]), 1, r["extra_bed_double_charges"])
+        self.assertIn("⚠ 8단계 부가옵션", out.getvalue())
+        self.assertNotIn("✗ 8단계", out.getvalue())
 
 
 class ExtraBedMandatoryRuleTest(unittest.TestCase):

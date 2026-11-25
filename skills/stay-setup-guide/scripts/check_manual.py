@@ -31,7 +31,8 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 프로모션 `붙일 오퍼` 줄이 있는지(있으면 오류 — 연 카드의 오퍼가 이미 체크돼 있고, 지시서는 오퍼 카드마다 한 단계다)
 - 프로모션에 걷힌 `다른 프로모션과 중복 적용`·`배타 그룹` 줄, 발동 조건 「객실 수」, 무료 숙박의 `적용 단위` 줄이 있는지(있으면 오류 — 2026-11-24 화면)
-- 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
+- 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다. `숙박 N박 이상일 때만` 에 값이 있는 부가옵션은 넘긴다)
+- 부가옵션 `숙박 N박 이상일 때만` 이 2~99의 정수 · `일자선택` 부가옵션 · `전 숙박일 의무`인지(오류 — 화면이 거절하거나 칸이 숨는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
 - 유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 빠진 회차의 날짜만 마감으로 팔린다)
 - `시즌 가격 채우기` 의 `카드:` 로 시즌을 못 짚는 회차가 있는지(경고 — 그 회차는 오퍼를 축으로 도는 검사에서 빠진다)
@@ -50,6 +51,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 부과금 이름이 `(성인)` 으로 끝나는지(경고 — 성인·소아를 하나로 합친다)
 - `룸 만들기` 의 `룸 이름` 에 한글이 있는지(경고 — 룸 이름은 계약서 원어, 한글은 `오퍼별 표시명`)
 - 엑스트라베드 부가옵션의 `의무 규칙` 이 `의무 아님` 인지(경고 — 계약서가 필수라고 하면 `기준 성인 초과 시 의무`)
+- `기준 성인 초과 시 의무` 부가옵션이 있는 오퍼에서 `시즌 가격 채우기` 가 (기준+1)명 칸을 기준 칸보다 비싸게 채우는지(경고 — 추가 인원 값을 두 번 받는다)
 - 같은 이름의 부가옵션이 오퍼 여럿에 있으면 가격 넣기 카드 줄이 오퍼를 한정하는지
 - `시즌 만들기` 단계가 `→ [추가]` 로 끝나는지
 - `취소정책 만들기` 단계가 `→ [추가]` 로 끝나는지(새 정책은 [추가], [저장] 은 이미 있는 정책을 고칠 때다)
@@ -345,6 +347,17 @@ EXTRA_BED_NAME_RE = re.compile(r"엑스트라\s*베드")
 ADDON_RULE_FIELD = "의무 규칙"
 ADDON_RULE_OPTIONAL = "의무 아님"
 ADDON_RULE_OVER_ADULT = "기준 성인 초과 시 의무"
+
+# 부가옵션 `숙박 N박 이상일 때만`(2026-11-25) — 날짜 의무를 N박 이상 숙박에만 세운다. ERP 는 `일자선택` 부가옵션에만,
+# 2~99만 받고, 칸은 `의무 규칙` 이 「전 숙박일 의무」일 때만 보인다(`find_min_stay_rule_gaps`). 값이 있으면 고객이 날을 고르는
+# "N박 이상 숙박 시 석식 1회 필수" 이므로 갈라디너 이름이어도 부과금으로 옮기라고 하지 않는다(`find_gala_addons`).
+ADDON_MIN_STAY_FIELD = "숙박 N박 이상일 때만"
+ADDON_APPLY_FIELD = "적용 방식"
+ADDON_PER_DATE = "일자선택"
+ADDON_ALL_NIGHTS_RULE = "전 숙박일 의무"
+MIN_STAY_FIELDS = (ADDON_MIN_STAY_FIELD, "`mandatory_min_stay_nights`")
+APPLY_TYPE_FIELDS = (ADDON_APPLY_FIELD, "`date_apply_type`")
+MANDATORY_KIND_FIELDS = (ADDON_RULE_FIELD, "`mandatory_kind`")
 
 # 연령 구간 — 계약서에 아동 정책이 있을 때만 넣는 선택 단계.
 # 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표와
@@ -3181,12 +3194,84 @@ def find_extra_bed_optional_rules(steps):
         name = (step["fields"].get("이름") or "").strip()
         if not EXTRA_BED_NAME_RE.search(name):
             continue
-        rule = strip_select(step["fields"].get(ADDON_RULE_FIELD) or "")
+        rule = strip_select(_labeled_value(step, MANDATORY_KIND_FIELDS) or "")
         if rule.startswith(ADDON_RULE_OPTIONAL):
             problems.append(
                 f"{step['num']}단계: 엑스트라베드 의무 규칙이 `{ADDON_RULE_OPTIONAL}` — "
                 f'계약서에 "추가 시 필수" 문장이 있으면 `{ADDON_RULE_OVER_ADULT}`'
             )
+    return problems
+
+
+def _fill_adjustments(step):
+    """`인원 조합별 조정(선택)` → {키: (부호, 수, 퍼센트 여부)}. 못 읽는 조각은 뺀다(꼴은 `find_occupancy_key_forms` 가 본다)."""
+    raw = next((step["fields"].get(name) for name in OCCUPANCY_ADJUST_FIELDS if step["fields"].get(name)), "") or ""
+    out = {}
+    for part in raw.split(","):
+        key, _, value = part.partition(":")
+        m = ADJUST_VALUE_RE.match(value.strip())
+        if key.strip() and m:
+            out[_normalized_occupancy_key(key)] = m.groups()
+    return out
+
+
+def find_extra_bed_double_charge(steps):
+    """기준 성인 초과 의무 엑스트라베드와 (기준+1)명 칸의 웃돈이 한 오퍼에 같이 있으면 계약서와 대조하도록 경고한다.
+
+    ERP 는 성인이 객실 `기준 성인` 을 넘으면 그 부가옵션을 견적에 스스로 붙인다(넘은 수만큼). 같은 객실의 `시즌 가격 채우기` 가
+    기준 조합과 (기준+1)명 조합을 둘 다 만들고 후자를 더 비싸게 깔면 추가 성인은 칸의 차액과 옵션 값을 둘 다 낸다.
+    ERP 부가옵션 패널도 같은 경고를 낸다. 계약서에 별도 요금 두 개가 있을 수 있어 경고로만 알린다.
+    옵션의 적용 객실(연결 룸 · 적용 범위)은 보지 않는다 — 오퍼 단위로 넓게 본다.
+    """
+    bases = {}
+    for step in steps:
+        if step["title"].startswith(ROOM_CREATE_TITLE):
+            name = (step["fields"].get(ROOM_NAME_FIELD) or "").strip()
+            base = (step["fields"].get("기준 성인") or "").strip()
+            if name and base.isdigit() and int(base) > 0:
+                bases[name] = int(base)
+    fills = _season_fill_steps(steps)
+    problems = []
+    for step in steps:
+        rule = strip_select(_labeled_value(step, MANDATORY_KIND_FIELDS) or "")
+        if not step["title"].startswith(ADDON_CREATE_TITLE) or not rule.startswith(ADDON_RULE_OVER_ADULT):
+            continue
+        offer = strip_select(step["fields"].get("오퍼") or "")
+        name = (step["fields"].get("이름") or "").strip()
+        for fill in _fills_of_offer(fills, offer):
+            adjust = _fill_adjustments(fill)
+            planned_keys = {key for _, key in _occupancy_keys_of(fill)}
+            # `체크: Deluxe Garden` · `<오퍼> · <룸>` 둘 다 — 룸 이름은 끝 조각이다
+            rooms = {re.sub(r"^체크\s*[:：]\s*", "", room).split("\u00b7")[-1].strip() for room in target_rooms(fill)}
+            # 판매 단가와 박수별 판매 단가에만 비교한다. 인원 조정은 요금제 조정 뒤에 붙으며,
+            # 정액과 정률이 섞이면 실제 단가에 적용해야 두 인원 칸의 차이를 알 수 있다.
+            sales = [value for label, value in _adjust_bases(fill) if label == "판매 단가" or "박 층" in label]
+            plan = _plan_adjust_of(fill)
+            if plan:
+                sales += [_adjusted(base, *plan).quantize(decimal.Decimal(".01"), rounding=decimal.ROUND_HALF_UP)
+                          for base in sales]
+
+            def cell_amount(base, key):
+                change = adjust.get(key)
+                return (_adjusted(base, *change).quantize(decimal.Decimal(".01"), rounding=decimal.ROUND_HALF_UP)
+                        if change else base)
+
+            raised = []
+            for room in sorted(rooms):
+                base = bases.get(room)
+                if base is None:
+                    continue
+                base_key, extra_key = f"A{base}", f"A{base + 1}"
+                if {base_key, extra_key} <= planned_keys and any(
+                    cell_amount(price, extra_key) > cell_amount(price, base_key) for price in sales
+                ):
+                    raised.append(f"{room} {extra_key}")
+            if raised:
+                problems.append(
+                    f"{step['num']}단계 부가옵션 `{name}` 은 성인이 객실 기준을 넘으면 견적에 저절로 붙는데, {fill['num']}단계가 "
+                    f"{', '.join(raised)} 칸을 기준 칸보다 비싸게 채운다. 같은 비용을 두 번 받는지 계약서와 대조한다. "
+                    "같은 비용은 한 곳에만 두고, 별도 요금은 각 청구 단위에 맞는 칸에 둔다"
+                )
     return problems
 
 
@@ -3234,6 +3319,7 @@ def find_gala_addons(steps):
     계약이 물리는 컴펄서리 디너는 **의무 부과금 하나**다(인당·정액·적용 날짜·연령별 단가).
     부가옵션은 고객이 고를 때만 붙으므로 그 돈이 청구되지 않는다. 계약서가 `선택`·`optional`
     이라고 못 박은 디너만 부가옵션이고, 그때는 이름 끝에 `(선택)` 을 붙여 그 사실을 남긴다.
+    `숙박 N박 이상일 때만` 에 값이 있는 부가옵션은 고객이 날을 고르는 N박 조건 디너라 부과금으로 담을 수 없어 넘긴다.
     """
     problems = []
     for step in steps:
@@ -3242,10 +3328,34 @@ def find_gala_addons(steps):
         name = (step["fields"].get("이름") or "").strip()
         if GALA_OPTIONAL_MARK in name or GALA_OPTIONAL_MARK in step["title"]:
             continue
+        if not _blank(_labeled_value(step, MIN_STAY_FIELDS)):
+            continue
         problems.append(
             f"{step['num']}단계: 갈라디너는 의무 부과금(인당·정액·적용 날짜·연령별 단가)로 넣는다 — "
             "계약서가 선택이라고 명시한 경우만 부가옵션이며 그때는 이름에 (선택) 을 붙인다"
         )
+    return problems
+
+
+def find_min_stay_rule_gaps(steps):
+    """부가옵션의 `숙박 N박 이상일 때만` 이 ERP 가 받는 모양인지 — 아니면 오류(화면이 저장을 거절하거나 칸이 없다).
+
+    - 값은 2~99의 정수다.
+    - `적용 방식` 이 `일자선택` 인 부가옵션에만 저장된다.
+    - 칸은 `의무 규칙` 이 전 숙박일 의무일 때만 보인다 — 아니면 러너가 칸을 못 찾는다.
+    """
+    problems = []
+    for step in steps:
+        value = (_labeled_value(step, MIN_STAY_FIELDS) or "").strip()
+        if not step["title"].startswith(ADDON_CREATE_TITLE) or _blank(value):
+            continue
+        where = f"{step['num']}단계: `{ADDON_MIN_STAY_FIELD}`"
+        if not re.fullmatch(r"0*(?:[2-9]|[1-9][0-9])", value):
+            problems.append(f"{where} 에는 2~99 사이의 정수를 넣는다(입력값 {value})")
+        if not strip_select(_labeled_value(step, APPLY_TYPE_FIELDS) or "").startswith(ADDON_PER_DATE):
+            problems.append(f"{where} 은 `{ADDON_APPLY_FIELD}` 이 `일자선택 (원하는 날만 — 조식)` 인 부가옵션에만 쓴다 — 화면이 거절한다")
+        if strip_select(_labeled_value(step, MANDATORY_KIND_FIELDS) or "") != ADDON_ALL_NIGHTS_RULE:
+            problems.append(f"{where} 칸은 `{ADDON_RULE_FIELD}` 이 `전 숙박일 의무`일 때만 화면에 보인다")
     return problems
 
 
@@ -4846,8 +4956,10 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     room_combo_gaps = find_room_combo_gaps(parsed)
     fill_keys_outside_combos = find_fill_keys_outside_room_combos(parsed)
     extra_bed_rules = find_extra_bed_optional_rules(parsed)
+    extra_bed_double_charges = find_extra_bed_double_charge(parsed)
     child_policy_gaps = find_child_policy_without_age_band(parsed)
     gala_addons = find_gala_addons(parsed)
+    min_stay_rule_gaps = find_min_stay_rule_gaps(parsed)
     gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
     adult_only_names = find_adult_only_charge_names(parsed)
     scope_row_gaps = find_scope_row_gaps(parsed)
@@ -4988,8 +5100,10 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "hangul_room_names": hangul_room_names,
         "room_bed_description_gaps": room_bed_description_gaps,
         "extra_bed_rules": extra_bed_rules,
+        "extra_bed_double_charges": extra_bed_double_charges,
         "child_policy_gaps": child_policy_gaps,
         "gala_addons": gala_addons,
+        "min_stay_rule_gaps": min_stay_rule_gaps,
         "gala_surcharge_gaps": gala_surcharge_gaps,
         "adult_only_names": adult_only_names,
         "scope_row_gaps": scope_row_gaps,
@@ -5086,7 +5200,7 @@ def main(argv=None):
               + r["los_prices_formats"] + r["los_without_base_price"]
               + r["cell_los_nights"]
               + r["cell_occupancy_mismatch"] + r["cell_coordinate_gaps"]
-              + r["audience_only_names"] + r["room_bed_description_gaps"] + r["gala_addons"]
+              + r["audience_only_names"] + r["room_bed_description_gaps"] + r["gala_addons"] + r["min_stay_rule_gaps"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["photo_path_gaps"] + r["folder_escapes"]
@@ -5121,7 +5235,7 @@ def main(argv=None):
         warnings.append(w)
     for w in r["hangul_room_names"]:
         warnings.append(w)
-    for w in r["extra_bed_rules"]:
+    for w in r["extra_bed_rules"] + r["extra_bed_double_charges"]:
         warnings.append(w)
     for w in r["scope_target_overlaps"]:
         warnings.append(w)
