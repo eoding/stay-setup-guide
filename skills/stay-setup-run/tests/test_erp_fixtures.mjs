@@ -470,4 +470,19 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   w.close();
 }
 
-console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, promotion target offers, retired promotion rows, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner)`);
+// 10) 부가옵션 드로어(2026-11-25) — "3박 이상 숙박 시 석식 1회 필수(날짜는 고객 선택)" 를 일자선택 · 전 숙박일 의무 · 「숙박 N박 이상일 때만」 으로
+{
+  const w = page({ drawer: frag('addon--new.html') });
+  const d = w.document;
+  const res = await w.stayRun.fill([
+    { label: '적용 방식', field: 'date_apply_type', kind: 'select', value: '일자선택 (원하는 날만 — 조식)' },
+    { label: '의무 규칙', field: 'mandatory_kind', kind: 'select', value: '전 숙박일 의무' },
+    { label: '숙박 N박 이상일 때만', field: 'mandatory_min_stay_nights', kind: 'typed', value: '3' }
+  ]);
+  ok(res.every((r) => r.status === 'ok') && res[2].matchedBy === 'hook', '부가옵션 드로어: 숙박 조건 칸을 표식으로 찾아 넣는다', res);
+  ok(d.querySelector('[name="date_apply_type"]').value === '2' && d.querySelector('[name="mandatory_kind"]').value === 'ALL_NIGHTS'
+    && d.querySelector('[name="mandatory_min_stay_nights"]').value === '3', '세 칸이 화면 값으로 들어간다');
+  w.close();
+}
+
+console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, promotion target offers, retired promotion rows, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner, add-on stay condition)`);

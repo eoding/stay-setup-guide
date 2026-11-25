@@ -161,6 +161,15 @@
               
             </td>
           </tr>
+          
+          <tr x-show="['ALL_NIGHTS', 'FIRST_NIGHT', 'LAST_NIGHT', 'DATES'].includes(kind)">
+            <th>숙박 N박 이상일 때만</th>
+            <td>
+              <input type="text" name="mandatory_min_stay_nights" inputmode="numeric" data-stay-field="mandatory_min_stay_nights" data-stay-kind="number" aria-label="숙박 N박 이상일 때만" id="id_stay_mandatory_min_stay_nights">
+              <small>비우면 늘 의무입니다. 숫자를 넣으면 숙박이 그 박 수 이상일 때만 의무가 되고, 고객은 이용할 날을 하루 이상 직접 고릅니다(더 고르는 날은 선택). 그보다 짧은 숙박에서는 일반 선택 옵션입니다. 일자선택 부가옵션에만 씁니다.</small>
+              
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

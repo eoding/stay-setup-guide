@@ -10,7 +10,7 @@
        trigger: 'LOS',
        basis: 'PCT',
        bookingWindow: false,
-       thresholdLabels: {&quot;LOS&quot;: &quot;최소 숙박(박)&quot;, &quot;LEAD_TIME&quot;: &quot;체크인 D-N일 전&quot;, &quot;ROOM_COUNT&quot;: &quot;최소 객실 수&quot;, &quot;ALWAYS&quot;: &quot;기준 없음&quot;},
+       thresholdLabels: {&quot;ALWAYS&quot;: &quot;기준 없음&quot;, &quot;LOS&quot;: &quot;최소 숙박(박)&quot;, &quot;LEAD_TIME&quot;: &quot;체크인 D-N일 전&quot;},
        get thresholdLabel() { return this.thresholdLabels[this.trigger] || '기준값' },
        get valueLabel() {
          return this.basis === 'PCT' ? '할인율(%)'
