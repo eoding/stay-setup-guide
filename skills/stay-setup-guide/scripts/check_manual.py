@@ -30,6 +30,7 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - 단계 제목의 갈래가 규칙서 §단계 갈래별 마지막 줄 표의 정본(또는 러너가 받는 별칭)인지(오류 — 러너가 모르는 갈래에서 멈춘다)
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 프로모션 `붙일 오퍼` 줄이 있는지(있으면 오류 — 연 카드의 오퍼가 이미 체크돼 있고, 지시서는 오퍼 카드마다 한 단계다)
+- 프로모션에 걷힌 `다른 프로모션과 중복 적용`·`배타 그룹` 줄, 발동 조건 「객실 수」, 무료 숙박의 `적용 단위` 줄이 있는지(있으면 오류 — 2026-11-24 화면)
 - 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
 - 유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 빠진 회차의 날짜만 마감으로 팔린다)
@@ -258,6 +259,19 @@ CAMPAIGN_FIELD = "캠페인"
 # 프로모션 추가 드로어의 「붙일 오퍼」(2026-11-18) — 사전에는 있지만 지시서에는 적지 않는 칸이다(`find_target_offer_rows`).
 TARGET_OFFERS_FIELD = "붙일 오퍼"
 TARGET_OFFERS_KEY = "target_offers"
+# 프로모션 드로어에서 걷힌 두 칸(2026-11-24) — 한 줄에 프로모션 하나만 팔아 판매에 반영되지 않았다(`find_retired_promotion_rows`).
+RETIRED_PROMOTION_FIELDS = {"다른 프로모션과 중복 적용": "combinability", "배타 그룹": "exclusivity_group"}
+# 발동 조건 「객실 수」 — 새 프로모션은 고를 수 없다(2026-11-24). 예약 한 건에 객실 하나만 판다.
+PROMOTION_TRIGGER_FIELD = "발동 조건"
+PROMOTION_ROOM_COUNT = "객실 수"
+# 혜택 방식이 「무료 숙박」이면 `적용 단위` 줄이 숨는다(2026-11-24) — 가장 싼 밤부터 N박이 무료라 단위와 무관하다.
+PROMOTION_BASIS_FIELD = "혜택 방식"
+PROMOTION_FREE_NIGHT = "무료 숙박"
+PROMOTION_UNIT_FIELD = "적용 단위"
+# 위 세 칸의 화면 key — 줄을 백틱 key(`` `trigger_type` ``)로 적어도 같은 칸이다. 값도 화면 글자 대신 POST 값으로 올 수 있다.
+PROMOTION_ROW_KEYS = {PROMOTION_TRIGGER_FIELD: "trigger_type", PROMOTION_BASIS_FIELD: "basis", PROMOTION_UNIT_FIELD: "unit"}
+PROMOTION_ROOM_COUNT_VALUE = "ROOM_COUNT"
+PROMOTION_FREE_NIGHT_VALUE = "FREE_NIGHT"
 
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
@@ -3765,6 +3779,44 @@ def find_target_offer_rows(steps):
     return problems
 
 
+def find_retired_promotion_rows(steps):
+    """2026-11-24 프로모션 드로어가 받지 않는 줄 — 걷힌 두 칸, 발동 조건 「객실 수」, 무료 숙박의 `적용 단위`.
+
+    - `다른 프로모션과 중복 적용` · `배타 그룹` 은 화면에서 없어졌다. 계약서의 "중복 할인" 조건은 옮길 자리가 없다.
+    - 새 프로모션은 발동 조건 「객실 수」 를 고를 수 없다 — 예약 한 건에 객실 하나만 팔아 "N실 이상" 은 늘 거짓이다.
+    - 혜택 방식이 「무료 숙박」 이면 `적용 단위` 줄이 숨어, 러너가 그 칸을 찾지 못하고 멈춘다.
+    """
+    problems = []
+    for step in steps:
+        fields = step["fields"]
+        for name in fields:
+            label = norm_field(name)
+            if label in RETIRED_PROMOTION_FIELDS or label.strip("`") in RETIRED_PROMOTION_FIELDS.values():
+                problems.append(
+                    f"{step['num']}단계: `{label}` 칸은 화면에서 없어졌다 — 줄을 뺀다"
+                    "(한 줄에 프로모션 하나만 팔아 판매에 반영되지 않는다. 계약서의 중복 할인 조건은 `changes.md` 에 적는다)"
+                )
+        rows = {norm_field(name): value for name, value in fields.items()}
+
+        def row(label):
+            """그 칸의 값 — 화면 글자 줄이나 백틱 key 줄. 둘 다 없으면 None."""
+            got = rows.get(label, rows.get(f"`{PROMOTION_ROW_KEYS[label]}`"))
+            return None if got is None else strip_select(got)
+
+        trigger = row(PROMOTION_TRIGGER_FIELD) or ""
+        if trigger.startswith(PROMOTION_ROOM_COUNT) or trigger == PROMOTION_ROOM_COUNT_VALUE:
+            problems.append(
+                f"{step['num']}단계: 발동 조건 「{PROMOTION_ROOM_COUNT}」 는 새 프로모션에 고를 수 없다 — "
+                "Stay 는 예약 한 건에 객실 하나만 판다. 계약서의 \"N실 이상\" 조건은 옮기지 않고 `changes.md` 에 적는다"
+            )
+        basis = row(PROMOTION_BASIS_FIELD) or ""
+        if (basis.startswith(PROMOTION_FREE_NIGHT) or basis == PROMOTION_FREE_NIGHT_VALUE) and row(PROMOTION_UNIT_FIELD) is not None:
+            problems.append(
+                f"{step['num']}단계: 혜택 방식이 「{PROMOTION_FREE_NIGHT}」 이면 `{PROMOTION_UNIT_FIELD}` 줄이 화면에서 숨는다 — 줄을 뺀다"
+            )
+    return problems
+
+
 def step_kind(title):
     """제목에서 갈래만 — 끝의 ` (…)` 를 떼되 괄호가 겹쳐도 짝을 맞춘다.
 
@@ -4818,6 +4870,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     unknown_step_kinds = find_unknown_step_kinds(parsed)
     campaign_uses = find_campaign_uses(parsed)
     target_offer_rows = find_target_offer_rows(parsed)
+    retired_promotion_rows = find_retired_promotion_rows(parsed)
     age_band_order = find_age_band_order(parsed)
     age_band_overlaps = find_age_band_overlaps(parsed)
     band_code_formats = find_band_code_format(parsed)
@@ -4909,6 +4962,8 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
                     continue
                 if n == CAMPAIGN_FIELD:  # 걷힌 칸 — `find_campaign_uses` 가 오류로 잡는다(두 번 알리지 않는다)
                     continue
+                if n in RETIRED_PROMOTION_FIELDS:  # 걷힌 칸 — `find_retired_promotion_rows` 가 오류로 잡는다
+                    continue
                 if BACKTICK_KEY_RE.match(n):  # 백틱 key(`` `min_nights` ``) — 그 단계 화면에서 `find_field_keys` 가 본다
                     continue
                 seen.append(n)
@@ -4958,6 +5013,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "legacy_offer_steps": legacy_offer_steps, "rooms_before_offer": rooms_before_offer,
         "campaign_uses": campaign_uses,
         "target_offer_rows": target_offer_rows,
+        "retired_promotion_rows": retired_promotion_rows,
         "age_band_order": age_band_order,
         "age_band_overlaps": age_band_overlaps,
         "band_code_formats": band_code_formats,
@@ -5071,7 +5127,7 @@ def main(argv=None):
               + r["season_overlaps"] + r["season_date_problems"] + r["cancel_policy_gaps"] + r["skip_warning_steps"]
               + r["unknown_step_kinds"] + r["inventory_gaps"] + r["customer_option_gaps"]
               + r["legacy_offer_steps"] + r["rooms_before_offer"]
-              + r["campaign_uses"] + r["target_offer_rows"] + r["age_band_order"] + r["age_band_overlaps"]
+              + r["campaign_uses"] + r["target_offer_rows"] + r["retired_promotion_rows"] + r["age_band_order"] + r["age_band_overlaps"]
               + r["band_code_formats"] + r["child_extra_missing"]
               + r["child_extra_values"] + r["child_extra_no_occupancy"]
               + r["promotion_window_gaps"]

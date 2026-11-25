@@ -1564,14 +1564,20 @@
      고리는 `판매 시작` 단계 앞에서 선다. 그때 검증 배너의 막힘(🔴)·권고(🟡)를 결과에 싣고, 연령 구간의 빈 나이·겹침처럼
      [판매 시작] 을 막는 줄은 사람이 바로 읽을 문장으로 띠에 남긴다(넘어가기로 풀 수 없는 차단이다 — 오퍼 탭 연령 구간을 고친다). */
   window.AGE_BAND_BLOCK_RE = /어느 구간에도 없습니다|두 구간에 겹칩니다/;
+  /* 맞닿은 오퍼 경고(2026-11-24)는 🟡 이지만 지시서 결함이 아니다 — 연도별 계약을 오퍼 둘로 이어 깔면 늘 뜬다. 도우미가 `adjacentOffers`
+     로 따로 싣고, 여기서는 세지 않고 뜻만 덧붙인다. [이건 넘어가기] 는 누르지 않는다(넘겨도 줄이 「넘어감」 으로 남고 판정이 호텔 전체에
+     걸린다 — 넘길지는 담당자가 정한다). */
+  window.ADJACENT_OFFERS_NOTE = '맞닿은 오퍼 경고 N건은 지시서 결함이 아닙니다 — 경계 날짜에 걸친 숙박은 한 번에 예약되지 않고 손님에게 나눠서 예약하라고 안내됩니다. 넘길지는 담당자가 정합니다';
   window.saleStartBanner = function () {
-    var b = { blockers: [], warnings: [] };
+    var b = { blockers: [], warnings: [], adjacentOffers: [] };
     try { b = (stayRun.state() || {}).banner || b; } catch (e) { /* 배너를 못 읽으면 빈 채로 */ }
     var age = (b.blockers || []).filter(function (l) { return window.AGE_BAND_BLOCK_RE.test(l); });
+    var adjacent = b.adjacentOffers || [];
+    var adjacentNote = adjacent.length ? ' · ' + window.ADJACENT_OFFERS_NOTE.replace('N건', adjacent.length + '건') : '';
     var note = (b.blockers || []).length
       ? '[판매 시작] 이 막혀 있습니다 — 🔴 ' + b.blockers.length + '건' + (age.length ? ' (연령 구간의 빈 나이·겹침 ' + age.length + '건: 오퍼 탭 `연령 구간` 에서 고칩니다 — 넘어가기로 풀 수 없습니다)' : '')
       : ((b.warnings || []).length ? '🟡 ' + b.warnings.length + '건이 남았습니다 — 원인을 지시서에서 고칩니다' : '배너에 막힘이 없습니다 — [판매 시작] 은 사람이 누릅니다');
-    return { blockers: b.blockers || [], warnings: b.warnings || [], ageBand: age, note: note };
+    return { blockers: b.blockers || [], warnings: b.warnings || [], adjacentOffers: adjacent, ageBand: age, note: note + adjacentNote };
   };
 
   window.runStepCore = async function (n, opt) {

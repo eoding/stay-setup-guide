@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.15.0'; // 2026-11-13: 가격 캘린더 기준 조합·가감 · 금액 숫자 견주기 · 시즌 입력 기억 비우기
+  var VERSION = '0.16.0'; // 2026-11-24: 검증 배너의 맞닿은 오퍼 경고를 `adjacentOffers` 로 따로 · 접힌 🟡 도 읽기
   var WAIT_MS = 10000; // 저장·열기 최대 대기(밀리초) — 기본값이다. 느린 서버에서는 `stayRun.config({waitMs})` 로 올린다
   var TICK = 100;
 
@@ -1669,9 +1669,23 @@
     return out;
   }
 
+  // 맞닿은 오퍼 경고(2026-11-24) — 연도별 계약을 오퍼 둘로 이어 깐 정상 지시서에서 늘 뜨는 🟡 라 지시서 결함으로 세지 않고
+  // `adjacentOffers` 로 따로 싣는다. 표식(`data-stay-banner`)이 먼저고, 표식 없는 화면은 문구 머리로 본다.
+  var ADJACENT_OFFERS_CODE = 'OFFERS_ADJACENT';
+  var ADJACENT_OFFERS_RE = /^두 오퍼가 맞닿아 있어 경계에 걸친 숙박은 판매되지 않습니다/;
+  // 🟡 한 줄 — 문구는 줄의 맨 글자 노드다(단추·사유 칸·「넘어감」 배지는 뺀다). 사람이 넘긴 줄은 사유를 붙인다.
+  // 접힌 목록(`x-show` 로 숨은 `<ul>`)도 읽는다 — innerText 는 숨은 줄을 빼서, 펼치지 않으면 🟡 가 0 으로 읽혔다.
+  function warningLine(li) {
+    var text = clean([].slice.call(li.childNodes).filter(function (n) { return n.nodeType === 3; })
+      .map(function (n) { return n.textContent; }).join(' '));
+    var dismissed = !!li.querySelector('[data-stay-action="undismiss"]');
+    var reason = dismissed ? clean(textOf(li.querySelector('small'))) : '';
+    return { code: li.getAttribute('data-stay-banner') || '', text: text,
+      line: trunc(text + (dismissed ? ' (넘어감' + (reason ? ': ' + reason : '') + ')' : ''), 220) };
+  }
   function bannerLines() {
     var b = document.getElementById('stay_validation_banner');
-    var out = { blockers: [], warnings: [] };
+    var out = { blockers: [], warnings: [], adjacentOffers: [] };
     if (!b || !shown(b)) return out;
     var bucket = null;
     var lines = blockLines(b);
@@ -1682,7 +1696,20 @@
       if (!bucket) continue;
       if (/^(이건 넘어가기|넘어가기|다시 보기|제안값 보기|세후가로 확정|판매 시작|같은 문제|외 \d+건|넘어감|판매중|판매 없음)/.test(ln)) continue;
       if (ln.length < 6) continue;
-      if (bucket.length < 40) bucket.push(trunc(ln, 220));
+      // 🟡 는 가른 뒤에 자른다 — 먼저 자르면 맞닿은 오퍼 줄 40개 뒤의 다른 🟡 가 잘려 0 으로 읽힌다
+      if (bucket.length < 40 || bucket === out.warnings) bucket.push(trunc(ln, 220));
+    }
+    var card = b.querySelector('[data-stay-card="warnings"]');
+    var items = card ? [].slice.call(card.querySelectorAll('li[data-stay-banner]')).map(warningLine) : [];
+    if (items.length) {
+      out.warnings = [];
+      items.forEach(function (it) {
+        var to = it.code === ADJACENT_OFFERS_CODE || ADJACENT_OFFERS_RE.test(it.text) ? out.adjacentOffers : out.warnings;
+        if (to.length < 40) to.push(it.line);
+      });
+    } else {
+      out.adjacentOffers = out.warnings.filter(function (l) { return ADJACENT_OFFERS_RE.test(l); }).slice(0, 40);
+      out.warnings = out.warnings.filter(function (l) { return !ADJACENT_OFFERS_RE.test(l); }).slice(0, 40);
     }
     return out;
   }

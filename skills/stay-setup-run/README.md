@@ -48,6 +48,10 @@ this skill is the execution. The guide and the screens are Korean, so the skill 
 > The pass mark before a hotel goes on sale is **zero red and zero yellow** banner items. A step that
 > dismisses a yellow item with a written reason is forbidden: the runner refuses it and `--check` blocks
 > it before a browser is opened. A yellow item that remains is a defect in the guide and is fixed there.
+> One yellow item is not a defect: the adjacent-offers warning (`두 오퍼가 맞닿아 있어 …`), which appears
+> whenever one offer's stay period ends the day before another's begins, as with contracts laid out year by
+> year. The helper reports it apart from the other yellow items (`banner.adjacentOffers`), the runner explains
+> it to the person and does not dismiss it, and the person decides whether to dismiss it.
 
 Works with Claude Code, Codex, Gemini CLI, Grok, Hermes Agent, Cursor and any other agent that reads
 the standard `SKILL.md` format **and can drive a browser**.

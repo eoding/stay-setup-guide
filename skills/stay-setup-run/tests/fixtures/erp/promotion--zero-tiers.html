@@ -79,8 +79,6 @@
                 
                 <option value="LEAD_TIME">얼리버드 — 체크인 D-N일 전에 예약하면</option>
                 
-                <option value="ROOM_COUNT">객실 수 — N개 이상 잡으면</option>
-                
               </select>
               
             </td>
@@ -102,7 +100,8 @@
               
             </td>
           </tr>
-          <tr>
+          
+          <tr x-show="basis !== 'FREE_NIGHT'">
             <th>적용 단위 <span class="stay-required" style="color:var(--stay-blocking)" aria-label="필수">*</span></th>
             <td>
               <select name="unit" class="browser-default" data-stay-field="unit" data-stay-kind="select" data-stay-required="1" aria-label="적용 단위" id="id_stay_unit">
@@ -111,8 +110,8 @@
   <option value="1">체류당 1회</option>
 
 </select>
-              <small x-show="basis === 'PCT'">정률은 밤마다 그 밤의 요금에 비례해 붙습니다 — 이 값은 정액·무료숙박에서만 뜻이 갈립니다.</small>
-              <small x-show="basis !== 'PCT'">정액·무료숙박에서만 뜻이 갈립니다 — 정률은 밤마다 요금에 비례해 붙습니다.</small>
+              <small x-show="basis === 'PCT'">정률은 밤마다 그 밤의 요금에 비례해 붙습니다 — 이 값은 정액에서만 뜻이 갈립니다.</small>
+              <small x-show="basis !== 'PCT'">정액에서만 뜻이 갈립니다 — 박당은 밤마다, 체류당 1회는 숙박 전체에 한 번 뺍니다.</small>
               
             </td>
           </tr>
@@ -286,25 +285,7 @@
               
             </td>
           </tr>
-          <tr>
-            <th>다른 프로모션과 중복 적용</th>
-            <td>
-              
-              <label class="check_form">
-                <input class="filled-in" type="checkbox" name="combinability"
-                       data-stay-field="combinability" data-stay-kind="checkbox"
-                       id="id_stay_combinability">
-                <span for="id_stay_combinability">중복 허용</span>
-              </label>
-              <small>끄면 이 할인을 고르는 순간 다른 할인은 못 고릅니다(기본은 택일).</small>
-            </td>
-            <th>배타 그룹</th>
-            <td>
-              <input type="text" name="exclusivity_group" maxlength="64" data-stay-field="exclusivity_group" data-stay-kind="text" aria-label="배타 그룹" id="id_stay_exclusivity_group">
-              <small>같은 이름을 적은 프로모션끼리는 하나만 고를 수 있습니다. 비우면 제한 없음.</small>
-              
-            </td>
-          </tr>
+          
           <tr>
             
             <th>프로모션 전용 취소 정책</th>

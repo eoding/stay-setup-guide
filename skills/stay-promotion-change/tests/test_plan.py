@@ -74,6 +74,13 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(self.verdict(snap, "601", "9002", "2", value="101"), "PCT_RANGE")
         self.assertEqual(self.verdict(snap, "601", "9004", "4", value="1.5"), "NOT_WHOLE")
 
+    def test_values_past_what_the_erp_form_stores_cannot_be_applied(self):
+        """2026-11-24 ERP 폼 — 정액은 9,999,999,999.99 까지, 무료 숙박은 2,147,483,647 박까지 받는다."""
+        snap = snapshot("9003", "9004")
+        self.assertEqual(self.verdict(snap, "601", "9003", "0", value="10000000000"), "FORM_REFUSES")
+        self.assertNotEqual(self.verdict(snap, "601", "9003", "0", value="25"), "FORM_REFUSES")
+        self.assertEqual(self.verdict(snap, "601", "9004", "4", value="2147483648"), "FORM_REFUSES")
+
     def test_a_promotion_the_form_would_refuse_as_it_stands_cannot_be_saved(self):
         def broken(erp):
             erp.promotion("9006")["apply_end"] = ""

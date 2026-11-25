@@ -9,7 +9,7 @@ more change the prices of a hotel that already sells — price calendar cells, a
 promotion discounts — with a preview, a save only after the person says "적용", a fresh reading to verify, and a rollback. The guides and the skill
 documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.10.1 (`stay-setup-guide` 1.8.3, `stay-setup-run` 0.15.1, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.0). Publishing follows the matched ERP release (extra-person add-ons attached at quote time, below). This release does not claim a production or browser installation rehearsal.
+Release candidate: plugin `stay-setup` 1.10.1 (`stay-setup-guide` 1.8.3, `stay-setup-run` 0.16.0, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.1). Publishing follows the matched ERP release (extra-person add-ons attached at quote time, the promotion drawer and the adjacent-offers warning, below). This release does not claim a production or browser installation rehearsal.
 
 ## 2026-11-24 extra-person add-ons are attached automatically
 
@@ -21,6 +21,25 @@ add-on, with the (base+1) price cell no higher than the base cell, or a higher (
 optional. Writing both charges the third adult twice; the ERP add-on panel warns about it and the checker now flags it
 as a warning. A room without `기준 성인` gets no automatic add-on, and a party whose automatic quantity exceeds the
 add-on's `수량 상한` cannot book that room.
+
+## 2026-11-24 promotion drawer fields and the adjacent-offers warning
+
+The ERP promotion drawer lost two fields that had no effect on sales, `다른 프로모션과 중복 적용` and `배타 그룹`: the customer
+room list and the staff quote sell one promotion per line. New promotions can no longer use the `발동 조건` option
+「객실 수」, and when `혜택 방식` is `무료 숙박` the `적용 단위` row is hidden. Guides write none of the three and the checker
+rejects them. A contract condition of the form "N rooms or more" is not carried over, because Stay sells one room per
+booking; the guide records it in `changes.md` instead. A promotion opened from an offer card limits `요금제 한정` to that
+offer's rate plans. The screen dictionary (279 fields), screen help and runner fixtures are re-synced, and the
+promotion helper no longer shows the two removed settings and refuses values the ERP form now refuses (a flat discount
+above 9,999,999,999.99, more than 2,147,483,647 free nights).
+
+The validation banner has a new yellow item, the adjacent-offers warning (`두 오퍼가 맞닿아 있어 경계에 걸친 숙박은 판매되지
+않습니다 …`). It appears whenever one offer's stay period ends the day before another's begins, as with contracts laid
+out year by year, and a stay across that boundary cannot be booked in one go: guests are told to split it. It is not a
+defect in the guide. The guide notes it in `changes.md`, the runner reports it apart from the other yellow items and
+explains it without pressing [이건 넘어가기], and the person decides whether to dismiss it. Dismissing does not remove the
+line, and the dismissal covers every later adjacent pair of that hotel. Every other yellow item still counts against the
+pass mark. The runner now also counts yellow items in a collapsed list.
 
 ## 2026-11-23 promotion discount helper
 
@@ -175,7 +194,7 @@ same browser and its checkmarks and progress bar rise on their own. Neither disp
 is not open the agent skips it silently.
 
 Automatic entry took 13–19 minutes per hotel in production runs, photos included. At the end, read the validation
-banner. The pass mark is zero red and zero yellow items. Then press [판매 시작] yourself.
+banner. The pass mark is zero red and zero yellow items, not counting the adjacent-offers warning. Then press [판매 시작] yourself.
 
 **Changing the prices of a hotel that already sells.** Open the hotel's Stay edit screen in a logged-in Chrome tab and
 ask in plain words. Each helper confirms what it understood, reads the current values, opens a preview page and saves
