@@ -16,20 +16,25 @@ Release candidate: plugin `stay-setup` 1.10.3 (`stay-setup-guide` 1.8.5, `stay-s
 For a contract requiring one dinner per adult on a guest-selected date, set the add-on to
 `일자선택`, choose `전 숙박일 의무`, and enter a whole number from 2 to 99 in `숙박 N박 이상일 때만`.
 For qualifying stays, the quantity equals the adult count. Guests choose one or more available dates.
-Each selected date incurs the dinner charge for every adult. Shorter stays can choose the add-on freely.
-If there are no eligible dates, the card is hidden. Offer children's dinners as a separate optional add-on.
-Fixed-date mandatory dinners remain surcharges. The checker enforces the same field combination and range as the ERP.
+Each selected date incurs the dinner charge for every adult. For shorter stays, guests can add dinner on available dates.
+Set at least one sellable dinner date for each stay that the contract requires to include dinner. Check coverage for
+the applicable rooms and rate plans. With no sellable dates, Stay hides the card and can issue a quote without dinner.
+If you cannot cover a required stay, record the gap in `changes.md` and confirm whether to close those dates to sales
+or arrange an agreed alternative before publishing. Keep the adult requirement on its own add-on. Set up a separate
+optional children's dinner only when the contract makes it optional. Fixed-date mandatory dinners use surcharges.
+If the settings cannot represent a required children's dinner, confirm how to provide and charge for it with the contract
+owner. The checker enforces the same field combination and range as the ERP.
 
 ## 2026-11-24 extra-person add-ons are attached automatically
 
 The ERP now attaches the two occupancy-rule add-ons, `기준 성인 초과 시 의무 (엑스트라베드)` and `총 인원 N명 이상일 때 의무`,
 at quote time: one per adult above the room's `기준 성인` (one in total for the head-count rule), and the guest cannot
-remove them. The screen dictionary note that said the two were stored but not enforced now describes this; fields and
-choices did not change. A guide therefore puts an extra adult's charge in one place only: either the mandatory extra-bed
-add-on, with the (base+1) price cell no higher than the base cell, or a higher (base+1) price cell with the extra bed left
-optional. Writing both charges the third adult twice; the ERP add-on panel warns about it and the checker now flags it
-as a warning. A room without `기준 성인` gets no automatic add-on, and a party whose automatic quantity exceeds the
-add-on's `수량 상한` cannot book that room.
+remove them. Record each contract charge once. If an extra adult's charge covers the required bed, put the charge in the
+add-on. If the contract prices extra occupancy and the required bed separately, use the (base+1) room price cell for
+occupancy and the add-on for the bed, following each charge's billing unit. A higher (base+1) room rate alongside a required
+bed triggers a warning in the ERP and the checker so staff can verify both amounts against the contract. The extra-adult
+rule requires a room's `기준 성인`. The total-headcount rule uses the total guests. A party whose automatic quantity exceeds
+the add-on's `수량 상한` cannot book that room.
 
 ## 2026-11-24 promotion drawer fields and the adjacent-offers warning
 

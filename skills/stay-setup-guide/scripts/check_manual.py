@@ -3216,12 +3216,12 @@ def _fill_adjustments(step):
 
 
 def find_extra_bed_double_charge(steps):
-    """기준 성인 초과 의무 엑스트라베드와 (기준+1)명 칸의 웃돈이 한 오퍼에 같이 있으면 경고 — 추가 인원 값을 두 번 받는다.
+    """기준 성인 초과 의무 엑스트라베드와 (기준+1)명 칸의 웃돈이 한 오퍼에 같이 있으면 계약서와 대조하도록 경고한다.
 
     ERP 는 성인이 객실 `기준 성인` 을 넘으면 그 부가옵션을 견적에 스스로 붙인다(넘은 수만큼). 같은 객실의 `시즌 가격 채우기` 가
-    `인원 조합별 조정(선택)` 으로 (기준+1)명 칸을 기준 칸보다 비싸게 깔면 세 번째 성인은 칸 값과 옵션 값을 둘 다 낸다 — ERP
-    부가옵션 패널도 같은 경고를 낸다. 계약서가 정말 둘 다 받으라고 할 수도 있어 경고로만 알린다. 옵션의 적용 객실(연결 룸 ·
-    적용 범위)은 보지 않는다 — 오퍼 단위로 넓게 본다.
+    기준 조합과 (기준+1)명 조합을 둘 다 만들고 후자를 더 비싸게 깔면 추가 성인은 칸의 차액과 옵션 값을 둘 다 낸다.
+    ERP 부가옵션 패널도 같은 경고를 낸다. 계약서에 별도 요금 두 개가 있을 수 있어 경고로만 알린다.
+    옵션의 적용 객실(연결 룸 · 적용 범위)은 보지 않는다 — 오퍼 단위로 넓게 본다.
     """
     bases = {}
     for step in steps:
@@ -3240,6 +3240,7 @@ def find_extra_bed_double_charge(steps):
         name = (step["fields"].get("이름") or "").strip()
         for fill in _fills_of_offer(fills, offer):
             adjust = _fill_adjustments(fill)
+            planned_keys = {key for _, key in _occupancy_keys_of(fill)}
             # `체크: Deluxe Garden` · `<오퍼> · <룸>` 둘 다 — 룸 이름은 끝 조각이다
             rooms = {re.sub(r"^체크\s*[:：]\s*", "", room).split("\u00b7")[-1].strip() for room in target_rooms(fill)}
             # 판매 단가와 박수별 판매 단가에만 비교한다. 인원 조정은 요금제 조정 뒤에 붙으며,
@@ -3250,19 +3251,26 @@ def find_extra_bed_double_charge(steps):
                 sales += [_adjusted(base, *plan).quantize(decimal.Decimal(".01"), rounding=decimal.ROUND_HALF_UP)
                           for base in sales]
 
-            def cell_amount(base, occupancy):
-                change = adjust.get(f"A{occupancy}")
+            def cell_amount(base, key):
+                change = adjust.get(key)
                 return (_adjusted(base, *change).quantize(decimal.Decimal(".01"), rounding=decimal.ROUND_HALF_UP)
                         if change else base)
 
-            raised = [f"{room} A{bases[room] + 1}" for room in sorted(rooms) if room in bases
-                      and any(cell_amount(price, bases[room] + 1) > cell_amount(price, bases[room])
-                              for price in sales)]
+            raised = []
+            for room in sorted(rooms):
+                base = bases.get(room)
+                if base is None:
+                    continue
+                base_key, extra_key = f"A{base}", f"A{base + 1}"
+                if {base_key, extra_key} <= planned_keys and any(
+                    cell_amount(price, extra_key) > cell_amount(price, base_key) for price in sales
+                ):
+                    raised.append(f"{room} {extra_key}")
             if raised:
                 problems.append(
                     f"{step['num']}단계 부가옵션 `{name}` 은 성인이 객실 기준을 넘으면 견적에 저절로 붙는데, {fill['num']}단계가 "
-                    f"{', '.join(raised)} 칸을 기준 칸보다 비싸게 채운다 — 추가 인원 값을 두 번 받는다. 계약서의 추가 성인 값은 "
-                    f"(기준+1)명 칸이나 의무 엑스트라베드 중 한 곳에만 둔다"
+                    f"{', '.join(raised)} 칸을 기준 칸보다 비싸게 채운다. 같은 비용을 두 번 받는지 계약서와 대조한다. "
+                    "같은 비용은 한 곳에만 두고, 별도 요금은 각 청구 단위에 맞는 칸에 둔다"
                 )
     return problems
 

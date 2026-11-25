@@ -2635,13 +2635,13 @@ def extra_bed_step(num, name="엑스트라베드 (1대)",
 
 
 class ExtraBedDoubleChargeTest(unittest.TestCase):
-    """기준 성인 초과 의무 엑스트라베드와 (기준+1)명 칸의 웃돈을 한 오퍼에 같이 두면 경고 — 세 번째 성인이 두 번 낸다."""
+    """생성된 (기준+1)명 칸의 웃돈과 의무 엑스트라베드를 계약서와 대조하도록 경고한다."""
 
-    def manual(self, adjust="A3:+30", rule="선택: 기준 성인 초과 시 의무 (엑스트라베드)", base="2"):
+    def manual(self, adjust="A3:+30", rule="선택: 기준 성인 초과 시 의무 (엑스트라베드)", base="2", keys="A2,A3"):
         room = room_step(5, "Deluxe Garden").replace("| 룸 설명 | 비움 |", f"| 룸 설명 | 비움 |\n| 기준 성인 | {base} |")
         season = season_step(6, "Low", "2026 시즌 요금", [("날짜 규칙 유형", "선택: 기간 범위"), ("기간 시작", "2026-12-01"),
                                                           ("기간 종료", "2026-12-20")])
-        fill = price_fill_step(7, "Low", "Deluxe Garden", [("인원 조합(선택)", "A2,A3"), ("인원 조합별 조정(선택)", adjust)])
+        fill = price_fill_step(7, "Low", "Deluxe Garden", [("인원 조합(선택)", keys), ("인원 조합별 조정(선택)", adjust)])
         return HEAD + offer_step(4) + room + season + fill + extra_bed_step(8, rule=rule)
 
     def problems(self, md):
@@ -2653,6 +2653,7 @@ class ExtraBedDoubleChargeTest(unittest.TestCase):
         self.assertTrue(problems[0].startswith("8단계"), problems)
         self.assertIn("7단계가 Deluxe Garden A3", problems[0])
         self.assertIn("두 번", problems[0])
+        self.assertIn("별도 요금은 각 청구 단위", problems[0])
 
     def test_same_price_extra_adult_cell_passes(self):
         """(기준+1)명 칸을 기준 칸과 같은 값으로 깔고 추가 값은 의무 엑스트라베드로만 받는 모양 — 맞게 쓴 지시서다."""
@@ -2664,6 +2665,12 @@ class ExtraBedDoubleChargeTest(unittest.TestCase):
                                ("A2:+10,A3:+10%", False)]:
             with self.subTest(adjust=adjust):
                 self.assertEqual(bool(self.problems(self.manual(adjust=adjust))), raised)
+
+    def test_compares_only_adult_combinations_created_in_the_fill(self):
+        for keys, adjust in [("A2", "A2:-5"), ("A3", "A3:+30")]:
+            with self.subTest(keys=keys):
+                self.assertEqual(self.problems(self.manual(keys=keys, adjust=adjust)), [])
+        self.assertEqual(len(self.problems(self.manual(keys="A02,A03"))), 1)
 
     def test_optional_extra_bed_is_not_charged_twice(self):
         self.assertEqual(self.problems(self.manual(rule="선택: 의무 아님 (고객이 원할 때만 선택)")), [])
