@@ -4227,6 +4227,18 @@ class RetiredPromotionRowsTest(unittest.TestCase):
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("`적용 단위`", problems[0])
 
+    def test_backticked_keys_are_the_same_rows(self):
+        """줄을 화면 key 로 적어도(`` `trigger_type` `` · `` `basis` `` · `` `unit` ``) 같은 칸이다 — 값이 POST 값이어도 잡는다."""
+        md = self.step(replace=[("| 발동 조건 | 선택: 상시 |", "| `trigger_type` | ROOM_COUNT |"),
+                                ("| 혜택 방식 | 선택: 정률 할인 |", "| `basis` | 선택: 무료 숙박 — N박을 공짜로 (STAY5PAY4형) |"),
+                                ("| 적용 단위 | 선택: 1박당 |", "| `unit` | 선택: 박당 |")])
+        problems = cm.find_retired_promotion_rows(steps_of(md))
+        self.assertEqual(len(problems), 2, problems)
+        self.assertIn("N실 이상", problems[0])
+        self.assertIn("`적용 단위`", problems[1])
+        md = self.step(replace=[("| 혜택 방식 | 선택: 정률 할인 |", "| `basis` | FREE_NIGHT |")])
+        self.assertEqual(len(cm.find_retired_promotion_rows(steps_of(md))), 1)
+
     def test_free_night_without_unit_row_passes(self):
         md = self.step(replace=[("| 혜택 방식 | 선택: 정률 할인 |", "| 혜택 방식 | 선택: 무료 숙박 — N박을 공짜로 (STAY5PAY4형) |"),
                                 ("| 적용 단위 | 선택: 1박당 |\n", "")])

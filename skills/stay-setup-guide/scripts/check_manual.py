@@ -267,6 +267,10 @@ PROMOTION_ROOM_COUNT = "객실 수"
 PROMOTION_BASIS_FIELD = "혜택 방식"
 PROMOTION_FREE_NIGHT = "무료 숙박"
 PROMOTION_UNIT_FIELD = "적용 단위"
+# 위 세 칸의 화면 key — 줄을 백틱 key(`` `trigger_type` ``)로 적어도 같은 칸이다. 값도 화면 글자 대신 POST 값으로 올 수 있다.
+PROMOTION_ROW_KEYS = {PROMOTION_TRIGGER_FIELD: "trigger_type", PROMOTION_BASIS_FIELD: "basis", PROMOTION_UNIT_FIELD: "unit"}
+PROMOTION_ROOM_COUNT_VALUE = "ROOM_COUNT"
+PROMOTION_FREE_NIGHT_VALUE = "FREE_NIGHT"
 
 # 배너 경고를 사유로 넘기는 단계는 더 이상 쓰지 않는다 — 원인을 지시서에서 고친다
 SKIP_WARNING_TITLE = "경고 넘어가기"
@@ -3741,14 +3745,21 @@ def find_retired_promotion_rows(steps):
                     f"{step['num']}단계: `{label}` 칸은 화면에서 없어졌다 — 줄을 뺀다"
                     "(한 줄에 프로모션 하나만 팔아 판매에 반영되지 않는다. 계약서의 중복 할인 조건은 `changes.md` 에 적는다)"
                 )
-        trigger = strip_select(fields.get(PROMOTION_TRIGGER_FIELD) or "")
-        if trigger.startswith(PROMOTION_ROOM_COUNT):
+        rows = {norm_field(name): value for name, value in fields.items()}
+
+        def row(label):
+            """그 칸의 값 — 화면 글자 줄이나 백틱 key 줄. 둘 다 없으면 None."""
+            got = rows.get(label, rows.get(f"`{PROMOTION_ROW_KEYS[label]}`"))
+            return None if got is None else strip_select(got)
+
+        trigger = row(PROMOTION_TRIGGER_FIELD) or ""
+        if trigger.startswith(PROMOTION_ROOM_COUNT) or trigger == PROMOTION_ROOM_COUNT_VALUE:
             problems.append(
                 f"{step['num']}단계: 발동 조건 「{PROMOTION_ROOM_COUNT}」 는 새 프로모션에 고를 수 없다 — "
                 "Stay 는 예약 한 건에 객실 하나만 판다. 계약서의 \"N실 이상\" 조건은 옮기지 않고 `changes.md` 에 적는다"
             )
-        basis = strip_select(fields.get(PROMOTION_BASIS_FIELD) or "")
-        if basis.startswith(PROMOTION_FREE_NIGHT) and PROMOTION_UNIT_FIELD in fields:
+        basis = row(PROMOTION_BASIS_FIELD) or ""
+        if (basis.startswith(PROMOTION_FREE_NIGHT) or basis == PROMOTION_FREE_NIGHT_VALUE) and row(PROMOTION_UNIT_FIELD) is not None:
             problems.append(
                 f"{step['num']}단계: 혜택 방식이 「{PROMOTION_FREE_NIGHT}」 이면 `{PROMOTION_UNIT_FIELD}` 줄이 화면에서 숨는다 — 줄을 뺀다"
             )
