@@ -9,7 +9,19 @@ more change the prices of a hotel that already sells — price calendar cells, a
 promotion discounts — with a preview, a save only after the person says "적용", a fresh reading to verify, and a rollback. The guides and the skill
 documents are Korean because the ERP screens are Korean.
 
-Release candidate: plugin `stay-setup` 1.10.1 (`stay-setup-guide` 1.8.3, `stay-setup-run` 0.16.0, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.1). Publishing follows the matched ERP release (extra-person add-ons attached at quote time, the promotion drawer and the adjacent-offers warning, below). This release does not claim a production or browser installation rehearsal.
+Release candidate: plugin `stay-setup` 1.10.2 (`stay-setup-guide` 1.8.4, `stay-setup-run` 0.16.0, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.1). Publishing follows the matched ERP release (the add-on stay-length condition, extra-person add-ons attached at quote time, the promotion drawer and the adjacent-offers warning, below). This release does not claim a production or browser installation rehearsal.
+
+## 2026-11-25 add-on stay-length condition
+
+The ERP add-on drawer has a new field under `의무 규칙`, `숙박 N박 이상일 때만`, shown only for the four date rules. With a
+number N (2 or more), the date rule applies only to stays of N nights or more, and the guest then picks at least one day
+(more days are optional); shorter stays see an ordinary optional add-on. The ERP saves it only on a `일자선택` add-on. A
+contract clause such as "one dinner required for stays of N nights or more, guest picks the day" is entered as a
+`일자선택` add-on with `전 숙박일 의무` and `숙박 N박 이상일 때만` = N. Mandatory gala or compulsory dinners on fixed dates
+stay surcharges. The checker rejects a value below 2, the field on a non-`일자선택` add-on, and the field without a date
+rule, and it no longer sends a gala-named add-on with this field to surcharges. The screen dictionary (280 fields), screen
+help and runner fixtures are re-synced; the sync also brings the promotion `발동 조건` refusal for promotions saved earlier
+with 「객실 수」 and its yellow validation line.
 
 ## 2026-11-24 extra-person add-ons are attached automatically
 
