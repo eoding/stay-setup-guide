@@ -1696,7 +1696,8 @@
       if (!bucket) continue;
       if (/^(이건 넘어가기|넘어가기|다시 보기|제안값 보기|세후가로 확정|판매 시작|같은 문제|외 \d+건|넘어감|판매중|판매 없음)/.test(ln)) continue;
       if (ln.length < 6) continue;
-      if (bucket.length < 40) bucket.push(trunc(ln, 220));
+      // 🟡 는 가른 뒤에 자른다 — 먼저 자르면 맞닿은 오퍼 줄 40개 뒤의 다른 🟡 가 잘려 0 으로 읽힌다
+      if (bucket.length < 40 || bucket === out.warnings) bucket.push(trunc(ln, 220));
     }
     var card = b.querySelector('[data-stay-card="warnings"]');
     var items = card ? [].slice.call(card.querySelectorAll('li[data-stay-banner]')).map(warningLine) : [];
@@ -1707,8 +1708,8 @@
         if (to.length < 40) to.push(it.line);
       });
     } else {
-      out.adjacentOffers = out.warnings.filter(function (l) { return ADJACENT_OFFERS_RE.test(l); });
-      out.warnings = out.warnings.filter(function (l) { return !ADJACENT_OFFERS_RE.test(l); });
+      out.adjacentOffers = out.warnings.filter(function (l) { return ADJACENT_OFFERS_RE.test(l); }).slice(0, 40);
+      out.warnings = out.warnings.filter(function (l) { return !ADJACENT_OFFERS_RE.test(l); }).slice(0, 40);
     }
     return out;
   }

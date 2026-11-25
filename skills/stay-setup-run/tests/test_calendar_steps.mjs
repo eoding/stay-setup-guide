@@ -535,6 +535,18 @@ const seasonFill = ({ memory, overwrite }) => `<div id="stay_season_fill_form_x"
   const only = read([open('OFFERS_ADJACENT', adjacent('2026 계약', '2027 계약'), 1)]);
   ok(only.sale.warnings.length === 0 && only.sale.adjacentOffers.length === 1 && /^배너에 막힘이 없습니다/.test(only.sale.note)
     && /나눠서 예약하라고 안내됩니다/.test(only.sale.note), '맞닿은 오퍼 경고만 남으면 막힘 없음으로 읽는다', only.sale);
+  // 표식 없는 화면 — 맞닿은 오퍼 줄이 40개를 넘어도 그 뒤의 다른 🟡 가 잘리지 않는다(가른 뒤에 자른다)
+  {
+    const lines = Array.from({ length: 41 }, (_, i) => `<li>${adjacent(`${2000 + i} 계약`, `${2001 + i} 계약`)}</li>`);
+    const w = new JSDOM(`<div id="stay_validation_banner"><div class="head">🟡 채우면 좋음 (42)</div>
+      <ul>${lines.join('')}<li>오퍼 '2026 계약'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다</li></ul></div>`,
+    { url: 'https://example.test/stay/1/', runScripts: 'outside-only', pretendToBeVisual: true }).window;
+    w.eval(HELPER);
+    const st = w.stayRun.state().banner;
+    ok(st.warnings.length === 1 && /표시명이 비어/.test(st.warnings[0]) && st.adjacentOffers.length === 40,
+      '표식 없는 배너 — 맞닿은 오퍼 줄 41개 뒤의 다른 🟡 도 센다', { warnings: st.warnings, adjacent: st.adjacentOffers.length });
+    w.close();
+  }
   const other = read([done('OFFER_NO_DISPLAY_NAME', "오퍼 '2026 계약'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다", '나중에 넣음')]);
   ok(other.sale.warnings.length === 1 && /\(넘어감: 나중에 넣음\)$/.test(other.sale.warnings[0]) && /^🟡 1건이 남았습니다/.test(other.sale.note),
     '사람이 넘긴 다른 🟡 는 종전처럼 지시서 결함으로 센다', other.sale);
