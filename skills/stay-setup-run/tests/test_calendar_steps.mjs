@@ -491,6 +491,67 @@ const seasonFill = ({ memory, overwrite }) => `<div id="stay_season_fill_form_x"
   w.close();
 }
 
+// ─────────────── 맞닿은 오퍼 경고(🟡)는 지시서 결함으로 세지 않는다 (2026-11-24) ───────────────
+{
+  // ERP `_validation_banner.html` 의 경고 묶음 모양 그대로 — 목록은 접혀 있고(`display:none`), 넘긴 줄도 「넘어감」 배지·사유와 함께 남는다
+  const adjacent = (a, b) => `두 오퍼가 맞닿아 있어 경계에 걸친 숙박은 판매되지 않습니다 — '${a}'(~2026-12-31) · '${b}'(2027-01-01~). 경계를 넘는 숙박을 팔려면 한 오퍼의 투숙 기간이 그 날짜들을 함께 덮어야 합니다`;
+  const open = (code, message, n) => `<li data-stay-banner="${code}">
+          ${message}
+          <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="dismiss">이건 넘어가기</button>
+          <span id="dismiss_${n}" style="display:none"><input type="hidden" name="rule_code" value="${code}"><input type="text" name="reason" required data-stay-field="reason" data-stay-kind="text" data-stay-required="1" placeholder="사유 (예: 이 호텔은 원래 사진을 안 준다)"><button type="button" class="stay-btn stay-btn--primary" data-stay-action="dismiss">넘어가기</button></span>
+        </li>`;
+  const done = (code, message, reason) => `<li data-stay-banner="${code}" style="opacity:.6">
+          ${message}
+          <span class="stay-badge stay-badge--tinted">넘어감</span>
+          <small>${reason}</small>
+          <button type="button" class="stay-btn stay-btn--ghost" data-stay-action="undismiss">다시 보기</button>
+        </li>`;
+  const banner = (items) => new JSDOM(`<div id="stay_validation_banner" class="stay-root mb-3" data-stay-screen="validation">
+      <div class="stay-banner stay-banner--warning" data-stay-card="warnings"><div style="flex:1;min-width:0">
+        <strong style="cursor:pointer">🟡 채우면 좋음 (${items.length}) <span>▼</span></strong>
+        <ul style="display:none">${items.join('')}</ul></div></div>
+      <div class="stay-gate" data-stay-card="gate"><button type="button" data-stay-action="activate">판매 시작</button></div></div>`,
+    { url: 'https://example.test/stay/1/', runScripts: 'outside-only', pretendToBeVisual: true });
+  const read = (items) => {
+    const w = banner(items).window;
+    w.localStorage.setItem('staySteps', JSON.stringify({ steps: [] }));
+    w.eval(HELPER);
+    w.eval(BOOT);
+    const out = { state: w.stayRun.state().banner, sale: w.saleStartBanner() };
+    w.close();
+    return out;
+  };
+  const mixed = read([
+    open('OFFERS_ADJACENT', adjacent('2026 계약', '2027 계약'), 1),
+    done('OFFERS_ADJACENT', adjacent('2027 계약', '2028 계약'), '연도별 계약 — 나눠서 예약 안내'),
+    open('OFFER_NO_DISPLAY_NAME', "오퍼 '2026 계약'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다", 3),
+  ]);
+  ok(mixed.state.warnings.length === 1 && /표시명이 비어/.test(mixed.state.warnings[0]) && !/넘어가기/.test(mixed.state.warnings[0]),
+    '접힌 목록의 🟡 도 읽고, 맞닿은 오퍼가 아닌 줄만 지시서 결함으로 센다(단추 글자는 빼고)', mixed.state);
+  ok(mixed.state.adjacentOffers.length === 2 && /\(넘어감: 연도별 계약 — 나눠서 예약 안내\)$/.test(mixed.state.adjacentOffers[1]),
+    '맞닿은 오퍼 경고는 넘긴 줄까지 `adjacentOffers` 로 따로 싣는다', mixed.state);
+  ok(/^🟡 1건이 남았습니다/.test(mixed.sale.note) && /맞닿은 오퍼 경고 2건은 지시서 결함이 아닙니다/.test(mixed.sale.note),
+    '판매 시작 앞 문장 — 남은 🟡 는 1건, 맞닿은 오퍼 경고는 뜻만 덧붙인다', mixed.sale);
+  const only = read([open('OFFERS_ADJACENT', adjacent('2026 계약', '2027 계약'), 1)]);
+  ok(only.sale.warnings.length === 0 && only.sale.adjacentOffers.length === 1 && /^배너에 막힘이 없습니다/.test(only.sale.note)
+    && /나눠서 예약하라고 안내됩니다/.test(only.sale.note), '맞닿은 오퍼 경고만 남으면 막힘 없음으로 읽는다', only.sale);
+  // 표식 없는 화면 — 맞닿은 오퍼 줄이 40개를 넘어도 그 뒤의 다른 🟡 가 잘리지 않는다(가른 뒤에 자른다)
+  {
+    const lines = Array.from({ length: 41 }, (_, i) => `<li>${adjacent(`${2000 + i} 계약`, `${2001 + i} 계약`)}</li>`);
+    const w = new JSDOM(`<div id="stay_validation_banner"><div class="head">🟡 채우면 좋음 (42)</div>
+      <ul>${lines.join('')}<li>오퍼 '2026 계약'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다</li></ul></div>`,
+    { url: 'https://example.test/stay/1/', runScripts: 'outside-only', pretendToBeVisual: true }).window;
+    w.eval(HELPER);
+    const st = w.stayRun.state().banner;
+    ok(st.warnings.length === 1 && /표시명이 비어/.test(st.warnings[0]) && st.adjacentOffers.length === 40,
+      '표식 없는 배너 — 맞닿은 오퍼 줄 41개 뒤의 다른 🟡 도 센다', { warnings: st.warnings, adjacent: st.adjacentOffers.length });
+    w.close();
+  }
+  const other = read([done('OFFER_NO_DISPLAY_NAME', "오퍼 '2026 계약'의 표시명이 비어 있어 고객에게 관리용 이름이 노출됩니다", '나중에 넣음')]);
+  ok(other.sale.warnings.length === 1 && /\(넘어감: 나중에 넣음\)$/.test(other.sale.warnings[0]) && /^🟡 1건이 남았습니다/.test(other.sale.note),
+    '사람이 넘긴 다른 🟡 는 종전처럼 지시서 결함으로 센다', other.sale);
+}
+
 // ─────────────── 금액은 숫자로 견준다 ───────────────
 {
   const dom = new JSDOM(`<div class="stay-drawer is-open"><div id="stay_drawer_body"><label for="a">판매가</label><input id="a" type="text" name="price" value="1,234.50"></div></div>`,
@@ -506,4 +567,4 @@ const seasonFill = ({ memory, overwrite }) => `<div id="stay_season_fill_form_x"
   w.close();
 }
 
-console.log(`calendar step tests passed (${pass} checks: base/manual link, base key, skipped result, pre-bundle screen, missing row, weekdays, adjust, repeat guard, zero apply, season memory, sale-start banner, numeric readback)`);
+console.log(`calendar step tests passed (${pass} checks: base/manual link, base key, skipped result, pre-bundle screen, missing row, weekdays, adjust, repeat guard, zero apply, season memory, sale-start banner, adjacent offers, numeric readback)`);

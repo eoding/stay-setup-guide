@@ -69,7 +69,7 @@ class TestExplainField(unittest.TestCase):
         data = rsg.load_dictionary(root / 'screen-dictionary.json')
         impact = rsg.load_impact(root / 'screen-effects.json')
         page, stats = rsg.render_guide(data, version='1.5.0', impact=impact)
-        self.assertEqual(stats['fields'], 281)  # 2026-11-18 사전 — 화면 36개 · 프로모션 「붙일 오퍼」 포함
+        self.assertEqual(stats['fields'], 279)  # 2026-11-24 사전 — 화면 36개 · 프로모션 「중복 적용」·「배타 그룹」 뺌
         self.assertIn('허용 인원 조합', page)
 
 

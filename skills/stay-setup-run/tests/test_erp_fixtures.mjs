@@ -189,8 +189,6 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
     v('진행기간 종료', 'promotion_apply_end_date', 'empty'),
     v('시즌 한정', 'season', 'empty'),
     v('요금제 한정', 'rate_plan', 'empty'),
-    v('다른 프로모션과 중복 적용', 'combinability', 'uncheck'),
-    v('배타 그룹', 'exclusivity_group', 'empty'),
     v('프로모션 전용 취소 정책', 'cancellation_policy', 'empty'),
     v('요금제 적용 범위', 'scope_rate_plan_mode', 'select', '기존 범위 그대로'),
     v('객실 적용 범위', 'scope_room_mode', 'select', '기존 범위 그대로')
@@ -222,6 +220,20 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
      '저장 요청에 연 카드의 오퍼 한 건만 실린다 — 지금처럼 그 오퍼에 프로모션 한 건', sent.filter(([name]) => /^target_offers/.test(name)));
   ok(sent.some(([name]) => name === 'season') && sent.some(([name]) => name === 'scope_room_mode'), '체크가 연 카드의 오퍼 하나 그대로라 시즌 한정·객실 적용 범위도 잠기지 않고 실린다');
   w.stayRun.progressHide && w.stayRun.progressHide();
+  w.close();
+}
+
+// 2c) 옛 지시서의 걷힌 프로모션 줄(2026-11-24) — `해제`·`비움` 이면 칸이 없어도 건너뛰고 단계를 멈추지 않는다
+{
+  const w = page({ drawer: frag('promotion--zero-tiers.html') });
+  w.eval(BOOT);
+  ok(!w.document.querySelector('[name="combinability"],[name="exclusivity_group"]'), '새 드로어에는 중복 적용·배타 그룹 칸이 없다');
+  const res = await w.stayRun.fill([
+    { label: '다른 프로모션과 중복 적용', field: 'combinability', kind: 'uncheck' },
+    { label: '배타 그룹', field: 'exclusivity_group', kind: 'empty' }
+  ]);
+  ok(res.length === 2 && res.every((x) => x.status === 'skipped'), '옛 지시서의 `해제`·`비움` 줄은 건너뛴다', res);
+  ok(![...w.document.querySelectorAll('[name="trigger_type"] option')].some((o) => o.value === 'ROOM_COUNT'), '새 프로모션의 발동 조건에 「객실 수」가 없다');
   w.close();
 }
 
@@ -458,4 +470,4 @@ function page({ pane = '', drawer = '', steps = [] } = {}) {
   w.close();
 }
 
-console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, promotion target offers, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner)`);
+console.log(`real ERP fixture tests passed (${pass} checks: hooks, season dates, zero tiers, promotion target offers, retired promotion rows, flags, activate, panel openers, calendar close, price link, adjust, season memory, age-gap banner)`);

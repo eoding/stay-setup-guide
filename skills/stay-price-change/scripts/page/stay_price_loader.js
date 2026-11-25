@@ -49,8 +49,8 @@
   // 설치된 일곱 파일의 알아볼 값 — 줄 끝을 \n 으로 맞춘 글자의 UTF-8 바이트 수 · CRC-32 · FNV-1a(페이지가 조각을 알아보는 셈과 같다).
   // 일곱 파일 가운데 하나라도 고치면 `python3 scripts/loader_identity.py` 로 다시 적는다 — tests/test_loader_identity.py 가 견준다.
   var INSTALLED = {
-    'stay_helper.js': { bytes: 203280, crc32: '2469cc98', fnv: '8fc462df' },
-    'stay_boot.js': { bytes: 176868, crc32: 'fca0450a', fnv: 'fb095b48' },
+    'stay_helper.js': { bytes: 205441, crc32: 'cbef0024', fnv: 'feb72bb2' },
+    'stay_boot.js': { bytes: 177796, crc32: '2a98d471', fnv: '5658064e' },
     'stay_price.js': { bytes: 120745, crc32: 'd5d12fb9', fnv: '1c4a7b4c' },
     'stay_addon_price.js': { bytes: 17308, crc32: '028d30fa', fnv: '776372f9' },
     'stay_charge.js': { bytes: 20512, crc32: 'dddf5930', fnv: 'b205e611' },

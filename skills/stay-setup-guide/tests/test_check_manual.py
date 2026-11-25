@@ -4134,8 +4134,6 @@ PROMO_ROWS_BASE = [
 PROMO_ROWS_TAIL = [
     ("시즌 한정", "비움"),
     ("요금제 한정", "비움"),
-    ("다른 프로모션과 중복 적용", "해제"),
-    ("배타 그룹", "비움"),
 ]
 
 
@@ -4190,6 +4188,71 @@ class TargetOffersRowTest(unittest.TestCase):
             code = cm.main([path])
         self.assertEqual(len(r["target_offer_rows"]), 1, r["target_offer_rows"])
         self.assertNotIn("붙일 오퍼", r["unknown_fields"])  # 사전에는 있는 칸이다 — 이 검사만 막는다
+        self.assertEqual(code, 1)
+
+
+class RetiredPromotionRowsTest(unittest.TestCase):
+    """2026-11-24 프로모션 드로어 — 걷힌 두 칸, 새 프로모션의 「객실 수」, 무료 숙박의 `적용 단위` 는 적지 않는다."""
+
+    def step(self, replace=(), add=()):
+        md = HEAD + promotion_step(4, ("해제", "비움", "비움"))
+        for old, new in replace:
+            md = md.replace(old, new, 1)
+        for name, value in add:
+            md = md.replace("| 요금제 한정 | 비움 |", f"| 요금제 한정 | 비움 |\n| {name} | {value} |", 1)
+        return md
+
+    def test_current_promotion_rows_pass(self):
+        self.assertEqual(cm.find_retired_promotion_rows(steps_of(self.step())), [])
+
+    def test_retired_rows_are_errors(self):
+        """옛 지시서처럼 `해제`·`비움` 으로 적어도 오류다 — 지금 화면에 없는 칸이다."""
+        problems = cm.find_retired_promotion_rows(steps_of(self.step(add=[("다른 프로모션과 중복 적용", "해제"), ("배타 그룹", "비움")])))
+        self.assertEqual(len(problems), 2, problems)
+        self.assertTrue(all("4단계" in p and "화면에서 없어졌다" in p for p in problems), problems)
+
+    def test_backticked_retired_key_is_error(self):
+        problems = cm.find_retired_promotion_rows(steps_of(self.step(add=[("`combinability`", "체크")])))
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_room_count_trigger_is_error(self):
+        md = self.step(replace=[("| 발동 조건 | 선택: 상시 |", "| 발동 조건 | 선택: 객실 수 — N개 이상 잡으면 |")])
+        problems = cm.find_retired_promotion_rows(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("N실 이상", problems[0])
+
+    def test_free_night_with_unit_row_is_error(self):
+        md = self.step(replace=[("| 혜택 방식 | 선택: 정률 할인 |", "| 혜택 방식 | 선택: 무료 숙박 — N박을 공짜로 (STAY5PAY4형) |")])
+        problems = cm.find_retired_promotion_rows(steps_of(md))
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("`적용 단위`", problems[0])
+
+    def test_backticked_keys_are_the_same_rows(self):
+        """줄을 화면 key 로 적어도(`` `trigger_type` `` · `` `basis` `` · `` `unit` ``) 같은 칸이다 — 값이 POST 값이어도 잡는다."""
+        md = self.step(replace=[("| 발동 조건 | 선택: 상시 |", "| `trigger_type` | ROOM_COUNT |"),
+                                ("| 혜택 방식 | 선택: 정률 할인 |", "| `basis` | 선택: 무료 숙박 — N박을 공짜로 (STAY5PAY4형) |"),
+                                ("| 적용 단위 | 선택: 1박당 |", "| `unit` | 선택: 박당 |")])
+        problems = cm.find_retired_promotion_rows(steps_of(md))
+        self.assertEqual(len(problems), 2, problems)
+        self.assertIn("N실 이상", problems[0])
+        self.assertIn("`적용 단위`", problems[1])
+        md = self.step(replace=[("| 혜택 방식 | 선택: 정률 할인 |", "| `basis` | FREE_NIGHT |")])
+        self.assertEqual(len(cm.find_retired_promotion_rows(steps_of(md))), 1)
+
+    def test_free_night_without_unit_row_passes(self):
+        md = self.step(replace=[("| 혜택 방식 | 선택: 정률 할인 |", "| 혜택 방식 | 선택: 무료 숙박 — N박을 공짜로 (STAY5PAY4형) |"),
+                                ("| 적용 단위 | 선택: 1박당 |\n", "")])
+        self.assertEqual(cm.find_retired_promotion_rows(steps_of(md)), [])
+
+    def test_the_whole_check_fails_without_a_second_unknown_field_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "manual.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(self.step(add=[("배타 그룹", "비움")]))
+            r = cm.check(path, dictionary_path=DICTIONARY)
+            code = cm.main([path])
+        self.assertEqual(len(r["retired_promotion_rows"]), 1, r["retired_promotion_rows"])
+        self.assertNotIn("배타 그룹", r["unknown_fields"])  # 이 검사가 오류로 잡으니 사전 대조에서는 두 번 알리지 않는다
         self.assertEqual(code, 1)
 
 
