@@ -8,8 +8,8 @@
     plan_promotion_rollback(…)       → RollbackPlan    (change_core.rollback.plan_rollback) — 지금 값을 읽은 프로모션인지 본다
     rollback_steps(plan, snapshot)   → 저장 단계들      되돌릴 프로모션마다 지금 창의 칸 + 적어 둔 값
 
-도우미는 단의 값만 바꾼다. 제목 · 코드 · 발동 조건 · 혜택 방식 · 단위 · 기준값 · 날짜 · 진행기간 · 시즌 · 요금제 · 중복 · 배타 그룹 · 취소
-정책 · 적용 범위는 창이 보인 그대로 보내고, 단을 더하거나 지우지 않는다. 저장 단계는 그 사실과 「표식 있는 ERP 에서만 저장」을 스스로
+도우미는 단의 값만 바꾼다. 제목 · 코드 · 발동 조건 · 혜택 방식 · 단위 · 기준값 · 날짜 · 진행기간 · 시즌 · 요금제 · 취소 정책 ·
+적용 범위는 창이 보인 그대로 보내고, 단을 더하거나 지우지 않는다. 저장 단계는 그 사실과 「표식 있는 ERP 에서만 저장」을 스스로
 지킨다(`PromotionStep` 이 만들어질 때 거절한다).
 """
 
@@ -33,6 +33,9 @@ from change_core.rules import BLOCKED, RED, Resolution, Rule, RuleTable, decide,
 from change_core.window import Form, form_values, with_values
 
 HUNDRED = Decimal(100)
+# ERP 폼이 받는 가장 큰 값(2026-11-24) — 정액은 가격 칸(DECIMAL 12,2)이, 무료 숙박은 가격 계산(32비트 정수)이 담는 끝이다.
+FLAT_MAX = Decimal("9999999999.99")
+FREE_NIGHTS_MAX = 2147483647
 DATE = r"\d{4}-\d{2}-\d{2}"
 
 
@@ -134,7 +137,8 @@ def form_refusal(promotion: Promotion, changes: Mapping[str, Decimal]) -> str | 
         words = promotion.threshold_words(tier)
         if value is None:
             return f"{words} 단의 값이 비어 있어 ERP 가 저장하지 않습니다"
-        if value < 0 or (basis == "PCT" and value > HUNDRED) or (basis == "FREE_NIGHT" and not _whole(value)):
+        if value < 0 or (basis == "PCT" and value > HUNDRED) or (basis == "FREE_NIGHT" and not _whole(value)) \
+                or (basis == "FLAT" and value > FLAT_MAX) or (basis == "FREE_NIGHT" and value > FREE_NIGHTS_MAX):
             return f"{words} 단의 값({money_text(value)})을 ERP 가 받지 않습니다"
     if promotion.one("tiers_submitted") != "1":
         return "할인 단 표식(tiers_submitted)이 없어 ERP 가 단을 읽지 않습니다"

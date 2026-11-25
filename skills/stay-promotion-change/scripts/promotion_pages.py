@@ -28,7 +28,7 @@ from change_core.words import josa
 MAKER = "어딩 Stay 프로모션 할인 도우미"
 UNIT = "단"
 KEPT_NOTE = ("저장은 프로모션마다 한 번이고, 편집 창의 다른 칸(제목 · 코드 · 발동 조건 · 혜택 방식 · 적용 단위 · 단의 기준값 · 적용 숙박일 · "
-             "진행기간 제한과 그 기간 · 시즌 · 요금제 · 중복 · 배타 그룹 · 취소 정책 · 적용 범위)은 창이 보인 그대로 보냅니다. 표의 다른 단도 "
+             "진행기간 제한과 그 기간 · 시즌 · 요금제 · 취소 정책 · 적용 범위)은 창이 보인 그대로 보냅니다. 표의 다른 단도 "
              "그대로 보내고, 단을 더하거나 지우지 않습니다.")
 SIDE_NOTE = ("저장하면 ERP 가 화면에 보이지 않는 분류 칸(할인 단위 · 프로모션 종류)을 화면의 값으로 다시 맞춥니다. 화면으로 만든 프로모션은 "
              "이미 같아 바뀌는 것이 없고, 되돌려도 그 칸은 그대로 둡니다.")
@@ -77,8 +77,6 @@ def settings(promotion: Promotion) -> list[tuple[str, str]]:
             ("적용 단위", labels.get("unit") or UNITS.get(get("unit"), get("unit"))),
             ("적용 숙박일", stay), ("진행기간 제한", booking),
             ("시즌 한정", labels.get("season") or "(전 시즌)"), ("요금제 한정", labels.get("rate_plan") or "(전 요금제)"),
-            ("다른 프로모션과 중복", "허용" if form_values(promotion.form, "combinability") else "택일"),
-            ("배타 그룹", get("exclusivity_group") or "없음"),
             ("취소 정책", labels.get("cancellation_policy") or "(요금제·오퍼 정책을 따름)")]
 
 
