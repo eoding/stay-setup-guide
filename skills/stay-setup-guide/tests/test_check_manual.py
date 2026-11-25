@@ -2240,7 +2240,7 @@ def min_stay_dinner_step(num, name="석식 (3박 이상 1회 필수)", nights="3
 
 
 class MinStayDinnerAddonTest(unittest.TestCase):
-    """`숙박 N박 이상일 때만` — 2 이상 · 일자선택 부가옵션 · 날짜 의무 규칙이어야 화면이 받는다."""
+    """`숙박 N박 이상일 때만` — 2~99 · 일자선택 부가옵션 · 전 숙박일 의무 규칙이어야 화면이 받는다."""
 
     def problems(self, md):
         return cm.find_min_stay_rule_gaps(steps_of(md))
@@ -2258,23 +2258,25 @@ class MinStayDinnerAddonTest(unittest.TestCase):
         self.assertEqual(self.problems(HEAD + min_stay_dinner_step(4, nights="비움", apply="선택: 1회 적용 (박수·날짜와 무관)",
                                                                    rule="선택: 의무 아님 (고객이 원할 때만 선택)")), [])
 
-    def test_one_night_or_words_are_refused(self):
-        for nights in ("1", "3박", "0"):
+    def test_only_whole_nights_in_range_are_accepted(self):
+        for nights in ("2", "99"):
+            self.assertEqual(self.problems(HEAD + min_stay_dinner_step(4, nights=nights)), [])
+        for nights in ("1", "3박", "0", "100", "9.5", "²"):
             problems = self.problems(HEAD + min_stay_dinner_step(4, nights=nights))
             self.assertEqual(len(problems), 1, (nights, problems))
-            self.assertIn("2 이상의 박 수", problems[0])
+            self.assertIn("2~99", problems[0])
 
     def test_only_a_pick_a_date_addon_takes_it(self):
         problems = self.problems(HEAD + min_stay_dinner_step(4, apply="선택: 날짜연동 (박수 따라감 — 엑스트라베드)"))
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("일자선택", problems[0])
 
-    def test_the_row_is_hidden_without_a_date_rule(self):
-        for rule in ("선택: 의무 아님 (고객이 원할 때만 선택)", "선택: 총 인원 N명 이상일 때 의무"):
+    def test_the_row_requires_all_nights(self):
+        for rule in ("선택: 의무 아님 (고객이 원할 때만 선택)", "선택: 총 인원 N명 이상일 때 의무",
+                     "선택: 첫 숙박일 의무", "선택: 마지막 숙박일 의무", "선택: 지정 날짜 의무 (갈라 디너 등)"):
             problems = self.problems(HEAD + min_stay_dinner_step(4, rule=rule))
             self.assertEqual(len(problems), 1, (rule, problems))
-            self.assertIn("날짜 의무", problems[0])
-        self.assertEqual(self.problems(HEAD + min_stay_dinner_step(4, rule="선택: 지정 날짜 의무 (갈라 디너 등)")), [])
+            self.assertIn("전 숙박일 의무", problems[0])
 
     def test_a_compulsory_dinner_name_with_the_condition_is_not_sent_to_surcharges(self):
         """고객이 날을 고르는 N박 조건 디너는 부과금으로 담을 수 없다 — 이름이 컴펄서리여도 부가옵션이 맞다."""
