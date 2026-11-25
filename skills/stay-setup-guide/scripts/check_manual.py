@@ -31,7 +31,8 @@ references/MANUAL-SPEC.md 의 규칙을 기계적으로 확인한다:
 - `캠페인 만들기` 단계가 있는지(있으면 오류) · 어느 단계든 `캠페인` 칸이 있는지(있으면 오류 — 화면에서 없어졌다)
 - 프로모션 `붙일 오퍼` 줄이 있는지(있으면 오류 — 연 카드의 오퍼가 이미 체크돼 있고, 지시서는 오퍼 카드마다 한 단계다)
 - 프로모션에 걷힌 `다른 프로모션과 중복 적용`·`배타 그룹` 줄, 발동 조건 「객실 수」, 무료 숙박의 `적용 단위` 줄이 있는지(있으면 오류 — 2026-11-24 화면)
-- 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다)
+- 갈라디너·컴펄서리 디너를 부가옵션으로 넣었는지(오류 — 의무 부과금 하나로 넣는다. `숙박 N박 이상일 때만` 에 값이 있는 부가옵션은 넘긴다)
+- 부가옵션 `숙박 N박 이상일 때만` 이 2 이상의 정수 · `일자선택` 부가옵션 · 날짜 의무 규칙인지(오류 — 화면이 거절하거나 칸이 숨는다)
 - 갈라디너 부과금이 `인당` 인지 · 연령 구간이 있는데 `연령별 단가` 줄이 없는지(오류)
 - 유료 연령 구간마다 그 오퍼의 `시즌 가격 채우기` **회차마다** `아동 추가 금액 — <노출명>` 줄이 있는지(오류 — 빠진 회차의 날짜만 마감으로 팔린다)
 - `시즌 가격 채우기` 의 `카드:` 로 시즌을 못 짚는 회차가 있는지(경고 — 그 회차는 오퍼를 축으로 도는 검사에서 빠진다)
@@ -346,6 +347,14 @@ EXTRA_BED_NAME_RE = re.compile(r"엑스트라\s*베드")
 ADDON_RULE_FIELD = "의무 규칙"
 ADDON_RULE_OPTIONAL = "의무 아님"
 ADDON_RULE_OVER_ADULT = "기준 성인 초과 시 의무"
+
+# 부가옵션 `숙박 N박 이상일 때만`(2026-11-25) — 날짜 의무를 N박 이상 숙박에만 세운다. ERP 는 `일자선택` 부가옵션에만,
+# 2 이상만 받고, 칸은 `의무 규칙` 이 날짜 네 종류일 때만 보인다(`find_min_stay_rule_gaps`). 값이 있으면 고객이 날을 고르는
+# "N박 이상 숙박 시 석식 1회 필수" 이므로 갈라디너 이름이어도 부과금으로 옮기라고 하지 않는다(`find_gala_addons`).
+ADDON_MIN_STAY_FIELD = "숙박 N박 이상일 때만"
+ADDON_APPLY_FIELD = "적용 방식"
+ADDON_PER_DATE = "일자선택"
+ADDON_DATE_RULES = ("전 숙박일 의무", "첫 숙박일 의무", "마지막 숙박일 의무", "지정 날짜 의무")
 
 # 연령 구간 — 계약서에 아동 정책이 있을 때만 넣는 선택 단계.
 # 구간은 오퍼에 매달리므로 그 오퍼를 만든 뒤에 오고, 부과금 드로어의 `연령별 단가` 표와
@@ -3285,6 +3294,7 @@ def find_gala_addons(steps):
     계약이 물리는 컴펄서리 디너는 **의무 부과금 하나**다(인당·정액·적용 날짜·연령별 단가).
     부가옵션은 고객이 고를 때만 붙으므로 그 돈이 청구되지 않는다. 계약서가 `선택`·`optional`
     이라고 못 박은 디너만 부가옵션이고, 그때는 이름 끝에 `(선택)` 을 붙여 그 사실을 남긴다.
+    `숙박 N박 이상일 때만` 에 값이 있는 부가옵션은 고객이 날을 고르는 N박 조건 디너라 부과금으로 담을 수 없어 넘긴다.
     """
     problems = []
     for step in steps:
@@ -3293,10 +3303,34 @@ def find_gala_addons(steps):
         name = (step["fields"].get("이름") or "").strip()
         if GALA_OPTIONAL_MARK in name or GALA_OPTIONAL_MARK in step["title"]:
             continue
+        if not _blank(step["fields"].get(ADDON_MIN_STAY_FIELD)):
+            continue
         problems.append(
             f"{step['num']}단계: 갈라디너는 의무 부과금(인당·정액·적용 날짜·연령별 단가)로 넣는다 — "
             "계약서가 선택이라고 명시한 경우만 부가옵션이며 그때는 이름에 (선택) 을 붙인다"
         )
+    return problems
+
+
+def find_min_stay_rule_gaps(steps):
+    """부가옵션의 `숙박 N박 이상일 때만` 이 ERP 가 받는 모양인지 — 아니면 오류(화면이 저장을 거절하거나 칸이 없다).
+
+    - 값은 2 이상의 정수다(1 은 조건 없는 의무와 같다고 ERP 가 거절한다).
+    - `적용 방식` 이 `일자선택` 인 부가옵션에만 저장된다.
+    - 칸은 `의무 규칙` 이 날짜 네 종류(전·첫·마지막 숙박일 · 지정 날짜)일 때만 보인다 — 아니면 러너가 칸을 못 찾는다.
+    """
+    problems = []
+    for step in steps:
+        value = (step["fields"].get(ADDON_MIN_STAY_FIELD) or "").strip()
+        if not step["title"].startswith(ADDON_CREATE_TITLE) or _blank(value):
+            continue
+        where = f"{step['num']}단계: `{ADDON_MIN_STAY_FIELD}`"
+        if not value.isdigit() or int(value) < 2:
+            problems.append(f"{where} 은 2 이상의 박 수다({value}) — 1박 조건은 늘 의무와 같아 화면이 거절한다")
+        if not strip_select(step["fields"].get(ADDON_APPLY_FIELD) or "").startswith(ADDON_PER_DATE):
+            problems.append(f"{where} 은 `{ADDON_APPLY_FIELD}` 이 `일자선택 (원하는 날만 — 조식)` 인 부가옵션에만 쓴다 — 화면이 거절한다")
+        if not strip_select(step["fields"].get(ADDON_RULE_FIELD) or "").startswith(ADDON_DATE_RULES):
+            problems.append(f"{where} 칸은 `{ADDON_RULE_FIELD}` 이 날짜 의무(보통 `전 숙박일 의무`)일 때만 화면에 보인다")
     return problems
 
 
@@ -4900,6 +4934,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
     extra_bed_double_charges = find_extra_bed_double_charge(parsed)
     child_policy_gaps = find_child_policy_without_age_band(parsed)
     gala_addons = find_gala_addons(parsed)
+    min_stay_rule_gaps = find_min_stay_rule_gaps(parsed)
     gala_surcharge_gaps = find_gala_surcharge_gaps(parsed)
     adult_only_names = find_adult_only_charge_names(parsed)
     scope_row_gaps = find_scope_row_gaps(parsed)
@@ -5043,6 +5078,7 @@ def check(md_path, photos_dir=None, share_name=None, dictionary_path=None, contr
         "extra_bed_double_charges": extra_bed_double_charges,
         "child_policy_gaps": child_policy_gaps,
         "gala_addons": gala_addons,
+        "min_stay_rule_gaps": min_stay_rule_gaps,
         "gala_surcharge_gaps": gala_surcharge_gaps,
         "adult_only_names": adult_only_names,
         "scope_row_gaps": scope_row_gaps,
@@ -5139,7 +5175,7 @@ def main(argv=None):
               + r["los_prices_formats"] + r["los_without_base_price"]
               + r["cell_los_nights"]
               + r["cell_occupancy_mismatch"] + r["cell_coordinate_gaps"]
-              + r["audience_only_names"] + r["room_bed_description_gaps"] + r["gala_addons"]
+              + r["audience_only_names"] + r["room_bed_description_gaps"] + r["gala_addons"] + r["min_stay_rule_gaps"]
               + r["gala_surcharge_gaps"] + r["create_only_fields"]
               + r["room_photo_saves"] + r["photo_count_gaps"] + r["addon_card_gaps"]
               + r["photo_path_gaps"] + r["folder_escapes"]
