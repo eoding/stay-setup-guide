@@ -9,7 +9,18 @@ more change the prices of a hotel that already sells — price calendar cells, a
 promotion discounts — with a preview, a save only after the person says "적용", a fresh reading to verify, and a rollback. The guides and the skill
 documents are Korean because the ERP screens are Korean.
 
-Release: plugin `stay-setup` 1.9.0 (`stay-setup-guide` 1.8.1, `stay-setup-run` 0.15.1, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.0). The matched ERP release went to production on 2026-11-23; the promotion helper saves only on an ERP that carries it. This release does not claim a production or browser installation rehearsal.
+Release candidate: plugin `stay-setup` 1.10.1 (`stay-setup-guide` 1.8.3, `stay-setup-run` 0.15.1, `stay-price-change` 0.1.0, `stay-addon-price-change` 0.1.0, `stay-charge-change` 0.1.0, `stay-promotion-change` 0.1.0). Publishing follows the matched ERP release (extra-person add-ons attached at quote time, below). This release does not claim a production or browser installation rehearsal.
+
+## 2026-11-24 extra-person add-ons are attached automatically
+
+The ERP now attaches the two occupancy-rule add-ons, `기준 성인 초과 시 의무 (엑스트라베드)` and `총 인원 N명 이상일 때 의무`,
+at quote time: one per adult above the room's `기준 성인` (one in total for the head-count rule), and the guest cannot
+remove them. The screen dictionary note that said the two were stored but not enforced now describes this; fields and
+choices did not change. A guide therefore puts an extra adult's charge in one place only: either the mandatory extra-bed
+add-on, with the (base+1) price cell no higher than the base cell, or a higher (base+1) price cell with the extra bed left
+optional. Writing both charges the third adult twice; the ERP add-on panel warns about it and the checker now flags it
+as a warning. A room without `기준 성인` gets no automatic add-on, and a party whose automatic quantity exceeds the
+add-on's `수량 상한` cannot book that room.
 
 ## 2026-11-23 promotion discount helper
 
