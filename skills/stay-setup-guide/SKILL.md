@@ -1,7 +1,7 @@
 ---
 name: stay-setup-guide
 description: "호텔 계약서(요금표)로 ERP Stay 입력 지시서(HTML)를 만들고, 화면 칸의 도움말·고객 표시 위치·판매 영향을 설명한다. 계약서 → 룰 정리 → 호텔·룸 팩트 → 원고 → 검사 → 지시서. '호텔 세팅 지시서', '계약서로 ERP 입력 순서', '호텔 깔기 매뉴얼', 'Stay 이 칸 도움말', '이 값이 고객에게 어디에 보여', 'hotel contract to ERP input guide' 요청에 쓴다."
-version: 1.8.5
+version: 1.8.6
 platforms: [linux, macos, windows]
 metadata:
   hermes:
@@ -60,6 +60,16 @@ metadata:
 같은 폴더의 `references/screen-dictionary.json` 은 그 사전의 **기계용 사본**이다 — 사람이 읽는 쪽은 `.md`, 검사기가 읽는 쪽은 `.json` 이고, 둘이 화면 이름·칸 이름·차례까지 같은지는 `tests/` 의 시험이 지킨다.
 **기본 추출본은 손으로 고치지 않는다** — ERP 가 화면을 그리면서 칸마다 박아 둔 표식(`data-stay-*`)에서 통째로 다시 만들어 받는다(아래 §화면 사전 다시 받기). 화면이 바뀌면 사전을 고치는 것이 아니라 **다시 받는다**.
 여기서 만든 지시서는 짝 스킬 `skills/stay-setup-run` 이 화면에서 그대로 실행한다 — 아래 표기(단계 제목·`카드:` 줄·마지막 `→ [버튼]`)가 그 러너가 알아보는 형식이므로 글자 그대로 지킨다.
+
+## Hotel list
+
+Open `자유여행` → `FIT` → `호텔관리` in ERP. On the hotel list (`/stay/`), search by hotel name. If names match, check the ID before selecting a row.
+
+| Control | Where it opens |
+| --- | --- |
+| Hotel name under **상품명** | The hotel’s ERP product detail, in the same tab. Select this to edit the hotel. |
+| **예약하기** | The staff reservation form for this hotel, in the same tab. |
+| **링크** | The guest-facing hotel detail on the travel agency’s main website, in a new tab. This control appears only for hotels with a detail page on that site. |
 
 ## 도움말 요청
 
