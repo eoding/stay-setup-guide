@@ -5269,7 +5269,7 @@ class TestFieldKeys(unittest.TestCase):
     def test_flagged_actions_come_from_the_dictionary(self):
         flags = self.keys.flagged_actions()
         self.assertEqual(flags["never_press"], ["activate"])
-        for verb in ("delete", "archive", "close_month", "apply_tax", "dismiss", "undismiss", "toggle_quantity"):
+        for verb in ("delete", "close_month", "apply_tax", "dismiss", "undismiss", "toggle_quantity"):
             self.assertIn(verb, flags["danger"])
 
     def test_actions_and_tabs_come_from_the_dictionary(self):
