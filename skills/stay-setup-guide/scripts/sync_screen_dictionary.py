@@ -148,12 +148,17 @@ pytest 는 이 둘을 알아서 해 주지만 `manage.py` 로 그냥 돌리면 �
   400(DisallowedHost)으로 떨어져 사전이 한 줄도 나오지 않는다.
 - TESTING: 로그인 신호가 `company_usersession` 행을 만들면서 접속 IP 를 넣는데, 테스트
   클라이언트의 가짜 로그인에는 IP 가 없어 `Column 'ip' cannot be null` 로 멈춘다.
+- STAY_ENABLED_TRAVEL_AGENT_IDS: test 설정은 이 덮어쓰기 훅을 고정 집합으로 정의하는데
+  (`basecamp/settings/test.py`), 관리 명령이 세우는 픽스처 여행사는 매번 새 id 라 그 집합에
+  없어 모든 화면이 403 으로 떨어진다. None 이면 훅이 꺼지고 운영과 같은 길
+  (DB 칸 `use_stay_flag`, `stay/views/permissions.py`)로 판정한다 — 명령은 그 칸을 세운다.
 """
 
 from {base} import *  # noqa: F401,F403
 
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 TESTING = True
+STAY_ENABLED_TRAVEL_AGENT_IDS = None
 '''
 
 PROG = "sync_screen_dictionary"

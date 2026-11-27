@@ -1,6 +1,6 @@
 {
   "name": "stay-setup",
-  "version": "1.10.4",
+  "version": "1.10.5",
   "description": "호텔 계약서 → ERP Stay 입력 지시서(HTML) 생성과 브라우저 자동 입력, 그리고 이미 판매 중인 호텔의 가격 바꾸기. 스킬 6개: stay-setup-guide(지시서 만들기), stay-setup-run(로그인된 Chrome 탭에서 실행), stay-price-change(가격 캘린더 값), stay-addon-price-change(부가옵션 금액), stay-charge-change(부과금 금액), stay-promotion-change(프로모션 할인 값 — 화면에 안 보이는 설정을 지키는 표식이 있는 ERP 에서만 저장) — 가격 도우미 넷은 미리보기 · 적용 · 다시 읽어 확인 · 되돌리기.",
   "repository": "https://github.com/eoding/stay-setup-guide",
   "author": {
